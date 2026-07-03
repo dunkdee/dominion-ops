@@ -1,0 +1,73 @@
+name: Wix Inventory Audit (Read-Only)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run inventory audit via wix-agent
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            echo "=== Wix Inventory Audit (read-only) ==="
+            echo "Checking wix-agent health..."
+
+            # Wait for agent to be up
+            for i in $(seq 1 10); do
+              if curl -sf http://localhost:8082/health > /dev/null 2>&1; then
+                echo "wix-agent is healthy"
+                break
+              fi
+              echo "Waiting for wix-agent... ($i/10)"
+              sleep 5
+            done
+
+            echo ""
+            echo "--- Running audit (no writes) ---"
+            AUDIT=$(curl -sf http://localhost:8082/audit 2>&1)
+            EXIT_CODE=$?
+
+            if [ $EXIT_CODE -ne 0 ]; then
+              echo "ERROR: audit request failed"
+              echo "$AUDIT"
+              exit 1
+            fi
+
+            echo "$AUDIT" | python3 -c "
+            import json, sys
+            data = json.load(sys.stdin)
+            s = data.get('summary', {})
+            print(f'Total products:      {s.get(\"total_products\", 0)}')
+            print(f'Inventory items:     {s.get(\"total_inventory_items\", 0)}')
+            print(f'Broken (need fix):   {s.get(\"broken_count\", 0)}')
+            print(f'No Zendrop match:    {s.get(\"no_zendrop_match_count\", 0)}')
+            print(f'Healthy:             {s.get(\"healthy_count\", 0)}')
+            print('')
+            broken = data.get('broken', [])
+            if broken:
+                print('=== BROKEN PRODUCTS (Zendrop says IN_STOCK, Wix shows wrong) ===')
+                for p in broken:
+                    print(f\"  [{p['product_id']}] {p['name']}\")
+                    print(f\"    Wix:      {p['wix_status']} (qty={p['wix_quantity']})\")
+                    print(f\"    Zendrop:  in_stock={p['zendrop_in_stock']} qty={p['zendrop_quantity']}\")
+            no_match = data.get('no_zendrop_match', [])
+            if no_match:
+                print('')
+                print('=== NO ZENDROP MATCH (may be genuinely OOS or not in Zendrop catalog) ===')
+                for p in no_match:
+                    print(f\"  [{p['product_id']}] {p['name']} — wix={p['wix_status']}\")
+            " 2>&1
+
+            echo ""
+            echo "Full audit JSON saved on VM:"
+            ls -lt ~/desktop-tutorial/apps/wix-agent/logs/audit_*.json 2>/dev/null | head -3
+            echo ""
+            echo "=== NEXT STEP ==="
+            echo "Review the broken products above. To fix specific ones:"
+            echo "  1. Trigger wix-inventory-fix workflow with the product IDs you confirm"
+            echo "  2. Or call POST http://localhost:8082/sync to auto-fix all Zendrop-confirmed items"

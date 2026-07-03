@@ -40,6 +40,26 @@ services:
     command: ["sh", "-c", "while true; do echo '👑 Baby heartbeat: empire integrations running'; sleep 30; done"]
     restart: always
 
+  wix-agent:
+    build: ./apps/wix-agent
+    container_name: wix-agent
+    ports:
+      - "8082:8000"
+    volumes:
+      - ./apps/wix-agent/logs:/app/logs
+      - ./apps/wix-agent/wix_agent.db:/app/wix_agent.db
+    restart: unless-stopped
+    environment:
+      WIX_API_KEY: ${WIX_API_KEY}
+      WIX_SITE_ID: ${WIX_SITE_ID:-a790d430-a3a0-4b0e-9be6-4c874c229167}
+      ZENDROP_API_KEY: ${ZENDROP_API_KEY}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
   dominion-web:
     build: ./web
     container_name: dominion-web

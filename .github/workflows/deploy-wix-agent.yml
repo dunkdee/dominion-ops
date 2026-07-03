@@ -1,0 +1,64 @@
+name: Deploy Wix Agent
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy wix-agent to VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            echo "=== Deploying Wix Agent ==="
+            cd ~/desktop-tutorial
+
+            echo "--- Pulling latest code ---"
+            git pull origin claude/vm-status-check-s0800x || git pull origin main
+
+            echo "--- Writing secrets to .env ---"
+            grep -v '^WIX_API_KEY=' .env > .env.tmp 2>/dev/null || true
+            grep -v '^ZENDROP_API_KEY=' .env.tmp > .env.tmp2 2>/dev/null || true
+            grep -v '^WIX_SITE_ID=' .env.tmp2 > .env.tmp3 2>/dev/null || true
+            mv .env.tmp3 .env 2>/dev/null || touch .env
+            rm -f .env.tmp .env.tmp2 .env.tmp3
+            echo "WIX_API_KEY=${{ secrets.WIX_API_KEY }}" >> .env
+            echo "ZENDROP_API_KEY=${{ secrets.ZENDROP_API_KEY }}" >> .env
+            echo "WIX_SITE_ID=a790d430-a3a0-4b0e-9be6-4c874c229167" >> .env
+
+            echo "--- Building and starting wix-agent ---"
+            docker compose up -d --build wix-agent
+
+            echo "--- Waiting for health check ---"
+            for i in $(seq 1 12); do
+              if curl -sf http://localhost:8082/health > /dev/null 2>&1; then
+                echo "wix-agent is healthy"
+                break
+              fi
+              echo "Waiting... ($i/12)"
+              sleep 5
+            done
+
+            echo ""
+            echo "--- Health check result ---"
+            curl -s http://localhost:8082/health | python3 -m json.tool
+
+            echo ""
+            echo "--- Docker container status ---"
+            docker ps --filter name=wix-agent --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+            echo ""
+            echo "=== Deploy complete ==="
+            echo "Available endpoints:"
+            echo "  GET  http://localhost:8082/health"
+            echo "  GET  http://localhost:8082/audit      (read-only inventory audit)"
+            echo "  POST http://localhost:8082/sync       (auto-sync all Zendrop-confirmed)"
+            echo "  POST http://localhost:8082/sync/fix   (fix specific product IDs)"
+            echo "  GET  http://localhost:8082/orders     (unfulfilled orders)"
+            echo "  POST http://localhost:8082/fulfill    (submit orders to Zendrop)"
+            echo "  GET  http://localhost:8082/dashboard  (revenue summary)"
+            echo "  GET  http://localhost:8082/logs       (change log files)"

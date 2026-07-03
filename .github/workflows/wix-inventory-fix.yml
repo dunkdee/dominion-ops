@@ -1,0 +1,83 @@
+name: Wix Inventory Fix (Confirmed Products Only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      product_ids:
+        description: "Comma-separated Wix product IDs to fix (from audit output)"
+        required: true
+        type: string
+      dry_run:
+        description: "Dry run only (no actual writes to Wix)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply inventory fix for confirmed products
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            PRODUCT_IDS="${{ github.event.inputs.product_ids }}"
+            DRY_RUN="${{ github.event.inputs.dry_run }}"
+
+            echo "=== Wix Inventory Fix ==="
+            echo "Product IDs: $PRODUCT_IDS"
+            echo "Dry run: $DRY_RUN"
+            echo ""
+
+            # Convert comma-separated IDs to JSON array
+            IDS_JSON=$(python3 -c "
+            import json, sys
+            ids = [x.strip() for x in '$PRODUCT_IDS'.split(',') if x.strip()]
+            print(json.dumps(ids))
+            ")
+
+            PAYLOAD="{\"product_ids\": $IDS_JSON, \"dry_run\": $DRY_RUN}"
+            echo "Payload: $PAYLOAD"
+            echo ""
+
+            RESULT=$(curl -sf -X POST http://localhost:8082/sync/fix \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD" 2>&1)
+            EXIT_CODE=$?
+
+            if [ $EXIT_CODE -ne 0 ]; then
+              echo "ERROR: fix request failed"
+              echo "$RESULT"
+              exit 1
+            fi
+
+            echo "$RESULT" | python3 -c "
+            import json, sys
+            data = json.load(sys.stdin)
+            print(f'Dry run: {data.get(\"dry_run\")}')
+            print(f'Applied at: {data.get(\"applied_at\")}')
+            print('')
+            for c in data.get('changes', []):
+                status = c.get('status', '?')
+                name = c.get('product_name', '?')
+                pid = c.get('product_id', '?')
+                before = c.get('before', {})
+                after = c.get('after', {})
+                zd = c.get('zendrop_source', {})
+                print(f'[{status.upper()}] {name} ({pid})')
+                print(f'  Before: status={before.get(\"wix_status\")} qty={before.get(\"wix_quantity\")}')
+                print(f'  After:  track={after.get(\"track_quantity\")} qty={after.get(\"quantity\")} in_stock={after.get(\"in_stock\")}')
+                print(f'  Zendrop source: qty={zd.get(\"quantity\")} in_stock={zd.get(\"in_stock\")}')
+            for s in data.get('skipped', []):
+                print(f'[SKIPPED] {s.get(\"product_id\")} — {s.get(\"reason\")}')
+            " 2>&1
+
+            echo ""
+            echo "Change log saved on VM:"
+            ls -lt ~/desktop-tutorial/apps/wix-agent/logs/inventory_changes_*.json 2>/dev/null | head -3

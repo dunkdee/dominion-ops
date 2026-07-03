@@ -1,0 +1,68 @@
+name: Fix Gemini Port
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Patch gemini port 5055 to 5056 and restart buddy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -e
+            echo "=== BACKUP ==="
+            cp /opt/ai_agents/gemini/server.py /opt/ai_agents/gemini/server.py.bak
+            cp ~/buddy_core/jarvis/jarvis_core.py ~/buddy_core/jarvis/jarvis_core.py.bak
+            cp ~/buddy_core/port_manifest.json ~/buddy_core/port_manifest.json.bak
+            echo "Backups done"
+
+            echo "=== PATCH server.py ==="
+            sed -i 's/app.run(host="127.0.0.1", port=5055)/app.run(host="127.0.0.1", port=5056)/' /opt/ai_agents/gemini/server.py
+            grep 'app.run' /opt/ai_agents/gemini/server.py
+
+            echo "=== PATCH jarvis_core.py ==="
+            sed -i 's/"gemini_server": 5055/"gemini_server": 5056/' ~/buddy_core/jarvis/jarvis_core.py
+            grep -n 'gemini_server' ~/buddy_core/jarvis/jarvis_core.py | head -5
+
+            echo "=== PATCH port_manifest.json ==="
+            python3 -c "
+import json, pathlib
+p = pathlib.Path.home() / 'buddy_core' / 'port_manifest.json'
+d = json.loads(p.read_text())
+if d.get('5055') == 'gemini-server':
+    del d['5055']
+d['5056'] = 'gemini-server'
+p.write_text(json.dumps(d, indent=2))
+print(json.dumps(d, indent=2))
+"
+
+            echo "=== ANY OTHER 5055 refs in buddy_web / bridge ==="
+            grep -n '5055' ~/buddy_core/buddy_web.py 2>/dev/null || echo "none in buddy_web.py"
+            grep -n '5055' ~/buddy_core/buddy_bridge_api.py 2>/dev/null || echo "none in buddy_bridge_api.py"
+
+            echo "=== RESTART GEMINI-SERVER ==="
+            sudo systemctl restart gemini-server
+            sleep 4
+            systemctl status gemini-server --no-pager | head -15
+
+            echo "=== PORT CHECK ==="
+            ss -tlnp | grep 5056 && echo "5056 LISTENING" || echo "5056 not yet up"
+            ss -tlnp | grep 5055 | head -3
+
+            echo "=== RESTART BUDDY SERVICES ==="
+            sudo systemctl restart buddy-bridge
+            sudo systemctl restart dominion-buddy-web
+            sleep 3
+            systemctl status buddy-bridge --no-pager | head -6
+            systemctl status dominion-buddy-web --no-pager | head -6
+
+            echo "=== TEST BRAIN ==="
+            curl -s -X POST http://127.0.0.1:5056/orchestrate \
+              -H 'Content-Type: application/json' \
+              -d '{"prompt": "Reply with one word: ONLINE"}' \
+              --max-time 15 || echo "No response (may need GCP credentials)"
+
+            echo "=== DONE ==="

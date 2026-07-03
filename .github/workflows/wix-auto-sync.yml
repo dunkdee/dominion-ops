@@ -9,251 +9,216 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Install dependencies
-        run: pip install httpx
+      - name: Sync inventory + fulfill orders via VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          command_timeout: 300s
+          script: |
+            set -e
 
-      - name: Sync inventory + submit unfulfilled orders to Zendrop
-        env:
-          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
-          ZENDROP_API_KEY: ${{ secrets.ZENDROP_API_KEY }}
-          WIX_SITE_ID: "a790d430-a3a0-4b0e-9be6-4c874c229167"
-        run: |
-          python3 << 'PYEOF'
-          import httpx, json, os, sys
-          from datetime import datetime, timezone
+            WIX_KEY=$(grep -m1 '^WIX_API_KEY=' ~/desktop-tutorial/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || \
+                       grep -m1 '^WIX_API_KEY=' ~/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || echo "")
+            ZD_KEY=$(grep  -m1 '^ZENDROP_API_KEY=' ~/desktop-tutorial/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || \
+                      grep -m1 '^ZENDROP_API_KEY=' ~/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || echo "")
+            SITE_ID="a790d430-a3a0-4b0e-9be6-4c874c229167"
 
-          WIX_KEY = os.environ["WIX_API_KEY"]
-          ZD_KEY  = os.environ["ZENDROP_API_KEY"]
-          SITE_ID = os.environ["WIX_SITE_ID"]
+            if [ -z "$WIX_KEY" ]; then
+              echo "WIX_API_KEY not found. Add it: echo 'WIX_API_KEY=...' >> ~/desktop-tutorial/.env"
+              exit 1
+            fi
 
-          if not WIX_KEY:
-              print("ERROR: WIX_API_KEY secret is not set."); sys.exit(1)
+            pip install httpx -q 2>/dev/null || python3 -m pip install httpx -q
 
-          WIX_H = {"Authorization": WIX_KEY, "wix-site-id": SITE_ID, "Content-Type": "application/json"}
-          ZD_H  = {"X-API-Key": ZD_KEY, "Content-Type": "application/json", "Accept": "application/json"}
-          NOW   = datetime.now(timezone.utc).isoformat()
+            WIX_KEY="$WIX_KEY" ZD_KEY="$ZD_KEY" SITE_ID="$SITE_ID" python3 << 'PYEOF'
+            import httpx, json, os, sys
+            from datetime import datetime, timezone
 
-          print(f"=== Wix Auto-Sync started {NOW} ===")
+            WIX_KEY = os.environ["WIX_KEY"]
+            ZD_KEY  = os.environ.get("ZD_KEY", "")
+            SITE_ID = os.environ["SITE_ID"]
+            WIX_H   = {"Authorization": WIX_KEY, "wix-site-id": SITE_ID, "Content-Type": "application/json"}
+            ZD_H    = {"X-API-Key": ZD_KEY, "Content-Type": "application/json", "Accept": "application/json"}
+            NOW     = datetime.now(timezone.utc).isoformat()
+            print(f"=== Wix Auto-Sync {NOW} ===")
 
-          # ── Catalog version ─────────────────────────────────────────────
-          try:
-              r = httpx.get("https://www.wixapis.com/stores/v3/provision/version", headers=WIX_H, timeout=15)
-              catalog = "v3" if "V3" in r.json().get("version", "").upper() else "v1"
-          except Exception:
-              catalog = "v1"
+            # Catalog version
+            try:
+                r = httpx.get("https://www.wixapis.com/stores/v3/provision/version", headers=WIX_H, timeout=15)
+                catalog = "v3" if "V3" in r.json().get("version", "").upper() else "v1"
+            except Exception:
+                catalog = "v1"
 
-          PROD_URL    = f"https://www.wixapis.com/stores/{catalog}/products/query"
-          INV_URL     = "https://www.wixapis.com/stores/v3/inventory-items/query" if catalog == "v3" else "https://www.wixapis.com/stores-reader/v2/inventoryItems/query"
-          INV_UPD_URL = "https://www.wixapis.com/stores/v3/inventory-items" if catalog == "v3" else "https://www.wixapis.com/stores/v2/inventoryItems"
-          ORDERS_URL  = "https://www.wixapis.com/ecom/v1/orders/search"
-          FULFILL_URL = "https://www.wixapis.com/ecom/v1/fulfillments"
+            PROD_URL    = f"https://www.wixapis.com/stores/{catalog}/products/query"
+            INV_URL     = "https://www.wixapis.com/stores/v3/inventory-items/query" if catalog == "v3" else "https://www.wixapis.com/stores-reader/v2/inventoryItems/query"
+            INV_UPD_URL = "https://www.wixapis.com/stores/v3/inventory-items" if catalog == "v3" else "https://www.wixapis.com/stores/v2/inventoryItems"
+            ORDERS_URL  = "https://www.wixapis.com/ecom/v1/orders/search"
+            FULFILL_URL = "https://www.wixapis.com/ecom/v1/fulfillments"
 
-          # ── PART 1: Inventory sync ───────────────────────────────────────
-          print("\n--- PART 1: Inventory Sync ---")
+            # ── PART 1: Inventory sync ────────────────────────────────────────
+            print("\n--- PART 1: Inventory Sync ---")
+            products, cursor, first = [], None, True
+            while True:
+                body = {"query": {"fields": ["DESCRIPTION", "MEDIA_ITEMS_INFO"], "cursorPaging": {"limit": 100}}} if first else {"query": {"cursorPaging": {"limit": 100, "cursor": cursor}}}
+                first = False
+                r = httpx.post(PROD_URL, headers=WIX_H, json=body, timeout=30)
+                if r.status_code != 200: print(f"Products error {r.status_code}"); break
+                d = r.json(); products.extend(d.get("products", []))
+                pm = d.get("pagingMetadata", {})
+                if not pm.get("hasNext"): break
+                cursor = pm.get("cursors", {}).get("next")
+                if not cursor: break
+            print(f"Products: {len(products)}")
 
-          # Fetch all products
-          products, cursor, first = [], None, True
-          while True:
-              body = {"query": {"fields": ["DESCRIPTION", "MEDIA_ITEMS_INFO"], "cursorPaging": {"limit": 100}}} if first else {"query": {"cursorPaging": {"limit": 100, "cursor": cursor}}}
-              first = False
-              r = httpx.post(PROD_URL, headers=WIX_H, json=body, timeout=30)
-              if r.status_code != 200: print(f"Products error {r.status_code}: {r.text[:200]}"); break
-              d = r.json(); products.extend(d.get("products", []))
-              pm = d.get("pagingMetadata", {})
-              if not pm.get("hasNext"): break
-              cursor = pm.get("cursors", {}).get("next")
-              if not cursor: break
-          print(f"Products fetched: {len(products)}")
+            inv_items, cursor, first = [], None, True
+            pg = 1000 if catalog == "v3" else 100
+            while True:
+                body = {"query": {"cursorPaging": {"limit": pg}}} if first else {"query": {"cursorPaging": {"limit": pg, "cursor": cursor}}}
+                first = False
+                r = httpx.post(INV_URL, headers=WIX_H, json=body, timeout=30)
+                if r.status_code != 200: print(f"Inv error {r.status_code}"); break
+                d = r.json(); inv_items.extend(d.get("inventoryItems", []))
+                pm = d.get("pagingMetadata", {})
+                if not pm.get("hasNext"): break
+                cursor = pm.get("cursors", {}).get("next")
+                if not cursor: break
+            print(f"Inventory items: {len(inv_items)}")
 
-          # Fetch all inventory items
-          inv_items, cursor, first = [], None, True
-          pg = 1000 if catalog == "v3" else 100
-          while True:
-              body = {"query": {"cursorPaging": {"limit": pg}}} if first else {"query": {"cursorPaging": {"limit": pg, "cursor": cursor}}}
-              first = False
-              r = httpx.post(INV_URL, headers=WIX_H, json=body, timeout=30)
-              if r.status_code != 200: print(f"Inventory error {r.status_code}: {r.text[:200]}"); break
-              d = r.json(); inv_items.extend(d.get("inventoryItems", []))
-              pm = d.get("pagingMetadata", {})
-              if not pm.get("hasNext"): break
-              cursor = pm.get("cursors", {}).get("next")
-              if not cursor: break
-          print(f"Inventory items fetched: {len(inv_items)}")
+            zd_by_name = {}
+            if ZD_KEY:
+                try:
+                    r = httpx.get("https://app.zendrop.com/api/v1/products", headers=ZD_H, params={"page":1,"per_page":100}, timeout=30)
+                    if r.status_code == 200:
+                        d = r.json()
+                        zd_prods = d.get("products", d if isinstance(d, list) else [])
+                        zd_by_name = {(p.get("name") or "").lower(): p for p in zd_prods}
+                        print(f"Zendrop products: {len(zd_by_name)}")
+                except Exception as e:
+                    print(f"Zendrop catalog: {e}")
 
-          # Fetch Zendrop catalog
-          zd_by_name = {}
-          try:
-              r = httpx.get("https://app.zendrop.com/api/v1/products", headers=ZD_H, params={"page": 1, "per_page": 100}, timeout=30)
-              if r.status_code == 200:
-                  d = r.json()
-                  zd_prods = d.get("products", d if isinstance(d, list) else [])
-                  zd_by_name = {(p.get("name") or "").lower(): p for p in zd_prods}
-                  print(f"Zendrop products: {len(zd_by_name)}")
-          except Exception as e:
-              print(f"Zendrop catalog error: {e}")
+            inv_by_pid = {}
+            for i in inv_items:
+                inv_by_pid.setdefault(i.get("productId", ""), []).append(i)
 
-          inv_by_pid = {}
-          for i in inv_items:
-              inv_by_pid.setdefault(i.get("productId", ""), []).append(i)
+            fixed, skipped_oos, skipped_no_match, errors_inv = [], [], [], []
+            for p in products:
+                pid, name = p["id"], p.get("name", "?")
+                items = inv_by_pid.get(pid, [])
+                if not items: continue
+                statuses = [i.get("availabilityStatus", "UNKNOWN") for i in items]
+                qtys = [i.get("quantity") or 0 for i in items if i.get("trackQuantity")]
+                is_broken = not all(s == "IN_STOCK" for s in statuses) or (qtys and sum(qtys) == 0)
+                if not is_broken: continue
+                zd = zd_by_name.get(name.lower())
+                if not zd:
+                    for k, v in zd_by_name.items():
+                        if name.lower() in k or k in name.lower(): zd = v; break
+                if not zd: skipped_no_match.append(name); continue
+                try:
+                    zid = str(zd.get("id") or zd.get("product_id", ""))
+                    zr = httpx.get(f"https://app.zendrop.com/api/v1/products/{zid}", headers=ZD_H, timeout=15)
+                    if zr.status_code != 200: skipped_no_match.append(name); continue
+                    zp = zr.json().get("product", zr.json())
+                    vs = zp.get("variants", [])
+                    if vs:
+                        zd_qty = sum(v.get("inventory_quantity", v.get("quantity", 0)) or 0 for v in vs)
+                        zd_in_stock = zd_qty > 0
+                    else:
+                        zd_qty = zp.get("quantity", 0); zd_in_stock = zp.get("in_stock", zd_qty > 0)
+                except Exception as e:
+                    errors_inv.append(f"{name}: {e}"); continue
+                if not zd_in_stock: skipped_oos.append(name); continue
+                use_qty = zd_qty > 0
+                for inv in items:
+                    iid = inv.get("id", "")
+                    try:
+                        if catalog == "v3":
+                            patch = {"inventoryItem": {"trackQuantity": use_qty}}
+                            if use_qty: patch["inventoryItem"]["quantity"] = zd_qty
+                            else: patch["inventoryItem"]["inStock"] = True
+                            r = httpx.patch(f"{INV_UPD_URL}/{iid}", headers=WIX_H, json=patch, timeout=20)
+                        else:
+                            patch = {"inventoryItem": {"trackQuantity": use_qty, "variants": [{"quantity": zd_qty} if use_qty else {"inStock": True}]}}
+                            r = httpx.patch(f"{INV_UPD_URL}/product/{pid}", headers=WIX_H, json=patch, timeout=20)
+                        if r.status_code in (200, 204): fixed.append(f"{name}(qty={zd_qty})")
+                        else: errors_inv.append(f"{name}: {r.status_code}")
+                    except Exception as e:
+                        errors_inv.append(f"{name}: {e}")
 
-          fixed, skipped_oos, skipped_no_match, errors_inv = [], [], [], []
+            print(f"Fixed: {len(fixed)} | Skipped OOS: {len(skipped_oos)} | No match: {len(skipped_no_match)}")
+            if fixed: print("  Fixed: " + ", ".join(fixed))
+            if errors_inv: print("  Errors: " + "; ".join(errors_inv[:5]))
 
-          for p in products:
-              pid, name = p["id"], p.get("name", "?")
-              items = inv_by_pid.get(pid, [])
-              if not items: continue
+            # ── PART 2: Order fulfillment ─────────────────────────────────────
+            print("\n--- PART 2: Order Fulfillment ---")
+            try:
+                r = httpx.post(ORDERS_URL, headers=WIX_H,
+                               json={"search": {"filter": {"fulfillmentStatus": "NOT_FULFILLED"}, "cursorPaging": {"limit": 100}}},
+                               timeout=30)
+                orders = r.json().get("orders", []) if r.status_code == 200 else []
+            except Exception as e:
+                print(f"Orders error: {e}"); orders = []
+            print(f"Unfulfilled orders: {len(orders)}")
 
-              statuses = [i.get("availabilityStatus", "UNKNOWN") for i in items]
-              qtys = [i.get("quantity") or 0 for i in items if i.get("trackQuantity")]
-              is_broken = not all(s == "IN_STOCK" for s in statuses) or (qtys and sum(qtys) == 0)
-              if not is_broken: continue
+            submitted, already_done, order_errors = [], [], []
+            for order in orders:
+                oid = order.get("id", "")
+                onum = order.get("number", "")
+                ship = order.get("shippingInfo", {}).get("logistics", {}).get("shippingDestination", {}).get("address", {})
+                buyer = order.get("buyerInfo", {})
+                line_items = []
+                for li in order.get("lineItems", []):
+                    cref = li.get("catalogReference", {})
+                    line_items.append({"product_id": cref.get("catalogItemId", ""),
+                                       "variant_id": cref.get("options", {}).get("variantId", ""),
+                                       "quantity": li.get("quantity", 1),
+                                       "sku": li.get("physicalProperties", {}).get("sku", ""),
+                                       "name": li.get("productName", {}).get("original", "")})
+                if not ZD_KEY: break
+                payload = {"order": {"external_order_id": oid,
+                    "shipping_address": {"first_name": ship.get("firstName", buyer.get("email","").split("@")[0]),
+                        "last_name": ship.get("lastName",""), "address1": ship.get("addressLine",""),
+                        "address2": ship.get("addressLine2",""), "city": ship.get("city",""),
+                        "province": ship.get("subdivision",""), "zip": ship.get("postalCode",""),
+                        "country": ship.get("country","US"), "phone": ship.get("phone", buyer.get("phone",""))},
+                    "line_items": line_items, "note": f"Wix order #{onum}"}}
+                try:
+                    zr = httpx.post("https://app.zendrop.com/api/v1/orders", headers=ZD_H, json=payload, timeout=20)
+                    if zr.status_code in (200, 201): submitted.append(f"#{onum}")
+                    elif zr.status_code == 409: already_done.append(f"#{onum}")
+                    else: order_errors.append(f"#{onum}: {zr.status_code}")
+                except Exception as e:
+                    order_errors.append(f"#{onum}: {e}")
 
-              # Find Zendrop match
-              zd = zd_by_name.get(name.lower())
-              if not zd:
-                  for k, v in zd_by_name.items():
-                      if name.lower() in k or k in name.lower(): zd = v; break
+            print(f"Submitted: {len(submitted)} | Already done: {len(already_done)} | Errors: {len(order_errors)}")
+            if submitted: print("  " + ", ".join(submitted))
+            if order_errors: print("  Errors: " + "; ".join(order_errors[:5]))
 
-              if not zd:
-                  skipped_no_match.append(name); continue
-
-              # Check Zendrop stock
-              try:
-                  zid = str(zd.get("id") or zd.get("product_id", ""))
-                  zr = httpx.get(f"https://app.zendrop.com/api/v1/products/{zid}", headers=ZD_H, timeout=15)
-                  if zr.status_code != 200: skipped_no_match.append(name); continue
-                  zp = zr.json().get("product", zr.json())
-                  vs = zp.get("variants", [])
-                  if vs:
-                      zd_qty = sum(v.get("inventory_quantity", v.get("quantity", 0)) or 0 for v in vs)
-                      zd_in_stock = zd_qty > 0
-                  else:
-                      zd_qty = zp.get("quantity", 0); zd_in_stock = zp.get("in_stock", zd_qty > 0)
-              except Exception as e:
-                  errors_inv.append(f"{name}: {e}"); continue
-
-              if not zd_in_stock:
-                  skipped_oos.append(name); continue
-
-              # Apply fix to all inventory items for this product
-              use_qty = zd_qty > 0
-              for inv in items:
-                  iid = inv.get("id", "")
-                  try:
-                      if catalog == "v3":
-                          patch = {"inventoryItem": {"trackQuantity": use_qty}}
-                          if use_qty: patch["inventoryItem"]["quantity"] = zd_qty
-                          else: patch["inventoryItem"]["inStock"] = True
-                          r = httpx.patch(f"{INV_UPD_URL}/{iid}", headers=WIX_H, json=patch, timeout=20)
-                      else:
-                          patch = {"inventoryItem": {"trackQuantity": use_qty, "variants": [{"quantity": zd_qty} if use_qty else {"inStock": True}]}}
-                          r = httpx.patch(f"{INV_UPD_URL}/product/{pid}", headers=WIX_H, json=patch, timeout=20)
-                      if r.status_code in (200, 204):
-                          fixed.append(f"{name} (qty={zd_qty})")
-                      else:
-                          errors_inv.append(f"{name}: {r.status_code} {r.text[:100]}")
-                  except Exception as e:
-                      errors_inv.append(f"{name}: {e}")
-
-          print(f"Fixed:             {len(fixed)}")
-          print(f"Skipped (OOS):     {len(skipped_oos)}")
-          print(f"Skipped (no match):{len(skipped_no_match)}")
-          if fixed:       print("  Fixed: " + ", ".join(fixed))
-          if errors_inv:  print("  Errors: " + "; ".join(errors_inv))
-
-          # ── PART 2: Order fulfillment ────────────────────────────────────
-          print("\n--- PART 2: Order Fulfillment ---")
-
-          try:
-              r = httpx.post(ORDERS_URL, headers=WIX_H,
-                             json={"search": {"filter": {"fulfillmentStatus": "NOT_FULFILLED"}, "cursorPaging": {"limit": 100}}},
-                             timeout=30)
-              orders = r.json().get("orders", []) if r.status_code == 200 else []
-          except Exception as e:
-              print(f"Orders fetch error: {e}"); orders = []
-          print(f"Unfulfilled orders: {len(orders)}")
-
-          submitted, already_done, order_errors = [], [], []
-
-          for order in orders:
-              oid    = order.get("id", "")
-              onum   = order.get("number", "")
-              ship   = order.get("shippingInfo", {}).get("logistics", {}).get("shippingDestination", {}).get("address", {})
-              buyer  = order.get("buyerInfo", {})
-              items  = order.get("lineItems", [])
-              line_items = []
-              for li in items:
-                  cref = li.get("catalogReference", {})
-                  line_items.append({
-                      "product_id": cref.get("catalogItemId", ""),
-                      "variant_id": cref.get("options", {}).get("variantId", ""),
-                      "quantity": li.get("quantity", 1),
-                      "sku": li.get("physicalProperties", {}).get("sku", ""),
-                      "name": li.get("productName", {}).get("original", ""),
-                  })
-              payload = {"order": {
-                  "external_order_id": oid,
-                  "shipping_address": {
-                      "first_name": ship.get("firstName", buyer.get("email", "").split("@")[0]),
-                      "last_name": ship.get("lastName", ""),
-                      "address1": ship.get("addressLine", ""),
-                      "address2": ship.get("addressLine2", ""),
-                      "city": ship.get("city", ""),
-                      "province": ship.get("subdivision", ""),
-                      "zip": ship.get("postalCode", ""),
-                      "country": ship.get("country", "US"),
-                      "phone": ship.get("phone", buyer.get("phone", "")),
-                  },
-                  "line_items": line_items,
-                  "note": f"Wix order #{onum}",
-              }}
-              try:
-                  zr = httpx.post("https://app.zendrop.com/api/v1/orders", headers=ZD_H, json=payload, timeout=20)
-                  if zr.status_code in (200, 201):
-                      submitted.append(f"#{onum}")
-                  elif zr.status_code == 409:  # already submitted (idempotent)
-                      already_done.append(f"#{onum}")
-                  else:
-                      order_errors.append(f"#{onum}: {zr.status_code} {zr.text[:100]}")
-              except Exception as e:
-                  order_errors.append(f"#{onum}: {e}")
-
-          print(f"Submitted to Zendrop: {len(submitted)}")
-          print(f"Already submitted:    {len(already_done)}")
-          if submitted:     print("  Orders: " + ", ".join(submitted))
-          if order_errors:  print("  Errors: " + "; ".join(order_errors))
-
-          # ── PART 3: Push tracking back to Wix ───────────────────────────
-          print("\n--- PART 3: Check Zendrop tracking + update Wix ---")
-          # Re-fetch submitted orders from Zendrop to get tracking
-          tracked = []
-          # Only check the ones we just submitted or already had
-          for order in orders[:20]:  # limit to 20 per run to avoid timeout
-              oid = order.get("id", "")
-              onum = order.get("number", "")
-              try:
-                  # Search Zendrop for this external_order_id
-                  zr = httpx.get(f"https://app.zendrop.com/api/v1/orders",
-                                 headers=ZD_H,
-                                 params={"external_order_id": oid},
-                                 timeout=15)
-                  if zr.status_code == 200:
-                      zorders = zr.json().get("orders", zr.json() if isinstance(zr.json(), list) else [])
-                      for zo in (zorders if isinstance(zorders, list) else [zorders]):
-                          tracking = zo.get("tracking_number") or zo.get("tracking", {}).get("number")
-                          carrier  = zo.get("carrier") or zo.get("tracking", {}).get("carrier", "OTHER")
-                          if tracking:
-                              fr = httpx.post(FULFILL_URL, headers=WIX_H,
-                                             json={"fulfillment": {"orderId": oid,
-                                                   "trackingInfo": {"trackingNumber": tracking, "shippingProvider": carrier or "OTHER"}}},
-                                             timeout=20)
-                              if fr.status_code in (200, 201, 204):
-                                  tracked.append(f"#{onum} tracking={tracking}")
-              except Exception:
-                  pass
-
-          print(f"Updated with tracking: {len(tracked)}")
-          if tracked: print("  " + ", ".join(tracked))
-
-          print(f"\n=== Sync complete ===")
-          PYEOF
+            # ── PART 3: Push tracking to Wix ─────────────────────────────────
+            print("\n--- PART 3: Tracking Updates ---")
+            tracked = []
+            if ZD_KEY:
+                for order in orders[:20]:
+                    oid = order.get("id", "")
+                    onum = order.get("number", "")
+                    try:
+                        zr = httpx.get("https://app.zendrop.com/api/v1/orders", headers=ZD_H,
+                                       params={"external_order_id": oid}, timeout=15)
+                        if zr.status_code == 200:
+                            zo = zr.json()
+                            zorders = zo.get("orders", zo if isinstance(zo, list) else [zo])
+                            for z in (zorders if isinstance(zorders, list) else [zorders]):
+                                tracking = z.get("tracking_number") or z.get("tracking", {}).get("number")
+                                carrier  = z.get("carrier") or z.get("tracking", {}).get("carrier", "OTHER")
+                                if tracking:
+                                    fr = httpx.post(FULFILL_URL, headers=WIX_H,
+                                                    json={"fulfillment": {"orderId": oid, "trackingInfo": {"trackingNumber": tracking, "shippingProvider": carrier or "OTHER"}}},
+                                                    timeout=20)
+                                    if fr.status_code in (200,201,204): tracked.append(f"#{onum}={tracking}")
+                    except Exception: pass
+            print(f"Tracking updated: {len(tracked)}")
+            if tracked: print("  " + ", ".join(tracked))
+            print("\n=== Sync complete ===")
+            PYEOF

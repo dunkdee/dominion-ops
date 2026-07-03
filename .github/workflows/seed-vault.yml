@@ -1,0 +1,45 @@
+name: Seed Obsidian Vault
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force overwrite existing notes (type YES to confirm)'
+        required: false
+        default: 'no'
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into VM and seed vault
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          timeout: 120s
+          script: |
+            set -e
+            echo "=== Vault Seed Starting ==="
+            echo "Date: $(date -u)"
+
+            cd ~/desktop-tutorial
+            git fetch origin main
+            git checkout main -- scripts/seed_vault.py
+            echo "Seed script pulled from repo."
+
+            VAULT_PATH="${VAULT_PATH:-$HOME/vault}"
+            echo "Vault path: $VAULT_PATH"
+            mkdir -p "$VAULT_PATH"
+
+            VAULT_PATH="$VAULT_PATH" python3 ~/desktop-tutorial/scripts/seed_vault.py
+
+            echo ""
+            echo "=== All markdown files in vault ==="
+            find "$VAULT_PATH" -name '*.md' | sort
+
+            echo ""
+            echo "=== DONE ==="
+            echo "Open Obsidian at: $VAULT_PATH"
+            echo "Start here: 90-meta/00-HOME.md"

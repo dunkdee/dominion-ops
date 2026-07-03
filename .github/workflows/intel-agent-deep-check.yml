@@ -1,0 +1,43 @@
+name: Intel Agent Deep Check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deep-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read runner + try to execute + check deps
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          timeout: 90s
+          script: |
+            echo "====== dominion_intel_runner.py (FULL) ======"
+            cat ~/buddy_core/agents/dominion_intel_runner.py 2>/dev/null || echo "FILE NOT FOUND"
+
+            echo ""
+            echo "====== INTEL DIRECTORY ======"
+            ls -la ~/buddy_core/intel/ 2>/dev/null || echo "DIR DOES NOT EXIST"
+
+            echo ""
+            echo "====== LOGS DIRECTORY ======"
+            ls -la ~/logs/ 2>/dev/null | head -20 || echo "DIR DOES NOT EXIST"
+
+            echo ""
+            echo "====== dominion_env PYTHON PACKAGES ======"
+            /home/malachisingleton8/dominion_env/bin/pip list 2>/dev/null | grep -iE "pytrends|google|requests|openai|anthropic|selenium|playwright|beautifulsoup|bs4|pandas|numpy" || echo "could not list packages"
+
+            echo ""
+            echo "====== DRY RUN (timeout 30s, capture error) ======"
+            cd ~/buddy_core && timeout 30 /home/malachisingleton8/dominion_env/bin/python3 agents/dominion_intel_runner.py 2>&1 || echo "EXIT CODE: $?"
+
+            echo ""
+            echo "====== GEMINI SERVER FULL LOG (last 40 lines) ======"
+            journalctl -u gemini-server.service -n 40 --no-pager 2>&1 || echo "no journal"
+
+            echo ""
+            echo "====== dominion_intel_core.py HEAD (first 60 lines) ======"
+            head -60 ~/buddy_core/agents/dominion_intel_core.py 2>/dev/null || echo "NOT FOUND"

@@ -1,0 +1,70 @@
+name: Fix Buddy Brains (Move Gemini to 5056)
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Patch gemini port and restart
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -e
+            echo "====== STEP 1: BACKUP ======"
+            cp /opt/ai_agents/gemini/server.py /opt/ai_agents/gemini/server.py.bak
+            cp ~/buddy_core/jarvis/jarvis_core.py ~/buddy_core/jarvis/jarvis_core.py.bak
+            cp ~/buddy_core/port_manifest.json ~/buddy_core/port_manifest.json.bak
+            echo "Backups done"
+
+            echo "====== STEP 2: PATCH GEMINI SERVER PORT 5055 → 5056 ======"
+            sed -i 's/app.run(host="127.0.0.1", port=5055)/app.run(host="127.0.0.1", port=5056)/' /opt/ai_agents/gemini/server.py
+            grep 'app.run' /opt/ai_agents/gemini/server.py
+
+            echo "====== STEP 3: PATCH JARVIS_CORE.PY ======"
+            sed -i 's/"gemini_server": 5055/"gemini_server": 5056/' ~/buddy_core/jarvis/jarvis_core.py
+            grep -n 'gemini_server' ~/buddy_core/jarvis/jarvis_core.py | head -5
+
+            echo "====== STEP 4: PATCH PORT MANIFEST ======"
+            # Update port_manifest.json: add 5056 entry, update 5055 entry
+            python3 -c "
+import json, pathlib
+path = pathlib.Path.home() / 'buddy_core' / 'port_manifest.json'
+data = json.loads(path.read_text())
+# Move gemini-server from 5055 to 5056
+if data.get('5055') == 'gemini-server':
+    del data['5055']
+data['5056'] = 'gemini-server'
+path.write_text(json.dumps(data, indent=2))
+print('port_manifest.json updated:', data)
+"
+
+            echo "====== STEP 5: CHECK BUDDY_WEB FOR PORT 5055 REFS ======"
+            grep -n '5055' ~/buddy_core/buddy_web.py 2>/dev/null || echo "No 5055 refs in buddy_web.py"
+            grep -n '5055' ~/buddy_core/buddy_bridge_api.py 2>/dev/null || echo "No 5055 refs in buddy_bridge_api.py"
+
+            echo "====== STEP 6: RESTART GEMINI-SERVER ======"
+            sudo systemctl restart gemini-server
+            sleep 3
+            systemctl status gemini-server --no-pager | head -15
+
+            echo "====== STEP 7: VERIFY PORT 5056 IS NOW LISTENING ======"
+            ss -tlnp | grep 5056 || echo "5056 not yet bound"
+            ss -tlnp | grep 5055 | head -5
+
+            echo "====== STEP 8: RESTART BUDDY SERVICES ======"
+            sudo systemctl restart buddy-bridge
+            sudo systemctl restart dominion-buddy-web
+            sleep 3
+            systemctl status buddy-bridge --no-pager | head -8
+            systemctl status dominion-buddy-web --no-pager | head -8
+
+            echo "====== STEP 9: VERIFY GEMINI BRAIN RESPONDS ======"
+            curl -s -X POST http://127.0.0.1:5056/orchestrate \
+              -H 'Content-Type: application/json' \
+              -d '{"prompt": "Reply with one word: ONLINE"}' \
+              --max-time 10 || echo "Gemini not responding yet (may need API key/credentials)"
+
+            echo "====== DONE — Gemini moved to 5056, buddy services restarted ======"

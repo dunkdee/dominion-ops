@@ -2,98 +2,102 @@ name: Deploy Wix Agent
 
 on:
   workflow_dispatch:
+    inputs:
+      wix_api_key:
+        description: 'WIX_API_KEY (paste your Wix API key here)'
+        required: true
+        type: string
+      zendrop_api_key:
+        description: 'ZENDROP_API_KEY (paste your Zendrop API key here, or leave blank)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Deploy wix-agent to VM
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          WIX_API_KEY_INPUT: ${{ inputs.wix_api_key }}
+          ZENDROP_API_KEY_INPUT: ${{ inputs.zendrop_api_key }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
+          envs: WIX_API_KEY_INPUT,ZENDROP_API_KEY_INPUT
           script: |
+            set -e
             echo "=== Deploying Wix Agent ==="
             cd ~/desktop-tutorial
 
             echo "--- Pulling latest code ---"
             git pull origin main
 
-            echo "--- Resolving API keys ---"
-            # Use bash login shell to source .profile/.bash_profile (where exported vars live)
-            WIX_KEY=$(bash -l -c 'echo "$WIX_API_KEY"' 2>/dev/null || echo "")
-            ZD_KEY=$(bash -l -c 'echo "$ZENDROP_API_KEY"' 2>/dev/null || echo "")
-
-            # GitHub Secrets take precedence if set
-            [ -n "${{ secrets.WIX_API_KEY }}" ] && WIX_KEY="${{ secrets.WIX_API_KEY }}"
-            [ -n "${{ secrets.ZENDROP_API_KEY }}" ] && ZD_KEY="${{ secrets.ZENDROP_API_KEY }}"
-
-            # Fall back to .env files
-            if [ -z "$WIX_KEY" ]; then
-              WIX_KEY=$(grep -m1 '^WIX_API_KEY=' ~/desktop-tutorial/.env 2>/dev/null | cut -d= -f2- | tr -d '"')
-            fi
-            if [ -z "$WIX_KEY" ]; then
-              WIX_KEY=$(grep -m1 '^WIX_API_KEY=' ~/.env 2>/dev/null | cut -d= -f2- | tr -d '"')
-            fi
-            if [ -z "$ZD_KEY" ]; then
-              ZD_KEY=$(grep -m1 '^ZENDROP_API_KEY=' ~/desktop-tutorial/.env 2>/dev/null | cut -d= -f2- | tr -d '"')
-            fi
-            if [ -z "$ZD_KEY" ]; then
-              ZD_KEY=$(grep -m1 '^ZENDROP_API_KEY=' ~/.env 2>/dev/null | cut -d= -f2- | tr -d '"')
-            fi
-
-            if [ -z "$WIX_KEY" ]; then
-              echo "ERROR: WIX_API_KEY not found anywhere on VM"
-              echo "Run this on the VM to fix it:"
-              echo "  echo 'export WIX_API_KEY=your_key' >> ~/.bash_profile"
-              echo "  echo WIX_API_KEY=your_key >> ~/desktop-tutorial/.env"
-              exit 1
-            fi
-
-            echo "WIX_API_KEY found (${#WIX_KEY} chars)"
-            [ -z "$ZD_KEY" ] && echo "WARNING: ZENDROP_API_KEY not found — order fulfillment will not work"
-
             echo "--- Writing keys to .env ---"
             touch .env
-            grep -v '^WIX_API_KEY=' .env > .env.tmp 2>/dev/null || true
-            grep -v '^ZENDROP_API_KEY=' .env.tmp > .env.tmp2 2>/dev/null || true
-            grep -v '^WIX_SITE_ID=' .env.tmp2 > .env.tmp3 2>/dev/null || true
+
+            # Strip old keys and rewrite
+            grep -v '^WIX_API_KEY=' .env > .env.tmp 2>/dev/null || cp .env .env.tmp
+            grep -v '^ZENDROP_API_KEY=' .env.tmp > .env.tmp2 2>/dev/null || cp .env.tmp .env.tmp2
+            grep -v '^WIX_SITE_ID=' .env.tmp2 > .env.tmp3 2>/dev/null || cp .env.tmp2 .env.tmp3
             mv .env.tmp3 .env
             rm -f .env.tmp .env.tmp2
-            echo "WIX_API_KEY=${WIX_KEY}" >> .env
-            echo "ZENDROP_API_KEY=${ZD_KEY}" >> .env
+
+            echo "WIX_API_KEY=${WIX_API_KEY_INPUT}" >> .env
             echo "WIX_SITE_ID=a790d430-a3a0-4b0e-9be6-4c874c229167" >> .env
 
+            if [ -n "${ZENDROP_API_KEY_INPUT}" ]; then
+              echo "ZENDROP_API_KEY=${ZENDROP_API_KEY_INPUT}" >> .env
+              echo "Zendrop key set (${#ZENDROP_API_KEY_INPUT} chars)"
+            else
+              echo "WARNING: ZENDROP_API_KEY not provided — inventory sync will run read-only, order fulfillment will not work"
+            fi
+
+            echo "WIX_API_KEY set (${#WIX_API_KEY_INPUT} chars)"
+
+            echo ""
             echo "--- Building and starting wix-agent ---"
             docker compose up -d --build wix-agent
 
-            echo "--- Waiting for health check (up to 60s) ---"
-            for i in $(seq 1 12); do
+            echo ""
+            echo "--- Waiting for health check (up to 90s) ---"
+            HEALTHY=false
+            for i in $(seq 1 18); do
               if curl -sf http://localhost:8082/health > /dev/null 2>&1; then
+                HEALTHY=true
                 echo "wix-agent is healthy!"
                 break
               fi
-              echo "Waiting... ($i/12)"
+              echo "Waiting... ($i/18)"
               sleep 5
             done
 
             echo ""
-            echo "--- Health ---"
+            echo "--- Health response ---"
             curl -s http://localhost:8082/health | python3 -m json.tool || echo "(health endpoint not responding)"
 
             echo ""
             echo "--- Container status ---"
             docker ps --filter name=wix-agent --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
+            if [ "$HEALTHY" = "false" ]; then
+              echo ""
+              echo "--- Container logs (last 50 lines) ---"
+              docker logs wix-agent --tail 50 2>&1 || true
+              echo "WARNING: Health check did not pass — check logs above"
+            fi
+
             echo ""
             echo "=== Deploy complete ==="
-            echo "Endpoints live at http://localhost:8082"
-            echo "  GET  /health"
-            echo "  GET  /audit      read-only inventory audit"
-            echo "  POST /sync       auto-sync all Zendrop-confirmed products"
-            echo "  POST /sync/fix   fix specific product IDs"
-            echo "  GET  /orders     unfulfilled Wix orders"
-            echo "  POST /fulfill    submit orders to Zendrop"
-            echo "  GET  /dashboard  revenue summary"
-            echo "  GET  /logs       change log files"
+            echo "Endpoints:"
+            echo "  GET  http://localhost:8082/health"
+            echo "  GET  http://localhost:8082/audit      read-only inventory check"
+            echo "  POST http://localhost:8082/sync       auto-fix all Zendrop-confirmed products"
+            echo "  POST http://localhost:8082/sync/fix   fix specific products: {\"product_ids\":[...]}"
+            echo "  GET  http://localhost:8082/orders     unfulfilled Wix orders"
+            echo "  POST http://localhost:8082/fulfill    submit orders to Zendrop"
+            echo "  GET  http://localhost:8082/dashboard  revenue summary"
+            echo "  GET  http://localhost:8082/logs       change log list"

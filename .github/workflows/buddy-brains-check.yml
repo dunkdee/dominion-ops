@@ -1,0 +1,50 @@
+name: Buddy Brains Check
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH Diagnostic
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            echo "====== WHAT IS ON PORT 5055 ======"
+            sudo ss -tlnp | grep 5055 || echo "nothing on 5055 via ss"
+            sudo lsof -i :5055 2>/dev/null || echo "nothing on 5055 via lsof"
+
+            echo "====== PORT 5055 PROCESS DETAIL ======"
+            PID=$(sudo lsof -ti :5055 2>/dev/null | head -1)
+            if [ -n "$PID" ]; then
+              echo "PID: $PID"
+              cat /proc/$PID/cmdline 2>/dev/null | tr '\0' ' ' || echo "no cmdline"
+              echo ""
+              ps aux | grep $PID | grep -v grep
+            else
+              echo "No PID holding 5055"
+            fi
+
+            echo "====== GEMINI SERVER STATUS ======"
+            systemctl status gemini-server --no-pager -l | head -30
+
+            echo "====== GEMINI SERVER FILE (check port config) ======"
+            cat /etc/systemd/system/gemini-server.service
+
+            echo "====== BUDDY SERVICE STATUS ======"
+            systemctl status dominion-buddy --no-pager -l | head -40 || echo "dominion-buddy not found"
+            systemctl status buddy --no-pager -l | head -20 || echo "buddy not found"
+
+            echo "====== BUDDY RECENT LOGS ======"
+            journalctl -u dominion-buddy -n 30 --no-pager 2>/dev/null || echo "no dominion-buddy journal"
+
+            echo "====== ALL RUNNING DOMINION SERVICES ======"
+            systemctl list-units --type=service --state=running 2>/dev/null | grep -iE 'dominion|buddy|gemini|intel|juris' | head -20
+
+            echo "====== INTEL TIMER STATUS ======"
+            systemctl status dominion-intel.timer --no-pager | head -20 || echo "no intel timer"
+
+            echo "====== INTEL SERVICE LAST RUN ======"
+            journalctl -u dominion-intel.service -n 20 --no-pager 2>/dev/null | tail -20

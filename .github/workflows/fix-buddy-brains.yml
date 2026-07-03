@@ -1,4 +1,4 @@
-name: Fix Buddy Brains (Move Gemini to 5056)
+name: Fix Buddy Brains
 on:
   workflow_dispatch:
 jobs:
@@ -19,7 +19,7 @@ jobs:
             cp ~/buddy_core/port_manifest.json ~/buddy_core/port_manifest.json.bak
             echo "Backups done"
 
-            echo "====== STEP 2: PATCH GEMINI SERVER PORT 5055 → 5056 ======"
+            echo "====== STEP 2: PATCH GEMINI SERVER PORT 5055 to 5056 ======"
             sed -i 's/app.run(host="127.0.0.1", port=5055)/app.run(host="127.0.0.1", port=5056)/' /opt/ai_agents/gemini/server.py
             grep 'app.run' /opt/ai_agents/gemini/server.py
 
@@ -28,17 +28,15 @@ jobs:
             grep -n 'gemini_server' ~/buddy_core/jarvis/jarvis_core.py | head -5
 
             echo "====== STEP 4: PATCH PORT MANIFEST ======"
-            # Update port_manifest.json: add 5056 entry, update 5055 entry
             python3 -c "
 import json, pathlib
 path = pathlib.Path.home() / 'buddy_core' / 'port_manifest.json'
 data = json.loads(path.read_text())
-# Move gemini-server from 5055 to 5056
 if data.get('5055') == 'gemini-server':
     del data['5055']
 data['5056'] = 'gemini-server'
 path.write_text(json.dumps(data, indent=2))
-print('port_manifest.json updated:', data)
+print('port_manifest updated:', json.dumps(data, indent=2))
 "
 
             echo "====== STEP 5: CHECK BUDDY_WEB FOR PORT 5055 REFS ======"
@@ -47,12 +45,13 @@ print('port_manifest.json updated:', data)
 
             echo "====== STEP 6: RESTART GEMINI-SERVER ======"
             sudo systemctl restart gemini-server
-            sleep 3
+            sleep 4
             systemctl status gemini-server --no-pager | head -15
 
             echo "====== STEP 7: VERIFY PORT 5056 IS NOW LISTENING ======"
-            ss -tlnp | grep 5056 || echo "5056 not yet bound"
-            ss -tlnp | grep 5055 | head -5
+            ss -tlnp | grep 5056 || echo "5056 not yet bound - gemini may still be starting"
+            echo "Port 5055 (juris still there, untouched):"
+            ss -tlnp | grep 5055 | head -3
 
             echo "====== STEP 8: RESTART BUDDY SERVICES ======"
             sudo systemctl restart buddy-bridge
@@ -61,10 +60,10 @@ print('port_manifest.json updated:', data)
             systemctl status buddy-bridge --no-pager | head -8
             systemctl status dominion-buddy-web --no-pager | head -8
 
-            echo "====== STEP 9: VERIFY GEMINI BRAIN RESPONDS ======"
+            echo "====== STEP 9: QUICK BRAIN TEST ======"
             curl -s -X POST http://127.0.0.1:5056/orchestrate \
               -H 'Content-Type: application/json' \
               -d '{"prompt": "Reply with one word: ONLINE"}' \
-              --max-time 10 || echo "Gemini not responding yet (may need API key/credentials)"
+              --max-time 15 && echo "" || echo "Gemini endpoint did not respond in time"
 
-            echo "====== DONE — Gemini moved to 5056, buddy services restarted ======"
+            echo "====== DONE ======"

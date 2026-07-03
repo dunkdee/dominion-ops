@@ -54,7 +54,7 @@ async def dashboard():
 
     picks_html = "".join(
         f"<tr><td>{t.get('symbol','?')}</td><td>{t.get('chain','')}</td>"
-        f"<td style='color:{'#00ff88' if t.get("verdict")=="BUY" else '#ffaa00'}'>{t.get('verdict','')}</td>"
+        f"<td style='color:{'#00ff88' if t.get('verdict')=='BUY' else '#ffaa00'}'>{t.get('verdict','')}</td>"
         f"<td>{t.get('score',0):.3f}</td>"
         f"<td>${float(t.get('liquidity_usd') or t.get('liquidity') or 0):,.0f}</td>"
         f"<td>${float(t.get('market_cap') or 0):,.0f}</td>"
@@ -104,7 +104,7 @@ th{{color:#667;text-align:left;border-bottom:1px solid #1a2a2a;padding:5px 4px}}
 td{{padding:4px;border-bottom:1px solid #0f1528}}
 .panel{{background:#0c0c1e;border:1px solid #1a2a4a;padding:12px;border-radius:6px;margin:10px 0}}
 </style></head><body>
-<h1>⚡ DOMINION ALPHA ENGINE v2.0</h1>
+<h1>&#9889; DOMINION ALPHA ENGINE v2.0</h1>
 
 <div class='grid'>
 <div class='card'><h3>Capital</h3><h2>${capital:,.2f}</h2></div>
@@ -127,7 +127,7 @@ td{{padding:4px;border-bottom:1px solid #0f1528}}
 </div>
 
 <div class='panel'>
-<h2>Top 20 Tokens — Last Scan</h2>
+<h2>Top 20 Tokens &mdash; Last Scan</h2>
 <table><tr><th>Symbol</th><th>Chain</th><th>Verdict</th><th>Score</th><th>Liquidity</th><th>Market Cap</th><th>Age</th><th>Thesis</th></tr>
 {picks_html}</table></div>
 

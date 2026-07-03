@@ -26,8 +26,8 @@ jobs:
 
             cd ~/desktop-tutorial
             git fetch origin main
-            git checkout main -- scripts/seed_vault.py
-            echo "Seed script pulled from repo."
+            git checkout origin/main -- scripts/seed_vault.py
+            echo "Seed script pulled from origin/main."
 
             VAULT_PATH="${VAULT_PATH:-$HOME/vault}"
             echo "Vault path: $VAULT_PATH"

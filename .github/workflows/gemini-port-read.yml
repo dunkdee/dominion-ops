@@ -1,0 +1,37 @@
+name: Gemini Port Read
+on:
+  workflow_dispatch:
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read gemini server and buddy-web code
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            echo "====== GEMINI SERVER.PY ======"
+            cat /opt/ai_agents/gemini/server.py
+
+            echo "====== BUDDY-WEB SERVICE FILE ======"
+            cat /etc/systemd/system/dominion-buddy-web.service
+
+            echo "====== BUDDY-WEB SCRIPT (find it) ======"
+            BUDDY_EXEC=$(systemctl show dominion-buddy-web --property=ExecStart --value 2>/dev/null | grep -oP '(?<=argv\[\]=)[^ ]+' | head -1)
+            echo "ExecStart: $BUDDY_EXEC"
+            cat "$BUDDY_EXEC" 2>/dev/null || echo "Could not read buddy-web script"
+
+            echo "====== BUDDY-BRIDGE SERVICE FILE ======"
+            cat /etc/systemd/system/buddy-bridge.service
+
+            echo "====== BUDDY-BRIDGE SCRIPT ======"
+            BRIDGE_EXEC=$(grep ExecStart /etc/systemd/system/buddy-bridge.service | awk '{print $NF}')
+            echo "ExecStart: $BRIDGE_EXEC"
+            cat "$BRIDGE_EXEC" 2>/dev/null || echo "Could not read bridge script"
+
+            echo "====== WHAT PORTS ARE FREE (5050-5070) ======"
+            for p in 5050 5051 5052 5053 5054 5056 5057 5058 5060 5065 5070; do
+              ss -tlnp | grep -q ":$p " && echo "$p: IN USE" || echo "$p: FREE"
+            done

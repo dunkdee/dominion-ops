@@ -3,15 +3,16 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Query
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
 import wix_client as wix
 import sync_engine as sync
 import fulfillment as fulfill
+import store_setup as store
 
-app = FastAPI(title="Wix Agent", version="1.0.0")
+app = FastAPI(title="Wix Agent", version="2.0.0")
 
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -31,23 +32,26 @@ class FixRequest(BaseModel):
     dry_run: bool = False
 
 
+# ── Core ───────────────────────────────────────────────────────────────────────
+
 @app.get("/health")
 def health():
     return {
         "status": "ok",
         "service": "wix-agent",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "site_id": wix.WIX_SITE_ID,
         "catalog_version": _catalog_version(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
+# ── Inventory ──────────────────────────────────────────────────────────────────
+
 @app.get("/audit")
 def audit_inventory():
     try:
-        report = sync.audit_inventory(_catalog_version())
-        return JSONResponse(content=report)
+        return JSONResponse(content=sync.audit_inventory(_catalog_version()))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -80,6 +84,8 @@ def fix_specific_products(req: FixRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ── Orders & Fulfillment ───────────────────────────────────────────────────────
 
 @app.get("/orders")
 def get_orders():
@@ -116,6 +122,8 @@ def fulfillment_status():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Dashboard ──────────────────────────────────────────────────────────────────
+
 @app.get("/dashboard")
 def dashboard():
     try:
@@ -145,6 +153,60 @@ def dashboard():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ── Store Setup ────────────────────────────────────────────────────────────────
+
+@app.get("/store/audit")
+def store_audit():
+    """Full store health check — pages, policies, product quality."""
+    try:
+        return JSONResponse(content=store.audit_store(_catalog_version()))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _run_store_setup_bg():
+    try:
+        store.full_store_setup(_catalog_version())
+    except Exception as e:
+        print(f"[store-setup] error: {e}")
+
+
+@app.post("/store/setup")
+def trigger_store_setup(background_tasks: BackgroundTasks):
+    """Run full store setup: policies, pages, product descriptions, SEO."""
+    background_tasks.add_task(_run_store_setup_bg)
+    return {"status": "store setup started", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@app.post("/store/setup/products")
+def setup_products(dry_run: bool = Query(default=True)):
+    """Enhance product descriptions and SEO. dry_run=true to preview changes."""
+    try:
+        return JSONResponse(content=store.enhance_products(_catalog_version(), dry_run=dry_run))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/store/pages")
+def store_pages_content():
+    """Return all policy page HTML content — paste into Wix Editor for each page."""
+    return {
+        p["slug"]: {"title": p["title"], "url": f"https://voltedgegoods.com/{p['slug']}", "html": p["content"]}
+        for p in store.PAGES_TO_CREATE
+    }
+
+
+@app.post("/store/policies")
+def update_policies_only():
+    """Update checkout policies in Wix store settings only."""
+    try:
+        return JSONResponse(content=store.setup_store_policies())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Logs ───────────────────────────────────────────────────────────────────────
 
 @app.get("/logs")
 def list_logs():

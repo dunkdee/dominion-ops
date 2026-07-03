@@ -8,6 +8,8 @@ WIX_SITE_ID = os.getenv("WIX_SITE_ID", "a790d430-a3a0-4b0e-9be6-4c874c229167")
 BASE_V3 = "https://www.wixapis.com/stores/v3"
 BASE_V1 = "https://www.wixapis.com/stores/v1"
 ECOM_BASE = "https://www.wixapis.com/ecom/v1"
+PAGES_BASE = "https://www.wixapis.com/site-pages/v2"
+STORE_SETTINGS_URL = "https://www.wixapis.com/stores/v2/storeSettings"
 
 TIMEOUT = 30.0
 
@@ -129,5 +131,74 @@ def fulfill_order(order_id: str, tracking_number: str, shipping_provider: str = 
     url = f"{ECOM_BASE}/fulfillments"
     body = {"fulfillment": {"orderId": order_id, "trackingInfo": {"trackingNumber": tracking_number, "shippingProvider": shipping_provider}}}
     r = httpx.post(url, headers=_headers(), json=body, timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.json()
+
+
+# ── Store settings (checkout policies) ────────────────────────────────────────
+
+def get_store_settings() -> dict:
+    r = httpx.get(STORE_SETTINGS_URL, headers=_headers(), timeout=TIMEOUT)
+    r.raise_for_status()
+    data = r.json()
+    return data.get("storeSettings", data)
+
+
+def update_store_settings(policy_patch: dict) -> dict:
+    body = {"storeSettings": {"generalSettings": policy_patch}}
+    r = httpx.patch(STORE_SETTINGS_URL, headers=_headers(), json=body, timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.json()
+
+
+# ── Site pages ─────────────────────────────────────────────────────────────────
+
+def get_pages() -> list[dict]:
+    r = httpx.get(f"{PAGES_BASE}/pages", headers=_headers(), timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.json().get("pages", [])
+
+
+def create_page(title: str, slug: str) -> dict:
+    body = {"page": {"title": title, "slug": slug}}
+    r = httpx.post(f"{PAGES_BASE}/pages", headers=_headers(), json=body, timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.json()
+
+
+# ── Product content & SEO ──────────────────────────────────────────────────────
+
+def update_product_content(
+    product_id: str,
+    description: str,
+    seo_title: str,
+    seo_description: str,
+    catalog_version: str = "v3",
+) -> dict:
+    if catalog_version == "v3":
+        url = f"{BASE_V3}/products/{product_id}"
+        payload = {
+            "product": {
+                "description": description,
+                "seoData": {
+                    "tags": [
+                        {"type": "title", "children": seo_title, "custom": True},
+                        {"type": "meta", "props": {"name": "description", "content": seo_description}, "custom": True},
+                    ]
+                },
+            },
+            "mask": {"paths": ["description", "seoData"]},
+        }
+        r = httpx.patch(url, headers=_headers(), json=payload, timeout=TIMEOUT)
+    else:
+        url = f"{BASE_V1}/products/{product_id}"
+        payload = {
+            "product": {
+                "description": description,
+                "seoTitle": seo_title,
+                "seoDescription": seo_description,
+            }
+        }
+        r = httpx.patch(url, headers=_headers(), json=payload, timeout=TIMEOUT)
     r.raise_for_status()
     return r.json()

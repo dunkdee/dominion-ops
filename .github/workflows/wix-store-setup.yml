@@ -1,0 +1,73 @@
+name: VoltEdge Store Setup
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'What to run'
+        required: true
+        default: 'audit'
+        type: choice
+        options:
+          - audit
+          - full_setup
+          - products_only
+          - policies_only
+      dry_run_products:
+        description: 'Dry run product updates? (true = preview only, no writes)'
+        required: false
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+
+jobs:
+  store-setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run VoltEdge Store Setup
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: 34.73.72.30
+          username: malachisingleton8
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            BASE="http://localhost:8082"
+
+            echo "=== Checking wix-agent health ==="
+            curl -sf "$BASE/health" | python3 -m json.tool || { echo "ERROR: wix-agent not running on port 8082"; exit 1; }
+
+            ACTION="${{ inputs.action }}"
+            DRY_RUN="${{ inputs.dry_run_products }}"
+
+            if [ "$ACTION" = "audit" ] || [ "$ACTION" = "full_setup" ]; then
+              echo ""
+              echo "=== Store Audit ==="
+              curl -sf "$BASE/store/audit" | python3 -m json.tool
+            fi
+
+            if [ "$ACTION" = "full_setup" ]; then
+              echo ""
+              echo "=== Running Full Store Setup (policies + pages + product SEO) ==="
+              curl -sf -X POST "$BASE/store/setup"
+              echo "Setup triggered in background. Waiting 30s for completion..."
+              sleep 30
+              echo ""
+              echo "=== Post-Setup Audit ==="
+              curl -sf "$BASE/store/audit" | python3 -m json.tool
+            fi
+
+            if [ "$ACTION" = "products_only" ]; then
+              echo ""
+              echo "=== Product Description Enhancement (dry_run=$DRY_RUN) ==="
+              curl -sf -X POST "$BASE/store/setup/products?dry_run=$DRY_RUN" | python3 -m json.tool
+            fi
+
+            if [ "$ACTION" = "policies_only" ]; then
+              echo ""
+              echo "=== Updating Checkout Policies ==="
+              curl -sf -X POST "$BASE/store/policies" | python3 -m json.tool
+            fi
+
+            echo ""
+            echo "=== Done ==="

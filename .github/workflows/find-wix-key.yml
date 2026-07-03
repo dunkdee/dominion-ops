@@ -1,0 +1,58 @@
+name: Find WIX_API_KEY on VM
+
+on:
+  workflow_dispatch:
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Search for WIX_API_KEY across VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            echo "=== Searching for WIX_API_KEY on VM ==="
+            echo ""
+
+            echo "--- Login shell env ---"
+            bash -l -c 'echo "WIX_API_KEY in login env: ${#WIX_API_KEY} chars"'
+
+            echo ""
+            echo "--- Checking .env files ---"
+            for f in ~/.env ~/desktop-tutorial/.env ~/.bash_profile ~/.profile ~/.bashrc ~/.zshrc /etc/environment; do
+              if [ -f "$f" ]; then
+                if grep -q 'WIX_API_KEY' "$f" 2>/dev/null; then
+                  echo "FOUND in $f"
+                  grep 'WIX_API_KEY' "$f" | sed 's/=.*/=***REDACTED***/' 
+                else
+                  echo "Not in $f"
+                fi
+              else
+                echo "$f does not exist"
+              fi
+            done
+
+            echo ""
+            echo "--- Searching all .env files under home ---"
+            find ~ -name '.env' -not -path '*/.git/*' 2>/dev/null | while read f; do
+              if grep -q 'WIX_API_KEY' "$f" 2>/dev/null; then
+                echo "FOUND: $f"
+              fi
+            done
+
+            echo ""
+            echo "--- Checking running Docker containers ---"
+            docker ps --format '{{.Names}}' 2>/dev/null | while read c; do
+              if docker exec "$c" printenv WIX_API_KEY 2>/dev/null | grep -q .; then
+                echo "FOUND in container: $c"
+              fi
+            done
+
+            echo ""
+            echo "--- Summary ---"
+            echo "If WIX_API_KEY was FOUND above, tell Claude which file/location"
+            echo "If nothing found, the key needs to be added manually"
+            echo "Fastest fix: echo \"WIX_API_KEY=your_key\" >> ~/desktop-tutorial/.env"

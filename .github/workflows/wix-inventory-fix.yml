@@ -1,0 +1,151 @@
+name: Wix Inventory Fix (Confirmed Products Only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      product_ids:
+        description: "Comma-separated Wix product IDs to fix (from audit output)"
+        required: true
+        type: string
+      dry_run:
+        description: "Dry run only — no writes"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: pip install httpx
+
+      - name: Apply inventory fix for confirmed products
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          ZENDROP_API_KEY: ${{ secrets.ZENDROP_API_KEY }}
+          WIX_SITE_ID: "a790d430-a3a0-4b0e-9be6-4c874c229167"
+          PRODUCT_IDS: ${{ github.event.inputs.product_ids }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          python3 << 'PYEOF'
+          import httpx, json, os, sys
+
+          WIX_KEY = os.environ["WIX_API_KEY"]
+          ZD_KEY  = os.environ["ZENDROP_API_KEY"]
+          SITE_ID = os.environ["WIX_SITE_ID"]
+          DRY_RUN = os.environ["DRY_RUN"].lower() == "true"
+          IDS     = [x.strip() for x in os.environ["PRODUCT_IDS"].split(",") if x.strip()]
+
+          if not WIX_KEY:
+              print("ERROR: WIX_API_KEY not set"); sys.exit(1)
+          if not IDS:
+              print("ERROR: no product_ids provided"); sys.exit(1)
+
+          WIX_H = {"Authorization": WIX_KEY, "wix-site-id": SITE_ID, "Content-Type": "application/json"}
+          ZD_H  = {"X-API-Key": ZD_KEY, "Content-Type": "application/json", "Accept": "application/json"}
+
+          print(f"Fixing {len(IDS)} product(s). Dry run: {DRY_RUN}")
+          print(f"IDs: {IDS}")
+
+          # Detect catalog version
+          try:
+              r = httpx.get("https://www.wixapis.com/stores/v3/provision/version", headers=WIX_H, timeout=15)
+              catalog = "v3" if "V3" in r.json().get("version", "").upper() else "v1"
+          except Exception:
+              catalog = "v1"
+
+          INV_URL     = "https://www.wixapis.com/stores/v3/inventory-items/query" if catalog == "v3" else "https://www.wixapis.com/stores-reader/v2/inventoryItems/query"
+          INV_UPD_URL = "https://www.wixapis.com/stores/v3/inventory-items" if catalog == "v3" else "https://www.wixapis.com/stores/v2/inventoryItems"
+          PROD_URL    = f"https://www.wixapis.com/stores/{catalog}/products/query"
+
+          # Fetch products for the requested IDs
+          prod_map = {}
+          r = httpx.post(PROD_URL, headers=WIX_H,
+                         json={"query": {"filter": {"id": {"$in": IDS}}, "cursorPaging": {"limit": 100}}},
+                         timeout=30)
+          if r.status_code == 200:
+              for p in r.json().get("products", []):
+                  prod_map[p["id"]] = p
+
+          # Fetch inventory items for these products
+          all_inv = []
+          cursor, first = None, True
+          pg = 1000 if catalog == "v3" else 100
+          while True:
+              body = {"query": {"cursorPaging": {"limit": pg}}} if first else {"query": {"cursorPaging": {"limit": pg, "cursor": cursor}}}
+              first = False
+              r = httpx.post(INV_URL, headers=WIX_H, json=body, timeout=30)
+              if r.status_code != 200: break
+              d = r.json(); all_inv.extend(d.get("inventoryItems", []))
+              pm = d.get("pagingMetadata", {})
+              if not pm.get("hasNext"): break
+              cursor = pm.get("cursors", {}).get("next")
+              if not cursor: break
+          inv_by_pid = {}
+          for i in all_inv:
+              if i.get("productId") in IDS:
+                  inv_by_pid.setdefault(i["productId"], []).append(i)
+
+          changes = []
+          for pid in IDS:
+              prod = prod_map.get(pid, {})
+              name = prod.get("name", pid)
+              inv_items = inv_by_pid.get(pid, [])
+              if not inv_items:
+                  print(f"SKIP {name}: no inventory items found")
+                  continue
+
+              # Get Zendrop qty if available
+              zd_qty = 0
+              try:
+                  zr = httpx.get("https://app.zendrop.com/api/v1/products", headers=ZD_H, params={"q": name, "page": 1, "per_page": 5}, timeout=15)
+                  if zr.status_code == 200:
+                      zdps = zr.json().get("products", [])
+                      if zdps:
+                          zid = str(zdps[0].get("id") or zdps[0].get("product_id", ""))
+                          zr2 = httpx.get(f"https://app.zendrop.com/api/v1/products/{zid}", headers=ZD_H, timeout=15)
+                          if zr2.status_code == 200:
+                              zp = zr2.json().get("product", zr2.json())
+                              vs = zp.get("variants", [])
+                              zd_qty = sum(v.get("inventory_quantity", v.get("quantity", 0)) or 0 for v in vs) if vs else zp.get("quantity", 0)
+              except Exception: pass
+
+              use_qty = zd_qty > 0
+              for inv in inv_items:
+                  iid = inv.get("id", "")
+                  before = {"status": inv.get("availabilityStatus"), "quantity": inv.get("quantity"), "trackQuantity": inv.get("trackQuantity")}
+                  after  = {"trackQuantity": use_qty, "quantity": zd_qty if use_qty else None, "inStock": True}
+                  if not DRY_RUN:
+                      try:
+                          if catalog == "v3":
+                              patch = {"inventoryItem": {"trackQuantity": use_qty}}
+                              if use_qty: patch["inventoryItem"]["quantity"] = zd_qty
+                              else: patch["inventoryItem"]["inStock"] = True
+                              r = httpx.patch(f"{INV_UPD_URL}/{iid}", headers=WIX_H, json=patch, timeout=20)
+                          else:
+                              patch = {"inventoryItem": {"trackQuantity": use_qty, "variants": [{"quantity": zd_qty} if use_qty else {"inStock": True}]}}
+                              r = httpx.patch(f"{INV_UPD_URL}/product/{pid}", headers=WIX_H, json=patch, timeout=20)
+                          status = "UPDATED" if r.status_code in (200, 204) else f"ERROR {r.status_code}: {r.text[:80]}"
+                      except Exception as e:
+                          status = f"ERROR: {e}"
+                  else:
+                      status = "DRY_RUN"
+                  changes.append({"product": name, "id": pid, "inv_item": iid, "before": before, "after": after, "status": status})
+                  print(f"[{status}] {name} | before={before} | after={after}")
+
+          with open("fix_log.json", "w") as f:
+              json.dump({"dry_run": DRY_RUN, "changes": changes}, f, indent=2)
+          print(f"\nDone. {len([c for c in changes if c['status']=='UPDATED'])} items updated.")
+          PYEOF
+
+      - name: Upload fix log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wix-fix-log
+          path: fix_log.json
+          retention-days: 30

@@ -6,6 +6,7 @@ from contextlib import contextmanager
 
 import wix_client as wix
 import zendrop_client as zendrop
+import empire
 
 DB_PATH = os.getenv("WIX_AGENT_DB", os.path.join(os.path.dirname(__file__), "wix_agent.db"))
 
@@ -102,7 +103,18 @@ def run_fulfillment_cycle(catalog_version: str = "v3") -> dict:
             submitted.append({"wix_order_id": order_id, "zendrop_order_id": zd_id})
         except Exception as e:
             errors.append({"wix_order_id": order_id, "error": str(e)})
-    return {"run_at": _now(), "orders_found": len(orders), "submitted": submitted, "already_tracked": already_tracked, "errors": errors}
+
+    result = {"run_at": _now(), "orders_found": len(orders), "submitted": submitted, "already_tracked": already_tracked, "errors": errors}
+
+    if submitted:
+        empire.notify_empire("order_fulfilled", {
+            "fulfilled_count": len(submitted),
+            "orders_found": len(orders),
+            "submitted_order_ids": [s["wix_order_id"] for s in submitted],
+            "error_count": len(errors),
+        })
+
+    return result
 
 
 def check_pending_fulfillments(catalog_version: str = "v3") -> dict:
@@ -131,6 +143,14 @@ def check_pending_fulfillments(catalog_version: str = "v3") -> dict:
                 still_pending.append({"wix_order_id": wix_id, "zendrop_status": status_data.get("status")})
         except Exception as e:
             errors.append({"wix_order_id": wix_id, "error": str(e)})
+
+    if updated:
+        empire.notify_empire("tracking_updated", {
+            "updated_count": len(updated),
+            "still_pending": len(still_pending),
+            "orders": [{"wix_order_id": u["wix_order_id"], "tracking": u["tracking_number"], "carrier": u["carrier"]} for u in updated],
+        })
+
     return {"checked_at": _now(), "updated": updated, "still_pending": still_pending, "errors": errors}
 
 

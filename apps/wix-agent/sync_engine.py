@@ -5,6 +5,7 @@ from typing import Optional
 
 import wix_client as wix
 import zendrop_client as zendrop
+import empire
 
 LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -122,6 +123,14 @@ def audit_inventory(catalog_version: str = "v3") -> dict:
 
     log_path = _write_log(f"audit_{_ts()}.json", report)
     print(f"Audit complete. Report saved to {log_path}")
+
+    empire.notify_empire("audit_complete", {
+        "broken_count": len(broken),
+        "healthy_count": len(healthy),
+        "no_match_count": len(no_zendrop_match),
+        "total_products": len(products),
+    })
+
     return report
 
 
@@ -207,6 +216,11 @@ def full_sync(catalog_version: str = "v3") -> dict:
     broken = report["broken"]
 
     if not broken:
+        empire.notify_empire("inventory_synced", {
+            "fixed_count": 0,
+            "broken_count": 0,
+            "message": "All inventory healthy — no changes needed",
+        })
         return {**report, "sync_action": "no_changes_needed"}
 
     confirmed_ids = [item["product_id"] for item in broken if item.get("zendrop_in_stock") is True]
@@ -226,10 +240,20 @@ def full_sync(catalog_version: str = "v3") -> dict:
             except Exception:
                 pass
 
+    fixed_count = len([c for c in fix_result["changes"] if c["status"] == "updated"])
+
+    empire.notify_empire("inventory_synced", {
+        "fixed_count": fixed_count,
+        "broken_count": len(broken),
+        "hidden_count": len(hidden),
+        "catalog_version": catalog_version,
+        "changes": [{"product": c["product_name"], "status": c["status"]} for c in fix_result["changes"]],
+    })
+
     return {
         **report,
         "sync_action": "auto_fixed",
-        "fixed_count": len([c for c in fix_result["changes"] if c["status"] == "updated"]),
+        "fixed_count": fixed_count,
         "hidden_count": len(hidden),
         "fix_log": fix_result,
     }

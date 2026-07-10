@@ -1,0 +1,68 @@
+name: Deploy Obsidian Remote
+
+on:
+  workflow_dispatch:
+    inputs:
+      obsidian_password:
+        description: 'Optional password to protect the vault (leave blank for no auth)'
+        required: false
+        default: ''
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy obsidian-remote + add Caddy route
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: 34.73.72.30
+          username: malachisingleton8
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: OBSIDIAN_PASSWORD
+          script: |
+            set -e
+            cd ~/desktop-tutorial
+
+            echo "=== Pulling latest code ==="
+            git pull origin main
+
+            echo "=== Writing OBSIDIAN_PASSWORD to .env ==="
+            if [ -n "$OBSIDIAN_PASSWORD" ]; then
+              grep -v '^OBSIDIAN_PASSWORD=' .env > .env.tmp && mv .env.tmp .env
+              echo "OBSIDIAN_PASSWORD=${OBSIDIAN_PASSWORD}" >> .env
+              echo "Password set."
+            else
+              echo "No password set — vault will be open (add one next run if needed)."
+            fi
+
+            echo "=== Starting obsidian-remote ==="
+            docker compose up -d --pull always obsidian-remote
+
+            echo "=== Waiting for container to start ==="
+            sleep 15
+
+            echo "=== Health check ==="
+            curl -sf http://localhost:8083 > /dev/null && echo "obsidian-remote UP on port 8083" || echo "WARNING: not yet responding (may still be starting)"
+
+            echo "=== Adding vault.dominionhealing.org to Caddy ==="
+            CADDY_FILE=/etc/caddy/Caddyfile
+            if grep -q 'vault.dominionhealing.org' "$CADDY_FILE"; then
+              echo "Caddy route already exists — skipping."
+            else
+              sudo tee -a "$CADDY_FILE" > /dev/null <<'EOF'
+
+vault.dominionhealing.org {
+    reverse_proxy localhost:8083
+}
+EOF
+              sudo systemctl reload caddy
+              echo "Caddy reloaded — vault.dominionhealing.org is live."
+            fi
+
+            echo ""
+            echo "==================================================="
+            echo "Obsidian Remote LIVE at: http://localhost:8083"
+            echo "Public URL: https://vault.dominionhealing.org"
+            echo "==================================================="
+        env:
+          OBSIDIAN_PASSWORD: ${{ inputs.obsidian_password }}

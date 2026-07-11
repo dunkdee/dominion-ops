@@ -2,17 +2,6 @@ name: Deploy Wix Agent
 
 on:
   workflow_dispatch:
-    inputs:
-      wix_api_key:
-        description: 'WIX_API_KEY — paste key here OR leave blank if already in GitHub Secrets'
-        required: false
-        type: string
-        default: ''
-      zendrop_api_key:
-        description: 'ZENDROP_API_KEY — paste key here OR leave blank if already in GitHub Secrets'
-        required: false
-        type: string
-        default: ''
 
 jobs:
   deploy:
@@ -20,100 +9,63 @@ jobs:
     steps:
       - name: Deploy wix-agent to VM
         uses: appleboy/ssh-action@v1.2.0
-        env:
-          WIX_INPUT: ${{ inputs.wix_api_key || secrets.WIX_API_KEY }}
-          ZD_INPUT: ${{ inputs.zendrop_api_key || secrets.ZENDROP_API_KEY }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          envs: WIX_INPUT,ZD_INPUT
+          envs: GITHUB_TOKEN
           script: |
-            set -e
             echo "=== Deploying Wix Agent ==="
             cd ~/desktop-tutorial
 
+            echo "--- Authenticating git remote ---"
+            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/dunkdee/desktop-tutorial.git
+
             echo "--- Pulling latest code ---"
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
 
-            echo "--- Resolving API keys ---"
-            WIX_KEY="${WIX_INPUT}"
-            ZD_KEY="${ZD_INPUT}"
-
-            # Last resort: check .env files on disk
-            if [ -z "$WIX_KEY" ]; then
-              WIX_KEY=$(grep -m1 '^WIX_API_KEY=' ~/desktop-tutorial/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
-            fi
-            if [ -z "$WIX_KEY" ]; then
-              WIX_KEY=$(grep -m1 '^WIX_API_KEY=' ~/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
-            fi
-            if [ -z "$ZD_KEY" ]; then
-              ZD_KEY=$(grep -m1 '^ZENDROP_API_KEY=' ~/desktop-tutorial/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
-            fi
-
-            if [ -z "$WIX_KEY" ]; then
-              echo ""
-              echo "=========================================="
-              echo "ERROR: WIX_API_KEY not found."
-              echo "Do ONE of these:"
-              echo "  1) Add WIX_API_KEY to GitHub Secrets:"
-              echo "     https://github.com/dunkdee/desktop-tutorial/settings/secrets/actions/new"
-              echo "  2) Re-run this workflow and paste the key in the input field"
-              echo "  3) Run on VM: echo 'WIX_API_KEY=your_key' >> ~/desktop-tutorial/.env"
-              echo "=========================================="
-              exit 1
-            fi
-
-            echo "WIX_API_KEY: ${#WIX_KEY} chars — ready"
-            [ -n "$ZD_KEY" ] && echo "ZENDROP_API_KEY: ${#ZD_KEY} chars — ready" || echo "ZENDROP_API_KEY: not set (order fulfillment disabled)"
-
-            echo ""
-            echo "--- Writing keys to .env ---"
-            touch .env
-            {
-              grep -v '^WIX_API_KEY=' .env | \
-              grep -v '^ZENDROP_API_KEY=' | \
-              grep -v '^WIX_SITE_ID='
-            } > .env.tmp && mv .env.tmp .env || true
-
-            echo "WIX_API_KEY=${WIX_KEY}" >> .env
+            echo "--- Writing secrets to .env ---"
+            grep -v '^WIX_API_KEY=' .env > .env.tmp 2>/dev/null || true
+            grep -v '^ZENDROP_API_KEY=' .env.tmp > .env.tmp2 2>/dev/null || true
+            grep -v '^WIX_SITE_ID=' .env.tmp2 > .env.tmp3 2>/dev/null || true
+            mv .env.tmp3 .env 2>/dev/null || touch .env
+            rm -f .env.tmp .env.tmp2 .env.tmp3
+            echo "WIX_API_KEY=${{ secrets.WIX_API_KEY }}" >> .env
+            echo "ZENDROP_API_KEY=${{ secrets.ZENDROP_API_KEY }}" >> .env
             echo "WIX_SITE_ID=a790d430-a3a0-4b0e-9be6-4c874c229167" >> .env
-            [ -n "$ZD_KEY" ] && echo "ZENDROP_API_KEY=${ZD_KEY}" >> .env
 
-            echo ""
             echo "--- Building and starting wix-agent ---"
             docker compose up -d --build wix-agent
 
-            echo ""
-            echo "--- Waiting for health (up to 90s) ---"
-            HEALTHY=false
-            for i in $(seq 1 18); do
+            echo "--- Waiting for health check ---"
+            for i in $(seq 1 12); do
               if curl -sf http://localhost:8082/health > /dev/null 2>&1; then
-                HEALTHY=true
-                echo "HEALTHY after ${i}x5s"
+                echo "wix-agent is healthy"
                 break
               fi
-              echo "  waiting... ($((i*5))s)"
+              echo "Waiting... ($i/12)"
               sleep 5
             done
 
             echo ""
-            curl -s http://localhost:8082/health | python3 -m json.tool || echo "(no response)"
+            echo "--- Health check result ---"
+            curl -s http://localhost:8082/health | python3 -m json.tool
 
             echo ""
+            echo "--- Docker container status ---"
             docker ps --filter name=wix-agent --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-
-            if [ "$HEALTHY" = "false" ]; then
-              echo ""
-              echo "--- Container logs ---"
-              docker logs wix-agent --tail 50 2>&1 || true
-              exit 1
-            fi
 
             echo ""
             echo "=== Deploy complete ==="
-            echo "  GET  http://VM:8082/health"
-            echo "  GET  http://VM:8082/audit"
-            echo "  POST http://VM:8082/sync"
-            echo "  POST http://VM:8082/fulfill"
-            echo "  GET  http://VM:8082/dashboard"
+            echo "Available endpoints:"
+            echo "  GET  http://localhost:8082/health"
+            echo "  GET  http://localhost:8082/audit      (read-only inventory audit)"
+            echo "  POST http://localhost:8082/sync       (auto-sync all Zendrop-confirmed)"
+            echo "  POST http://localhost:8082/sync/fix   (fix specific product IDs)"
+            echo "  GET  http://localhost:8082/orders     (unfulfilled orders)"
+            echo "  POST http://localhost:8082/fulfill    (submit orders to Zendrop)"
+            echo "  GET  http://localhost:8082/dashboard  (revenue summary)"
+            echo "  GET  http://localhost:8082/logs       (change log files)"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -13,12 +13,17 @@ jobs:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
+          envs: GITHUB_TOKEN
           script: |
             echo "=== Deploying Wix Agent ==="
             cd ~/desktop-tutorial
 
+            echo "--- Authenticating git remote ---"
+            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/dunkdee/desktop-tutorial.git
+
             echo "--- Pulling latest code ---"
-            git pull origin claude/vm-status-check-s0800x || git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
 
             echo "--- Writing secrets to .env ---"
             grep -v '^WIX_API_KEY=' .env > .env.tmp 2>/dev/null || true
@@ -62,3 +67,5 @@ jobs:
             echo "  POST http://localhost:8082/fulfill    (submit orders to Zendrop)"
             echo "  GET  http://localhost:8082/dashboard  (revenue summary)"
             echo "  GET  http://localhost:8082/logs       (change log files)"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

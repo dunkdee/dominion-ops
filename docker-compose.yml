@@ -32,7 +32,7 @@ services:
       GA4_MEASUREMENT_ID: ${GA4_MEASUREMENT_ID:-G-8DXWMYHNY2}
       VAULT_PATH: /vault
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8080/\").read(); print(\"OK\")' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8080/\").read()' || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 5
@@ -67,7 +67,7 @@ services:
       PPH_MAX_PROPOSALS_PER_RUN: ${PPH_MAX_PROPOSALS_PER_RUN:-3}
       PPH_MIN_BUDGET: ${PPH_MIN_BUDGET:-50}
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\").read()' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -98,7 +98,7 @@ services:
       BABY_API_URL: http://baby-api:8080
       N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL}
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\").read()' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -117,7 +117,7 @@ services:
       PGID: 1000
       OBSIDIAN_PASSWORD: ${OBSIDIAN_PASSWORD:-}
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080 || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8080\").read()' 2>/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

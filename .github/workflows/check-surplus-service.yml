@@ -1,0 +1,40 @@
+name: Check Surplus Service (port 8100)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-surplus:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect port 8100 and aura-ecosystem on VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            echo "=== HOME DIR ==="
+            echo $HOME
+            echo ""
+            echo "=== WHAT IS RUNNING ON PORT 8100 ==="
+            ss -tlnp 2>/dev/null | grep 8100 || netstat -tlnp 2>/dev/null | grep 8100 || echo "ss/netstat unavailable"
+            echo ""
+            echo "=== PROCESS ON PORT 8100 ==="
+            fuser 8100/tcp 2>/dev/null || echo "fuser unavailable"
+            lsof -i :8100 2>/dev/null | head -10 || echo "lsof unavailable"
+            echo ""
+            echo "=== SURPLUS SYSTEMD SERVICE ==="
+            systemctl status dominion-surplus 2>/dev/null | head -20 || echo "no dominion-surplus service"
+            systemctl list-units --type=service --state=running 2>/dev/null | grep -iE 'surplus|8100' || echo "no surplus service found"
+            echo ""
+            echo "=== AURA-ECOSYSTEM AGENCY-WEBSITE CONTENTS ==="
+            ls -la $HOME/aura-ecosystem/agency-website/ 2>/dev/null | head -20 || echo "NOT FOUND"
+            echo ""
+            echo "=== SURPLUS SOURCE FILES ==="
+            find $HOME -name '*surplus*' -not -path '*/.git/*' 2>/dev/null | head -15
+            find /opt/dominion /home -name 'surplus*' -not -path '*/.git/*' 2>/dev/null | head -15
+            echo ""
+            echo "=== DOMINION SERVICES ON PORT 8100 ==="
+            grep -r '8100' /etc/systemd/system/ 2>/dev/null | head -10
+            grep -r '8100' $HOME/dominion/ 2>/dev/null | grep -v '.git' | head -10

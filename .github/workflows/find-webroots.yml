@@ -1,0 +1,37 @@
+name: Find Webroot Paths
+
+on:
+  workflow_dispatch:
+
+jobs:
+  find-webroots:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Detect webroot paths on VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            echo "=== CADDYFILE ==="
+            cat /etc/caddy/Caddyfile 2>/dev/null || echo "NOT FOUND AT /etc/caddy/Caddyfile"
+            echo ""
+            echo "=== OTHER CADDY LOCATIONS ==="
+            find /etc -name "Caddyfile" 2>/dev/null | head -5
+            find /home -name "Caddyfile" 2>/dev/null | head -5
+            find /opt -name "Caddyfile" 2>/dev/null | head -5
+            echo ""
+            echo "=== COMMON WEBROOT CANDIDATES ==="
+            for dir in /var/www/html /var/www/dominionhealing.org /var/www/dominionhealing /var/www/surplus /var/www/surplus.dominionhealing.org /srv/www /home/*/public_html /home/*/www; do
+              if [ -d "$dir" ]; then
+                echo "EXISTS: $dir"
+                ls "$dir" | head -5
+              fi
+            done
+            echo ""
+            echo "=== RUNNING CADDY SITES ==="
+            systemctl status caddy 2>/dev/null | head -5
+            echo ""
+            echo "=== SITE FILES SEARCH ==="
+            find /var/www /srv/www /home -name "index.html" 2>/dev/null | grep -v ".git" | head -20

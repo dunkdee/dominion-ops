@@ -1,0 +1,93 @@
+name: Deploy Site Compliance Fixes
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-fixes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy compliance pages to VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          envs: GITHUB_TOKEN
+          script: |
+            set -e
+            MAIN_WR="$HOME/aura-ecosystem/agency-website"
+            SURPLUS_PUB="/var/www/surplus-public"
+            TS=$(date +%Y%m%d_%H%M%S)
+
+            echo "=== PULLING LATEST REPO ==="
+            cd ~/desktop-tutorial
+            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/dunkdee/desktop-tutorial.git
+            git fetch origin main
+            git checkout origin/main -- apps/site-fixes/
+            echo "Repo files fetched"
+
+            echo "=== BACKING UP ORIGINALS ==="
+            cp "$MAIN_WR/index.html" "$MAIN_WR/index.html.bak.$TS" 2>/dev/null && echo "backed up index.html" || true
+            cp "$MAIN_WR/store.html" "$MAIN_WR/store.html.bak.$TS" 2>/dev/null && echo "backed up store.html" || true
+
+            echo "=== DEPLOYING MAIN SITE FILES ==="
+            cp ~/desktop-tutorial/apps/site-fixes/index.html "$MAIN_WR/index.html"
+            echo "index.html: $(wc -c < "$MAIN_WR/index.html") bytes"
+            grep -q 'Fla. Stat' "$MAIN_WR/index.html" && echo 'PASS: surplus disclosure present' || echo 'FAIL: surplus disclosure missing'
+            grep -q 'educational purposes' "$MAIN_WR/index.html" && echo 'PASS: education disclaimer present' || echo 'FAIL: disclaimer missing'
+
+            cp ~/desktop-tutorial/apps/site-fixes/store.html "$MAIN_WR/store.html"
+            echo "store.html: $(wc -c < "$MAIN_WR/store.html") bytes"
+            grep -q 'Credit Dispute Toolkit' "$MAIN_WR/store.html" && echo 'PASS: CDT present' || echo 'FAIL: CDT missing'
+
+            echo "=== DEPLOYING SURPLUS COMPLIANCE PAGE ==="
+            sudo mkdir -p "$SURPLUS_PUB"
+            cp "$SURPLUS_PUB/index.html" "$SURPLUS_PUB/index.html.bak.$TS" 2>/dev/null || true
+            sudo cp ~/desktop-tutorial/apps/site-fixes/surplus.html "$SURPLUS_PUB/index.html"
+            sudo grep -q '45.033' "$SURPLUS_PUB/index.html" && echo 'PASS: 45.033 cap present' || echo 'FAIL: 45.033 missing'
+            sudo grep -q 'directly with the clerk' "$SURPLUS_PUB/index.html" && echo 'PASS: self-file right present' || echo 'FAIL: self-file right missing'
+
+            echo "=== UPDATING CADDY SURPLUS BLOCK ==="
+            CADDY=/etc/caddy/Caddyfile
+            sudo cp "$CADDY" "${CADDY}.bak.${TS}"
+            sudo python3 - << 'PYEOF'
+import sys
+caddy_file = '/etc/caddy/Caddyfile'
+with open(caddy_file) as f:
+    content = f.read()
+if 'surplus-public' in content:
+    print('Caddy already updated')
+    sys.exit(0)
+old = 'surplus.dominionhealing.org {\n\treverse_proxy 127.0.0.1:8100\n}'
+new = '''surplus.dominionhealing.org {
+\t@root_page {
+\t\tpath / /index.html
+\t}
+\thandle @root_page {
+\t\troot * /var/www/surplus-public
+\t\tfile_server
+\t}
+\thandle {
+\t\treverse_proxy 127.0.0.1:8100
+\t}
+}'''
+if old in content:
+    content = content.replace(old, new)
+    with open(caddy_file, 'w') as f:
+        f.write(content)
+    print('Surplus Caddy block updated')
+else:
+    print('WARNING: pattern not found in Caddyfile - check manually')
+    sys.exit(1)
+PYEOF
+
+            echo "=== VALIDATING AND RELOADING CADDY ==="
+            sudo caddy validate --config /etc/caddy/Caddyfile 2>&1 && echo 'Caddy config valid' || { echo 'FAIL: restoring backup'; sudo cp "${CADDY}.bak.${TS}" "$CADDY"; exit 1; }
+            sudo systemctl reload caddy && echo 'PASS: Caddy reloaded' || echo 'WARN: try: sudo caddy reload --config /etc/caddy/Caddyfile'
+
+            echo "=== COMPLETE ==="
+            echo "dominionhealing.org: index.html + store.html updated"
+            echo "surplus.dominionhealing.org: compliance page live at root"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

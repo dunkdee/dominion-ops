@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dominion Healing — Books, Surplus Recovery &amp; AI Wellness</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --navy: #0d1b2a; --gold: #c9a84c; --gold-light: #e8c87a; --cream: #f9f5ef; --text: #1a1a2e; --muted: #5a5a7a; }
+  body { font-family: 'Inter', sans-serif; color: var(--text); background: #fff; line-height: 1.6; }
+  h1, h2, h3 { font-family: 'Cormorant Garamond', serif; font-weight: 700; }
+  nav { background: var(--navy); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+  .nav-brand { color: var(--gold); font-family: 'Cormorant Garamond', serif; font-size: 1.4rem; font-weight: 700; text-decoration: none; }
+  .nav-links { display: flex; gap: 1.5rem; }
+  .nav-links a { color: #ccc; text-decoration: none; font-size: 0.9rem; }
+  .nav-links a:hover { color: var(--gold); }
+  .hero { background: linear-gradient(135deg, var(--navy) 0%, #1a2f4a 100%); color: #fff; padding: 5rem 2rem; text-align: center; }
+  .hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); color: var(--gold-light); margin-bottom: 1rem; }
+  .hero p { font-size: 1.1rem; color: #c8d0db; max-width: 640px; margin: 0 auto 2rem; }
+  .btn { display: inline-block; background: var(--gold); color: var(--navy); padding: 0.85rem 2rem; border-radius: 4px; font-weight: 600; text-decoration: none; }
+  .btn:hover { background: var(--gold-light); }
+  .btn-outline { background: transparent; border: 2px solid var(--gold); color: var(--gold); margin-left: 1rem; }
+  .btn-outline:hover { background: var(--gold); color: var(--navy); }
+  .stats { background: var(--cream); padding: 3rem 2rem; }
+  .stats-grid { display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap; max-width: 800px; margin: 0 auto; }
+  .stat { text-align: center; }
+  .stat-num { font-family: 'Cormorant Garamond', serif; font-size: 2.5rem; color: var(--gold); font-weight: 700; }
+  .stat-label { font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .services { padding: 4rem 2rem; }
+  .services h2 { text-align: center; font-size: 2rem; margin-bottom: 0.5rem; }
+  .services-sub { text-align: center; color: var(--muted); margin-bottom: 3rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; max-width: 1100px; margin: 0 auto; }
+  .card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.75rem; }
+  .card h3 { font-size: 1.25rem; margin-bottom: 0.5rem; color: var(--navy); }
+  .card p { font-size: 0.9rem; color: var(--muted); margin-bottom: 1rem; }
+  .card .legal-note { font-size: 0.78rem; color: #888; border-top: 1px solid #eee; padding-top: 0.75rem; margin-top: 0.75rem; }
+  .books { background: var(--cream); padding: 4rem 2rem; }
+  .books h2 { text-align: center; font-size: 2rem; margin-bottom: 2.5rem; }
+  .books-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2rem; max-width: 800px; margin: 0 auto; }
+  .book { background: #fff; border-radius: 8px; padding: 1.5rem; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .book h3 { font-size: 1.2rem; margin-bottom: 0.5rem; color: var(--navy); }
+  .book .price { font-size: 1.4rem; color: var(--gold); font-weight: 700; margin: 0.5rem 0; }
+  .book p { font-size: 0.85rem; color: var(--muted); margin-bottom: 1rem; }
+  .contact { padding: 4rem 2rem; max-width: 600px; margin: 0 auto; }
+  .contact h2 { font-size: 2rem; margin-bottom: 0.5rem; text-align: center; }
+  .contact-sub { text-align: center; color: var(--muted); margin-bottom: 2rem; }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
+  .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem; font-family: 'Inter', sans-serif; }
+  .form-group textarea { height: 100px; resize: vertical; }
+  .form-submit { width: 100%; background: var(--gold); color: var(--navy); border: none; padding: 0.9rem; font-size: 1rem; font-weight: 700; border-radius: 4px; cursor: pointer; }
+  .disclosures { background: #f0f0f0; padding: 3rem 2rem; }
+  .disclosures-inner { max-width: 860px; margin: 0 auto; }
+  .disclosures h2 { font-size: 1.4rem; margin-bottom: 1.5rem; color: var(--navy); }
+  .disclosures h3 { font-size: 1rem; font-weight: 700; margin-top: 1.25rem; margin-bottom: 0.4rem; color: var(--navy); }
+  .disclosures p { font-size: 0.82rem; color: #444; line-height: 1.65; }
+  footer { background: var(--navy); color: #888; padding: 2rem; text-align: center; font-size: 0.8rem; }
+  footer a { color: var(--gold); text-decoration: none; }
+  #contact { scroll-margin-top: 80px; }
+</style>
+</head>
+<body>
+<nav>
+  <a class="nav-brand" href="/">Dominion Healing</a>
+  <div class="nav-links">
+    <a href="#services">Services</a><a href="#books">Books</a><a href="/store.html">Store</a><a href="https://surplus.dominionhealing.org">Surplus</a><a href="#contact">Contact</a>
+  </div>
+</nav>
+<section class="hero">
+  <h1>Healing, Knowledge &amp; Financial Clarity</h1>
+  <p>Books on holistic wellness, Florida surplus recovery services, and AI-powered wellness education — all grounded in truth, not hype.</p>
+  <a class="btn" href="/store.html">Browse the Store</a>
+  <a class="btn btn-outline" href="#contact">Get in Touch</a>
+</section>
+<section class="stats">
+  <div class="stats-grid">
+    <div class="stat"><div class="stat-num">2</div><div class="stat-label">Published Books</div></div>
+    <div class="stat"><div class="stat-num">67</div><div class="stat-label">FL Counties Covered</div></div>
+    <div class="stat"><div class="stat-num">24/7</div><div class="stat-label">AI Wellness Education</div></div>
+  </div>
+</section>
+<section class="services" id="services">
+  <h2>What We Offer</h2>
+  <p class="services-sub">Practical tools and services — no fluff, no false promises.</p>
+  <div class="cards">
+    <div class="card">
+      <h3>Wellness Books</h3>
+      <p>Two published books covering holistic healing practices and personal sovereignty. Available on Amazon.</p>
+      <a class="btn" href="#books">View Books</a>
+      <p class="legal-note">These books are for educational purposes only and are not medical advice.</p>
+    </div>
+    <div class="card">
+      <h3>FL Surplus Recovery</h3>
+      <p>We help Florida property owners locate and claim surplus funds held by county clerks after tax deeds or foreclosures. Our fee is capped at 12% by Fla. Stat. §45.033. No upfront fees — ever. You always have the right to file your claim directly with the county clerk at no cost.</p>
+      <a class="btn" href="https://surplus.dominionhealing.org">Learn More</a>
+      <p class="legal-note">We are not attorneys. Nothing here is legal advice. Maximum contingency fee: 12% per Fla. Stat. §45.033.</p>
+    </div>
+    <div class="card">
+      <h3>AI Wellness Education</h3>
+      <p>AI-generated educational summaries on health topics — designed to help you ask better questions at your next doctor's visit.</p>
+      <a class="btn" href="/store.html">See Products</a>
+      <p class="legal-note">Not medical advice. Does not create a provider-patient relationship. Always consult a licensed healthcare professional.</p>
+    </div>
+    <div class="card">
+      <h3>Credit Dispute Tools</h3>
+      <p>FCRA/FDCPA-compliant letter templates to help you exercise your rights when disputing credit report errors.</p>
+      <a class="btn" href="/store.html">View Toolkit</a>
+      <p class="legal-note">Templates are for educational use only and are not legal advice. Consult a licensed attorney for guidance on your specific situation.</p>
+    </div>
+  </div>
+</section>
+<section class="books" id="books">
+  <h2>Published Books</h2>
+  <div class="books-grid">
+    <div class="book">
+      <h3>The Art of True Healing</h3>
+      <div class="price">$17.99</div>
+      <p>A practical guide to holistic wellness practices rooted in natural principles.</p>
+      <a class="btn" href="https://www.amazon.com/dp/B0GY6LM72W" target="_blank" rel="noopener">Buy on Amazon</a>
+    </div>
+    <div class="book">
+      <h3>Divine Sovereignty</h3>
+      <div class="price">$19.00</div>
+      <p>Exploring personal sovereignty through mindfulness, intentional living, and self-determination.</p>
+      <a class="btn" href="https://www.amazon.com/dp/B0GDQ7C3JC" target="_blank" rel="noopener">Buy on Amazon</a>
+    </div>
+  </div>
+</section>
+<section class="contact" id="contact">
+  <h2>Contact Us</h2>
+  <p class="contact-sub">Questions about surplus recovery, our books, or anything else? Reach out below.</p>
+  <form action="/api/lead" method="POST">
+    <div class="form-group"><label for="name">Full Name</label><input type="text" id="name" name="name" required placeholder="Your name"></div>
+    <div class="form-group"><label for="email">Email Address</label><input type="email" id="email" name="email" required placeholder="your@email.com"></div>
+    <div class="form-group"><label for="interest">I'm interested in…</label><select id="interest" name="interest"><option value="surplus">FL Surplus Recovery</option><option value="books">Books</option><option value="wellness">AI Wellness Education</option><option value="credit">Credit Dispute Toolkit</option><option value="other">Other</option></select></div>
+    <div class="form-group"><label for="message">Message (optional)</label><textarea id="message" name="message" placeholder="Any details you'd like to share…"></textarea></div>
+    <button type="submit" class="form-submit">Send Message</button>
+  </form>
+</section>
+<section class="disclosures">
+  <div class="disclosures-inner">
+    <h2>Important Disclosures</h2>
+    <h3>Health &amp; Wellness</h3>
+    <p>All health-related content on this website is for educational purposes only. Nothing on this site constitutes medical advice, diagnosis, or treatment. Always consult a qualified healthcare provider before making any health decisions.</p>
+    <h3>AI-Generated Content</h3>
+    <p>Some content on this site is generated with the assistance of artificial intelligence. AI outputs may contain errors or omissions. AI-generated wellness content does not create a provider-patient relationship. Verify all information with qualified professionals before acting on it.</p>
+    <h3>Florida Surplus Recovery</h3>
+    <p>Our contingency fee is capped at 12% of the recovered amount per Fla. Stat. §45.033. We charge no upfront fees. You have the right to file your claim directly with the county clerk at no cost and without hiring anyone. We are not attorneys and do not provide legal advice.</p>
+    <h3>Consultations</h3>
+    <p>Any consultation with Dominion Healing representatives is for informational purposes only and does not constitute professional advice (legal, medical, financial, or otherwise). No professional-client relationship is formed through this website.</p>
+    <h3>Credit Dispute</h3>
+    <p>Credit dispute letter templates are provided for educational purposes under FCRA and FDCPA. These templates are not legal advice and do not constitute attorney-client representation. Consult a licensed attorney for advice specific to your situation.</p>
+  </div>
+</section>
+<footer>
+  <p>&copy; 2026 Dominion Healing. All rights reserved. | <a href="#contact">Contact</a> | <a href="/store.html">Store</a></p>
+  <p style="margin-top:0.5rem;">Dominion Healing is not a law firm, medical practice, or financial advisory firm. All content is for educational purposes only.</p>
+</footer>
+</body>
+</html>

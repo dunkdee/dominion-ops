@@ -1,0 +1,29 @@
+name: Check VM .env
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show .env key names and lengths
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            ENV_FILE="$HOME/desktop-tutorial/.env"
+            if [ ! -f "$ENV_FILE" ]; then
+              echo "$ENV_FILE not found"
+              exit 1
+            fi
+            echo "=== $ENV_FILE ==="
+            while IFS= read -r line || [ -n "$line" ]; do
+              # Skip blank lines and comments
+              [[ -z "$line" || "$line" == \#* ]] && continue
+              KEY=$(echo "$line" | cut -d= -f1)
+              VAL=$(echo "$line" | cut -d= -f2-)
+              echo "$KEY = (${#VAL} chars)"
+            done < "$ENV_FILE"

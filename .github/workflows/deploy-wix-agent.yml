@@ -13,7 +13,7 @@ jobs:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          envs: GITHUB_TOKEN
+          envs: GITHUB_TOKEN,WIX_API_KEY,ZENDROP_API_KEY
           script: |
             echo "=== Deploying Wix Agent ==="
             cd ~/desktop-tutorial
@@ -25,15 +25,26 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            echo "--- Writing secrets to .env ---"
-            grep -v '^WIX_API_KEY=' .env > .env.tmp 2>/dev/null || true
-            grep -v '^ZENDROP_API_KEY=' .env.tmp > .env.tmp2 2>/dev/null || true
-            grep -v '^WIX_SITE_ID=' .env.tmp2 > .env.tmp3 2>/dev/null || true
-            mv .env.tmp3 .env 2>/dev/null || touch .env
-            rm -f .env.tmp .env.tmp2 .env.tmp3
-            echo "WIX_API_KEY=${{ secrets.WIX_API_KEY }}" >> .env
-            echo "ZENDROP_API_KEY=${{ secrets.ZENDROP_API_KEY }}" >> .env
+            echo "--- Writing secrets to .env (only if non-empty) ---"
+            touch .env
+            # Always set WIX_SITE_ID
+            sed -i '/^WIX_SITE_ID=/d' .env
             echo "WIX_SITE_ID=a790d430-a3a0-4b0e-9be6-4c874c229167" >> .env
+            # Only overwrite API keys if secret is non-empty; otherwise preserve existing .env value
+            if [ -n "$WIX_API_KEY" ]; then
+              sed -i '/^WIX_API_KEY=/d' .env
+              echo "WIX_API_KEY=$WIX_API_KEY" >> .env
+              echo "WIX_API_KEY written (${#WIX_API_KEY} chars)"
+            else
+              echo "WIX_API_KEY secret not set in GitHub — preserving existing .env value"
+            fi
+            if [ -n "$ZENDROP_API_KEY" ]; then
+              sed -i '/^ZENDROP_API_KEY=/d' .env
+              echo "ZENDROP_API_KEY=$ZENDROP_API_KEY" >> .env
+              echo "ZENDROP_API_KEY written (${#ZENDROP_API_KEY} chars)"
+            else
+              echo "ZENDROP_API_KEY secret not set in GitHub — preserving existing .env value"
+            fi
 
             echo "--- Building and starting wix-agent ---"
             docker compose up -d --build wix-agent
@@ -69,3 +80,5 @@ jobs:
             echo "  GET  http://localhost:8082/logs       (change log files)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          ZENDROP_API_KEY: ${{ secrets.ZENDROP_API_KEY }}

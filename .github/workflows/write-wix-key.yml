@@ -1,0 +1,51 @@
+name: Write ENV Key to VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      env_key:
+        description: 'Variable name (e.g. ZENDROP_API_KEY)'
+        required: true
+        default: 'ZENDROP_API_KEY'
+      env_value:
+        description: 'Paste the API key value here'
+        required: true
+
+jobs:
+  write-key:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write key to VM .env and restart wix-agent
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          envs: ENV_KEY,ENV_VALUE
+          script: |
+            set -e
+            ENV_FILE="$HOME/desktop-tutorial/.env"
+            touch "$ENV_FILE"
+
+            # Remove old entry for this key and append new value
+            sed -i "/^${ENV_KEY}=/d" "$ENV_FILE"
+            echo "${ENV_KEY}=${ENV_VALUE}" >> "$ENV_FILE"
+
+            # Verify length (never print value)
+            VAL=$(grep "^${ENV_KEY}=" "$ENV_FILE" | cut -d= -f2-)
+            echo "PASS: ${ENV_KEY} written — ${#VAL} chars"
+
+            # Restart wix-agent so it picks up the new key
+            cd "$HOME/desktop-tutorial"
+            if docker ps -a --format '{{.Names}}' | grep -q '^wix-agent$'; then
+              docker stop wix-agent 2>/dev/null || true
+              docker rm wix-agent 2>/dev/null || true
+            fi
+            docker compose up -d wix-agent
+            sleep 8
+
+            docker ps --filter name=wix-agent --format 'Status: {{.Status}}'
+            curl -sf http://localhost:8082/health && echo 'PASS: wix-agent /health OK' || echo 'WARN: /health not reachable yet (give it 30s)'
+        env:
+          ENV_KEY: ${{ inputs.env_key }}
+          ENV_VALUE: ${{ inputs.env_value }}

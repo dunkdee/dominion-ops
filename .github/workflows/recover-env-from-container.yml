@@ -1,0 +1,54 @@
+name: Recover ENV Keys from Running Container
+
+on:
+  workflow_dispatch:
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract WIX_API_KEY and ZENDROP_API_KEY from wix-agent container
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -e
+            ENV_FILE="$HOME/desktop-tutorial/.env"
+            touch "$ENV_FILE"
+
+            # Extract keys from running container directly to temp file (values never hit stdout)
+            TMP=$(mktemp)
+            docker exec wix-agent env 2>/dev/null | grep -E '^(WIX_API_KEY|ZENDROP_API_KEY)=' > "$TMP" || true
+
+            COUNT=$(wc -l < "$TMP")
+            echo "Found $COUNT key(s) in wix-agent container"
+
+            if [ "$COUNT" -eq 0 ]; then
+              echo "ERROR: Neither WIX_API_KEY nor ZENDROP_API_KEY found in wix-agent container"
+              echo "Container must be running and healthy to recover keys"
+              rm -f "$TMP"
+              exit 1
+            fi
+
+            # Remove old entries then append recovered values
+            while IFS= read -r line; do
+              KEY="${line%%=*}"
+              sed -i "/^${KEY}=/d" "$ENV_FILE" 2>/dev/null || true
+            done < "$TMP"
+            cat "$TMP" >> "$ENV_FILE"
+            rm -f "$TMP"
+
+            # Verify: print key names and lengths only (never values)
+            echo ""
+            echo "=== Keys now in $ENV_FILE ==="
+            while IFS= read -r line; do
+              KEY="${line%%=*}"
+              VAL="${line#*=}"
+              echo "  PASS: ${KEY} = ${#VAL} chars"
+            done < <(grep -E '^(WIX_API_KEY|ZENDROP_API_KEY)=' "$ENV_FILE")
+
+            echo ""
+            echo "Container NOT restarted — already running with correct keys"
+            echo "Keys will survive next container restart now that .env is updated"

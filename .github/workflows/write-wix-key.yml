@@ -1,10 +1,14 @@
-name: Write WIX_API_KEY to VM
+name: Write ENV Key to VM
 
 on:
   workflow_dispatch:
     inputs:
-      wix_api_key:
-        description: 'Paste your Wix API key here'
+      env_key:
+        description: 'Variable name (e.g. ZENDROP_API_KEY)'
+        required: true
+        default: 'ZENDROP_API_KEY'
+      env_value:
+        description: 'Paste the API key value here'
         required: true
 
 jobs:
@@ -17,22 +21,22 @@ jobs:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          envs: WIX_API_KEY
+          envs: ENV_KEY,ENV_VALUE
           script: |
             set -e
             ENV_FILE="$HOME/desktop-tutorial/.env"
 
-            # Remove any existing WIX_API_KEY line
+            # Remove any existing line for this key
             if [ -f "$ENV_FILE" ]; then
-              sed -i '/^WIX_API_KEY=/d' "$ENV_FILE"
+              sed -i "/^${ENV_KEY}=/d" "$ENV_FILE"
             fi
 
             # Append the new key
-            echo "WIX_API_KEY=${WIX_API_KEY}" >> "$ENV_FILE"
-            echo "WIX_API_KEY written to $ENV_FILE"
+            echo "${ENV_KEY}=${ENV_VALUE}" >> "$ENV_FILE"
+            echo "${ENV_KEY} written to $ENV_FILE"
 
-            # Verify it was written (show length, not value)
-            VAL=$(grep '^WIX_API_KEY=' "$ENV_FILE" | cut -d= -f2)
+            # Verify (show length, not value)
+            VAL=$(grep "^${ENV_KEY}=" "$ENV_FILE" | cut -d= -f2)
             echo "Stored key length: ${#VAL} chars"
 
             # Restart wix-agent to pick up the new env var
@@ -50,4 +54,5 @@ jobs:
             docker ps --filter name=wix-agent --format 'Status: {{.Status}}'
             curl -sf http://localhost:8082/health && echo 'PASS: wix-agent /health OK' || echo 'WARN: /health not reachable yet'
         env:
-          WIX_API_KEY: ${{ inputs.wix_api_key }}
+          ENV_KEY: ${{ inputs.env_key }}
+          ENV_VALUE: ${{ inputs.env_value }}

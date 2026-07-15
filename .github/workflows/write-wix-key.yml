@@ -1,0 +1,55 @@
+name: Write WIX_API_KEY to VM
+
+on:
+  workflow_dispatch:
+
+jobs:
+  write-key:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write key to VM .env and restart wix-agent
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          envs: WIX_API_KEY
+          script: |
+            set -e
+            ENV_FILE="$HOME/desktop-tutorial/.env"
+
+            # Remove any existing WIX_API_KEY line
+            if [ -f "$ENV_FILE" ]; then
+              sed -i '/^WIX_API_KEY=/d' "$ENV_FILE"
+            fi
+
+            # Append the new key
+            echo "WIX_API_KEY=${WIX_API_KEY}" >> "$ENV_FILE"
+            echo "WIX_API_KEY written to $ENV_FILE"
+
+            # Verify it was written (show length, not value)
+            VAL=$(grep '^WIX_API_KEY=' "$ENV_FILE" | cut -d= -f2)
+            echo "Stored key length: ${#VAL} chars"
+
+            # Restart wix-agent to pick up the new env var
+            cd "$HOME/desktop-tutorial"
+            if docker ps -a --format '{{.Names}}' | grep -q '^wix-agent$'; then
+              docker stop wix-agent 2>/dev/null || true
+              docker rm wix-agent 2>/dev/null || true
+              echo "Removed old wix-agent container"
+            fi
+
+            if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ]; then
+              docker compose up -d wix-agent
+              echo "Started wix-agent via docker compose"
+            else
+              echo "No docker-compose.yml found — start wix-agent manually"
+              exit 1
+            fi
+
+            # Wait and verify
+            sleep 5
+            docker ps --filter name=wix-agent --format 'Status: {{.Status}}'
+            curl -sf http://localhost:8082/health && echo 'PASS: wix-agent /health OK' || echo 'WARN: /health not reachable yet (may need more time)'
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}

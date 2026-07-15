@@ -2,6 +2,10 @@ name: Write WIX_API_KEY to VM
 
 on:
   workflow_dispatch:
+    inputs:
+      wix_api_key:
+        description: 'Paste your Wix API key here'
+        required: true
 
 jobs:
   write-key:
@@ -39,17 +43,11 @@ jobs:
               echo "Removed old wix-agent container"
             fi
 
-            if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ]; then
-              docker compose up -d wix-agent
-              echo "Started wix-agent via docker compose"
-            else
-              echo "No docker-compose.yml found — start wix-agent manually"
-              exit 1
-            fi
+            docker compose up -d wix-agent
+            echo "Started wix-agent via docker compose"
 
-            # Wait and verify
             sleep 5
             docker ps --filter name=wix-agent --format 'Status: {{.Status}}'
-            curl -sf http://localhost:8082/health && echo 'PASS: wix-agent /health OK' || echo 'WARN: /health not reachable yet (may need more time)'
+            curl -sf http://localhost:8082/health && echo 'PASS: wix-agent /health OK' || echo 'WARN: /health not reachable yet'
         env:
-          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_API_KEY: ${{ inputs.wix_api_key }}

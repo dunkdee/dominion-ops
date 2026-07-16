@@ -15,47 +15,16 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             echo "=============================="
-            echo "  systemctl status (full)"
+            echo "  sudo access check"
             echo "=============================="
-            systemctl status dominion-proposal-queue.service --no-pager -l 2>&1 || echo "status command failed"
+            sudo -n true 2>/dev/null && echo "SUDO_OK (passwordless)" || echo "SUDO_NO"
 
             echo ""
             echo "=============================="
-            echo "  systemctl show (Fragment/Source paths)"
+            echo "  sibling buddy_core unit files (templates)"
             echo "=============================="
-            systemctl show dominion-proposal-queue.service -p FragmentPath -p SourcePath -p UnitFileState -p MainPID -p ExecStart 2>&1
-
-            echo ""
-            echo "=============================="
-            echo "  unit file search (systemd dirs)"
-            echo "=============================="
-            find /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system \
-              -iname "*proposal*" 2>/dev/null
-
-            echo ""
-            echo "=============================="
-            echo "  unit file content (if found)"
-            echo "=============================="
-            for f in /etc/systemd/system/dominion-proposal-queue.service \
-                     /etc/systemd/system/multi-user.target.wants/dominion-proposal-queue.service; do
-              echo "--- $f ---"
-              cat "$f" 2>/dev/null || echo "not present"
+            for svc in dominion-review-queue.service dominion-report.service dominion-guardian.service dominion-buddy-web.service; do
+              echo "--- $svc ---"
+              systemctl cat "$svc" 2>&1
+              echo ""
             done
-
-            echo ""
-            echo "=============================="
-            echo "  running proposal_queue processes"
-            echo "=============================="
-            ps aux | grep -i proposal_queue | grep -v grep || echo "no matching process"
-
-            echo ""
-            echo "=============================="
-            echo "  ~/buddy_core/proposal_queue.py"
-            echo "=============================="
-            ls -la ~/buddy_core/proposal_queue.py 2>/dev/null || echo "file not found"
-
-            echo ""
-            echo "=============================="
-            echo "  systemd-analyze verify"
-            echo "=============================="
-            systemd-analyze verify dominion-proposal-queue.service 2>&1 || true

@@ -16,7 +16,7 @@ jobs:
           command_timeout: 300s
           script: |
             echo "===== STEP 1: PULL LATEST REPO ====="
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
             git fetch origin main
             git reset --hard origin/main
             echo "repo synced"
@@ -26,10 +26,10 @@ jobs:
             echo "dir ready: ~/dominion/alpha_engine"
 
             echo "===== STEP 3: COPY FILES (no overwrite of existing) ====="
-            cp -rn ~/desktop-tutorial/alpha_engine/. ~/dominion/alpha_engine/ 2>/dev/null || true
-            cp -r ~/desktop-tutorial/alpha_engine/dominion_alpha ~/dominion/alpha_engine/ 2>/dev/null || true
-            cp ~/desktop-tutorial/alpha_engine/requirements.txt ~/dominion/alpha_engine/ 2>/dev/null || true
-            cp ~/desktop-tutorial/alpha_engine/dominion-alpha.service ~/dominion/alpha_engine/ 2>/dev/null || true
+            cp -rn ~/dominion-ops/alpha_engine/. ~/dominion/alpha_engine/ 2>/dev/null || true
+            cp -r ~/dominion-ops/alpha_engine/dominion_alpha ~/dominion/alpha_engine/ 2>/dev/null || true
+            cp ~/dominion-ops/alpha_engine/requirements.txt ~/dominion/alpha_engine/ 2>/dev/null || true
+            cp ~/dominion-ops/alpha_engine/dominion-alpha.service ~/dominion/alpha_engine/ 2>/dev/null || true
             echo "files copied"
 
             echo "===== STEP 4: CREATE .env IF NOT EXISTS ====="

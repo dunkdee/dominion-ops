@@ -15,7 +15,7 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 15m
           script: |
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
 
             echo "=============================="
             echo "  GIT PULL"

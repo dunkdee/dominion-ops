@@ -17,7 +17,7 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             set -e
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
 
             # Install deps if needed
             pip3 install --quiet python-frontmatter 2>/dev/null || \

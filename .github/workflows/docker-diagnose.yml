@@ -29,7 +29,7 @@ jobs:
             echo "=============================="
             echo "  DOCKER COMPOSE PS"
             echo "=============================="
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
             docker compose ps 2>/dev/null
 
             echo ""
@@ -44,7 +44,7 @@ jobs:
             echo "=============================="
             echo "  .ENV FILE (key names only, no values)"
             echo "=============================="
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
             grep -oP '^[^=]+' .env 2>/dev/null | sort || echo ".env not found"
 
             echo ""

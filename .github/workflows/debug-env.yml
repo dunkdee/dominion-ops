@@ -23,15 +23,15 @@ jobs:
             grep -rl '\.env' ~/.config/systemd/ 2>/dev/null || echo 'none'
 
             echo '=== docker-compose.yml env_file / environment section ==='
-            cat ~/desktop-tutorial/docker-compose.yml
+            cat ~/dominion-ops/docker-compose.yml
 
             echo '=== .env file last modified ==='
-            stat ~/desktop-tutorial/.env 2>/dev/null || echo 'file not found'
+            stat ~/dominion-ops/.env 2>/dev/null || echo 'file not found'
 
             echo '=== does docker compose have its own .env or override? ==='
-            ls -la ~/desktop-tutorial/.env* 2>/dev/null
-            ls -la ~/desktop-tutorial/docker-compose*.yml 2>/dev/null
-            ls -la ~/desktop-tutorial/docker-compose*.yaml 2>/dev/null
+            ls -la ~/dominion-ops/.env* 2>/dev/null
+            ls -la ~/dominion-ops/docker-compose*.yml 2>/dev/null
+            ls -la ~/dominion-ops/docker-compose*.yaml 2>/dev/null
 
             echo '=== wix-agent container env vars (names only) ==='
             docker inspect wix-agent --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | cut -d= -f1 || echo 'container not running'

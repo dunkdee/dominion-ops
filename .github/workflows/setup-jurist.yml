@@ -67,15 +67,15 @@ jobs:
 
             echo ""
             echo "=============================="
-            echo "  GIT PULL desktop-tutorial"
+            echo "  GIT PULL dominion-ops"
             echo "=============================="
-            cd ~/desktop-tutorial && git pull origin main
+            cd ~/dominion-ops && git pull origin main
 
             echo ""
             echo "=============================="
             echo "  RESTART BABY-API"
             echo "=============================="
-            cd ~/desktop-tutorial && docker compose up -d baby-api
+            cd ~/dominion-ops && docker compose up -d baby-api
             echo "Waiting 20s for baby-api startup..."
             sleep 20
 

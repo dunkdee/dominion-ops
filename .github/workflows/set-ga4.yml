@@ -19,7 +19,7 @@ jobs:
             echo "=============================="
             echo "  UPDATE .ENV"
             echo "=============================="
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
             grep -v '^GA4_MEASUREMENT_ID=' .env > .env.tmp && mv .env.tmp .env
             echo "GA4_MEASUREMENT_ID=${GA4_ID}" >> .env
             echo "✅ Written: GA4_MEASUREMENT_ID=${GA4_ID}"

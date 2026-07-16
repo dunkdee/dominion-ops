@@ -17,7 +17,7 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 3m
           script: |
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
             RESTART_NEEDED=0
 
             # Check baby-api

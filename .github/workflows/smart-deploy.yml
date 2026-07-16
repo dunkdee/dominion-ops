@@ -21,7 +21,7 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             set -e
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
 
             echo "=============================="
             echo "  SCANNING VM FOR ENV KEYS"
@@ -36,7 +36,7 @@ jobs:
               "$HOME/dominion/buddy/.env"
               "$HOME/dominion/store/.env"
               "$HOME/.env"
-              "$HOME/desktop-tutorial/.env"
+              "$HOME/dominion-ops/.env"
             )
 
             # Keys we care about
@@ -83,7 +83,7 @@ jobs:
 
             echo ""
             echo "=============================="
-            echo "  WRITING ~/desktop-tutorial/.env"
+            echo "  WRITING ~/dominion-ops/.env"
             echo "=============================="
 
             # Write merged .env
@@ -133,7 +133,7 @@ jobs:
               echo "  ... waiting for baby-api (attempt $i/12)"
               if [ "$i" = "12" ]; then
                 echo "❌ baby-api FAILED to start after 60s"
-                docker logs desktop-tutorial-baby-api-1 2>&1 | tail -30
+                docker logs dominion-ops-baby-api-1 2>&1 | tail -30
               fi
             done
             curl -sf http://localhost:8090/ && echo "✅ dominion-web OK" || echo "❌ dominion-web FAILED"

@@ -49,7 +49,7 @@ jobs:
             echo "=============================="
             echo "  VAULT 20-DEALS AFTER TEST"
             echo "=============================="
-            VAULT=$(grep '^VAULT_PATH=' ~/desktop-tutorial/.env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'")
+            VAULT=$(grep '^VAULT_PATH=' ~/dominion-ops/.env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'")
             VAULT=${VAULT:-/home/malachisingleton8/vault}
             ls -lt "${VAULT}/20-deals" 2>/dev/null | head -10
             echo ""

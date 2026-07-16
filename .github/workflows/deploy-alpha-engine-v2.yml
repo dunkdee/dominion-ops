@@ -27,7 +27,7 @@ jobs:
             echo "BACKUP CREATED: $BACKUP_DIR"
 
             echo "===== STEP 2: PULL LATEST REPO ====="
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
             git fetch origin main
             git reset --hard origin/main
             echo "repo at: $(git log --oneline -1)"
@@ -37,13 +37,13 @@ jobs:
             echo "service stopped"
 
             echo "===== STEP 4: DEPLOY v2 FILES ====="
-            cp -r ~/desktop-tutorial/alpha_engine/dominion_alpha ~/dominion/alpha_engine/
-            cp ~/desktop-tutorial/alpha_engine/requirements.txt ~/dominion/alpha_engine/
+            cp -r ~/dominion-ops/alpha_engine/dominion_alpha ~/dominion/alpha_engine/
+            cp ~/dominion-ops/alpha_engine/requirements.txt ~/dominion/alpha_engine/
             ls -la ~/dominion/alpha_engine/dominion_alpha/
 
             echo "===== STEP 5: PRESERVE .env AND DB ====="
             if [ ! -f ~/dominion/alpha_engine/.env ]; then
-              cp ~/desktop-tutorial/alpha_engine/.env.example ~/dominion/alpha_engine/.env
+              cp ~/dominion-ops/alpha_engine/.env.example ~/dominion/alpha_engine/.env
               echo ".env created from example"
             else
               echo ".env preserved"
@@ -75,7 +75,7 @@ jobs:
             .venv/bin/python -c "import sys; sys.path.insert(0,'.'); from dominion_alpha.memory import init_db,get_memory_stats; from dominion_alpha.council import COUNCIL,convene; from dominion_alpha.scanner import scan_new_pairs; from dominion_alpha.risk import check_entry,check_exit,check_portfolio_risk; from dominion_alpha.paper_broker import get_capital,get_open_positions; from dominion_alpha.performance import compute_performance; from dominion_alpha.learning import get_lessons,get_current_weights; from dominion_alpha.governor import run_cycle,get_state; from dominion_alpha.api import app; init_db(); assert len(COUNCIL)==12,'Expected 12 advisors'; print('ALL IMPORTS OK'); print('Council advisors:',len(COUNCIL)); print('Names:',[a.name for a in COUNCIL]); state=get_state(); print('Governor v'+state.version,'threshold='+str(state.confidence_threshold),'kill_switch='+str(state.kill_switch)); print('LIVE_TRADING=false confirmed: OK'); print('Memory tables:',list(get_memory_stats().keys()))"
 
             echo "===== STEP 9: UPDATE SERVICE FILE ====="
-            sudo cp ~/desktop-tutorial/alpha_engine/dominion-alpha.service /etc/systemd/system/
+            sudo cp ~/dominion-ops/alpha_engine/dominion-alpha.service /etc/systemd/system/
             sudo systemctl daemon-reload
             sudo systemctl enable dominion-alpha
 

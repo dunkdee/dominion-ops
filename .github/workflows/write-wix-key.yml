@@ -24,7 +24,7 @@ jobs:
           envs: ENV_KEY,ENV_VALUE
           script: |
             set -e
-            ENV_FILE="$HOME/desktop-tutorial/.env"
+            ENV_FILE="$HOME/dominion-ops/.env"
 
             # Remove any existing line for this key
             if [ -f "$ENV_FILE" ]; then
@@ -40,7 +40,7 @@ jobs:
             echo "Stored key length: ${#VAL} chars"
 
             # Restart wix-agent to pick up the new env var
-            cd "$HOME/desktop-tutorial"
+            cd "$HOME/dominion-ops"
             if docker ps -a --format '{{.Names}}' | grep -q '^wix-agent$'; then
               docker stop wix-agent 2>/dev/null || true
               docker rm wix-agent 2>/dev/null || true

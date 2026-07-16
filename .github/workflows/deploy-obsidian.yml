@@ -21,7 +21,7 @@ jobs:
           envs: OBSIDIAN_PASSWORD
           script: |
             set -e
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
 
             echo "=== Pulling latest code ==="
             git pull origin main

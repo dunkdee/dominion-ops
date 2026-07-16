@@ -16,10 +16,10 @@ jobs:
           envs: GITHUB_TOKEN
           script: |
             echo "=== Deploying Wix Agent ==="
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
 
             echo "--- Authenticating git remote ---"
-            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/dunkdee/desktop-tutorial.git
+            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/dunkdee/dominion-ops.git
 
             echo "--- Pulling latest code ---"
             git fetch origin main

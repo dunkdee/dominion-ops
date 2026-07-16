@@ -14,7 +14,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            ENV_FILE="$HOME/desktop-tutorial/.env"
+            ENV_FILE="$HOME/dominion-ops/.env"
             if [ ! -f "$ENV_FILE" ]; then
               echo "$ENV_FILE not found"
               exit 1

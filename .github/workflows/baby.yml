@@ -22,7 +22,7 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             set -e
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
 
             printf 'GUMROAD_TOKEN=%s\n'         '${{ secrets.GUMROAD_TOKEN }}'         > .env
             printf 'BREVO_API_KEY=%s\n'          '${{ secrets.BREVO_API_KEY }}'         >> .env

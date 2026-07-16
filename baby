@@ -2,6 +2,6 @@
 # Run these with actual values from your secure password manager.
 # NEVER paste real keys into this file — this repo is public.
 
-# gh secret set YOUTUBE_CLIENT_ID --body "YOUR_VALUE_HERE" --repo dunkdee/desktop-tutorial
-# gh secret set YOUTUBE_CLIENT_SECRET --body "YOUR_VALUE_HERE" --repo dunkdee/desktop-tutorial
-# gh secret set YOUTUBE_API_KEY --body "YOUR_VALUE_HERE" --repo dunkdee/desktop-tutorial
+# gh secret set YOUTUBE_CLIENT_ID --body "YOUR_VALUE_HERE" --repo dunkdee/dominion-ops
+# gh secret set YOUTUBE_CLIENT_SECRET --body "YOUR_VALUE_HERE" --repo dunkdee/dominion-ops
+# gh secret set YOUTUBE_API_KEY --body "YOUR_VALUE_HERE" --repo dunkdee/dominion-ops

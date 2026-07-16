@@ -24,7 +24,7 @@ jobs:
             echo "=== Vault Seed Starting ==="
             echo "Date: $(date -u)"
 
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
             git fetch origin main
             git checkout origin/main -- scripts/seed_vault.py
             echo "Seed script pulled from origin/main."
@@ -33,7 +33,7 @@ jobs:
             echo "Vault path: $VAULT_PATH"
             mkdir -p "$VAULT_PATH"
 
-            VAULT_PATH="$VAULT_PATH" python3 ~/desktop-tutorial/scripts/seed_vault.py
+            VAULT_PATH="$VAULT_PATH" python3 ~/dominion-ops/scripts/seed_vault.py
 
             echo ""
             echo "=== All markdown files in vault ==="

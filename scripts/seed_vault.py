@@ -98,7 +98,7 @@ tags: [home, index, meta]
 
 ## Codebase
 
-- GitHub: https://github.com/dunkdee/desktop-tutorial
+- GitHub: https://github.com/dunkdee/dominion-ops
 - VM: 34.73.72.30
 """)
 
@@ -131,7 +131,7 @@ tags: [agents, registry, meta]
 - **Action:** Terminal Claude must start the service
 
 ## Baby API
-- **Container:** desktop-tutorial-baby-api-1 | **Port:** 8080
+- **Container:** dominion-ops-baby-api-1 | **Port:** 8080
 - **Vault:** mounts ~/vault → /vault inside container
 
 ## Gemini Server
@@ -232,7 +232,7 @@ tags: [architecture, vm, system]
 30+ systemd services. Agents: Alchemist, Juris, Conductor, Buddy, Store, Surplus.
 PostgreSQL. Caddy routes: api, n8n, store, buddy, surplus, report, empire subdomains.
 
-## System 2: ~/desktop-tutorial/ (GitHub-managed Docker)
+## System 2: ~/dominion-ops/ (GitHub-managed Docker)
 baby-api:8080, dominion-web:8090, browser-agents:8081.
 Vault at ~/vault mounted into baby-api container.
 

@@ -19,7 +19,7 @@ Walk in divine power, wisdom, and sovereignty. Every project aligns with abundan
 | Checkout URL | **LIVE** | `https://singleton828.gumroad.com/l/xnfyw` |
 | Price | $47 | Confirmed in API response |
 | Published flag | **STUCK AT false** | Gumroad API v2 cannot set `published=true` programmatically without a file. API silently ignores `custom_delivery_url` and `url` params. Must use dashboard. |
-| PDF file | **GENERATED + HOSTED** | `scripts/gen_blueprint.py` → 5-page PDF on GitHub Release at `https://github.com/dunkdee/desktop-tutorial/releases/download/blueprint-v1/divine-sovereignty-blueprint.pdf` |
+| PDF file | **GENERATED + HOSTED** | `scripts/gen_blueprint.py` → 5-page PDF on GitHub Release at `https://github.com/dunkdee/dominion-ops/releases/download/blueprint-v1/divine-sovereignty-blueprint.pdf` |
 | Website CTA button | **WIRED** | Points to `https://singleton828.gumroad.com/l/xnfyw` — `$47` in button text |
 
 > **ONE MANUAL STEP REMAINING:** Go to https://app.gumroad.com/products/Rgc4gza-8hLx7YSIu3vBQA==/edit
@@ -69,8 +69,8 @@ Walk in divine power, wisdom, and sovereignty. Every project aligns with abundan
 ---
 
 ## In Progress
-- [ ] **Gumroad product file attach** — PDF is at `https://github.com/dunkdee/desktop-tutorial/releases/download/blueprint-v1/divine-sovereignty-blueprint.pdf`. Go to https://app.gumroad.com/products/Rgc4gza-8hLx7YSIu3vBQA==/edit, download PDF, upload it there, and publish. This is the ONLY remaining step to make the product purchasable.
-- [ ] **Update GUMROAD_TOKEN secret** — Go to GitHub → dunkdee/desktop-tutorial → Settings → Secrets → update `GUMROAD_TOKEN` to `_7K6RZVc_PEhdz4WyGJJTEw1TAlWrf5S0-GvAKD_CVY`
+- [ ] **Gumroad product file attach** — PDF is at `https://github.com/dunkdee/dominion-ops/releases/download/blueprint-v1/divine-sovereignty-blueprint.pdf`. Go to https://app.gumroad.com/products/Rgc4gza-8hLx7YSIu3vBQA==/edit, download PDF, upload it there, and publish. This is the ONLY remaining step to make the product purchasable.
+- [ ] **Update GUMROAD_TOKEN secret** — Go to GitHub → dunkdee/dominion-ops → Settings → Secrets → update `GUMROAD_TOKEN` to `_7K6RZVc_PEhdz4WyGJJTEw1TAlWrf5S0-GvAKD_CVY`
 - [ ] **Set VM SSH secrets** — Add `VM_HOST=34.73.72.30`, `VM_USER=malachisingleton8`, `VM_SSH_KEY=<private key>` to GitHub Secrets so baby.yml SSH deploy works
 - [ ] **TikTok worker** — Code complete but OAuth flow not tested.
 - [ ] **Trading paper-mode tests** — OANDA integration exists. Not live-tested.
@@ -84,7 +84,7 @@ Walk in divine power, wisdom, and sovereignty. Every project aligns with abundan
 - [x] Diagnosed YAML parse bug in upload-blueprint.yml (multi-line python3 -c at col 0 inside block scalar)
 - [x] Fixed workflow: `scripts/gen_blueprint.py` in repo, clean workflow with `checkout@v4`
 - [x] PDF generates successfully: 7404 bytes, 5 pages via GitHub Actions
-- [x] PDF hosted on GitHub Release: `https://github.com/dunkdee/desktop-tutorial/releases/download/blueprint-v1/divine-sovereignty-blueprint.pdf`
+- [x] PDF hosted on GitHub Release: `https://github.com/dunkdee/dominion-ops/releases/download/blueprint-v1/divine-sovereignty-blueprint.pdf`
 - [x] Confirmed Gumroad API v2 limitations: no file upload endpoint, no delivery URL set via API
 - [x] Gumroad product description wired with full 7-pillar content
 

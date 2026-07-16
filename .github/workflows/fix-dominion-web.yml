@@ -31,7 +31,7 @@ jobs:
             echo "=============================="
             echo "  REBUILD + START DOMINION-WEB"
             echo "=============================="
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
             git pull origin main
             docker compose up -d --build dominion-web
             sleep 5

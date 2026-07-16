@@ -18,8 +18,8 @@ jobs:
             echo "=============================="
             echo "  .ENV FILES (key names only)"
             echo "=============================="
-            echo "--- ~/desktop-tutorial/.env ---"
-            grep -oP '^[^=]+' ~/desktop-tutorial/.env 2>/dev/null | sort || echo "NOT FOUND"
+            echo "--- ~/dominion-ops/.env ---"
+            grep -oP '^[^=]+' ~/dominion-ops/.env 2>/dev/null | sort || echo "NOT FOUND"
             echo ""
             echo "--- ~/.env ---"
             grep -oP '^[^=]+' ~/.env 2>/dev/null | sort || echo "NOT FOUND"
@@ -46,7 +46,7 @@ jobs:
             echo "=============================="
             echo "  DOCKER COMPOSE STATUS"
             echo "=============================="
-            cd ~/desktop-tutorial && docker compose ps 2>/dev/null
+            cd ~/dominion-ops && docker compose ps 2>/dev/null
 
             echo ""
             echo "=============================="
@@ -69,9 +69,9 @@ jobs:
 
             echo ""
             echo "=============================="
-            echo "  ~/desktop-tutorial LAYOUT"
+            echo "  ~/dominion-ops LAYOUT"
             echo "=============================="
-            find ~/desktop-tutorial -maxdepth 3 \
+            find ~/dominion-ops -maxdepth 3 \
               -not -path "*/.git/*" \
               -not -path "*/node_modules/*" \
               -not -path "*/__pycache__/*" 2>/dev/null | sort

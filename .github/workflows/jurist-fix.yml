@@ -44,9 +44,9 @@ jobs:
 
             echo ""
             echo "=============================="
-            echo "  FORCE-SYNC desktop-tutorial"
+            echo "  FORCE-SYNC dominion-ops"
             echo "=============================="
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
             git fetch origin
             git reset --hard origin/main
             echo "Sync complete. app.py head:"
@@ -57,7 +57,7 @@ jobs:
             echo "=============================="
             echo "  REBUILD + RESTART BABY-API"
             echo "=============================="
-            cd ~/desktop-tutorial && docker compose up -d --build baby-api
+            cd ~/dominion-ops && docker compose up -d --build baby-api
             echo "Waiting 20s..."
             sleep 20
 

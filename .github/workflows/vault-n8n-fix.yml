@@ -117,7 +117,7 @@ print('Written /tmp/gw_fixed.json with URL: ' + wf['nodes'][1]['parameters']['ur
             echo "=============================="
             echo "  VAULT AFTER E2E TEST"
             echo "=============================="
-            VAULT=$(grep '^VAULT_PATH=' ~/desktop-tutorial/.env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'")
+            VAULT=$(grep '^VAULT_PATH=' ~/dominion-ops/.env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'")
             VAULT=${VAULT:-/home/malachisingleton8/vault}
             ls -lt "${VAULT}/20-deals" 2>/dev/null | head -10
             LATEST=$(ls -t "${VAULT}/20-deals" 2>/dev/null | head -1)

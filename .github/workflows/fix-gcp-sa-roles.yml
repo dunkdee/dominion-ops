@@ -61,7 +61,7 @@ jobs:
             echo "=============================="
             echo "  RESTART BABY-API"
             echo "=============================="
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
 
             # Try compose restart first
             if docker compose restart baby-api 2>/dev/null; then

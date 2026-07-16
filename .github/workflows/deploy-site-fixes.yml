@@ -21,8 +21,8 @@ jobs:
             TS=$(date +%Y%m%d_%H%M%S)
 
             echo "=== PULLING LATEST REPO ==="
-            cd ~/desktop-tutorial
-            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/dunkdee/desktop-tutorial.git
+            cd ~/dominion-ops
+            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/dunkdee/dominion-ops.git
             git fetch origin main
             git checkout origin/main -- apps/site-fixes/
             echo "Repo files fetched"
@@ -32,26 +32,26 @@ jobs:
             cp "$MAIN_WR/store.html" "$MAIN_WR/store.html.bak.$TS" 2>/dev/null && echo "backed up store.html" || true
 
             echo "=== DEPLOYING MAIN SITE FILES ==="
-            cp ~/desktop-tutorial/apps/site-fixes/index.html "$MAIN_WR/index.html"
+            cp ~/dominion-ops/apps/site-fixes/index.html "$MAIN_WR/index.html"
             echo "index.html: $(wc -c < "$MAIN_WR/index.html") bytes"
             grep -q 'Fla. Stat' "$MAIN_WR/index.html" && echo 'PASS: surplus disclosure present' || echo 'FAIL: surplus disclosure missing'
             grep -q 'educational purposes' "$MAIN_WR/index.html" && echo 'PASS: education disclaimer present' || echo 'FAIL: disclaimer missing'
 
-            cp ~/desktop-tutorial/apps/site-fixes/store.html "$MAIN_WR/store.html"
+            cp ~/dominion-ops/apps/site-fixes/store.html "$MAIN_WR/store.html"
             echo "store.html: $(wc -c < "$MAIN_WR/store.html") bytes"
             grep -q 'Credit Dispute Toolkit' "$MAIN_WR/store.html" && echo 'PASS: CDT present' || echo 'FAIL: CDT missing'
 
             echo "=== DEPLOYING SURPLUS COMPLIANCE PAGE ==="
             sudo mkdir -p "$SURPLUS_PUB"
             cp "$SURPLUS_PUB/index.html" "$SURPLUS_PUB/index.html.bak.$TS" 2>/dev/null || true
-            sudo cp ~/desktop-tutorial/apps/site-fixes/surplus.html "$SURPLUS_PUB/index.html"
+            sudo cp ~/dominion-ops/apps/site-fixes/surplus.html "$SURPLUS_PUB/index.html"
             sudo grep -q '45.033' "$SURPLUS_PUB/index.html" && echo 'PASS: 45.033 cap present' || echo 'FAIL: 45.033 missing'
             sudo grep -q 'directly with the clerk' "$SURPLUS_PUB/index.html" && echo 'PASS: self-file right present' || echo 'FAIL: self-file right missing'
 
             echo "=== UPDATING CADDY SURPLUS BLOCK ==="
             CADDY=/etc/caddy/Caddyfile
             sudo cp "$CADDY" "${CADDY}.bak.${TS}"
-            sudo python3 ~/desktop-tutorial/apps/site-fixes/fix_caddy.py
+            sudo python3 ~/dominion-ops/apps/site-fixes/fix_caddy.py
 
             echo "=== VALIDATING AND RELOADING CADDY ==="
             sudo caddy validate --config /etc/caddy/Caddyfile 2>&1 && echo 'Caddy config valid' || { echo 'FAIL: restoring backup'; sudo cp "${CADDY}.bak.${TS}" "$CADDY"; exit 1; }

@@ -29,7 +29,7 @@ jobs:
             echo "=============================="
             PROJECT=$(gcloud config get-value project 2>/dev/null)
             if [ -z "$PROJECT" ] || [ "$PROJECT" = "(unset)" ]; then
-              PROJECT=$(grep '^GCP_PROJECT_ID=' ~/desktop-tutorial/.env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'")
+              PROJECT=$(grep '^GCP_PROJECT_ID=' ~/dominion-ops/.env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'")
             fi
             if [ -z "$PROJECT" ]; then
               PROJECT=$(grep '^GCP_PROJECT_ID=' ~/.env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'")
@@ -81,15 +81,15 @@ jobs:
 
             echo ""
             echo "=============================="
-            echo "  WRITE TO ~/desktop-tutorial/.env"
+            echo "  WRITE TO ~/dominion-ops/.env"
             echo "=============================="
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
 
             # Compact to single-line JSON then base64-encode to avoid special char issues
             KEY_JSON=$(python3 -c "import json; d=json.load(open('/tmp/sa_key.json')); print(json.dumps(d, separators=(',', ':')))") 
             grep -v '^GOOGLE_SERVICE_ACCOUNT_JSON=' .env > .env.tmp && mv .env.tmp .env
             echo "GOOGLE_SERVICE_ACCOUNT_JSON=${KEY_JSON}" >> .env
-            echo "Written to ~/desktop-tutorial/.env"
+            echo "Written to ~/dominion-ops/.env"
 
             grep -v '^GOOGLE_SERVICE_ACCOUNT_JSON=' ~/.env > /tmp/home_env_tmp 2>/dev/null && mv /tmp/home_env_tmp ~/.env || true
             echo "GOOGLE_SERVICE_ACCOUNT_JSON=${KEY_JSON}" >> ~/.env

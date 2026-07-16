@@ -20,15 +20,15 @@ jobs:
             set -e
 
             # Load keys from VM environment
-            WIX_KEY=$(grep -m1 '^WIX_API_KEY=' ~/desktop-tutorial/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || \
+            WIX_KEY=$(grep -m1 '^WIX_API_KEY=' ~/dominion-ops/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || \
                        grep -m1 '^WIX_API_KEY=' ~/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || echo "")
-            ZD_KEY=$(grep  -m1 '^ZENDROP_API_KEY=' ~/desktop-tutorial/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || \
+            ZD_KEY=$(grep  -m1 '^ZENDROP_API_KEY=' ~/dominion-ops/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || \
                       grep -m1 '^ZENDROP_API_KEY=' ~/.env 2>/dev/null | cut -d= -f2- | tr -d '"' || echo "")
             SITE_ID="a790d430-a3a0-4b0e-9be6-4c874c229167"
 
             if [ -z "$WIX_KEY" ]; then
-              echo "WIX_API_KEY not found in ~/desktop-tutorial/.env or ~/.env"
-              echo "Run: echo 'WIX_API_KEY=your_key_here' >> ~/desktop-tutorial/.env"
+              echo "WIX_API_KEY not found in ~/dominion-ops/.env or ~/.env"
+              echo "Run: echo 'WIX_API_KEY=your_key_here' >> ~/dominion-ops/.env"
               exit 1
             fi
 

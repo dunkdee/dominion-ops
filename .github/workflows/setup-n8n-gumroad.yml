@@ -15,7 +15,7 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 3m
           script: |
-            cd ~/desktop-tutorial
+            cd ~/dominion-ops
             git pull origin main
 
             echo "=============================="
@@ -30,7 +30,7 @@ jobs:
             echo "=============================="
             echo "  WRITE WORKFLOW JSON"
             echo "=============================="
-            python3 -c 'import json,os; r=os.path.expanduser("~/desktop-tutorial"); w=json.load(open(os.path.join(r,"n8n-workflows/gumroad-sale.json"))); w["active"]=True; open("/tmp/gw.json","w").write(json.dumps(w)); print("JSON written")'
+            python3 -c 'import json,os; r=os.path.expanduser("~/dominion-ops"); w=json.load(open(os.path.join(r,"n8n-workflows/gumroad-sale.json"))); w["active"]=True; open("/tmp/gw.json","w").write(json.dumps(w)); print("JSON written")'
             WF_ID=$(python3 -c 'import json; print(json.load(open("/tmp/gw.json"))["id"])')
             echo "Workflow ID: $WF_ID"
 

@@ -1,0 +1,72 @@
+name: Fix — recreate dominion-proposal-queue.service unit file
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recreate missing unit file + daemon-reload + enable
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -e
+            echo "=============================="
+            echo "  before"
+            echo "=============================="
+            systemctl status dominion-proposal-queue.service --no-pager -l 2>&1 || true
+
+            echo ""
+            echo "=============================="
+            echo "  writing unit file"
+            echo "=============================="
+            SVC_USER=$(whoami)
+            SVC_HOME=$HOME
+            UNIT=/tmp/dominion-proposal-queue.service
+            printf '[Unit]\n'                                                          > "$UNIT"
+            printf 'Description=Dominion Proposal Queue\n'                             >> "$UNIT"
+            printf 'After=network-online.target\n'                                     >> "$UNIT"
+            printf 'Wants=network-online.target\n'                                     >> "$UNIT"
+            printf '\n'                                                                >> "$UNIT"
+            printf '[Service]\n'                                                       >> "$UNIT"
+            printf 'Type=simple\n'                                                     >> "$UNIT"
+            printf 'User=%s\n' "$SVC_USER"                                             >> "$UNIT"
+            printf 'WorkingDirectory=%s/buddy_core\n' "$SVC_HOME"                      >> "$UNIT"
+            printf 'ExecStart=%s/dominion_env/bin/python %s/buddy_core/proposal_queue.py\n' "$SVC_HOME" "$SVC_HOME" >> "$UNIT"
+            printf 'Restart=always\n'                                                  >> "$UNIT"
+            printf 'RestartSec=10\n'                                                   >> "$UNIT"
+            printf 'Environment=PYTHONUNBUFFERED=1\n'                                  >> "$UNIT"
+            printf 'StandardOutput=journal\n'                                          >> "$UNIT"
+            printf 'StandardError=journal\n'                                           >> "$UNIT"
+            printf 'SyslogIdentifier=proposal-queue\n'                                 >> "$UNIT"
+            printf '\n'                                                                >> "$UNIT"
+            printf '[Install]\n'                                                       >> "$UNIT"
+            printf 'WantedBy=multi-user.target\n'                                      >> "$UNIT"
+
+            cat "$UNIT"
+            sudo mv "$UNIT" /etc/systemd/system/dominion-proposal-queue.service
+            sudo chown root:root /etc/systemd/system/dominion-proposal-queue.service
+            sudo chmod 644 /etc/systemd/system/dominion-proposal-queue.service
+
+            echo ""
+            echo "=============================="
+            echo "  daemon-reload + enable (no restart — leave running process alone)"
+            echo "=============================="
+            sudo systemctl daemon-reload
+            sudo systemctl enable dominion-proposal-queue.service
+
+            echo ""
+            echo "=============================="
+            echo "  after"
+            echo "=============================="
+            systemctl status dominion-proposal-queue.service --no-pager -l 2>&1
+
+            echo ""
+            echo "=============================="
+            echo "  baby-api / dominion-web still healthy"
+            echo "=============================="
+            curl -sf http://localhost:8080/ 2>/dev/null && echo "" || echo "baby-api NOT responding"

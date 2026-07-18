@@ -1,0 +1,43 @@
+name: Datadog Setup Step 1 — Confirm host type (foundation-vm)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm Compute Engine host via gcloud + metadata server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            echo "=============================="
+            echo "  gcloud compute instances list --project=dominion-ascendant"
+            echo "=============================="
+            gcloud compute instances list --project=dominion-ascendant 2>&1 || echo "gcloud not available or not authenticated on this host"
+
+            echo ""
+            echo "=============================="
+            echo "  GCE metadata server (authoritative if gcloud CLI unavailable)"
+            echo "=============================="
+            curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/name" 2>/dev/null && echo "" || echo "no metadata server (not GCE?)"
+            curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/machine-type" 2>/dev/null && echo "" || true
+            curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/zone" 2>/dev/null && echo "" || true
+            curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/project-id" 2>/dev/null && echo "" || true
+
+            echo ""
+            echo "=============================="
+            echo "  hostname / dmi fallback"
+            echo "=============================="
+            hostname
+            cat /sys/class/dmi/id/product_name 2>/dev/null || echo "dmi not readable"
+            cat /sys/class/dmi/id/sys_vendor 2>/dev/null || echo "dmi vendor not readable"
+
+            echo ""
+            echo "=============================="
+            echo "  existing datadog-agent check (idempotency)"
+            echo "=============================="
+            systemctl status datadog-agent --no-pager -l 2>&1 || echo "datadog-agent not installed yet"

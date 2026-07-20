@@ -1,0 +1,283 @@
+
+===== GIT FETCH AND IDENTITY =====
++ git fetch --prune origin main
+exit=128
+current_branch=claude/movie-generator-youtube-b50wx2
+head=aa2d7d2e9e92124a3ebc131d4f0d326b5b1c872b
+local_main=af33b4d557051ba72cf8d96dd4d820f9c6d82e90
+origin_main=8be563b6a0070e6e350cc5b4bc92a15c85899401
+head_ancestor_rc=1
+origin_main_ancestor_rc=1
+
+===== COMMITS ONLY ON VM FEATURE BRANCH =====
+aa2d7d2 (HEAD -> claude/movie-generator-youtube-b50wx2) sync: VM live state  workflow updates, apps, STATE as of 2026-07-16
+
+===== COMMITS ONLY ON GITHUB MAIN =====
+8be563b (origin/main, origin/HEAD) fix: extract Python heredoc to fix_caddy.py — heredoc broke YAML block scalar parsing, preventing workflow_dispatch from registering
+f4aba79 Add compliance HTML pages and deploy workflow for site fixes
+f3b64a2 Add check-surplus-service workflow to identify what serves port 8100
+ad6a8b1 Add find-webroots diagnostic workflow
+cdd3b2b fix: wix-store-setup SSH key secret name (SSH_PRIVATE_KEY -> VM_SSH_KEY)
+
+===== TREE DIFFERENCE =====
+ .github/workflows/add-vault-to-main-domain.yml | 148 ++++++------
+ .github/workflows/baby.yml                     |   2 +-
+ .github/workflows/buddy-brains-check.yml       | 100 ++++----
+ .github/workflows/check-env.yml                |  29 ---
+ .github/workflows/check-surplus-service.yml    |  80 +++----
+ .github/workflows/check-wix-key.yml            |  38 ----
+ .github/workflows/cleanup-and-redeploy.yml     |   2 +-
+ .github/workflows/container-test.yml           |   2 +-
+ .github/workflows/create-gcp-sa.yml            |   8 +-
+ .github/workflows/create-product.yml           | 126 +++++------
+ .github/workflows/cron-status.yml              |  62 ++---
+ .github/workflows/debug-env.yml                |  37 ---
+ .github/workflows/deploy-alpha-engine-v2.yml   |  10 +-
+ .github/workflows/deploy-alpha-engine.yml      |  10 +-
+ .github/workflows/deploy-browser-agents.yml    |   2 +-
+ .github/workflows/deploy-obsidian.yml          |   2 +-
+ .github/workflows/deploy-site-fixes.yml        |  12 +-
+ .github/workflows/deploy-wix-agent.yml         |   4 +-
+ .github/workflows/deploy.yml                   |  40 ++--
+ .github/workflows/docker-diagnose.yml          |   4 +-
+ .github/workflows/explore-dominion.yml         | 136 +++++------
+ .github/workflows/find-trading-bot.yml         | 116 +++++-----
+ .github/workflows/find-webroots.yml            |  74 +++---
+ .github/workflows/find-wix-key.yml             | 160 ++++++-------
+ .github/workflows/fix-and-verify.yml           |   2 +-
+ .github/workflows/fix-buddy-brains.yml         | 138 +++++------
+ .github/workflows/fix-dominion-web.yml         |   2 +-
+ .github/workflows/fix-gcp-sa-roles.yml         |   2 +-
+ .github/workflows/fix-gemini-port.yml          | 136 +++++------
+ .github/workflows/fix-gemini-port2.yml         |  94 ++++----
+ .github/workflows/fix-n8n-url.yml              |   2 +-
+ .github/workflows/full-audit.yml               |  10 +-
+ .github/workflows/gemini-content.yml           | 114 +++++-----
+ .github/workflows/gemini-port-read.yml         | 126 +++++------
+ .github/workflows/gumroad-check.yml            | 132 +++++------
+ .github/workflows/gumroad-landing.yml          | 172 +++++++-------
+ .github/workflows/intel-agent-check.yml        |  94 ++++----
+ .github/workflows/intel-agent-deep-check.yml   |  86 +++----
+ .github/workflows/juris-upgrade.yml            | 128 +++++------
+ .github/workflows/jurist-audit.yml             | 148 ++++++------
+ .github/workflows/jurist-fix.yml               |   6 +-
+ .github/workflows/n8n-debug.yml                |   2 +-
+ .github/workflows/netlify_sync_env.yml         | 102 ++++-----
+ .github/workflows/publish-product.yml          |  94 ++++----
+ .github/workflows/seed-vault.yml               |   4 +-
+ .github/workflows/set-ga4.yml                  |   2 +-
+ .github/workflows/setup-jurist.yml             |   6 +-
+ .github/workflows/setup-n8n-gumroad.yml        |   4 +-
+ .github/workflows/smart-deploy.yml             |   8 +-
+ .github/workflows/sync-secrets.yml             |   4 +-
+ .github/workflows/test-gemini.yml              |  58 ++---
+ .github/workflows/trading-bot-audit.yml        | 170 +++++++-------
+ .github/workflows/upload-blueprint.yml         | 144 ++++++------
+ .github/workflows/vault-deals-check.yml        |   2 +-
+ .github/workflows/vault-health.yml             |   2 +-
+ .github/workflows/vault-n8n-fix.yml            |   2 +-
+ .github/workflows/vm-status-check.yml          | 220 +++++++++---------
+ .github/workflows/watchdog.yml                 |   2 +-
+ .github/workflows/wix-auto-sync.yml            |  90 ++++----
+ .github/workflows/wix-inventory-audit.yml      |   8 +-
+ .github/workflows/wix-inventory-fix.yml        | 302 ++++++++++++-------------
+ .github/workflows/wix-key-hunt.yml             | 146 ++++++------
+ .github/workflows/wix-store-setup.yml          | 146 ++++++------
+ .github/workflows/write-wix-key.yml            |  58 -----
+ STATE.md                                       |   8 +-
+ baby                                           |   6 +-
+ scripts/seed_vault.py                          |   6 +-
+ 67 files changed, 2015 insertions(+), 2177 deletions(-)
+M	.github/workflows/add-vault-to-main-domain.yml
+M	.github/workflows/baby.yml
+M	.github/workflows/buddy-brains-check.yml
+D	.github/workflows/check-env.yml
+M	.github/workflows/check-surplus-service.yml
+D	.github/workflows/check-wix-key.yml
+M	.github/workflows/cleanup-and-redeploy.yml
+M	.github/workflows/container-test.yml
+M	.github/workflows/create-gcp-sa.yml
+M	.github/workflows/create-product.yml
+M	.github/workflows/cron-status.yml
+D	.github/workflows/debug-env.yml
+M	.github/workflows/deploy-alpha-engine-v2.yml
+M	.github/workflows/deploy-alpha-engine.yml
+M	.github/workflows/deploy-browser-agents.yml
+M	.github/workflows/deploy-obsidian.yml
+M	.github/workflows/deploy-site-fixes.yml
+M	.github/workflows/deploy-wix-agent.yml
+M	.github/workflows/deploy.yml
+M	.github/workflows/docker-diagnose.yml
+M	.github/workflows/explore-dominion.yml
+M	.github/workflows/find-trading-bot.yml
+M	.github/workflows/find-webroots.yml
+M	.github/workflows/find-wix-key.yml
+M	.github/workflows/fix-and-verify.yml
+M	.github/workflows/fix-buddy-brains.yml
+M	.github/workflows/fix-dominion-web.yml
+M	.github/workflows/fix-gcp-sa-roles.yml
+M	.github/workflows/fix-gemini-port.yml
+M	.github/workflows/fix-gemini-port2.yml
+M	.github/workflows/fix-n8n-url.yml
+M	.github/workflows/full-audit.yml
+M	.github/workflows/gemini-content.yml
+M	.github/workflows/gemini-port-read.yml
+M	.github/workflows/gumroad-check.yml
+M	.github/workflows/gumroad-landing.yml
+M	.github/workflows/intel-agent-check.yml
+M	.github/workflows/intel-agent-deep-check.yml
+M	.github/workflows/juris-upgrade.yml
+M	.github/workflows/jurist-audit.yml
+M	.github/workflows/jurist-fix.yml
+M	.github/workflows/n8n-debug.yml
+M	.github/workflows/netlify_sync_env.yml
+M	.github/workflows/publish-product.yml
+M	.github/workflows/seed-vault.yml
+M	.github/workflows/set-ga4.yml
+M	.github/workflows/setup-jurist.yml
+M	.github/workflows/setup-n8n-gumroad.yml
+M	.github/workflows/smart-deploy.yml
+M	.github/workflows/sync-secrets.yml
+M	.github/workflows/test-gemini.yml
+M	.github/workflows/trading-bot-audit.yml
+M	.github/workflows/upload-blueprint.yml
+M	.github/workflows/vault-deals-check.yml
+M	.github/workflows/vault-health.yml
+M	.github/workflows/vault-n8n-fix.yml
+M	.github/workflows/vm-status-check.yml
+M	.github/workflows/watchdog.yml
+M	.github/workflows/wix-auto-sync.yml
+M	.github/workflows/wix-inventory-audit.yml
+M	.github/workflows/wix-inventory-fix.yml
+M	.github/workflows/wix-key-hunt.yml
+M	.github/workflows/wix-store-setup.yml
+D	.github/workflows/write-wix-key.yml
+M	STATE.md
+M	baby
+M	scripts/seed_vault.py
+
+===== WORKTREE CHANGES =====
+ M .env.example
+?? .env
+.env is NOT ignored
+.env untracked
+
+===== COMPOSE MODEL AT VERIFIED MAIN =====
+git_show_exit=0
+time="2026-07-20T19:57:50Z" level=warning msg="The \"ANTHROPIC_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"TIKTOK_CLIENT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"INSTAGRAM_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"TWITTER_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"TWITTER_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"PPH_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"TIKTOK_USERNAME\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"TIKTOK_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"TIKTOK_CLIENT_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"INSTAGRAM_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"PPH_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"WIX_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"ZENDROP_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"N8N_WEBHOOK_URL\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"GCP_PROJECT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"GUMROAD_TOKEN\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"OANDA_ACCOUNT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"TIKTOK_CLIENT_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"GOOGLE_SERVICE_ACCOUNT_JSON\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"YOUTUBE_CLIENT_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"OANDA_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"BINANCE_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"ANTHROPIC_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"YOUTUBE_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"BINANCE_API_SECRET\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"BREVO_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"YOUTUBE_CLIENT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"TIKTOK_CLIENT_ID\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="The \"GEMINI_API_KEY\" variable is not set. Defaulting to a blank string."
+time="2026-07-20T19:57:50Z" level=warning msg="/tmp/dominion-compose-main.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+obsidian-remote
+wix-agent
+baby-api
+baby-logger
+browser-agents
+dominion-web
+compose_services_exit=0
+
+===== RUNNING CONTAINER DATA MOUNTS =====
+--- /movie-generator --- status=running health=none restarts=0 project= workdir=
+
+--- /wix-agent --- status=running health=healthy restarts=0 project=desktop-tutorial workdir=/home/malachisingleton8/desktop-tutorial
+bind  /home/malachisingleton8/desktop-tutorial/apps/wix-agent/logs -> /app/logs rw=true
+bind  /home/malachisingleton8/desktop-tutorial/apps/wix-agent/wix_agent.db -> /app/wix_agent.db rw=true
+
+--- /baby-api --- status=running health=healthy restarts=0 project=desktop-tutorial workdir=/home/malachisingleton8/desktop-tutorial
+bind  /home/malachisingleton8/vault -> /vault rw=true
+bind  /home/malachisingleton8/desktop-tutorial/api -> /app rw=true
+
+--- /dominion-web --- status=running health=none restarts=0 project=desktop-tutorial workdir=/home/malachisingleton8/desktop-tutorial
+
+--- /baby-logger --- status=running health=none restarts=0 project=desktop-tutorial workdir=/home/malachisingleton8/desktop-tutorial
+
+--- /dominion-seo --- status=running health=none restarts=2 project= workdir=
+bind  /opt/dominion/adc.json -> /opt/dominion/adc.json rw=false
+bind  /var/log/dominion -> /var/log/dominion rw=true
+
+--- /dominion-n8n --- status=running health=none restarts=0 project= workdir=
+bind  /home/malachisingleton8/n8n/rescue-data -> /home/node/.n8n rw=true
+
+--- /dominion-db --- status=running health=none restarts=0 project= workdir=
+volume dominion_pgdata /var/lib/docker/volumes/dominion_pgdata/_data -> /var/lib/postgresql/data rw=true
+
+
+===== DOCKER STORAGE =====
+DRIVER    VOLUME NAME
+local     aura-ecosystem_caddy_data
+local     caddy_config
+local     caddy_data
+local     dominion_pgdata
+local     n8n_data
+local     postgres_data
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          9         6         4.403GB   4.177GB (94%)
+Containers      8         8         2.916MB   0B (0%)
+Local Volumes   6         1         299.6MB   222.9MB (74%)
+Build Cache     0         0         0B        0B
+
+===== PERSISTENT DATA SIZE =====
+156M	/home/malachisingleton8/n8n
+1.4M	/home/malachisingleton8/.n8n
+4.6M	/home/malachisingleton8/dominion/.n8n
+5.8M	/home/malachisingleton8/dominion-ops
+1.5M	/home/malachisingleton8/backups
+postgres_user=dominion
+postgres_db=dominion
+
+===== SERVICE BASELINE =====
+80 308
+3000 302
+5000 404
+5055 404
+5060 200
+5070 404
+5080 200
+5090 200
+5095 200
+5100 200
+5101 200
+5102 404
+5103 404
+5110 200
+5120 404
+5678 200
+8080 200
+8082 404
+8090 200
+8100 200
+8200 200
+8787 200
+9380 200
+UNIT LOAD ACTIVE SUB DESCRIPTION
+0 loaded units listed.
+
+===== PREFLIGHT COMPLETE =====
+Mon Jul 20 19:57:53 UTC 2026
+ssh_exit=0

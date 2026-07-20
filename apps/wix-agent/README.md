@@ -18,11 +18,12 @@ Never commit real values. Store them in the production secret store or the VM's 
 - `GET /health`: process health plus dependency status. It may report `degraded` while returning HTTP 200.
 - `GET /ready`: returns HTTP 200 only when the database and required integrations are configured; otherwise HTTP 503.
 - `GET /audit`: read-only inventory audit; operator token required.
+- `GET /store/audit`: read-only catalog content audit; operator token required.
 - `POST /sync`: starts a read-only inventory audit. It does not change inventory.
 - `POST /sync/fix`: applies only explicitly supplied product IDs. `dry_run` defaults to `true`.
 - `POST /fulfill`: starts fulfillment and requires both the operator token and Zendrop configuration.
 
-Bulk store setup is intentionally disabled. Generated product copy and policy text must be reviewed before any publication because supplier facts, warranties, shipping promises, and legal policies cannot be safely inferred by code.
+The agent exposes no bulk store, page, policy, or product-copy mutation route. Supplier facts, warranties, shipping promises, and legal policies cannot be safely inferred by code and must be verified in the Wix dashboard before publication.
 
 ## Verification
 

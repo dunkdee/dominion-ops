@@ -1,6 +1,12 @@
 name: Wix Agent Production Preflight
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/wix-agent/**"
+      - ".github/workflows/wix-agent-preflight.yml"
   workflow_dispatch:
     inputs:
       confirm:
@@ -18,7 +24,8 @@ jobs:
   preflight:
     if: >-
       github.ref == 'refs/heads/main' &&
-      github.event.inputs.confirm == 'RUN_WIX_PREFLIGHT'
+      (github.event_name == 'push' ||
+      github.event.inputs.confirm == 'RUN_WIX_PREFLIGHT')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

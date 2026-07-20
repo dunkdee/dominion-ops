@@ -41,6 +41,7 @@ if importlib.util.find_spec("zendrop_client") is None:
     sys.modules["zendrop_client"] = zendrop_stub
 
 import fulfillment
+import store_setup
 import wix_client
 
 
@@ -395,6 +396,26 @@ class WixClientTests(unittest.TestCase):
             )
 
 
+class StoreAuditTests(unittest.TestCase):
+    def test_store_audit_is_read_only_and_reports_weak_copy(self):
+        products = [
+            {"id": "weak", "name": "Weak", "plainDescription": "short"},
+            {"id": "ready", "name": "Ready", "plainDescription": "x" * 150},
+        ]
+        with (
+            patch.object(store_setup.wix, "get_all_products", return_value=products),
+            patch.object(store_setup.wix, "update_product_content") as update,
+        ):
+            report = store_setup.audit_store("v3")
+
+        update.assert_not_called()
+        self.assertEqual(report["mode"], "read_only")
+        self.assertFalse(report["mutations_available"])
+        self.assertEqual(report["products"]["total"], 2)
+        self.assertEqual(report["products"]["need_description_review"], 1)
+        self.assertEqual(report["products"]["weak_products"][0]["id"], "weak")
+
+
 @unittest.skipUnless(importlib.util.find_spec("fastapi"), "FastAPI is not installed")
 class ApiSafetyTests(unittest.TestCase):
     @classmethod
@@ -447,15 +468,18 @@ class ApiSafetyTests(unittest.TestCase):
             response = client.get("/orders")
         self.assertEqual(response.status_code, 401)
 
-    def test_bulk_store_mutation_is_disabled(self):
+    def test_legacy_store_mutation_and_generated_copy_routes_are_removed(self):
+        headers = {"X-Operator-Token": "test-operator-token"}
         with self.client_class(self.app) as client:
-            response = client.post(
-                "/store/setup",
-                headers={"X-Operator-Token": "test-operator-token"},
-            )
-        self.assertEqual(response.status_code, 409)
+            responses = [
+                client.post("/store/setup", headers=headers),
+                client.post("/store/setup/products", headers=headers),
+                client.post("/store/policies", headers=headers),
+                client.get("/store/pages", headers=headers),
+            ]
+        self.assertEqual([response.status_code for response in responses], [404] * 4)
 
-    def test_product_and_inventory_writes_are_dry_run_only(self):
+    def test_inventory_writes_are_dry_run_only(self):
         headers = {"X-Operator-Token": "test-operator-token"}
         with (
             patch.object(
@@ -468,11 +492,7 @@ class ApiSafetyTests(unittest.TestCase):
                 headers=headers,
                 json={"product_ids": ["product"], "dry_run": False},
             )
-            products = client.post(
-                "/store/setup/products?dry_run=false", headers=headers
-            )
         self.assertEqual(inventory.status_code, 409)
-        self.assertEqual(products.status_code, 409)
 
 
 if __name__ == "__main__":

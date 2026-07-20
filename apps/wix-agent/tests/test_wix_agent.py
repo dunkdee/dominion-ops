@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import importlib.util
+import sqlite3
 import types
 import unittest
 from pathlib import Path
@@ -73,6 +74,72 @@ class FulfillmentDatabaseTests(unittest.TestCase):
             health = fulfillment.database_health()
             self.assertEqual(health["status"], "error")
             self.assertIn("points to a directory", health["error"])
+
+    def test_migrates_existing_database_for_submission_safety(self):
+        path = Path(self.tempdir.name) / "legacy.db"
+        with sqlite3.connect(path) as conn:
+            conn.execute(
+                "CREATE TABLE fulfillments ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "wix_order_id TEXT NOT NULL UNIQUE, zendrop_order_id TEXT, "
+                "status TEXT NOT NULL DEFAULT 'pending_submit', "
+                "tracking_number TEXT, carrier TEXT, "
+                "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+
+        with patch.dict(os.environ, {"WIX_AGENT_DB": str(path)}):
+            fulfillment.init_db()
+
+        with sqlite3.connect(path) as conn:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(fulfillments)")}
+        self.assertIn("last_error", columns)
+        self.assertIn("attempt_count", columns)
+
+    def test_order_is_submitted_only_once(self):
+        path = Path(self.tempdir.name) / "dedupe.db"
+        order = {"id": "wix-123", "lineItems": []}
+        submissions = []
+
+        def submit(payload):
+            submissions.append(payload)
+            return {"order": {"id": "zendrop-456"}}
+
+        with (
+            patch.dict(os.environ, {"WIX_AGENT_DB": str(path)}),
+            patch.object(fulfillment.wix, "get_orders", return_value=[order]),
+            patch.object(fulfillment.zendrop, "submit_order", side_effect=submit),
+            patch.object(fulfillment.empire, "notify_empire"),
+        ):
+            first = fulfillment.run_fulfillment_cycle()
+            second = fulfillment.run_fulfillment_cycle()
+            summary = fulfillment.get_fulfillment_summary()
+
+        self.assertEqual(len(submissions), 1)
+        self.assertEqual(first["submitted"][0]["zendrop_order_id"], "zendrop-456")
+        self.assertEqual(second["already_tracked"], ["wix-123"])
+        self.assertEqual(summary, {"submitted": 1})
+
+    def test_failed_submission_stops_for_manual_reconciliation(self):
+        path = Path(self.tempdir.name) / "failed.db"
+        order = {"id": "wix-789", "lineItems": []}
+
+        with (
+            patch.dict(os.environ, {"WIX_AGENT_DB": str(path)}),
+            patch.object(fulfillment.wix, "get_orders", return_value=[order]),
+            patch.object(
+                fulfillment.zendrop,
+                "submit_order",
+                side_effect=RuntimeError("supplier unavailable"),
+            ) as submit,
+        ):
+            first = fulfillment.run_fulfillment_cycle()
+            second = fulfillment.run_fulfillment_cycle()
+            summary = fulfillment.get_fulfillment_summary()
+
+        self.assertEqual(submit.call_count, 1)
+        self.assertEqual(first["errors"][0]["wix_order_id"], "wix-789")
+        self.assertEqual(second["already_tracked"], ["wix-789"])
+        self.assertEqual(summary, {"submit_failed": 1})
 
 
 class WixClientTests(unittest.TestCase):

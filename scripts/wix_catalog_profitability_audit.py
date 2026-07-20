@@ -201,8 +201,15 @@ def query_products_v3():
                 ],
                 True,
             ),
-            (["PLAIN_DESCRIPTION", "MEDIA_ITEMS_INFO", "CURRENCY"], False),
-            ([], False),
+            (
+                [
+                    "PLAIN_DESCRIPTION",
+                    "MEDIA_ITEMS_INFO",
+                    "INFO_SECTION",
+                    "CURRENCY",
+                ],
+                False,
+            ),
         ),
         100,
     )
@@ -215,7 +222,6 @@ def query_variants_v3():
         (
             (["MERCHANT_DATA", "CURRENCY"], True),
             (["CURRENCY"], False),
-            ([], False),
         ),
         1000,
     )
@@ -293,6 +299,8 @@ def v3_inventory_status(variants):
     states = []
     for variant in variants:
         inventory = variant.get("inventoryStatus") or {}
+        if inventory.get("preorderEnabled") is True:
+            return "SELLABLE_PREORDER"
         if inventory.get("inStock") is True:
             states.append(True)
         elif inventory.get("inStock") is False:
@@ -356,7 +364,11 @@ def inventory_status(item, product):
 
 def seo_configured(product):
     seo = product.get("seoData") or {}
-    return bool(seo.get("tags") or seo.get("settings") or seo.get("keywords"))
+    return any(
+        tag.get("custom") is True and tag.get("disabled") is not True
+        for tag in seo.get("tags") or []
+        if isinstance(tag, dict)
+    )
 
 
 def minimum_price_for_margin(cost, target_margin):
@@ -437,13 +449,21 @@ def build_report():
         ) = query_variants_v3()
         if not variants_ok:
             fatal_errors.append(variants_error or "v3_variant_query_failed")
-        # Variant MERCHANT_DATA is the authoritative source for Wix COGS.
-        merchant_access = variant_merchant_access
+        # Variant MERCHANT_DATA supplies COGS; product admin access covers
+        # non-visible catalog records needed for a complete audit.
+        merchant_access = product_merchant_access and variant_merchant_access
         if not merchant_access:
-            limitations.append("merchant_cost_access_unavailable")
+            limitations.append(
+                "merchant_cost_or_hidden_catalog_admin_access_unavailable"
+            )
         inventory_ok = variants_ok
         if products_ok and products and variants_ok and not variants_v3:
             fatal_errors.append("v3_variant_query_returned_no_variants")
+        if variants_ok:
+            limitations.append(
+                "v3_query_variants_is_eventually_consistent; "
+                "canonical_product_read_required_before_automated_fulfillment"
+            )
     elif not fatal_errors:
         products, products_ok, products_error = query_products_v1(privileged=True)
         if not products_ok and products_error and any(
@@ -498,6 +518,8 @@ def build_report():
 
     product_rows = []
     pricing_rows = []
+    variant_count_checked = 0
+    variant_count_mismatches = 0
     for product in sorted(
         products, key=lambda value: str(value.get("name") or "").lower()
     ):
@@ -529,6 +551,18 @@ def build_report():
         brand_present = bool(product.get("brand"))
         seo_present = seo_configured(product)
         content_flags = []
+        if is_v3:
+            expected_variants = number(
+                nested(product, "variantSummary", "variantCount")
+            )
+            if expected_variants is not None:
+                variant_count_checked += 1
+                if int(expected_variants) != len(product_variants):
+                    variant_count_mismatches += 1
+                    content_flags.append(
+                        "VARIANT_COUNT_MISMATCH_"
+                        f"EXPECTED_{int(expected_variants)}_GOT_{len(product_variants)}"
+                    )
         if not visible:
             content_flags.append("HIDDEN")
         if description_chars < 200:
@@ -644,6 +678,13 @@ def build_report():
                 }
             )
 
+    if is_v3 and products and variant_count_checked == 0:
+        limitations.append("v3_variant_summary_counts_unavailable")
+    if variant_count_mismatches:
+        fatal_errors.append(
+            f"v3_variant_count_mismatches_{variant_count_mismatches}"
+        )
+
     price_missing = sum(
         "PRICE_MISSING_OR_ZERO" in row["flags"] for row in pricing_rows
     )
@@ -712,6 +753,15 @@ def build_report():
         and standard_below_40 == 0
         else "BLOCKED"
     )
+    automated_catalog_gate = (
+        "PASS"
+        if not fatal_errors
+        and products
+        and pricing_data_gate == "PASS"
+        and baseline_margin_gate == "PASS"
+        and variant_count_mismatches == 0
+        else "BLOCKED"
+    )
 
     lines = []
     add = lines.append
@@ -726,6 +776,7 @@ def build_report():
     add(f"- Currency used for display: **{currency}**")
     add(f"- Merchant-specific catalog access: **{merchant_access}**")
     add(f"- Zendrop key configured on current container: **{ZENDROP_CONFIGURED}**")
+    add(f"- Automated catalog pricing gates: **{automated_catalog_gate}**")
     if is_v3:
         add(
             "- V3 product fieldset used: **"
@@ -773,11 +824,20 @@ def build_report():
     add(f"- Descriptions under 200 characters: **{weak_descriptions}**")
     add(f"- Products with fewer than 3 media items: **{weak_media}**")
     add(f"- Products missing custom SEO: **{missing_seo}**")
-    add(f"- Inventory API status: **{'PASS' if inventory_ok else 'LIMITED'}**")
+    add(
+        "- Variant inventory-status coverage: **"
+        + ("PASS" if inventory_ok else "LIMITED")
+        + "**"
+    )
+    if is_v3:
+        add(
+            f"- Variant summary counts checked: **{variant_count_checked}**; "
+            f"mismatches: **{variant_count_mismatches}**"
+        )
     add("")
     add("## Product content and launch information")
     add("")
-    add("| Product | Visible | Type | Description chars | Media | Brand | Custom SEO | Info sections | Inventory | Flags |")
+    add("| Product | Visible | Type | Description chars | Media | Brand | Custom SEO | Info sections | Inventory/preorder | Flags |")
     add("|---|---:|---|---:|---:|---:|---:|---:|---|---|")
     for row in product_rows:
         add(

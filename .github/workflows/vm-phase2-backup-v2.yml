@@ -1,0 +1,145 @@
+name: VM Phase 2 resilient rollback backups
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - .github/workflows/vm-phase2-backup-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/vm-readonly-20260720
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+
+      - name: Resume and validate approved backups
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          mkdir -p audit
+          set +e
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > audit/vm-phase2-backup-v2.txt <<'REMOTE'
+          set +e
+          section() { printf '\n===== %s =====\n' "$1"; }
+          record() { rc=$1; name=$2; if [ "$rc" -eq 0 ]; then echo "$name=PASS"; else echo "$name=FAIL($rc)"; fi; }
+          REPO="$HOME/dominion-ops"
+          BACKUP=$(find "$HOME/backups" -maxdepth 1 -type d -name 'phase2-*' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
+          if [ -z "$BACKUP" ]; then
+            BACKUP="$HOME/backups/phase2-$(date -u +%Y%m%dT%H%M%SZ)"
+            install -d -m 700 "$BACKUP"
+          fi
+          echo "backup_directory=$BACKUP"
+
+          section "EXISTING PARTIAL BACKUP"
+          find "$BACKUP" -maxdepth 2 -type f -printf '%p %s bytes\n' 2>/dev/null | sort
+
+          section "CODE AND GIT"
+          if [ ! -s "$BACKUP/dominion-ops-complete.tgz" ]; then tar -C "$HOME" -czf "$BACKUP/dominion-ops-complete.tgz" dominion-ops; fi
+          record $? code_archive
+          if [ ! -s "$BACKUP/dominion-ops-all-refs.bundle" ]; then git -C "$REPO" bundle create "$BACKUP/dominion-ops-all-refs.bundle" --all; fi
+          record $? git_bundle
+          git -C "$REPO" bundle verify "$BACKUP/dominion-ops-all-refs.bundle" >/dev/null 2>&1
+          record $? git_bundle_verify
+          git -C "$REPO" diff --binary > "$BACKUP/worktree.patch"
+          record $? worktree_patch
+          git -C "$REPO" status --short > "$BACKUP/worktree-status.txt"
+          [ -f "$REPO/.env" ] && cp -a "$REPO/.env" "$BACKUP/production.env"
+          record $? production_env_copy
+
+          section "WIX"
+          docker exec wix-agent test -f /app/wix_agent.db
+          record $? wix_db_in_container
+          if [ ! -s "$BACKUP/wix_agent.db" ]; then docker cp wix-agent:/app/wix_agent.db "$BACKUP/wix_agent.db"; fi
+          record $? wix_db_copy
+          if [ -s "$BACKUP/wix_agent.db" ]; then
+            python3 -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); assert c.execute("PRAGMA quick_check").fetchone()[0]=="ok"; c.close()' "$BACKUP/wix_agent.db"
+            record $? wix_db_quick_check
+          fi
+          if [ ! -e "$BACKUP/wix-logs" ]; then docker cp wix-agent:/app/logs "$BACKUP/wix-logs"; fi
+          record $? wix_logs_copy
+
+          section "N8N"
+          N8N_DIR="$HOME/n8n/rescue-data"
+          N8N_DB=$(find "$N8N_DIR" -maxdepth 2 -type f -name database.sqlite 2>/dev/null | head -1)
+          echo "n8n_database_location=${N8N_DB:-NOT_FOUND}"
+          if [ -n "$N8N_DB" ] && [ ! -s "$BACKUP/n8n-database.sqlite" ]; then
+            python3 -c 'import sqlite3,sys; src=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); dst=sqlite3.connect(sys.argv[2]); src.backup(dst); dst.close(); src.close()' "$N8N_DB" "$BACKUP/n8n-database.sqlite"
+          fi
+          record $? n8n_db_backup
+          if [ -s "$BACKUP/n8n-database.sqlite" ]; then
+            python3 -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); assert c.execute("PRAGMA quick_check").fetchone()[0]=="ok"; c.close()' "$BACKUP/n8n-database.sqlite"
+            record $? n8n_db_quick_check
+          else
+            echo 'n8n_db_quick_check=FAIL(no backup)'
+          fi
+          if [ ! -s "$BACKUP/n8n-files.tgz" ]; then
+            tar -C "$N8N_DIR" --exclude=database.sqlite --exclude=database.sqlite-wal --exclude=database.sqlite-shm -czf "$BACKUP/n8n-files.tgz" .
+          fi
+          record $? n8n_files_archive
+
+          section "POSTGRES"
+          DB_USER=$(docker exec dominion-db sh -lc 'printf %s "$POSTGRES_USER"' 2>/dev/null)
+          DB_NAME=$(docker exec dominion-db sh -lc 'printf %s "$POSTGRES_DB"' 2>/dev/null)
+          if [ -n "$DB_USER" ] && [ -n "$DB_NAME" ] && [ ! -s "$BACKUP/postgres.dump" ]; then
+            docker exec dominion-db pg_dump -U "$DB_USER" -d "$DB_NAME" --format=custom > "$BACKUP/postgres.dump"
+          fi
+          record $? postgres_dump
+          if [ -s "$BACKUP/postgres.dump" ]; then
+            docker exec -i dominion-db pg_restore -l < "$BACKUP/postgres.dump" > "$BACKUP/postgres-contents.txt"
+            record $? postgres_dump_verify
+          else
+            echo 'postgres_dump_verify=FAIL(no dump)'
+          fi
+
+          section "DEPLOYMENT STATE"
+          docker ps -a --format '{{.Names}}|{{.Image}}|{{.Status}}' > "$BACKUP/docker-containers.txt"
+          record $? docker_inventory
+          systemctl list-units --type=service --state=running --no-pager --plain > "$BACKUP/running-services.txt"
+          record $? service_inventory
+
+          section "FINAL VALIDATION"
+          chmod -R go-rwx "$BACKUP"
+          required='dominion-ops-complete.tgz dominion-ops-all-refs.bundle production.env wix_agent.db n8n-database.sqlite n8n-files.tgz postgres.dump'
+          complete=yes
+          for f in $required; do
+            if [ -s "$BACKUP/$f" ]; then echo "$f=present"; else echo "$f=MISSING"; complete=no; fi
+          done
+          if [ "$complete" = yes ]; then
+            (cd "$BACKUP" && sha256sum $required > SHA256SUMS)
+            echo 'backup_set=COMPLETE'
+          else
+            echo 'backup_set=INCOMPLETE'
+          fi
+          printf 'backup_size='; du -sh "$BACKUP" | awk '{print $1}'
+          printf 'free_disk_after='; df -h / | awk 'NR==2 {print $4}'
+          date -u
+          exit 0
+          REMOTE
+          echo "ssh_exit=$?" >> audit/vm-phase2-backup-v2.txt
+          exit 0
+
+      - name: Commit backup report
+        run: |
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/vm-phase2-backup-v2.txt
+          git commit -m "backup: capture resilient Phase 2 rollback validation"
+          git push origin HEAD:audit/vm-readonly-20260720

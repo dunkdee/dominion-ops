@@ -1,0 +1,99 @@
+name: VM Phase 2 rollback backups
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - .github/workflows/vm-phase2-backup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/vm-readonly-20260720
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+
+      - name: Create approved rollback backups
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          mkdir -p audit
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > audit/vm-phase2-backup.txt <<'REMOTE'
+          set -euo pipefail
+          section() { printf '\n===== %s =====\n' "$1"; }
+          TS=$(date -u +%Y%m%dT%H%M%SZ)
+          BACKUP="$HOME/backups/phase2-$TS"
+          REPO="$HOME/dominion-ops"
+          install -d -m 700 "$BACKUP"
+
+          section "CODE AND GIT BACKUP"
+          tar -C "$HOME" -czf "$BACKUP/dominion-ops-complete.tgz" dominion-ops
+          git -C "$REPO" bundle create "$BACKUP/dominion-ops-all-refs.bundle" --all
+          git -C "$REPO" diff --binary > "$BACKUP/worktree.patch"
+          git -C "$REPO" status --short > "$BACKUP/worktree-status.txt"
+          if [ -f "$REPO/.env" ]; then cp -a "$REPO/.env" "$BACKUP/production.env"; fi
+          echo 'code archive: created'
+          echo 'git bundle: created'
+          echo 'worktree patch: created'
+
+          section "WIX DATA BACKUP"
+          docker cp wix-agent:/app/wix_agent.db "$BACKUP/wix_agent.db"
+          docker cp wix-agent:/app/logs "$BACKUP/wix-logs"
+          python3 -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print("sqlite_quick_check="+c.execute("PRAGMA quick_check").fetchone()[0]); c.close()' "$BACKUP/wix_agent.db"
+
+          section "N8N DATA BACKUP"
+          N8N_DIR="$HOME/n8n/rescue-data"
+          N8N_DB="$N8N_DIR/database.sqlite"
+          test -f "$N8N_DB"
+          python3 -c 'import sqlite3,sys; src=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); dst=sqlite3.connect(sys.argv[2]); src.backup(dst); print("sqlite_backup_ok"); dst.close(); src.close()' "$N8N_DB" "$BACKUP/n8n-database.sqlite"
+          python3 -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print("sqlite_quick_check="+c.execute("PRAGMA quick_check").fetchone()[0]); c.close()' "$BACKUP/n8n-database.sqlite"
+          tar -C "$N8N_DIR" --exclude=database.sqlite --exclude=database.sqlite-wal --exclude=database.sqlite-shm -czf "$BACKUP/n8n-files.tgz" .
+
+          section "POSTGRES BACKUP"
+          DB_USER=$(docker exec dominion-db sh -lc 'printf %s "$POSTGRES_USER"')
+          DB_NAME=$(docker exec dominion-db sh -lc 'printf %s "$POSTGRES_DB"')
+          docker exec dominion-db pg_dump -U "$DB_USER" -d "$DB_NAME" --format=custom > "$BACKUP/postgres.dump"
+          docker exec -i dominion-db pg_restore -l < "$BACKUP/postgres.dump" > "$BACKUP/postgres-contents.txt"
+          test -s "$BACKUP/postgres-contents.txt"
+          echo 'postgres custom dump: validated'
+
+          section "DEPLOYMENT STATE"
+          docker ps -a --format '{{.Names}}|{{.Image}}|{{.Status}}' > "$BACKUP/docker-containers.txt"
+          docker inspect --format '{{.Name}}|{{.Image}}|{{range .Mounts}}{{.Type}}:{{.Source}}->{{.Destination}};{{end}}' $(docker ps -aq) > "$BACKUP/docker-mounts.txt"
+          systemctl list-units --type=service --state=running --no-pager --plain > "$BACKUP/running-services.txt"
+
+          section "BACKUP VALIDATION"
+          chmod -R go-rwx "$BACKUP"
+          find "$BACKUP" -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+          (cd "$BACKUP" && sha256sum dominion-ops-complete.tgz dominion-ops-all-refs.bundle wix_agent.db n8n-database.sqlite n8n-files.tgz postgres.dump > SHA256SUMS)
+          test -s "$BACKUP/SHA256SUMS"
+          printf 'backup_directory=%s\n' "$BACKUP"
+          printf 'backup_size='; du -sh "$BACKUP" | awk '{print $1}'
+          printf 'free_disk_after='; df -h / | awk 'NR==2 {print $4}'
+          date -u
+          REMOTE
+
+      - name: Commit backup verification
+        run: |
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/vm-phase2-backup.txt
+          git commit -m "backup: verify Phase 2 rollback set"
+          git push origin HEAD:audit/vm-readonly-20260720

@@ -1,23 +1,56 @@
+import hmac
 import os
-import json
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Query
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-import wix_client as wix
-import sync_engine as sync
+import empire
 import fulfillment as fulfill
 import store_setup as store
+import sync_engine as sync
+import wix_client as wix
+import zendrop_client as zendrop
 
-app = FastAPI(title="Wix Agent", version="2.0.0")
 
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
+OPERATOR_TOKEN = os.getenv("WIX_AGENT_OPERATOR_TOKEN", "")
 CATALOG_VERSION = None
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    fulfill.init_db()
+    yield
+
+
+app = FastAPI(
+    title="Wix Agent",
+    version="2.1.0",
+    docs_url=None,
+    redoc_url=None,
+    lifespan=lifespan,
+)
+
+
+@app.middleware("http")
+async def require_operator_token(request: Request, call_next):
+    if request.url.path in {"/health", "/ready"}:
+        return await call_next(request)
+    if not OPERATOR_TOKEN:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Operator access is not configured"},
+        )
+    supplied = request.headers.get("X-Operator-Token", "")
+    if not hmac.compare_digest(supplied, OPERATOR_TOKEN):
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
 
 
 def _catalog_version() -> str:
@@ -27,65 +60,122 @@ def _catalog_version() -> str:
     return CATALOG_VERSION
 
 
+def _readiness() -> dict:
+    database = fulfill.database_health()
+    integrations = {
+        "wix_api_key": bool(wix.WIX_API_KEY),
+        "wix_site_id": bool(wix.WIX_SITE_ID),
+        "zendrop_api_key": bool(zendrop.ZENDROP_API_KEY),
+        "operator_token": bool(OPERATOR_TOKEN),
+        "n8n_webhook": bool(empire.N8N_WEBHOOK_URL),
+    }
+    blockers = []
+    if database.get("status") != "ok":
+        blockers.append("fulfillment_database")
+    for required in (
+        "wix_api_key",
+        "wix_site_id",
+        "zendrop_api_key",
+        "operator_token",
+    ):
+        if not integrations[required]:
+            blockers.append(required)
+    return {
+        "ready": not blockers,
+        "database": database,
+        "integrations": integrations,
+        "blockers": blockers,
+    }
+
+
 class FixRequest(BaseModel):
     product_ids: list[str]
-    dry_run: bool = False
+    dry_run: bool = True
 
 
-# ── Core ───────────────────────────────────────────────────────────────────────
+# Core
+
 
 @app.get("/health")
 def health():
+    readiness = _readiness()
     return {
-        "status": "ok",
+        "status": "ok" if readiness["ready"] else "degraded",
         "service": "wix-agent",
-        "version": "2.0.0",
-        "site_id": wix.WIX_SITE_ID,
+        "version": "2.1.0",
         "catalog_version": _catalog_version(),
+        **readiness,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
-# ── Inventory ──────────────────────────────────────────────────────────────────
+@app.get("/ready")
+def ready():
+    readiness = _readiness()
+    payload = {
+        "status": "ready" if readiness["ready"] else "not_ready",
+        **readiness,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    return JSONResponse(status_code=200 if readiness["ready"] else 503, content=payload)
+
+
+# Inventory
+
 
 @app.get("/audit")
 def audit_inventory():
     try:
         return JSONResponse(content=sync.audit_inventory(_catalog_version()))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-def _run_sync_bg():
+def _run_audit_bg():
     try:
-        sync.full_sync(_catalog_version())
-    except Exception as e:
-        print(f"[sync] background error: {e}")
+        sync.audit_inventory(_catalog_version())
+    except Exception as exc:
+        print(f"[sync] background audit error: {exc}")
 
 
 @app.post("/sync")
 def trigger_sync(background_tasks: BackgroundTasks):
-    background_tasks.add_task(_run_sync_bg)
-    return {"status": "sync started", "timestamp": datetime.now(timezone.utc).isoformat()}
+    background_tasks.add_task(_run_audit_bg)
+    return {
+        "status": "inventory audit started",
+        "note": "No inventory is changed by this endpoint",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.post("/sync/fix")
 def fix_specific_products(req: FixRequest):
     try:
-        report = sync.audit_inventory(_catalog_version())
-        broken = report["broken"]
+        catalog_version = _catalog_version()
+        if catalog_version == "v1" and not req.dry_run:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Catalog V1 inventory writes are disabled until supplier "
+                    "variants are mapped explicitly; rerun with dry_run=true"
+                ),
+            )
+        report = sync.audit_inventory(catalog_version)
         result = sync.fix_inventory(
-            wix_items=broken,
+            wix_items=report["broken"],
             confirmed_product_ids=req.product_ids,
-            catalog_version=_catalog_version(),
+            catalog_version=catalog_version,
             dry_run=req.dry_run,
         )
         return JSONResponse(content=result)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-# ── Orders & Fulfillment ───────────────────────────────────────────────────────
+# Orders and fulfillment
+
 
 @app.get("/orders")
 def get_orders():
@@ -96,33 +186,39 @@ def get_orders():
             "orders": orders,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 def _run_fulfill_bg():
     try:
         fulfill.run_fulfillment_cycle(_catalog_version())
         fulfill.check_pending_fulfillments(_catalog_version())
-    except Exception as e:
-        print(f"[fulfill] background error: {e}")
+    except Exception as exc:
+        print(f"[fulfill] background error: {exc}")
 
 
 @app.post("/fulfill")
 def trigger_fulfillment(background_tasks: BackgroundTasks):
+    if not zendrop.ZENDROP_API_KEY:
+        raise HTTPException(status_code=503, detail="Zendrop integration is not configured")
     background_tasks.add_task(_run_fulfill_bg)
-    return {"status": "fulfillment cycle started", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {
+        "status": "fulfillment cycle started",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/fulfillments/status")
 def fulfillment_status():
     try:
         return fulfill.get_fulfillment_summary()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-# ── Dashboard ──────────────────────────────────────────────────────────────────
+# Dashboard
+
 
 @app.get("/dashboard")
 def dashboard():
@@ -131,7 +227,6 @@ def dashboard():
         fulfill_summary = fulfill.get_fulfillment_summary()
         return {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "site_id": wix.WIX_SITE_ID,
             "catalog_version": _catalog_version(),
             "orders": {
                 "unfulfilled": len(orders),
@@ -141,77 +236,79 @@ def dashboard():
             "fulfillment_db": fulfill_summary,
             "recent_unfulfilled_orders": [
                 {
-                    "id": o.get("id"),
-                    "number": o.get("number"),
-                    "buyer_email": o.get("buyerInfo", {}).get("email"),
-                    "created_date": o.get("createdDate"),
-                    "price": o.get("priceSummary", {}).get("total", {}).get("formattedAmount"),
+                    "id": order.get("id"),
+                    "number": order.get("number"),
+                    "created_date": order.get("createdDate"),
+                    "price": order.get("priceSummary", {})
+                    .get("total", {})
+                    .get("formattedAmount"),
                 }
-                for o in orders[:10]
+                for order in orders[:10]
             ],
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-# ── Store Setup ────────────────────────────────────────────────────────────────
+# Store setup
+
 
 @app.get("/store/audit")
 def store_audit():
-    """Full store health check — pages, policies, product quality."""
     try:
         return JSONResponse(content=store.audit_store(_catalog_version()))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-def _run_store_setup_bg():
-    try:
-        store.full_store_setup(_catalog_version())
-    except Exception as e:
-        print(f"[store-setup] error: {e}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.post("/store/setup")
-def trigger_store_setup(background_tasks: BackgroundTasks):
-    """Run full store setup: policies, pages, product descriptions, SEO."""
-    background_tasks.add_task(_run_store_setup_bg)
-    return {"status": "store setup started", "timestamp": datetime.now(timezone.utc).isoformat()}
+def trigger_store_setup():
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            "Bulk store mutation is disabled. Review GET /store/pages and run "
+            "POST /store/setup/products?dry_run=true before any explicit update."
+        ),
+    )
 
 
 @app.post("/store/setup/products")
 def setup_products(dry_run: bool = Query(default=True)):
-    """Enhance product descriptions and SEO. dry_run=true to preview changes."""
     try:
-        return JSONResponse(content=store.enhance_products(_catalog_version(), dry_run=dry_run))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(
+            content=store.enhance_products(_catalog_version(), dry_run=dry_run)
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.get("/store/pages")
 def store_pages_content():
-    """Return all policy page HTML content — paste into Wix Editor for each page."""
     return {
-        p["slug"]: {"title": p["title"], "url": f"https://voltedgegoods.com/{p['slug']}", "html": p["content"]}
-        for p in store.PAGES_TO_CREATE
+        page["slug"]: {
+            "title": page["title"],
+            "url": f"https://voltedgegoods.com/{page['slug']}",
+            "html": page["content"],
+        }
+        for page in store.PAGES_TO_CREATE
     }
 
 
 @app.post("/store/policies")
 def update_policies_only():
-    """Update checkout policies in Wix store settings only."""
     try:
         return JSONResponse(content=store.setup_store_policies())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-# ── Logs ───────────────────────────────────────────────────────────────────────
+# Logs
+
 
 @app.get("/logs")
 def list_logs():
     files = sorted(LOG_DIR.glob("*.json"), reverse=True)
-    return {"count": len(files), "files": [f.name for f in files]}
+    return {"count": len(files), "files": [path.name for path in files]}
 
 
 @app.get("/logs/{filename}")

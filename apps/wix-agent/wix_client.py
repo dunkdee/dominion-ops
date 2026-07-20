@@ -5,9 +5,7 @@ import httpx
 
 
 WIX_API_KEY = os.getenv("WIX_API_KEY", "")
-WIX_SITE_ID = os.getenv(
-    "WIX_SITE_ID", "a790d430-a3a0-4b0e-9be6-4c874c229167"
-)
+WIX_SITE_ID = os.getenv("WIX_SITE_ID", "")
 
 BASE_V3 = "https://www.wixapis.com/stores/v3"
 BASE_V1_READ = "https://www.wixapis.com/stores-reader/v1"
@@ -21,6 +19,10 @@ class UnsupportedWixOperation(RuntimeError):
     pass
 
 
+class WixCatalogVersionError(RuntimeError):
+    pass
+
+
 def _headers() -> dict:
     return {
         "Authorization": WIX_API_KEY,
@@ -30,17 +32,23 @@ def _headers() -> dict:
 
 
 def detect_catalog_version() -> str:
-    try:
-        response = httpx.get(
-            f"{BASE_V3}/provision/version", headers=_headers(), timeout=TIMEOUT
-        )
-        if response.status_code == 200:
-            version = response.json().get("version", "")
-            if "V3" in version.upper():
-                return "v3"
-    except Exception:
-        pass
-    return "v1"
+    if not WIX_API_KEY or not WIX_SITE_ID:
+        raise WixCatalogVersionError("Wix API key and site ID are required")
+    response = httpx.get(
+        f"{BASE_V3}/provision/version", headers=_headers(), timeout=TIMEOUT
+    )
+    response.raise_for_status()
+    payload = response.json()
+    version = str(
+        payload.get("catalogVersion") or payload.get("version") or ""
+    ).upper()
+    if version == "V3_CATALOG" or version == "V3":
+        return "v3"
+    if version == "V1_CATALOG" or version == "V1":
+        return "v1"
+    raise WixCatalogVersionError(
+        "Wix returned an unknown or unavailable catalog version"
+    )
 
 
 def _get_all_products_v3() -> list[dict]:
@@ -51,10 +59,8 @@ def _get_all_products_v3() -> list[dict]:
         if cursor:
             cursor_paging["cursor"] = cursor
         body = {
-            "query": {
-                "fields": ["DESCRIPTION", "MEDIA_ITEMS_INFO"],
-                "cursorPaging": cursor_paging,
-            }
+            "fields": ["PLAIN_DESCRIPTION", "MEDIA_ITEMS_INFO"],
+            "query": {"cursorPaging": cursor_paging},
         }
         response = httpx.post(
             f"{BASE_V3}/products/query",
@@ -169,15 +175,10 @@ def update_inventory_item_v3(
     quantity: Optional[int] = None,
     track_quantity: bool = True,
 ) -> dict:
-    url = f"{BASE_V3}/inventory-items/{item_id}"
-    patch = {"inventoryItem": {"trackQuantity": track_quantity}}
-    if track_quantity and quantity is not None:
-        patch["inventoryItem"]["quantity"] = quantity
-    else:
-        patch["inventoryItem"]["inStock"] = in_stock
-    response = httpx.patch(url, headers=_headers(), json=patch, timeout=TIMEOUT)
-    response.raise_for_status()
-    return response.json()
+    raise UnsupportedWixOperation(
+        "Catalog V3 inventory writes are disabled until the current item "
+        "revision and an exact supplier-variant mapping are verified"
+    )
 
 
 def update_inventory_item_v1(
@@ -200,7 +201,12 @@ def update_inventory_item_v1(
 def set_product_visibility(
     product_id: str, visible: bool, catalog_version: str = "v3"
 ) -> dict:
-    base = BASE_V3 if catalog_version == "v3" else BASE_V1_WRITE
+    if catalog_version == "v3":
+        raise UnsupportedWixOperation(
+            "Catalog V3 product writes require the current product revision; "
+            "use a reviewed revision-safe workflow"
+        )
+    base = BASE_V1_WRITE
     url = f"{base}/products/{product_id}"
     response = httpx.patch(
         url,
@@ -285,39 +291,18 @@ def update_product_content(
     catalog_version: str = "v3",
 ) -> dict:
     if catalog_version == "v3":
-        url = f"{BASE_V3}/products/{product_id}"
-        payload = {
-            "product": {
-                "description": description,
-                "seoData": {
-                    "tags": [
-                        {
-                            "type": "title",
-                            "children": seo_title,
-                            "custom": True,
-                        },
-                        {
-                            "type": "meta",
-                            "props": {
-                                "name": "description",
-                                "content": seo_description,
-                            },
-                            "custom": True,
-                        },
-                    ]
-                },
-            },
-            "mask": {"paths": ["description", "seoData"]},
+        raise UnsupportedWixOperation(
+            "Catalog V3 product writes require the current product revision; "
+            "use a reviewed revision-safe workflow"
+        )
+    url = f"{BASE_V1_WRITE}/products/{product_id}"
+    payload = {
+        "product": {
+            "description": description,
+            "seoTitle": seo_title,
+            "seoDescription": seo_description,
         }
-    else:
-        url = f"{BASE_V1_WRITE}/products/{product_id}"
-        payload = {
-            "product": {
-                "description": description,
-                "seoTitle": seo_title,
-                "seoDescription": seo_description,
-            }
-        }
+    }
     response = httpx.patch(
         url, headers=_headers(), json=payload, timeout=TIMEOUT
     )

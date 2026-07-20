@@ -1,0 +1,85 @@
+name: VM Phase 2 Wix state recovery
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - .github/workflows/vm-phase2-wix-recovery.yml
+
+permissions:
+  contents: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/vm-readonly-20260720
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+
+      - name: Preserve and validate live Wix state
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          mkdir -p audit
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > audit/vm-phase2-wix-recovery.txt <<'REMOTE'
+          set -euo pipefail
+          section() { printf '\n===== %s =====\n' "$1"; }
+          BACKUP=$(find "$HOME/backups" -maxdepth 1 -type d -name 'phase2-*' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
+          test -n "$BACKUP"
+          DEST="$BACKUP/wix-app-live"
+          rm_target="$DEST"
+          if [ -e "$DEST" ]; then DEST="$BACKUP/wix-app-live-$(date -u +%H%M%S)"; fi
+
+          section "LIVE CONTAINER PATH TYPES"
+          docker exec wix-agent sh -lc 'for p in /app /app/wix_agent.db /app/logs; do ls -ld "$p" 2>&1; done'
+          echo 'database candidates in container:'
+          docker exec wix-agent sh -lc 'find /app -maxdepth 5 -type f \( -name "*.db" -o -name "*.sqlite" -o -name "*.sqlite3" \) -exec ls -l {} \; 2>/dev/null'
+
+          section "PRESERVE COMPLETE LIVE APP STATE"
+          docker cp wix-agent:/app "$DEST"
+          chmod -R go-rwx "$DEST"
+          printf 'copied_to=%s\n' "$DEST"
+          printf 'copied_size='; du -sh "$DEST" | awk '{print $1}'
+
+          section "VALIDATE DATABASE CANDIDATES"
+          count=0
+          valid=0
+          while IFS= read -r -d '' db; do
+            count=$((count+1))
+            echo "candidate=$db"
+            if python3 -c 'import sqlite3,sys; c=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); r=c.execute("PRAGMA quick_check").fetchone(); print("quick_check="+str(r[0] if r else "none")); c.close(); raise SystemExit(0 if r and r[0]=="ok" else 1)' "$db"; then
+              valid=$((valid+1))
+            fi
+          done < <(find "$DEST" -maxdepth 6 -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \) -print0)
+          echo "candidate_count=$count"
+          echo "valid_database_count=$valid"
+          test "$valid" -ge 1
+
+          section "WIX HEALTH"
+          docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}}' wix-agent
+          curl -fsS -m 5 http://127.0.0.1:8082/health
+          echo
+          date -u
+          REMOTE
+
+      - name: Commit recovery verification
+        run: |
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/vm-phase2-wix-recovery.txt
+          git commit -m "backup: verify live Wix state for Phase 2"
+          git push origin HEAD:audit/vm-readonly-20260720

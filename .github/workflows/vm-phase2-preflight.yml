@@ -1,0 +1,111 @@
+name: VM Phase 2 deployment preflight
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - .github/workflows/vm-phase2-preflight.yml
+
+permissions:
+  contents: write
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/vm-readonly-20260720
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+
+      - name: Pull authorized Phase 2 preflight
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          mkdir -p audit
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > audit/vm-phase2-preflight.txt <<'REMOTE'
+          set -euo pipefail
+          section() { printf '\n===== %s =====\n' "$1"; }
+          REPO="$HOME/dominion-ops"
+
+          section "GIT FETCH AND IDENTITY"
+          cd "$REPO"
+          git fetch --prune origin main
+          printf 'current_branch='; git branch --show-current
+          printf 'head='; git rev-parse HEAD
+          printf 'local_main='; git rev-parse main
+          printf 'origin_main='; git rev-parse origin/main
+          printf 'head_is_ancestor_of_origin_main='
+          if git merge-base --is-ancestor HEAD origin/main; then echo yes; else echo no; fi
+          printf 'origin_main_is_ancestor_of_head='
+          if git merge-base --is-ancestor origin/main HEAD; then echo yes; else echo no; fi
+
+          section "COMMITS ONLY ON VM FEATURE BRANCH"
+          git log --oneline --decorate origin/main..HEAD | head -100 || true
+
+          section "COMMITS ONLY ON GITHUB MAIN"
+          git log --oneline --decorate HEAD..origin/main | head -100 || true
+
+          section "TREE DIFFERENCE"
+          git diff --stat HEAD..origin/main
+          git diff --name-status HEAD..origin/main | head -200
+
+          section "WORKTREE CHANGES"
+          git status --short
+          echo '.env ignore status:'
+          git check-ignore -v .env || echo '.env is NOT ignored'
+          echo '.env tracked status:'
+          git ls-files --error-unmatch .env >/dev/null 2>&1 && echo tracked || echo untracked
+
+          section "COMPOSE MODEL AT VERIFIED MAIN"
+          git show origin/main:docker-compose.yml >/tmp/dominion-compose-main.yml
+          docker compose -f /tmp/dominion-compose-main.yml config --services 2>&1
+          echo 'images:'
+          docker compose -f /tmp/dominion-compose-main.yml config --images 2>&1
+
+          section "RUNNING CONTAINER DATA MOUNTS"
+          for cid in $(docker ps -aq); do
+            docker inspect --format '--- {{.Name}} --- status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}} project={{index .Config.Labels "com.docker.compose.project"}} workdir={{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$cid"
+            docker inspect --format '{{range .Mounts}}{{.Type}} {{.Name}} {{.Source}} -> {{.Destination}} rw={{.RW}}{{println}}{{end}}' "$cid"
+          done
+
+          section "DOCKER VOLUMES"
+          docker volume ls
+          docker system df
+
+          section "PERSISTENT DATA SIZE"
+          for p in "$HOME/n8n" "$HOME/.n8n" "$HOME/dominion/.n8n" "$HOME/dominion-ops" "$HOME/backups"; do
+            [ -e "$p" ] && du -sh "$p"
+          done
+          docker exec dominion-db sh -lc 'printf "postgres_user=%s\npostgres_db=%s\n" "${POSTGRES_USER:-postgres}" "${POSTGRES_DB:-postgres}"' 2>/dev/null || echo 'postgres identity probe unavailable'
+
+          section "SERVICE BASELINE"
+          for port in 80 3000 5000 5055 5060 5070 5080 5090 5095 5100 5101 5102 5103 5110 5120 5678 8080 8082 8090 8100 8200 8787 9380; do
+            code=$(curl -k -sS -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:$port/" 2>/dev/null)
+            [ -n "$code" ] && [ "$code" != 000 ] && printf '%s %s\n' "$port" "$code"
+          done
+          systemctl --failed --no-pager --plain
+
+          section "PREFLIGHT COMPLETE"
+          date -u
+          REMOTE
+
+      - name: Commit preflight report
+        run: |
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/vm-phase2-preflight.txt
+          git commit -m "audit: capture authorized VM Phase 2 deployment preflight"
+          git push origin HEAD:audit/vm-readonly-20260720

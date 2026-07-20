@@ -1,0 +1,26 @@
+===== DUPLICATE CONDUCTOR =====
+disabled
+inactive
+Result=success
+NRestarts=0
+ActiveState=inactive
+SubState=dead
+===== CANONICAL CONDUCTOR =====
+Result=success
+NRestarts=10
+ActiveState=active
+SubState=running
+{"status":"ok"}
+===== PERMISSIONS =====
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/.env
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/buddy_core/.env
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion-ops/.env
+600 malachisingleton8:malachisingleton8 /opt/dominion/adc.json
+600 malachisingleton8:malachisingleton8 /opt/dominion/gcp-key.json
+750 malachisingleton8:malachisingleton8 /home/malachisingleton8/logs
+===== LOGROTATE =====
+logrotate validation passed
+===== FAILED UNITS =====
+UNIT LOAD ACTIVE SUB DESCRIPTION
+0 loaded units listed.
+Mon Jul 20 18:20:50 UTC 2026

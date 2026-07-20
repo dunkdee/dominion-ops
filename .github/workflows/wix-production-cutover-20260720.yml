@@ -315,14 +315,22 @@ jobs:
           stage="BUILDING_CANDIDATE"
           write_state
           docker build --tag "$image" "$release_dir"
-          mapfile -t networks < <(
+
+          stage="DISCOVERING_DOCKER_NETWORKS"
+          write_state
+          network_lines="$(
             docker inspect wix-agent \
               --format '{{range $name, $config := .NetworkSettings.Networks}}{{println $name}}{{end}}'
+          )"
+          mapfile -t networks < <(
+            printf '%s\n' "$network_lines" | sed '/^[[:space:]]*$/d'
           )
-          test "${#networks[@]}" -eq 1
+          test "${#networks[@]}" -ge 1
           network="${networks[0]}"
           test -n "$network"
 
+          stage="TESTING_CANDIDATE"
+          write_state
           cleanup_candidate
           docker volume create "$candidate_data" >/dev/null
           docker volume create "$candidate_logs" >/dev/null
@@ -345,6 +353,9 @@ jobs:
             --volume "$candidate_data:/data" \
             --volume "$candidate_logs:/app/logs" \
             "$image" >/dev/null
+          for ((network_index = 1; network_index < ${#networks[@]}; network_index++)); do
+            docker network connect "${networks[$network_index]}" "$candidate"
+          done
 
           attempt=0
           until curl -fsS http://127.0.0.1:18082/ready \
@@ -608,6 +619,9 @@ jobs:
             --health-retries 3 \
             --health-start-period 20s \
             "$image" >/dev/null
+          for ((network_index = 1; network_index < ${#networks[@]}; network_index++)); do
+            docker network connect "${networks[$network_index]}" wix-agent
+          done
 
           attempt=0
           until curl -fsS http://127.0.0.1:8082/ready \

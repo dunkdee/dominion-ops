@@ -95,7 +95,7 @@ def request_json(method, url, *, json_body=None):
     return response.status_code, payload, error
 
 
-def query_products(privileged):
+def query_products_v1(privileged):
     products = []
     offset = 0
     while True:
@@ -124,7 +124,7 @@ def query_products(privileged):
     return products, True, None
 
 
-def query_inventory():
+def query_inventory_v1():
     items = []
     offset = 0
     while True:
@@ -144,6 +144,187 @@ def query_inventory():
             break
         offset += len(page)
     return items, True, None
+
+
+def _next_cursor(payload):
+    paging = payload.get("pagingMetadata") or {}
+    cursor = (paging.get("cursors") or {}).get("next")
+    return cursor if paging.get("hasNext") and cursor else None
+
+
+def _query_v3_collection(endpoint, result_key, field_sets, page_size):
+    """Query a V3 collection, reducing optional fields when access is limited."""
+    failures = []
+    for fields, merchant_access in field_sets:
+        items = []
+        cursor = None
+        while True:
+            paging = {"limit": page_size}
+            if cursor:
+                paging["cursor"] = cursor
+            body = {"query": {"cursorPaging": paging}}
+            if fields:
+                # Wix Catalog V3 fieldsets are top-level, not nested in query.
+                body["fields"] = fields
+            _, payload, error = request_json(
+                "POST",
+                f"https://www.wixapis.com/stores/v3/{endpoint}",
+                json_body=body,
+            )
+            if error:
+                failures.append(
+                    f"{endpoint.replace('/', '_')}_{error}_fields_"
+                    f"{'+'.join(fields) if fields else 'default'}"
+                )
+                break
+            page = payload.get(result_key, []) or []
+            items.extend(page)
+            cursor = _next_cursor(payload)
+            if not cursor:
+                return items, True, None, merchant_access, fields
+        # Retry from the first page with a smaller, documented fieldset.
+    return [], False, ";".join(failures), False, []
+
+
+def query_products_v3():
+    return _query_v3_collection(
+        "products/query",
+        "products",
+        (
+            (
+                [
+                    "PLAIN_DESCRIPTION",
+                    "MEDIA_ITEMS_INFO",
+                    "INFO_SECTION",
+                    "MERCHANT_DATA",
+                    "CURRENCY",
+                ],
+                True,
+            ),
+            (["PLAIN_DESCRIPTION", "MEDIA_ITEMS_INFO", "CURRENCY"], False),
+            ([], False),
+        ),
+        100,
+    )
+
+
+def query_variants_v3():
+    return _query_v3_collection(
+        "products/query-variants",
+        "variants",
+        (
+            (["MERCHANT_DATA", "CURRENCY"], True),
+            (["CURRENCY"], False),
+            ([], False),
+        ),
+        1000,
+    )
+
+
+def nested(value, *path):
+    for key in path:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
+
+
+def first_number(value, paths):
+    for path in paths:
+        parsed = number(nested(value, *path))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def v3_price(variant):
+    return first_number(
+        variant,
+        (
+            ("price", "actualPrice", "amount"),
+            ("price", "actualPrice"),
+            ("price", "amount"),
+            ("actualPrice", "amount"),
+            ("actualPrice",),
+            ("price",),
+        ),
+    )
+
+
+def v3_cost(variant):
+    return first_number(
+        variant,
+        (
+            ("revenueDetails", "cost", "amount"),
+            ("revenueDetails", "cost"),
+            ("costAndProfitData", "itemCost", "amount"),
+            ("costAndProfitData", "itemCost"),
+            ("costAndProfitData", "cost", "amount"),
+            ("costAndProfitData", "cost"),
+            ("merchantData", "itemCost", "amount"),
+            ("merchantData", "itemCost"),
+            ("merchantData", "cost", "amount"),
+            ("merchantData", "cost"),
+            ("itemCost", "amount"),
+            ("itemCost",),
+            ("cost", "amount"),
+            ("cost",),
+        ),
+    )
+
+
+def v3_variant_label(variant):
+    labels = []
+    for choice in variant.get("optionChoices") or []:
+        names = choice.get("optionChoiceNames") or {}
+        option_name = names.get("optionName") or choice.get("optionName")
+        choice_name = names.get("choiceName") or choice.get("choiceName")
+        if option_name or choice_name:
+            labels.append(
+                f"{safe_text(option_name or 'Option', 40)}="
+                f"{safe_text(choice_name or 'MISSING', 60)}"
+            )
+    return "; ".join(labels) or "Base variant"
+
+
+def v3_inventory_status(variants):
+    if not variants:
+        return "RECORD_MISSING"
+    states = []
+    for variant in variants:
+        inventory = variant.get("inventoryStatus") or {}
+        if inventory.get("inStock") is True:
+            states.append(True)
+        elif inventory.get("inStock") is False:
+            states.append(False)
+        status = str(
+            inventory.get("status")
+            or inventory.get("availabilityStatus")
+            or variant.get("availabilityStatus")
+            or ""
+        ).upper()
+        if status in ("IN_STOCK", "AVAILABLE"):
+            states.append(True)
+        elif status in ("OUT_OF_STOCK", "NOT_AVAILABLE"):
+            states.append(False)
+    if any(states):
+        return "IN_STOCK"
+    if states:
+        return "OUT_OF_STOCK"
+    return "TRACKED_STATUS_UNKNOWN"
+
+
+def v3_media_count(product):
+    media = product.get("media") or {}
+    candidates = (
+        media.get("items"),
+        nested(media, "itemsInfo", "items"),
+        product.get("mediaItems"),
+    )
+    for value in candidates:
+        if isinstance(value, list):
+            return len(value)
+    return 0
 
 
 def inventory_status(item, product):
@@ -208,9 +389,12 @@ def build_report():
         or "UNKNOWN",
         40,
     )
+    version_upper = version.upper()
+    is_v3 = "V3" in version_upper
+    is_v1 = "V1" in version_upper
     if version_error:
-        limitations.append(f"catalog_version_{version_error}")
-    elif "V1" not in version.upper():
+        fatal_errors.append(f"catalog_version_{version_error}")
+    elif not (is_v1 or is_v3):
         fatal_errors.append(f"unsupported_catalog_{version}")
 
     properties = {}
@@ -223,27 +407,74 @@ def build_report():
         properties = property_payload.get("properties", {}) or {}
 
     products = []
+    variants_v3 = []
+    inventory = []
+    inventory_ok = False
     merchant_access = True
-    if not fatal_errors:
-        products, products_ok, products_error = query_products(privileged=True)
+    product_fields = []
+    variant_fields = []
+    if not fatal_errors and is_v3:
+        (
+            products,
+            products_ok,
+            products_error,
+            product_merchant_access,
+            product_fields,
+        ) = query_products_v3()
+        if not products_ok:
+            fatal_errors.append(products_error or "v3_product_query_failed")
+        elif not product_fields:
+            limitations.append("v3_product_optional_content_fields_unavailable")
+        elif "PLAIN_DESCRIPTION" not in product_fields:
+            limitations.append("v3_plain_descriptions_unavailable")
+
+        (
+            variants_v3,
+            variants_ok,
+            variants_error,
+            variant_merchant_access,
+            variant_fields,
+        ) = query_variants_v3()
+        if not variants_ok:
+            fatal_errors.append(variants_error or "v3_variant_query_failed")
+        # Variant MERCHANT_DATA is the authoritative source for Wix COGS.
+        merchant_access = variant_merchant_access
+        if not merchant_access:
+            limitations.append("merchant_cost_access_unavailable")
+        inventory_ok = variants_ok
+        if products_ok and products and variants_ok and not variants_v3:
+            fatal_errors.append("v3_variant_query_returned_no_variants")
+    elif not fatal_errors:
+        products, products_ok, products_error = query_products_v1(privileged=True)
         if not products_ok and products_error and any(
             code in products_error for code in ("http_401", "http_403", "http_428")
         ):
-            products, products_ok, products_error = query_products(privileged=False)
+            products, products_ok, products_error = query_products_v1(
+                privileged=False
+            )
             merchant_access = False
             limitations.append("merchant_cost_and_hidden_product_access_unavailable")
         if not products_ok:
             fatal_errors.append(products_error or "product_query_failed")
+        if products:
+            inventory, inventory_ok, inventory_error = query_inventory_v1()
+            if not inventory_ok:
+                limitations.append(inventory_error or "inventory_query_failed")
 
-    inventory = []
-    inventory_ok = False
-    if products:
-        inventory, inventory_ok, inventory_error = query_inventory()
-        if not inventory_ok:
-            limitations.append(inventory_error or "inventory_query_failed")
+    if not fatal_errors and not products:
+        fatal_errors.append("catalog_contains_no_products")
+
     inventory_by_product = {
         item.get("productId"): item for item in inventory if item.get("productId")
     }
+    variants_by_product = {}
+    for variant in variants_v3:
+        product_id = (
+            nested(variant, "productData", "productId")
+            or variant.get("productId")
+        )
+        if product_id:
+            variants_by_product.setdefault(product_id, []).append(variant)
 
     currency = safe_text(properties.get("paymentCurrency") or "USD", 12)
     business_fields = (
@@ -267,18 +498,36 @@ def build_report():
 
     product_rows = []
     pricing_rows = []
-    for product in sorted(products, key=lambda value: str(value.get("name") or "").lower()):
+    for product in sorted(
+        products, key=lambda value: str(value.get("name") or "").lower()
+    ):
+        product_id = product.get("id") or product.get("_id")
+        product_variants = variants_by_product.get(product_id, [])
         name = safe_text(product.get("name"), 120)
         visible = product.get("visible") is not False
-        description_chars = plain_length(product.get("description"))
-        media = product.get("media") or {}
-        media_count = len(media.get("items") or product.get("mediaItems") or [])
+        if is_v3:
+            description_chars = plain_length(
+                product.get("plainDescription") or product.get("description")
+            )
+            media_count = v3_media_count(product)
+            info_count = len(
+                product.get("infoSections")
+                or product.get("infoSection")
+                or []
+            )
+            inv_status = v3_inventory_status(product_variants)
+        else:
+            description_chars = plain_length(product.get("description"))
+            media = product.get("media") or {}
+            media_count = len(
+                media.get("items") or product.get("mediaItems") or []
+            )
+            info_count = len(product.get("additionalInfoSections") or [])
+            inv_status = inventory_status(
+                inventory_by_product.get(product_id), product
+            )
         brand_present = bool(product.get("brand"))
         seo_present = seo_configured(product)
-        info_count = len(product.get("additionalInfoSections") or [])
-        inv_status = inventory_status(
-            inventory_by_product.get(product.get("id")), product
-        )
         content_flags = []
         if not visible:
             content_flags.append("HIDDEN")
@@ -311,26 +560,54 @@ def build_report():
             }
         )
 
-        managed = bool(product.get("manageVariants"))
-        variants = product.get("variants") or []
-        entries = variants if managed and variants else [None]
+        if is_v3:
+            entries = product_variants or [None]
+        else:
+            managed = bool(product.get("manageVariants"))
+            variants = product.get("variants") or []
+            entries = variants if managed and variants else [None]
         for entry in entries:
-            details = (entry or {}).get("variant") or {}
-            choices = (entry or {}).get("choices") or {}
-            label = (
-                "; ".join(
-                    f"{safe_text(key, 40)}={safe_text(value, 60)}"
-                    for key, value in sorted(choices.items())
+            if is_v3:
+                details = entry or {}
+                product_data = details.get("productData") or {}
+                label = v3_variant_label(details)
+                price = v3_price(details)
+                cost = v3_cost(details)
+                sku = safe_text(details.get("sku"), 60)
+                row_visible = (
+                    visible
+                    and details.get("visible") is not False
+                    and product_data.get("visible") is not False
                 )
-                if entry
-                else "Base product"
-            )
-            price_data = details.get("priceData") or product.get("priceData") or product.get("price")
-            cost_data = details.get("costAndProfitData") or product.get("costAndProfitData")
-            price = current_price(price_data)
-            cost = item_cost(cost_data)
-            sku = safe_text(details.get("sku") or product.get("sku"), 60)
-            row_visible = visible and details.get("visible") is not False
+                product_type = (
+                    product_data.get("productType")
+                    or product.get("productType")
+                    or "UNKNOWN"
+                )
+            else:
+                details = (entry or {}).get("variant") or {}
+                choices = (entry or {}).get("choices") or {}
+                label = (
+                    "; ".join(
+                        f"{safe_text(key, 40)}={safe_text(value, 60)}"
+                        for key, value in sorted(choices.items())
+                    )
+                    if entry
+                    else "Base product"
+                )
+                price_data = (
+                    details.get("priceData")
+                    or product.get("priceData")
+                    or product.get("price")
+                )
+                cost_data = details.get("costAndProfitData") or product.get(
+                    "costAndProfitData"
+                )
+                price = current_price(price_data)
+                cost = item_cost(cost_data)
+                sku = safe_text(details.get("sku") or product.get("sku"), 60)
+                row_visible = visible and details.get("visible") is not False
+                product_type = product.get("productType") or "UNKNOWN"
             standard_profit, standard_margin = profitability(
                 price, cost, STANDARD_CARD_RATE, STANDARD_CARD_FIXED
             )
@@ -342,7 +619,7 @@ def build_report():
                 row_flags.append("PRICE_MISSING_OR_ZERO")
             if cost is None:
                 row_flags.append("COGS_MISSING")
-            elif cost <= 0 and str(product.get("productType") or "").lower() == "physical":
+            elif cost <= 0 and str(product_type).lower() == "physical":
                 row_flags.append("PHYSICAL_COGS_ZERO_REVIEW")
             if sku == "MISSING":
                 row_flags.append("SKU_MISSING")
@@ -389,6 +666,32 @@ def build_report():
     missing_seo = sum("CUSTOM_SEO_MISSING" in row["flags"] for row in product_rows)
     hidden = sum("HIDDEN" in row["flags"] for row in product_rows)
 
+    if (
+        is_v3
+        and merchant_access
+        and pricing_rows
+        and cost_missing == len(pricing_rows)
+    ):
+        limitations.append("v3_merchant_cost_values_not_present_or_unrecognized")
+
+    variant_schema = []
+    if variants_v3:
+        first_variant = variants_v3[0]
+        variant_schema.append(
+            "top_level=" + ",".join(sorted(str(key) for key in first_variant))
+        )
+        for key in (
+            "price",
+            "revenueDetails",
+            "costAndProfitData",
+            "merchantData",
+        ):
+            value = first_variant.get(key)
+            if isinstance(value, dict):
+                variant_schema.append(
+                    f"{key}=" + ",".join(sorted(str(item) for item in value))
+                )
+
     if fatal_errors:
         audit_result = "INCOMPLETE"
     elif limitations:
@@ -423,6 +726,17 @@ def build_report():
     add(f"- Currency used for display: **{currency}**")
     add(f"- Merchant-specific catalog access: **{merchant_access}**")
     add(f"- Zendrop key configured on current container: **{ZENDROP_CONFIGURED}**")
+    if is_v3:
+        add(
+            "- V3 product fieldset used: **"
+            + safe_text(", ".join(product_fields) or "DEFAULT", 200)
+            + "**"
+        )
+        add(
+            "- V3 variant fieldset used: **"
+            + safe_text(", ".join(variant_fields) or "DEFAULT", 120)
+            + "**"
+        )
     add("")
     add("## Executive launch gates")
     add("")
@@ -490,6 +804,11 @@ def build_report():
     add("")
     add(f"- Limitations: {', '.join(safe_text(item, 120) for item in limitations) or 'none'}")
     add(f"- Fatal errors: {', '.join(safe_text(item, 120) for item in fatal_errors) or 'none'}")
+    if variant_schema:
+        add(
+            "- V3 variant schema field names (values excluded): "
+            + safe_text("; ".join(variant_schema), 500)
+        )
     add("- Public desktop/mobile layout, navigation, checkout, policy-page text, shipping rules, tax rules, and payment activation require separate customer-journey verification.")
     add("")
     add("## Required next actions")
@@ -506,6 +825,9 @@ def build_report():
     add("")
     add("## Source references")
     add("")
+    add("- Wix Stores catalog versions: https://dev.wix.com/docs/api-reference/business-solutions/stores/introduction")
+    add("- Wix Catalog V3 Query Products: https://dev.wix.com/docs/api-reference/business-solutions/stores/catalog-v3/products-v3/query-products")
+    add("- Wix Catalog V3 Query Variants: https://dev.wix.com/docs/api-reference/business-solutions/stores/catalog-v3/read-only-variants-v3/query-variants")
     add("- Wix Catalog V1 Query Products: https://dev.wix.com/docs/api-reference/business-solutions/stores/catalog-v1/catalog/query-products")
     add("- Wix Site Properties: https://dev.wix.com/docs/api-reference/business-management/site-properties/properties/get-site-properties")
     add("- Wix COGS tracking: https://support.wix.com/en/article/wix-stores-tracking-the-cost-of-goods")

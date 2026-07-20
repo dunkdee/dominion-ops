@@ -92,6 +92,7 @@ jobs:
           state_file="$state_dir/wix-production-cutover-latest.env"
           image="dominion/wix-agent:$RELEASE_SHA"
           stage="INITIALIZING"
+          failure_stage="NONE"
           backup_file="NONE"
           rollback_name="NONE"
           old_database_status="NOT_CHECKED"
@@ -102,13 +103,14 @@ jobs:
           candidate="wix-agent-candidate-${deployment_slug}"
           candidate_data="${candidate}-data"
           candidate_logs="${candidate}-logs"
-          mkdir -p "$state_dir"
+          install -d -m 700 "$state_dir"
 
           write_state() {
             {
               printf 'RELEASE_SHA=%s\n' "$RELEASE_SHA"
               printf 'DEPLOYMENT_ID=%s\n' "$DEPLOYMENT_ID"
               printf 'STAGE=%s\n' "$stage"
+              printf 'FAILURE_STAGE=%s\n' "$failure_stage"
               printf 'BACKUP_FILE=%s\n' "$(basename "$backup_file")"
               printf 'BACKUP_SHA256=%s\n' "$backup_sha256"
               printf 'ROLLBACK_CONTAINER=%s\n' "$rollback_name"
@@ -134,6 +136,7 @@ jobs:
               exit_code=1
             fi
             cleanup_candidate
+            failure_stage="$stage"
             stage="FAILED_BEFORE_CUTOVER"
             write_state
             exit "$exit_code"
@@ -174,7 +177,7 @@ jobs:
           PYENV
           chmod 600 "$source_env"
 
-          mkdir -p "$(dirname "$runtime_env")"
+          install -d -m 700 "$(dirname "$runtime_env")"
           python3 - "$source_env" "$runtime_env" <<'PYRUNTIME'
           import os
           import sys
@@ -328,7 +331,7 @@ jobs:
           )"
 
           backup_dir="$HOME/backups/wix-agent"
-          mkdir -p "$backup_dir"
+          install -d -m 700 "$backup_dir"
           case "$database_backup_result" in
             BACKED_UP)
               backup_file="$backup_dir/wix_agent_$(date -u +%Y%m%dT%H%M%SZ).db"
@@ -390,6 +393,7 @@ jobs:
             if docker inspect "$rollback_name" >/dev/null 2>&1; then
               renamed=1
             fi
+            failure_stage="$stage"
             rollback_ok=0
             if [ "$renamed" -eq 1 ]; then
               docker rm -f wix-agent >/dev/null 2>&1 || true
@@ -558,6 +562,20 @@ jobs:
               container
               and container.get("Config", {}).get("Healthcheck", {}).get("Test")
           )
+          non_root_user = bool(
+              container
+              and container.get("Config", {}).get("User") == "10001:10001"
+          )
+          resource_limits = (
+              host_config.get("PidsLimit") == 256
+              and host_config.get("Memory") == 512 * 1024 * 1024
+              and host_config.get("NanoCpus") == 1_000_000_000
+          )
+          tmpfs_options = (host_config.get("Tmpfs") or {}).get("/tmp", "")
+          hardened_tmpfs = all(
+              option in tmpfs_options
+              for option in ("noexec", "nosuid", "nodev")
+          )
 
           readiness_code = "unreachable"
           readiness = {}
@@ -574,7 +592,7 @@ jobs:
 
           expected = os.environ.get("EXPECTED_RELEASE_SHA", "")
           outcome = os.environ.get("CUTOVER_OUTCOME", "unknown")
-          release_matches = bool(expected) and expected in image
+          release_matches = bool(expected) and image == f"dominion/wix-agent:{expected}"
           mode = environment.get("WIX_FULFILLMENT_MODE", "UNSET")
           zendrop_credential_withheld = not bool(
               environment.get("ZENDROP_API_KEY")
@@ -621,6 +639,7 @@ jobs:
           print("- API keys and secret values: **EXCLUDED**")
           print(f"- Workflow cutover outcome: **{outcome.upper()}**")
           print(f"- Cutover state: **{state.get('STAGE', 'UNKNOWN')}**")
+          print(f"- Failure stage: **{state.get('FAILURE_STAGE', 'NONE')}**")
           print(f"- Expected release: **{expected or 'UNKNOWN'}**")
           print(f"- Running image matches release: **{release_matches}**")
           print()
@@ -643,6 +662,9 @@ jobs:
           print(f"| No-new-privileges enforced | {'PASS' if no_new_privileges else 'BLOCKED'} |")
           print(f"| Safe restart policy | {'PASS' if restart_safe else 'BLOCKED'} |")
           print(f"| Docker healthcheck configured | {'PASS' if healthcheck_configured else 'BLOCKED'} |")
+          print(f"| Non-root runtime user | {'PASS' if non_root_user else 'BLOCKED'} |")
+          print(f"| CPU, memory, and PID limits | {'PASS' if resource_limits else 'BLOCKED'} |")
+          print(f"| Hardened temporary filesystem | {'PASS' if hardened_tmpfs else 'BLOCKED'} |")
           print(f"| Zendrop supplier submission | {'DISABLED' if mode == 'record_only' else 'REVIEW'} |")
           print()
           print("## Recovery evidence")
@@ -723,6 +745,12 @@ jobs:
           grep -q 'Safe restart policy | PASS' \
             audit/wix-production-cutover-latest.md
           grep -q 'Docker healthcheck configured | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'Non-root runtime user | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'CPU, memory, and PID limits | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'Hardened temporary filesystem | PASS' \
             audit/wix-production-cutover-latest.md
           grep -q 'Verified backup retained: \*\*PASS\*\*' \
             audit/wix-production-cutover-latest.md

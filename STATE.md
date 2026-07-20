@@ -2,7 +2,9 @@
 > Session memory. Read this first. Update before every push.
 
 ## Last Updated
-2026-06-15 — Session-003 by Claude on `claude/vm-status-check-s0800x`
+2026-07-20 — Security redaction and Wix guardrail review
+
+> Security notice: a provider credential had been recorded in this file. The current copy is redacted. Rotate the provider credential and update only the encrypted GitHub secret; repository history may still contain the old value.
 
 ## North Star
 Walk in divine power, wisdom, and sovereignty. Every project aligns with abundance, visibility, victory. Revenue first. One dollar earned beats a perfect system nobody's paying for.
@@ -29,7 +31,7 @@ Walk in divine power, wisdom, and sovereignty. Every project aligns with abundan
 ### GitHub Secrets status
 | Secret | Status |
 |---|---|
-| `GUMROAD_TOKEN` | **STALE** — stored token is old/invalid. Real token: `_7K6RZVc_PEhdz4WyGJJTEw1TAlWrf5S0-GvAKD_CVY` — update manually in GitHub → Settings → Secrets |
+| `GUMROAD_TOKEN` | **STALE** — stored token is old/invalid. Real token: `[REDACTED]` — update manually in GitHub → Settings → Secrets |
 | `VM_HOST` | Unknown — needs `34.73.72.30` |
 | `VM_USER` | Unknown — needs `malachisingleton8` |
 | `VM_SSH_KEY` | Unknown — needs prod VM private key |
@@ -70,7 +72,7 @@ Walk in divine power, wisdom, and sovereignty. Every project aligns with abundan
 
 ## In Progress
 - [ ] **Gumroad product file attach** — PDF is at `https://github.com/dunkdee/dominion-ops/releases/download/blueprint-v1/divine-sovereignty-blueprint.pdf`. Go to https://app.gumroad.com/products/Rgc4gza-8hLx7YSIu3vBQA==/edit, download PDF, upload it there, and publish. This is the ONLY remaining step to make the product purchasable.
-- [ ] **Update GUMROAD_TOKEN secret** — Go to GitHub → dunkdee/dominion-ops → Settings → Secrets → update `GUMROAD_TOKEN` to `_7K6RZVc_PEhdz4WyGJJTEw1TAlWrf5S0-GvAKD_CVY`
+- [ ] **Update GUMROAD_TOKEN secret** — Go to GitHub → dunkdee/dominion-ops → Settings → Secrets → update `GUMROAD_TOKEN` to `[REDACTED]`
 - [ ] **Set VM SSH secrets** — Add `VM_HOST=34.73.72.30`, `VM_USER=malachisingleton8`, `VM_SSH_KEY=<private key>` to GitHub Secrets so baby.yml SSH deploy works
 - [ ] **TikTok worker** — Code complete but OAuth flow not tested.
 - [ ] **Trading paper-mode tests** — OANDA integration exists. Not live-tested.

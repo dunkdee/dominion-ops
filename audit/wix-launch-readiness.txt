@@ -1,0 +1,37 @@
+
+===== AGENT AND REQUIRED CONFIG =====
+status=running health=healthy restarts=0
+WIX_API_KEY=set(length:721)
+WIX_SITE_ID=set(length:36)
+ZENDROP_API_KEY=MISSING
+N8N_WEBHOOK_URL=MISSING
+{"status":"ok","service":"wix-agent","version":"2.0.0","site_id":"a790d430-a3a0-4b0e-9be6-4c874c229167","catalog_version":"v1","timestamp":"2026-07-20T20:09:27.041311+00:00"}
+
+===== FULFILLMENT DATABASE =====
+db_file_rc=1
+db_directory_rc=0
+fulfillment_status_http=500
+
+===== WIX STORE READINESS =====
+store_audit_http=200
+pages_total=None
+pages_missing=
+return_policy=None
+shipping_policy=None
+products_total=None
+products_needing_description=None
+audit_errors=pages,store_settings,products
+
+===== UNFULFILLED ORDER COUNT (NO CUSTOMER DATA STORED) =====
+orders_http=200
+unfulfilled_order_count=0
+
+===== PUBLIC STOREFRONT =====
+https://voltedgegoods.com -> HTTP 200 final=https://www.voltedgegoods.com/
+https://www.voltedgegoods.com -> HTTP 200 final=https://www.voltedgegoods.com/
+dns_ipv4=185.230.63.107
+dns_ipv4=185.230.63.171
+dns_ipv4=185.230.63.186
+
+===== READINESS AUDIT COMPLETE =====
+Mon Jul 20 20:09:29 UTC 2026

@@ -1,0 +1,112 @@
+name: VM Phase 1 no-outage containment
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - .github/workflows/vm-phase1-containment.yml
+
+permissions:
+  contents: write
+
+jobs:
+  contain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/vm-readonly-20260720
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+
+      - name: Apply approved no-outage containment
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          mkdir -p audit
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > audit/vm-phase1-containment.txt <<'REMOTE'
+          set -euo pipefail
+          section() { printf '\n===== %s =====\n' "$1"; }
+          TS=$(date -u +%Y%m%dT%H%M%SZ)
+          BACKUP="$HOME/backups/hardening-$TS"
+          mkdir -p "$BACKUP"
+
+          section "PRECHECK"
+          date -u
+          printf 'Conductor 5060 health: '
+          curl -fsS -m 5 http://127.0.0.1:5060/health
+          echo
+          systemctl show dominion-conductor.service -p ActiveState -p SubState -p MainPID -p NRestarts --no-pager
+          systemctl show conductor-api.service -p ActiveState -p SubState -p MainPID -p NRestarts --no-pager
+
+          section "BACKUP CURRENT SECURITY METADATA"
+          files=(
+            "$HOME/.env"
+            "$HOME/.env.gpg"
+            "$HOME/buddy_core/.env"
+            "$HOME/buddy_core/youtube_credentials.json"
+            "$HOME/conductor/.env.gpg"
+            "$HOME/dominion-ops/.env"
+            "$HOME/dominion/alpha_engine/.env"
+            "$HOME/n8n-clean-rebuild/export/credentials.json"
+            "$HOME/n8n/rescue-data/import/credentials.json"
+            "$HOME/n8n/.env.gpg"
+            "$HOME/stripe-verifier/.env.gpg"
+            "/opt/dominion/adc.json"
+            "/opt/dominion/gcp-key.json"
+          )
+          for f in "${files[@]}"; do
+            if [ -e "$f" ]; then stat -c '%a %U:%G %n' "$f"; fi
+          done | tee "$BACKUP/permissions-before.txt"
+          stat -c '%a %U:%G %n' "$HOME/logs" | tee "$BACKUP/logs-permission-before.txt"
+
+          section "LOCK CREDENTIAL FILES"
+          for f in "${files[@]}"; do
+            if [ -e "$f" ]; then
+              chmod 600 "$f"
+              stat -c '%a %U:%G %n' "$f"
+            fi
+          done
+
+          section "HARDEN LOG DIRECTORY"
+          chmod 750 "$HOME/logs"
+          stat -c '%a %U:%G %n' "$HOME/logs"
+          if sudo -n logrotate --debug /etc/logrotate.conf 2>&1 | grep -q 'insecure permissions'; then
+            echo 'ERROR: logrotate still reports insecure parent permissions'
+            exit 1
+          fi
+          sudo -n systemctl reset-failed logrotate.service
+          echo 'logrotate debug validation passed'
+
+          section "STOP DUPLICATE CONDUCTOR API LOOP"
+          curl -fsS -m 5 http://127.0.0.1:5060/health >/dev/null
+          sudo -n systemctl disable --now conductor-api.service
+          systemctl show conductor-api.service -p ActiveState -p SubState -p NRestarts --no-pager
+          printf 'Canonical Conductor after containment: '
+          curl -fsS -m 5 http://127.0.0.1:5060/health
+          echo
+
+          section "POSTCHECK"
+          systemctl --failed --no-pager --plain
+          echo "Local backup: $BACKUP"
+          date -u
+          REMOTE
+
+      - name: Commit containment report
+        run: |
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/vm-phase1-containment.txt
+          git commit -m "fix: record VM phase 1 containment"
+          git push origin HEAD:audit/vm-readonly-20260720

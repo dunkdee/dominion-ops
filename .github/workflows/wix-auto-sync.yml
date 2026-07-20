@@ -54,12 +54,9 @@ jobs:
             "$VM_USER@$VM_HOST" 'bash -se' <<'REMOTE'
           set -euo pipefail
           cd "$HOME/dominion-ops"
-          set -a
-          . ./.env
-          set +a
-
-          test -n "${WIX_AGENT_OPERATOR_TOKEN:-}"
-          auth_header="X-Operator-Token: ${WIX_AGENT_OPERATOR_TOKEN}"
+          operator_token="$(sed -n 's/^WIX_AGENT_OPERATOR_TOKEN=//p' .env | tail -n 1)"
+          test -n "$operator_token"
+          auth_header="X-Operator-Token: $operator_token"
 
           curl -fsS http://127.0.0.1:8082/ready >/tmp/wix-ready.json
           python3 -c 'import json; d=json.load(open("/tmp/wix-ready.json")); assert d["ready"] is True'

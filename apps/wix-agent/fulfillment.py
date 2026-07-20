@@ -52,11 +52,24 @@ def init_db() -> None:
                 status TEXT NOT NULL DEFAULT 'pending_submit',
                 tracking_number TEXT,
                 carrier TEXT,
+                last_error TEXT,
+                attempt_count INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
             """
         )
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(fulfillments)").fetchall()
+        }
+        if "last_error" not in columns:
+            conn.execute("ALTER TABLE fulfillments ADD COLUMN last_error TEXT")
+        if "attempt_count" not in columns:
+            conn.execute(
+                "ALTER TABLE fulfillments "
+                "ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0"
+            )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_status ON fulfillments(status)")
 
 
@@ -74,6 +87,40 @@ def database_health() -> dict:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _reserve_order(order_id: str) -> bool:
+    """Claim an order before calling Zendrop so retries cannot duplicate it."""
+    now = _now()
+    with _db() as conn:
+        cursor = conn.execute(
+            "INSERT OR IGNORE INTO fulfillments "
+            "(wix_order_id, status, last_error, attempt_count, created_at, updated_at) "
+            "VALUES (?, 'submitting', NULL, 1, ?, ?)",
+            (order_id, now, now),
+        )
+    return cursor.rowcount == 1
+
+
+def _record_submission(order_id: str, zendrop_order_id: str) -> None:
+    with _db() as conn:
+        conn.execute(
+            "UPDATE fulfillments SET zendrop_order_id=?, status='submitted', "
+            "last_error=NULL, updated_at=? WHERE wix_order_id=?",
+            (zendrop_order_id, _now(), order_id),
+        )
+
+
+def _record_submission_failure(order_id: str, error: Exception) -> None:
+    # Keep diagnostics bounded and do not automatically retry an uncertain
+    # supplier submission; an operator must reconcile it with Zendrop first.
+    message = str(error).strip() or error.__class__.__name__
+    with _db() as conn:
+        conn.execute(
+            "UPDATE fulfillments SET status='submit_failed', last_error=?, "
+            "updated_at=? WHERE wix_order_id=?",
+            (message[:500], _now(), order_id),
+        )
 
 
 def _map_wix_order_to_zendrop(order: dict) -> dict:
@@ -123,14 +170,12 @@ def run_fulfillment_cycle(catalog_version: str = "v3") -> dict:
     submitted = []
     already_tracked = []
     errors = []
-    with _db() as conn:
-        existing_ids = {
-            row["wix_order_id"]
-            for row in conn.execute("SELECT wix_order_id FROM fulfillments").fetchall()
-        }
     for order in orders:
         order_id = order.get("id", "")
-        if order_id in existing_ids:
+        if not order_id:
+            errors.append({"wix_order_id": "", "error": "Wix order is missing an ID"})
+            continue
+        if not _reserve_order(order_id):
             already_tracked.append(order_id)
             continue
         try:
@@ -138,15 +183,15 @@ def run_fulfillment_cycle(catalog_version: str = "v3") -> dict:
             result = zendrop.submit_order(payload)
             zd_order = result.get("order", result)
             zd_id = str(zd_order.get("id", zd_order.get("order_id", "")))
-            with _db() as conn:
-                conn.execute(
-                    "INSERT OR IGNORE INTO fulfillments "
-                    "(wix_order_id, zendrop_order_id, status, created_at, updated_at) "
-                    "VALUES (?, ?, 'submitted', ?, ?)",
-                    (order_id, zd_id, _now(), _now()),
+            if not zd_id:
+                raise RuntimeError(
+                    "Zendrop response did not include an order ID; "
+                    "manual reconciliation required"
                 )
+            _record_submission(order_id, zd_id)
             submitted.append({"wix_order_id": order_id, "zendrop_order_id": zd_id})
         except Exception as exc:
+            _record_submission_failure(order_id, exc)
             errors.append({"wix_order_id": order_id, "error": str(exc)})
 
     result = {

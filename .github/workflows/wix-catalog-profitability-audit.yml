@@ -1,0 +1,91 @@
+name: Wix catalog and profitability audit
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - ".github/workflows/wix-catalog-profitability-audit.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wix-catalog-profitability-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out private audit branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: audit/vm-readonly-20260720
+          fetch-depth: 1
+
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Pull authorized read-only Wix report
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          mkdir -p audit
+          ssh \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" \
+            "docker exec -i wix-agent python -" \
+            < scripts/wix_catalog_profitability_audit.py \
+            > audit/wix-catalog-profitability-latest.md
+
+          grep -q '^# Wix Catalog Launch and Profitability Audit' audit/wix-catalog-profitability-latest.md
+          grep -q 'Customer/order data: \*\*EXCLUDED\*\*' audit/wix-catalog-profitability-latest.md
+          grep -q 'API keys and secret values: \*\*EXCLUDED\*\*' audit/wix-catalog-profitability-latest.md
+
+      - name: Commit authorized private report
+        run: |
+          set -euo pipefail
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/wix-catalog-profitability-latest.md
+          if git diff --cached --quiet; then
+            echo "Report content is unchanged."
+            exit 0
+          fi
+          git commit -m "audit: capture detailed Wix catalog profitability"
+          git push origin HEAD:audit/vm-readonly-20260720
+
+      - name: Enforce complete audit result
+        run: |
+          set -euo pipefail
+          if grep -q 'Audit result: \*\*INCOMPLETE\*\*' audit/wix-catalog-profitability-latest.md; then
+            echo "The report was stored, but the catalog audit is incomplete."
+            exit 1
+          fi

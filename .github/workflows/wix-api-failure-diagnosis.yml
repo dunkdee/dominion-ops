@@ -1,0 +1,58 @@
+name: Wix API failure diagnosis
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - .github/workflows/wix-api-failure-diagnosis.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/vm-readonly-20260720
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+      - name: Diagnose Wix failures without exposing keys or customer data
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          mkdir -p audit
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes "$VM_USER@$VM_HOST" 'bash -s' > audit/wix-api-failure-diagnosis.txt <<'REMOTE'
+          set +e
+          TMP=$(mktemp -d)
+          trap 'rm -rf "$TMP"' EXIT
+          echo '===== STORE AUDIT ERRORS ====='
+          curl -sS -o "$TMP/store.json" -m 120 http://127.0.0.1:8082/store/audit
+          python3 -c 'import json,sys,re; d=json.load(open(sys.argv[1])); [(print(k+"="+re.sub(r"(?i)(authorization|token|key)[=: ]+[^ ,}]+",r"\1=[REDACTED]",str(v.get("error")))) if isinstance(v,dict) and v.get("error") else None) for k,v in d.items()]' "$TMP/store.json"
+          echo '===== FULFILLMENT ERROR ====='
+          curl -sS -o "$TMP/fulfill.json" -m 20 http://127.0.0.1:8082/fulfillments/status
+          python3 -c 'import json,sys,re; d=json.load(open(sys.argv[1])); s=str(d.get("detail","unknown")); print(re.sub(r"(?i)(authorization|token|key)[=: ]+[^ ,}]+",r"\1=[REDACTED]",s))' "$TMP/fulfill.json"
+          echo '===== DIRECT WIX FUNCTION PROBES ====='
+          docker exec wix-agent python -c 'import wix_client as w; tests=[("catalog_version",lambda:w.detect_catalog_version()),("products_v1",lambda:len(w.get_all_products("v1"))),("orders",lambda:len(w.get_orders(fulfillment_status="NOT_FULFILLED"))),("pages",lambda:len(w.get_pages())),("settings",lambda:list(w.get_store_settings().keys()))]; [(print(n+"="+str(f())) if True else None) for n,f in tests]' 2>&1 | sed -E 's/([Aa]uthorization|[Tt]oken|[Kk]ey)[=: ]+[^ ,}]+/\1=[REDACTED]/g'
+          echo '===== COMPLETE ====='
+          date -u
+          exit 0
+          REMOTE
+      - name: Commit sanitized diagnosis
+        run: |
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/wix-api-failure-diagnosis.txt
+          git commit -m "audit: diagnose Wix API launch failures"
+          git push origin HEAD:audit/vm-readonly-20260720

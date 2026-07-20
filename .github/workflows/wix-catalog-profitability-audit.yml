@@ -6,6 +6,7 @@ on:
       - audit/vm-readonly-20260720
     paths:
       - ".github/workflows/wix-catalog-profitability-audit.yml"
+      - "scripts/wix_catalog_profitability_audit.py"
 
 permissions:
   contents: write

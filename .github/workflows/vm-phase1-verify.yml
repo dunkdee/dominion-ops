@@ -1,0 +1,68 @@
+name: VM Phase 1 final verification
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - .github/workflows/vm-phase1-verify.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/vm-readonly-20260720
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+
+      - name: Clear stale state and verify
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          mkdir -p audit
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > audit/vm-phase1-verification.txt <<'REMOTE'
+          set -euo pipefail
+          sudo -n systemctl reset-failed conductor-api.service logrotate.service
+          echo '===== DUPLICATE CONDUCTOR ====='
+          systemctl is-enabled conductor-api.service || true
+          systemctl is-active conductor-api.service || true
+          systemctl show conductor-api.service -p ActiveState -p SubState -p Result -p NRestarts --no-pager
+          echo '===== CANONICAL CONDUCTOR ====='
+          systemctl show dominion-conductor.service -p ActiveState -p SubState -p Result -p NRestarts --no-pager
+          curl -fsS -m 5 http://127.0.0.1:5060/health
+          echo
+          echo '===== PERMISSIONS ====='
+          stat -c '%a %U:%G %n' "$HOME/.env" "$HOME/buddy_core/.env" "$HOME/dominion-ops/.env" /opt/dominion/adc.json /opt/dominion/gcp-key.json "$HOME/logs"
+          echo '===== LOGROTATE ====='
+          if sudo -n logrotate --debug /etc/logrotate.conf 2>&1 | grep -q 'insecure permissions'; then
+            echo 'FAILED: insecure permissions remain'
+            exit 1
+          fi
+          echo 'logrotate validation passed'
+          echo '===== FAILED UNITS ====='
+          systemctl --failed --no-pager --plain
+          date -u
+          REMOTE
+
+      - name: Commit verification report
+        run: |
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/vm-phase1-verification.txt
+          git commit -m "fix: verify VM phase 1 containment"
+          git push origin HEAD:audit/vm-readonly-20260720

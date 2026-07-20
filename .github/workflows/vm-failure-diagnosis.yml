@@ -1,0 +1,81 @@
+name: Read-only VM failure diagnosis
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - .github/workflows/vm-failure-diagnosis.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/vm-readonly-20260720
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+
+      - name: Pull failure diagnosis
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          mkdir -p audit
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > audit/vm-failure-diagnosis.txt <<'REMOTE'
+          set +e
+          section() { printf '\n===== %s =====\n' "$1"; }
+
+          section "RESTART LOOP UNIT DEFINITIONS"
+          for unit in conductor-api.service dominion-juris.service dominion-review-queue.service dominion-surplus-scraper.service; do
+            echo "--- $unit ---"
+            systemctl show "$unit" -p ActiveState -p SubState -p Result -p NRestarts -p ExecMainStatus -p ExecStart -p Restart -p RestartUSec -p WorkingDirectory -p FragmentPath --no-pager 2>/dev/null
+            echo "unit directives (environment values omitted):"
+            systemctl cat "$unit" 2>/dev/null | grep -Ev '^[[:space:]]*Environment(File)?=' | head -100
+          done
+
+          section "RECENT LOOP ERRORS"
+          for unit in conductor-api.service dominion-juris.service dominion-review-queue.service dominion-surplus-scraper.service; do
+            echo "--- $unit ---"
+            journalctl -u "$unit" --since '30 minutes ago' -p warning --no-pager -o cat 2>/dev/null |               sed -E 's/([A-Za-z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Za-z0-9_]*[=:])[[:space:]]*[^[:space:]]+/\1[REDACTED]/Ig' | tail -80
+          done
+
+          section "LOGROTATE DEBUG"
+          sudo -n logrotate --debug /etc/logrotate.conf 2>&1 | tail -160
+
+          section "HEALTH ROUTE DISCOVERY"
+          for port in 3000 5000 5052 5055 5060 5070 5080 5090 5095 5100 5101 5102 5103 5110 5120 5678 8080 8082 8090 8099 8100 8200 8787 9380; do
+            printf '\n--- port %s ---\n' "$port"
+            for path in / /health /healthz /api/health /api/healthz; do
+              code=$(curl -sS -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:$port$path" 2>/dev/null)
+              [ -n "$code" ] && [ "$code" != "000" ] && printf '%s %s\n' "$path" "$code"
+            done
+          done
+
+          section "TIMERS FOR CORE SERVICES"
+          systemctl list-timers --all --no-pager --plain | grep -Ei 'dominion|conductor|n8n|logrotate|backup|health|watchdog' || true
+
+          section "AUDIT COMPLETE"
+          date -u
+          REMOTE
+
+      - name: Commit failure diagnosis
+        run: |
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/vm-failure-diagnosis.txt
+          git commit -m "audit: capture VM failure diagnosis"
+          git push origin HEAD:audit/vm-readonly-20260720

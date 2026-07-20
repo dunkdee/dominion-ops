@@ -1,12 +1,12 @@
 # Wix Production Cutover Report
 
-- Generated: 2026-07-20T22:35:55.515829+00:00
+- Generated: 2026-07-20T22:39:58.285969+00:00
 - Customer/order data: **EXCLUDED**
 - API keys and secret values: **EXCLUDED**
 - Workflow cutover outcome: **FAILURE**
 - Cutover state: **FAILED_BEFORE_CUTOVER**
-- Failure stage: **INITIALIZING**
-- Expected release: **4e7dc60b0730165989c666947c460c00907c1a6d**
+- Failure stage: **BUILDING_CANDIDATE**
+- Expected release: **7eba601b1a4f3e66719a5ca87ce2268c97af5bd6**
 - Running image matches release: **False**
 
 ## Production verification
@@ -44,7 +44,7 @@
 - Rollback container retained: **NONE**
 - Rollback container stopped and retained: **BLOCKED**
 - Previous Compose file retained: **NONE**
-- New data volume: **wix_agent_data_4e7dc60b0730-29784447103-1**
+- New data volume: **wix_agent_data_7eba601b1a4f-29784658981-1**
 - Database mount type: **MISSING**
 
 ## Remaining launch controls

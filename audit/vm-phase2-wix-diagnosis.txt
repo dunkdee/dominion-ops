@@ -1,0 +1,13 @@
+===== WIX PATH TYPE =====
+drwxr-xr-x 2 1000 1003 4096 Jul 11 03:17 /app/logs
+drwxr-xr-x 2 1000 1003 4096 Jul 11 03:17 /app/wix_agent.db
+db_is_file=1
+db_is_directory=0
+===== DATABASE CANDIDATES =====
+===== CODE EXPECTATION =====
+11:DB_PATH = os.getenv("WIX_AGENT_DB", os.path.join(os.path.dirname(__file__), "wix_agent.db"))
+16:    conn = sqlite3.connect(DB_PATH)
+===== HEALTH =====
+status=running health=healthy restarts=0
+{"status":"ok","service":"wix-agent","version":"2.0.0","site_id":"a790d430-a3a0-4b0e-9be6-4c874c229167","catalog_version":"v1","timestamp":"2026-07-20T20:07:33.993189+00:00"}
+Mon Jul 20 20:07:33 UTC 2026

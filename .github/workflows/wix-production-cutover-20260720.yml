@@ -105,12 +105,16 @@ jobs:
           backup_sha256="NONE"
           compose_backup_file="NONE"
           compose_replaced=0
+          volume_contract_applied=0
           deployment_slug="${RELEASE_SHA:0:12}-${DEPLOYMENT_ID}"
           new_data_volume="wix_agent_data_${deployment_slug}"
           new_logs_volume="wix_agent_logs_${deployment_slug}"
           candidate="wix-agent-candidate-${deployment_slug}"
           candidate_data="${candidate}-data"
           candidate_logs="${candidate}-logs"
+          volume_state_file="$state_dir/wix-compose-volume-state-$DEPLOYMENT_ID.json"
+          export WIX_AGENT_DATA_VOLUME="$new_data_volume"
+          export WIX_AGENT_LOGS_VOLUME="$new_logs_volume"
           install -d -m 700 "$state_dir"
 
           write_state() {
@@ -145,6 +149,7 @@ jobs:
               exit_code=1
             fi
             cleanup_candidate
+            rm -f "$volume_state_file"
             failure_stage="$stage"
             stage="FAILED_BEFORE_CUTOVER"
             write_state
@@ -158,8 +163,26 @@ jobs:
           test -f "$source_env"
           test "$(docker inspect -f '{{.State.Running}}' wix-agent)" = "true"
 
-          WIX_AGENT_DATA_VOLUME="$new_data_volume" \
-          WIX_AGENT_LOGS_VOLUME="$new_logs_volume" \
+          python3 - "$source_env" "$volume_state_file" <<'PYVSTATE'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+          state = {}
+          for key in ("WIX_AGENT_DATA_VOLUME", "WIX_AGENT_LOGS_VOLUME"):
+              prefix = key + "="
+              values = [line[len(prefix):] for line in source if line.startswith(prefix)]
+              state[key] = {
+                  "present": bool(values),
+                  "value": values[-1] if values else "",
+              }
+          target = Path(sys.argv[2])
+          target.write_text(json.dumps(state), encoding="utf-8")
+          os.chmod(target, 0o600)
+          PYVSTATE
+
           python3 - "$source_env" <<'PYENV'
           import os
           import secrets
@@ -182,8 +205,6 @@ jobs:
           if not current("WIX_AGENT_OPERATOR_TOKEN"):
               replace("WIX_AGENT_OPERATOR_TOKEN", secrets.token_urlsafe(48))
           replace("WIX_FULFILLMENT_MODE", "record_only")
-          replace("WIX_AGENT_DATA_VOLUME", os.environ["WIX_AGENT_DATA_VOLUME"])
-          replace("WIX_AGENT_LOGS_VOLUME", os.environ["WIX_AGENT_LOGS_VOLUME"])
 
           temp = path.with_suffix(path.suffix + ".cutover")
           temp.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -419,6 +440,27 @@ jobs:
 
           rollback_name="wix-agent-rollback-$(date -u +%Y%m%dT%H%M%SZ)"
           renamed=0
+          restore_volume_contract() {
+            python3 - "$source_env" "$volume_state_file" <<'PYRESTORE'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          state = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          lines = path.read_text(encoding="utf-8").splitlines()
+          for key in ("WIX_AGENT_DATA_VOLUME", "WIX_AGENT_LOGS_VOLUME"):
+              prefix = key + "="
+              lines = [line for line in lines if not line.startswith(prefix)]
+              if state[key]["present"]:
+                  lines.append(prefix + state[key]["value"])
+          temp = path.with_suffix(path.suffix + ".volume-restore")
+          temp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          os.chmod(temp, 0o600)
+          os.replace(temp, path)
+          PYRESTORE
+          }
           rollback_cutover() {
             exit_code=$?
             trap - ERR INT TERM HUP
@@ -431,10 +473,18 @@ jobs:
             fi
             failure_stage="$stage"
             compose_ok=1
+            if [ "$volume_contract_applied" -eq 1 ]; then
+              if ! restore_volume_contract; then
+                compose_ok=0
+              fi
+            fi
             if [ "$compose_replaced" -eq 1 ]; then
               if ! install -m 644 "$compose_backup_file" "$compose_target"; then
                 compose_ok=0
               fi
+            fi
+            if [ "$compose_ok" -eq 1 ]; then
+              rm -f "$volume_state_file"
             fi
             rollback_ok=0
             if [ "$renamed" -eq 1 ]; then
@@ -459,6 +509,24 @@ jobs:
             exit "$exit_code"
           }
           trap rollback_cutover ERR INT TERM HUP
+
+          volume_contract_applied=1
+          python3 - "$source_env" <<'PYVOLUMES'
+          import os
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          lines = path.read_text(encoding="utf-8").splitlines()
+          for key in ("WIX_AGENT_DATA_VOLUME", "WIX_AGENT_LOGS_VOLUME"):
+              prefix = key + "="
+              lines = [line for line in lines if not line.startswith(prefix)]
+              lines.append(prefix + os.environ[key])
+          temp = path.with_suffix(path.suffix + ".volume-contract")
+          temp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          os.chmod(temp, 0o600)
+          os.replace(temp, path)
+          PYVOLUMES
 
           compose_replaced=1
           install -m 644 "$release_compose" "$compose_target.cutover"
@@ -535,6 +603,7 @@ jobs:
           stage="SUCCESS"
           write_state
           trap - ERR INT TERM HUP
+          rm -f "$volume_state_file" || true
           echo "Authorized Wix record-only production cutover succeeded."
           REMOTE
 

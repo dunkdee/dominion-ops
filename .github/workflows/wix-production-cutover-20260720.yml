@@ -164,6 +164,8 @@ jobs:
           test -f "$source_env"
           test "$(docker inspect -f '{{.State.Running}}' wix-agent)" = "true"
 
+          stage="CONFIGURING_SECURE_RUNTIME"
+          write_state
           python3 - "$source_env" "$volume_state_file" <<'PYVSTATE'
           import json
           import os
@@ -189,8 +191,10 @@ jobs:
           PYVSTATE
 
           python3 - "$source_env" <<'PYENV'
+          import json
           import os
           import secrets
+          import subprocess
           import sys
           from pathlib import Path
 
@@ -206,6 +210,27 @@ jobs:
               prefix = key + "="
               lines[:] = [line for line in lines if not line.startswith(prefix)]
               lines.append(prefix + value)
+
+          inspection = subprocess.run(
+              ["docker", "inspect", "wix-agent"],
+              text=True,
+              capture_output=True,
+              check=True,
+          )
+          container = json.loads(inspection.stdout)[0]
+          container_values = dict(
+              item.split("=", 1)
+              for item in container.get("Config", {}).get("Env", [])
+              if "=" in item
+          )
+          for key in (
+              "WIX_API_KEY",
+              "WIX_SITE_ID",
+              "WIX_AGENT_OPERATOR_TOKEN",
+              "N8N_WEBHOOK_URL",
+          ):
+              if not current(key) and container_values.get(key):
+                  replace(key, container_values[key])
 
           if not current("WIX_AGENT_OPERATOR_TOKEN"):
               replace("WIX_AGENT_OPERATOR_TOKEN", secrets.token_urlsafe(48))

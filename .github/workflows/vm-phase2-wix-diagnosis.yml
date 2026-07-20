@@ -1,0 +1,57 @@
+name: VM Phase 2 Wix path diagnosis
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - .github/workflows/vm-phase2-wix-diagnosis.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/vm-readonly-20260720
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+      - name: Diagnose Wix path
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          mkdir -p audit
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes "$VM_USER@$VM_HOST" 'bash -s' > audit/vm-phase2-wix-diagnosis.txt <<'REMOTE'
+          set +e
+          echo '===== WIX PATH TYPE ====='
+          docker exec wix-agent sh -lc 'ls -ld /app/wix_agent.db /app/logs 2>&1; test -f /app/wix_agent.db; echo db_is_file=$?; test -d /app/wix_agent.db; echo db_is_directory=$?'
+          echo '===== DATABASE CANDIDATES ====='
+          docker exec wix-agent sh -lc 'find /app -maxdepth 5 -type f \( -name "*.db" -o -name "*.sqlite" -o -name "*.sqlite3" \) -exec ls -l {} \; 2>/dev/null'
+          echo '===== CODE EXPECTATION ====='
+          docker exec wix-agent sh -lc 'grep -n "DB_PATH" /app/fulfillment.py 2>/dev/null | head -5'
+          echo '===== HEALTH ====='
+          docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}}' wix-agent
+          curl -fsS -m 5 http://127.0.0.1:8082/health
+          echo
+          date -u
+          exit 0
+          REMOTE
+      - name: Commit diagnosis
+        run: |
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/vm-phase2-wix-diagnosis.txt
+          git commit -m "audit: diagnose Wix persistence path"
+          git push origin HEAD:audit/vm-readonly-20260720

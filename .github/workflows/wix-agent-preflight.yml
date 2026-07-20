@@ -1,0 +1,151 @@
+name: Wix Agent Production Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type RUN_WIX_PREFLIGHT"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wix-agent-production-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event.inputs.confirm == 'RUN_WIX_PREFLIGHT'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out verified main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Resolve immutable release
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate and configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Copy immutable Wix candidate to VM
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          tar -czf /tmp/wix-agent-release.tgz apps/wix-agent
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "mkdir -p releases/wix-agent/$RELEASE_SHA"
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            /tmp/wix-agent-release.tgz \
+            "$VM_USER@$VM_HOST:releases/wix-agent/$RELEASE_SHA/release.tgz"
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            "tar -xzf releases/wix-agent/$RELEASE_SHA/release.tgz -C releases/wix-agent/$RELEASE_SHA"
+
+      - name: Build and verify isolated record-only candidate
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "RELEASE_SHA=$RELEASE_SHA bash -se" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+          release_dir="$HOME/releases/wix-agent/$RELEASE_SHA/apps/wix-agent"
+          source_env="$HOME/dominion-ops/.env"
+          runtime_env="$HOME/.config/dominion/wix-agent-preflight.env"
+          image="dominion/wix-agent:preflight-$RELEASE_SHA"
+          candidate="wix-agent-preflight-$RELEASE_SHA"
+          candidate_data="${candidate}-data"
+          candidate_logs="${candidate}-logs"
+
+          test -d "$release_dir"
+          test -f "$source_env"
+          mkdir -p "$(dirname "$runtime_env")"
+          grep -E '^(WIX_API_KEY|WIX_SITE_ID|WIX_AGENT_OPERATOR_TOKEN|N8N_WEBHOOK_URL)=' \
+            "$source_env" > "$runtime_env"
+          chmod 600 "$runtime_env"
+          for name in WIX_API_KEY WIX_SITE_ID WIX_AGENT_OPERATOR_TOKEN; do
+            grep -Eq "^${name}=.+" "$runtime_env"
+          done
+
+          network="$(docker inspect wix-agent --format '{{range $name, $config := .NetworkSettings.Networks}}{{$name}}{{end}}')"
+          test -n "$network"
+          docker build --tag "$image" "$release_dir"
+
+          cleanup() {
+            docker rm -f "$candidate" >/dev/null 2>&1 || true
+            docker volume rm "$candidate_data" "$candidate_logs" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          cleanup
+          docker volume create "$candidate_data" >/dev/null
+          docker volume create "$candidate_logs" >/dev/null
+
+          docker run -d --name "$candidate" \
+            --network "$network" \
+            --publish 127.0.0.1:18082:8000 \
+            --read-only \
+            --tmpfs /tmp:size=64m,noexec,nosuid,nodev \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --pids-limit 256 \
+            --memory 512m \
+            --cpus 1.0 \
+            --env-file "$runtime_env" \
+            --env WIX_FULFILLMENT_MODE=record_only \
+            --env WIX_AGENT_DB=/data/wix_agent.db \
+            --env BABY_API_URL=http://baby-api:8080 \
+            --volume "$candidate_data:/data" \
+            --volume "$candidate_logs:/app/logs" \
+            "$image" >/dev/null
+
+          attempt=0
+          until curl -fsS http://127.0.0.1:18082/ready >/tmp/wix-preflight-ready.json; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 20 ]; then
+              docker logs --tail 100 "$candidate"
+              exit 1
+            fi
+            sleep 2
+          done
+          python3 -c 'import json; d=json.load(open("/tmp/wix-preflight-ready.json")); assert d["ready"] is True; assert d["catalog"]["version"] == "v3"; assert d["fulfillment"]["mode"] == "record_only"'
+
+          operator_token="$(sed -n 's/^WIX_AGENT_OPERATOR_TOKEN=//p' "$runtime_env" | tail -n 1)"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:18082/fulfillments/status)" = "401"
+          curl -fsS -H "X-Operator-Token: $operator_token" \
+            http://127.0.0.1:18082/fulfillments/status >/dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            -H "X-Operator-Token: $operator_token" \
+            http://127.0.0.1:18082/fulfill)" = "409"
+
+          echo "Isolated Wix V3 record-only candidate preflight passed."
+          REMOTE

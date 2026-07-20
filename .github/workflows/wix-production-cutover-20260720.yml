@@ -128,13 +128,17 @@ jobs:
 
           fail_before_cutover() {
             exit_code=$?
+            trap - ERR INT TERM HUP
             set +e
+            if [ "$exit_code" -eq 0 ]; then
+              exit_code=1
+            fi
             cleanup_candidate
             stage="FAILED_BEFORE_CUTOVER"
             write_state
             exit "$exit_code"
           }
-          trap fail_before_cutover ERR
+          trap fail_before_cutover ERR INT TERM HUP
 
           test -d "$release_dir"
           test -f "$source_env"
@@ -378,7 +382,14 @@ jobs:
           renamed=0
           rollback_cutover() {
             exit_code=$?
+            trap - ERR INT TERM HUP
             set +e
+            if [ "$exit_code" -eq 0 ]; then
+              exit_code=1
+            fi
+            if docker inspect "$rollback_name" >/dev/null 2>&1; then
+              renamed=1
+            fi
             rollback_ok=0
             if [ "$renamed" -eq 1 ]; then
               docker rm -f wix-agent >/dev/null 2>&1 || true
@@ -401,7 +412,7 @@ jobs:
             write_state
             exit "$exit_code"
           }
-          trap rollback_cutover ERR
+          trap rollback_cutover ERR INT TERM HUP
 
           stage="CUTOVER_STARTED"
           write_state
@@ -456,7 +467,7 @@ jobs:
 
           stage="SUCCESS"
           write_state
-          trap - ERR
+          trap - ERR INT TERM HUP
           echo "Authorized Wix record-only production cutover succeeded."
           REMOTE
 
@@ -543,6 +554,10 @@ jobs:
           restart_safe = (
               host_config.get("RestartPolicy", {}).get("Name") == "unless-stopped"
           )
+          healthcheck_configured = bool(
+              container
+              and container.get("Config", {}).get("Healthcheck", {}).get("Test")
+          )
 
           readiness_code = "unreachable"
           readiness = {}
@@ -583,7 +598,10 @@ jobs:
               import hashlib
 
               with backup_path.open("rb") as backup_stream:
-                  digest = hashlib.file_digest(backup_stream, "sha256").hexdigest()
+                  digest_builder = hashlib.sha256()
+                  for chunk in iter(lambda: backup_stream.read(1024 * 1024), b""):
+                      digest_builder.update(chunk)
+                  digest = digest_builder.hexdigest()
               backup_retained = (
                   digest == backup_hash
                   and (backup_path.stat().st_mode & 0o777) == 0o600
@@ -624,6 +642,7 @@ jobs:
           print(f"| Linux capabilities dropped | {'PASS' if cap_drop_all else 'BLOCKED'} |")
           print(f"| No-new-privileges enforced | {'PASS' if no_new_privileges else 'BLOCKED'} |")
           print(f"| Safe restart policy | {'PASS' if restart_safe else 'BLOCKED'} |")
+          print(f"| Docker healthcheck configured | {'PASS' if healthcheck_configured else 'BLOCKED'} |")
           print(f"| Zendrop supplier submission | {'DISABLED' if mode == 'record_only' else 'REVIEW'} |")
           print()
           print("## Recovery evidence")
@@ -679,9 +698,31 @@ jobs:
             audit/wix-production-cutover-latest.md
           grep -q 'Release image active | PASS' \
             audit/wix-production-cutover-latest.md
+          grep -q 'Localhost-only port binding | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'Persistent /data mount | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'Readiness HTTP 200 | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'Wix catalog V3 | PASS' \
+            audit/wix-production-cutover-latest.md
           grep -q 'Record-only fulfillment | PASS' \
             audit/wix-production-cutover-latest.md
           grep -q 'Zendrop credential withheld | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'Operator token configured | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'Secret files mode 600 | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'Read-only root filesystem | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'Linux capabilities dropped | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'No-new-privileges enforced | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'Safe restart policy | PASS' \
+            audit/wix-production-cutover-latest.md
+          grep -q 'Docker healthcheck configured | PASS' \
             audit/wix-production-cutover-latest.md
           grep -q 'Verified backup retained: \*\*PASS\*\*' \
             audit/wix-production-cutover-latest.md

@@ -1,0 +1,49 @@
+name: Wix Agent CI
+
+on:
+  push:
+    branches:
+      - agent/wix-launch-readiness
+    paths:
+      - "apps/wix-agent/**"
+      - "docker-compose.yml"
+      - ".github/workflows/wix-agent-ci.yml"
+  pull_request:
+    paths:
+      - "apps/wix-agent/**"
+      - "docker-compose.yml"
+      - ".github/workflows/wix-agent-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wix-agent-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/wix-agent/requirements.txt
+
+      - name: Install runtime dependencies
+        run: python -m pip install --disable-pip-version-check -r apps/wix-agent/requirements.txt
+
+      - name: Compile Python sources
+        run: python -m compileall -q apps/wix-agent
+
+      - name: Run regression tests
+        run: python -m unittest discover -s apps/wix-agent/tests -v
+
+      - name: Build Wix agent image
+        run: docker build --tag dominion/wix-agent:ci apps/wix-agent

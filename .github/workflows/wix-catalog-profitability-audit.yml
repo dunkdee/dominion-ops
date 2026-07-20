@@ -90,3 +90,5 @@ jobs:
             echo "The report was stored, but the catalog audit is incomplete."
             exit 1
           fi
+          grep -q 'Automated catalog pricing gates: \*\*PASS\*\*' \
+            audit/wix-catalog-profitability-latest.md

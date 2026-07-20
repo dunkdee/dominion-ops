@@ -1,0 +1,530 @@
+
+===== AUDIT IDENTITY =====
+Mon Jul 20 14:56:34 UTC 2026
+foundation-vm
+ 14:56:34 up 43 days,  1:11,  0 user,  load average: 0.29, 0.47, 0.51
+uid=1000(malachisingleton8) gid=1003(malachisingleton8) groups=1003(malachisingleton8),4(adm),30(dip),44(video),46(plugdev),993(ollama),1000(google-sudoers),1001(docker),1002(lxd)
+kernel: Linux 6.1.0-49-cloud-amd64 x86_64 GNU/Linux
+os: Debian GNU/Linux 12 (bookworm)
+
+===== GCE METADATA =====
+instance/name: foundation-vm
+instance/machine-type: projects/288811801522/machineTypes/n2-standard-2
+instance/zone: projects/288811801522/zones/us-central1-a
+project/project-id: dominion-ascendant
+
+===== CAPACITY =====
+               total        used        free      shared  buff/cache   available
+Mem:           7.8Gi       2.4Gi       2.8Gi        23Mi       2.9Gi       5.3Gi
+Swap:          2.0Gi       800Mi       1.2Gi
+Filesystem     Type  Size  Used Avail Use% Mounted on
+/dev/sda1      ext4   49G   35G   13G  74% /
+/dev/sda15     vfat  124M   12M  112M  10% /boot/efi
+
+Top-level home usage:
+352K	/home/malachisingleton8/auric_edge
+864K	/home/malachisingleton8/dominion_rag_db
+1.1M	/home/malachisingleton8/freelancer_proposals
+1.5M	/home/malachisingleton8/MASTER_RESCUE.sqlite
+1.5M	/home/malachisingleton8/backups
+1.5M	/home/malachisingleton8/n8n-database.sqlite
+1.6M	/home/malachisingleton8/affiliate_content
+2.1M	/home/malachisingleton8/DOMINION_VAULT.b64
+3.3M	/home/malachisingleton8/proposals
+3.5M	/home/malachisingleton8/dominion_vault
+4.7M	/home/malachisingleton8/dominion_3d_dashboard
+5.8M	/home/malachisingleton8/dominion-ops
+7.1M	/home/malachisingleton8/agent.log
+8.0M	/home/malachisingleton8/content_queue
+12M	/home/malachisingleton8/stripe-verifier
+17M	/home/malachisingleton8/DOMINION_VAULT_2026
+37M	/home/malachisingleton8/dominion-strategizer
+38M	/home/malachisingleton8/cloudflared-linux-amd64
+40M	/home/malachisingleton8/tiktok_audio
+44M	/home/malachisingleton8/tiktok_videos
+54M	/home/malachisingleton8/conductor
+99M	/home/malachisingleton8/logs
+110M	/home/malachisingleton8/piper
+156M	/home/malachisingleton8/n8n
+179M	/home/malachisingleton8/surplus_recovery
+199M	/home/malachisingleton8/aura-ecosystem
+244M	/home/malachisingleton8/youtube_videos
+417M	/home/malachisingleton8/dominion
+837M	/home/malachisingleton8/buddy_core
+1.3G	/home/malachisingleton8/dominion_env
+
+===== FAILED SYSTEMD UNITS =====
+UNIT              LOAD   ACTIVE SUB    DESCRIPTION
+logrotate.service loaded failed failed Rotate log files
+
+LOAD   = Reflects whether the unit definition was properly loaded.
+ACTIVE = The high-level unit activation state, i.e. generalization of SUB.
+SUB    = The low-level unit activation state, values depend on unit type.
+1 loaded units listed.
+
+===== RUNNING RELEVANT SYSTEMD SERVICES =====
+auric_edge.service                                     loaded active running Dominion AuricEdge Real Estate SaaS phi=1.618
+caddy.service                                          loaded active running Caddy
+conductor-scheduler.service                            loaded active running Dominion Conductor Scheduler
+conductor-worker.service                               loaded active running Dominion Conductor Worker
+covenant-watchdog.service                              loaded active running Dominion Covenant Watchdog
+docker.service                                         loaded active running Docker Application Container Engine
+dominion-3d-dashboard.service                          loaded active running Dominion 3D Command Center (port 8200)
+dominion-alchemist.service                             loaded active running Dominion Alchemist Health AI
+dominion-alpha.service                                 loaded active running Dominion Alpha Engine - Token Scanner + Paper Trader
+dominion-buddy-web.service                             loaded active running Buddy Web Chat — Phone-accessible AI (port 5070)
+dominion-command-deck.service                          loaded active running Dominion Command Deck - Overseer Dashboard (port 5110)
+dominion-conductor.service                             loaded active running Dominion Conductor API
+dominion-dashboard.service                             loaded active running Dominion Dashboard Command Center
+dominion-email-drip.service                            loaded active running Dominion KDP Email Drip Engine
+dominion-email-monitor.service                         loaded active running Dominion Email Monitor — SMS alerts for new emails
+dominion-gatekeeper.service                            loaded active running Dominion Gatekeeper Revenue Rail
+dominion-guardian.service                              loaded active running Dominion System Guardian
+dominion-juris.service                                 loaded active running Juris Legal Intelligence API
+dominion-monitor.service                               loaded active running Dominion System Monitor
+dominion-n8n-watchdog.service                          loaded active running Dominion n8n Watchdog
+dominion-ops-dashboard.service                         loaded active running Dominion Operations Dashboard (port 5100)
+dominion-port-healer.service                           loaded active running Dominion Port Conflict Auto-Healer
+dominion-proposal-queue.service                        loaded active running Dominion Proposal Queue
+dominion-report.service                                loaded active running Dominion CEO Report Dashboard (port 5095)
+dominion-review-queue.service                          loaded active running Dominion Surplus Review Queue
+dominion-sentinel.service                              loaded active running Dominion Sentinel — Autonomous Guardian (phi=1.618)
+dominion-store.service                                 loaded active running Dominion Store Payment API (port 5080)
+dominion-surplus-dashboard.service                     loaded active running Dominion Surplus Recovery Dashboard
+dominion-tiktok.service                                loaded active running Dominion TikTok OAuth and Auto-Poster (port 5120)
+dominion-twilio-router.service                         loaded active running Dominion Twilio Call/SMS Router (port 5102)
+gemini-server.service                                  loaded active running Gemini Orchestrator API Server
+juris-api.service                                      loaded active running Dominion Juris API
+ollama.service                                         loaded active running Ollama Service
+
+===== ALL RELEVANT SYSTEMD UNIT FILES =====
+caddy-api.service                                      disabled        enabled
+caddy.service                                          disabled        enabled
+conductor-api.service                                  disabled        enabled
+conductor-autonomous.service                           static          -
+conductor-scheduler.service                            enabled         enabled
+conductor-worker.service                               enabled         enabled
+conductor.service                                      masked          enabled
+docker.service                                         enabled         enabled
+dominion-3d-dashboard.service                          enabled         enabled
+dominion-affiliate.service                             disabled        enabled
+dominion-alchemist.service                             enabled         enabled
+dominion-alpha.service                                 enabled         enabled
+dominion-backup.service                                static          -
+dominion-buddy-web.service                             enabled         enabled
+dominion-command-deck.service                          enabled         enabled
+dominion-conductor.service                             disabled        enabled
+dominion-dashboard.service                             enabled         enabled
+dominion-email-drip.service                            enabled         enabled
+dominion-email-monitor.service                         enabled         enabled
+dominion-executor.service                              static          -
+dominion-gatekeeper.service                            enabled         enabled
+dominion-generate-payload.service                      static          -
+dominion-guardian.service                              enabled         enabled
+dominion-healthcheck.service                           static          -
+dominion-intel.service                                 static          -
+dominion-juris.service                                 enabled         enabled
+dominion-kdp.service                                   disabled        enabled
+dominion-monitor.service                               enabled         enabled
+dominion-n8n-watchdog.service                          disabled        enabled
+dominion-ops-dashboard.service                         enabled         enabled
+dominion-overseer.service                              disabled        enabled
+dominion-paper-trade.service                           disabled        enabled
+dominion-port-healer.service                           enabled         enabled
+dominion-proposal-queue.service                        enabled         enabled
+dominion-publish.service                               static          -
+dominion-report.service                                enabled         enabled
+dominion-review-queue.service                          enabled         enabled
+dominion-scout.service                                 disabled        enabled
+dominion-sentinel.service                              enabled         enabled
+dominion-site.service                                  disabled        enabled
+dominion-social-poster.service                         static          -
+dominion-store.service                                 enabled         enabled
+dominion-surplus-api.service                           disabled        enabled
+dominion-surplus-dashboard.service                     enabled         enabled
+dominion-surplus-scraper.service                       disabled        enabled
+dominion-tiktok.service                                enabled         enabled
+dominion-tracker.service                               disabled        enabled
+dominion-trade-report.service                          disabled        enabled
+dominion-twilio-router.service                         enabled         enabled
+dominion-watchdog.service                              static          -
+dominion-wholesale.service                             disabled        enabled
+dominion-youtube.service                               disabled        enabled
+gemini-server.service                                  disabled        enabled
+n8n.service                                            disabled        enabled
+ollama.service                                         enabled         enabled
+
+===== DOCKER CONTAINERS =====
+NAMES             IMAGE                        STATUS                 PORTS
+movie-generator   movie-generator              Up 3 days              0.0.0.0:8001->8000/tcp, [::]:8001->8000/tcp
+wix-agent         desktop-tutorial-wix-agent   Up 5 days (healthy)    0.0.0.0:8082->8000/tcp, [::]:8082->8000/tcp
+baby-api          a319b3721a52                 Up 3 weeks (healthy)   0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp
+dominion-web      3224bfc43c02                 Up 4 weeks             0.0.0.0:8090->80/tcp, [::]:8090->80/tcp
+baby-logger       alpine:latest                Up 4 weeks             
+dominion-seo      dominion-seo:latest          Up 3 days              
+dominion-n8n      n8nio/n8n:latest             Up 4 weeks             0.0.0.0:5678->5678/tcp, [::]:5678->5678/tcp
+dominion-db       postgres:15                  Up 5 weeks             127.0.0.1:5432->5432/tcp
+
+===== DOCKER COMPOSE PROJECTS =====
+NAME                STATUS              CONFIG FILES
+desktop-tutorial    running(4)          /home/malachisingleton8/desktop-tutorial/docker-compose.yml
+
+===== LISTENING TCP PORTS =====
+State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess                                 
+LISTEN 0      4096   127.0.0.53%lo:53         0.0.0.0:*                                           
+LISTEN 0      4096       127.0.0.1:11434      0.0.0.0:*                                           
+LISTEN 0      4096      127.0.0.54:53         0.0.0.0:*                                           
+LISTEN 0      2048       127.0.0.1:3000       0.0.0.0:*    users:(("uvicorn",pid=727352,fd=13))   
+LISTEN 0      4096         0.0.0.0:8001       0.0.0.0:*                                           
+LISTEN 0      4096         0.0.0.0:8090       0.0.0.0:*                                           
+LISTEN 0      4096         0.0.0.0:8082       0.0.0.0:*                                           
+LISTEN 0      4096         0.0.0.0:8080       0.0.0.0:*                                           
+LISTEN 0      2048         0.0.0.0:8099       0.0.0.0:*    users:(("python",pid=3089646,fd=13))   
+LISTEN 0      2048         0.0.0.0:8100       0.0.0.0:*    users:(("python",pid=1718732,fd=13))   
+LISTEN 0      128          0.0.0.0:20202      0.0.0.0:*                                           
+LISTEN 0      128          0.0.0.0:22         0.0.0.0:*                                           
+LISTEN 0      511          0.0.0.0:8200       0.0.0.0:*    users:(("node",pid=394,fd=18))         
+LISTEN 0      4096       127.0.0.1:2019       0.0.0.0:*                                           
+LISTEN 0      128          0.0.0.0:5000       0.0.0.0:*    users:(("python3",pid=399,fd=3))       
+LISTEN 0      128          0.0.0.0:5055       0.0.0.0:*    users:(("python3",pid=1454438,fd=4))   
+LISTEN 0      128          0.0.0.0:5052       0.0.0.0:*    users:(("python",pid=3604583,fd=3))    
+LISTEN 0      2048         0.0.0.0:5080       0.0.0.0:*    users:(("python3",pid=804084,fd=13))   
+LISTEN 0      2048         0.0.0.0:5070       0.0.0.0:*    users:(("python3",pid=3604584,fd=13))  
+LISTEN 0      128          0.0.0.0:5110       0.0.0.0:*    users:(("python",pid=395,fd=3))        
+LISTEN 0      2048         0.0.0.0:5102       0.0.0.0:*    users:(("python",pid=405,fd=13))       
+LISTEN 0      2048         0.0.0.0:5103       0.0.0.0:*    users:(("python",pid=3208532,fd=13))   
+LISTEN 0      2048         0.0.0.0:5100       0.0.0.0:*    users:(("python",pid=401,fd=13))       
+LISTEN 0      2048         0.0.0.0:5101       0.0.0.0:*    users:(("python",pid=872368,fd=13))    
+LISTEN 0      2048         0.0.0.0:5090       0.0.0.0:*    users:(("python3",pid=426,fd=13))      
+LISTEN 0      2048         0.0.0.0:5095       0.0.0.0:*    users:(("python3",pid=431,fd=13))      
+LISTEN 0      2048         0.0.0.0:8787       0.0.0.0:*    users:(("uvicorn",pid=3584163,fd=13))  
+LISTEN 0      4096       127.0.0.1:5432       0.0.0.0:*                                           
+LISTEN 0      128          0.0.0.0:8888       0.0.0.0:*                                           
+LISTEN 0      2048         0.0.0.0:5120       0.0.0.0:*    users:(("python",pid=1515843,fd=13))   
+LISTEN 0      2048       127.0.0.1:5060       0.0.0.0:*    users:(("python",pid=4070265,fd=6))    
+LISTEN 0      128        127.0.0.1:5056       0.0.0.0:*    users:(("python3",pid=3604500,fd=3))   
+LISTEN 0      2048         0.0.0.0:9380       0.0.0.0:*    users:(("python",pid=383,fd=13))       
+LISTEN 0      5          127.0.0.1:5050       0.0.0.0:*    users:(("python",pid=2308281,fd=3))    
+LISTEN 0      4096         0.0.0.0:5355       0.0.0.0:*                                           
+LISTEN 0      20         127.0.0.1:25         0.0.0.0:*                                           
+LISTEN 0      4096       127.0.0.1:8384       0.0.0.0:*    users:(("syncthing",pid=1744728,fd=18))
+LISTEN 0      4096         0.0.0.0:5678       0.0.0.0:*                                           
+LISTEN 0      20             [::1]:25            [::]:*                                           
+LISTEN 0      4096            [::]:8001          [::]:*                                           
+LISTEN 0      4096            [::]:8090          [::]:*                                           
+LISTEN 0      4096            [::]:8082          [::]:*                                           
+LISTEN 0      4096            [::]:8080          [::]:*                                           
+LISTEN 0      4096               *:20201            *:*                                           
+LISTEN 0      4096               *:443              *:*                                           
+LISTEN 0      128             [::]:22            [::]:*                                           
+LISTEN 0      4096               *:80               *:*                                           
+LISTEN 0      4096               *:22000            *:*    users:(("syncthing",pid=1744728,fd=11))
+LISTEN 0      4096            [::]:5355          [::]:*                                           
+LISTEN 0      4096            [::]:5678          [::]:*                                           
+
+===== LOCAL HTTP HEALTH PROBES =====
+port 80 -> HTTP 308
+port 443 -> HTTP 400
+port 3000 -> HTTP 302
+port 5055 -> HTTP 404
+port 5060 -> HTTP 200
+port 5678 -> HTTP 200
+port 8080 -> HTTP 200
+port 8082 -> HTTP 404
+port 8090 -> HTTP 200
+port 8100 -> HTTP 200
+port 8200 -> HTTP 200
+port 8787 -> HTTP 200
+port 9380 -> HTTP 200
+
+===== CADDY ROUTING SUMMARY =====
+5:dominionhealing.org, www.dominionhealing.org {
+7:	handle @tiktok_oauth {
+8:		reverse_proxy 127.0.0.1:5120
+11:	handle @tiktok_webhook {
+12:		respond 200 {
+18:	@buddy {
+21:	reverse_proxy @buddy 127.0.0.1:5070
+23:	@store_path {
+26:	handle @store_path {
+28:		reverse_proxy 127.0.0.1:5080
+31:	@store_api {
+34:	reverse_proxy @store_api 127.0.0.1:5080
+36:	@lead {
+39:	reverse_proxy @lead 127.0.0.1:5000
+41:	@api {
+44:	reverse_proxy @api 127.0.0.1:5000
+46:	@vault_path {
+49:	reverse_proxy @vault_path 127.0.0.1:8080
+51:	root * /home/malachisingleton8/aura-ecosystem/agency-website
+55:dash.dominionhealing.org {
+57:	reverse_proxy 127.0.0.1:3000
+60:api.dominionhealing.org {
+62:	reverse_proxy 127.0.0.1:5000
+65:n8n.dominionhealing.org {
+67:	reverse_proxy 127.0.0.1:5678
+70:agent.dominionhealing.org {
+72:	reverse_proxy 127.0.0.1:5055
+75:store.dominionhealing.org {
+77:	reverse_proxy 127.0.0.1:5080
+80:tools.dominionhealing.org {
+82:	root * /opt/dominion/marketplace
+86:buddy.dominionhealing.org {
+88:	reverse_proxy 127.0.0.1:5070
+91:shop.dominionhealing.org {
+94:	reverse_proxy @not_acme 127.0.0.1:5090
+97:report.dominionhealing.org {
+99:	reverse_proxy 127.0.0.1:5095
+102:surplus.dominionhealing.org {
+103:	@root_page {
+106:	handle @root_page {
+107:		root * /var/www/surplus-public
+110:	handle {
+111:		reverse_proxy 127.0.0.1:8100
+115:empire.dominionhealing.org {
+117:	reverse_proxy 127.0.0.1:8090
+120:hub.dominionhealing.org {
+122:	reverse_proxy 127.0.0.1:8080
+125:tiktok.dominionhealing.org {
+127:	reverse_proxy 127.0.0.1:5120
+
+===== KNOWN APPLICATION DIRECTORIES =====
+--- /home/malachisingleton8/dominion-ops ---
+total 212
+drwxr-xr-x 15 malachisingleton8 malachisingleton8  4096 Jul 15 04:04 .
+drwxr-xr-x 71 malachisingleton8 malachisingleton8  4096 Jul 20 07:00 ..
+-rw-r--r--  1 malachisingleton8 malachisingleton8  3117 Jul 18 19:41 .env
+-rw-r--r--  1 malachisingleton8 malachisingleton8  1040 Jul 16 10:13 .env.example
+-rw-r--r--  1 malachisingleton8 malachisingleton8   389 Jun 15 17:12 .env.production.example
+drwxr-xr-x  8 malachisingleton8 malachisingleton8  4096 Jul 17 04:33 .git
+drwxr-xr-x  4 malachisingleton8 malachisingleton8  4096 Jun 15 17:12 .github
+-rw-r--r--  1 malachisingleton8 malachisingleton8   211 Jun 15 17:12 .gitignore
+-rw-r--r--  1 malachisingleton8 malachisingleton8    19 Jun 15 17:12 CNAME
+-rw-r--r--  1 malachisingleton8 malachisingleton8   300 Jun 15 17:12 Keep Alive Workflow
+drwxr-xr-x  3 malachisingleton8 malachisingleton8  4096 Jun 15 17:12 OPS
+-rw-r--r--  1 malachisingleton8 malachisingleton8   469 Jun 15 17:12 Ops Status.sh
+-rw-r--r--  1 malachisingleton8 malachisingleton8  1546 Jun 15 17:12 PR_BODY_TEMPLATE.md
+-rw-r--r--  1 malachisingleton8 malachisingleton8   222 Jun 15 17:12 README.md
+-rw-r--r--  1 malachisingleton8 malachisingleton8  1016 Jun 15 17:12 README_NETLIFY.md
+-rw-r--r--  1 malachisingleton8 malachisingleton8   159 Jun 15 17:12 SECURITY.md
+-rw-r--r--  1 malachisingleton8 malachisingleton8  7472 Jul 16 10:13 STATE.md
+drwxr-xr-x  3 malachisingleton8 malachisingleton8  4096 Jun 27 09:41 alpha_engine
+drwxr-xr-x  2 malachisingleton8 malachisingleton8  4096 Jun 23 17:51 api
+drwxr-xr-x 12 malachisingleton8 malachisingleton8  4096 Jul 15 02:11 apps
+-rw-r--r--  1 malachisingleton8 malachisingleton8   427 Jul 16 10:13 baby
+-rw-r--r--  1 malachisingleton8 malachisingleton8  1030 Jun 15 17:12 build-doctor.sh
+-rw-r--r--  1 malachisingleton8 malachisingleton8   125 Jun 15 17:12 caddy
+-rwxr-xr-x  1 malachisingleton8 malachisingleton8   642 Jun 15 17:12 daily_content.sh
+drwxr-xr-x  2 malachisingleton8 malachisingleton8  4096 Jun 15 17:12 deploy
+-rw-r--r--  1 malachisingleton8 malachisingleton8  4102 Jul 11 03:17 docker-compose.yml
+drwxr-xr-x  2 malachisingleton8 malachisingleton8  4096 Jun 15 17:12 docs
+-rw-r--r--  1 malachisingleton8 malachisingleton8   215 Jun 15 17:12 dominion
+-rw-r--r--  1 malachisingleton8 malachisingleton8  6508 Jun 23 17:51 dominion_log.txt
+-rw-r--r--  1 malachisingleton8 malachisingleton8  5234 Jun 15 17:12 index.html
+-rw-r--r--  1 malachisingleton8 malachisingleton8 19938 Jun 23 17:51 landing.html
+-rw-r--r--  1 malachisingleton8 malachisingleton8  5106 Jun 15 17:12 n8n workflow
+-rwxr-xr-x  1 malachisingleton8 malachisingleton8  8306 Jun 15 17:12 n8n-enable.sh
+-rwxr-xr-x  1 malachisingleton8 malachisingleton8 12048 Jun 15 17:12 n8n-recover.sh
+drwxr-xr-x  2 malachisingleton8 malachisingleton8  4096 Jun 23 17:51 n8n-workflows
+drwxr-xr-x  3 malachisingleton8 malachisingleton8  4096 Jun 15 17:12 netlify
+-rw-r--r--  1 malachisingleton8 malachisingleton8   489 Jun 15 17:12 netlify.toml
+drwxr-xr-x  2 malachisingleton8 malachisingleton8  4096 Jun 15 17:12 ops
+drwxr-xr-x  2 malachisingleton8 malachisingleton8  4096 Jul  3 03:53 scripts
+--- /home/malachisingleton8/buddy_core ---
+total 27268
+drwxr-xr-x 31 malachisingleton8 malachisingleton8   12288 Jul 20 14:48 .
+drwxr-xr-x 71 malachisingleton8 malachisingleton8    4096 Jul 20 07:00 ..
+-rw-r--r--  1 malachisingleton8 malachisingleton8    2396 Jul  5 11:54 .env
+-rw-r--r--  1 malachisingleton8 malachisingleton8  648524 Jul 16 17:00 3_AI_Tools_Replacing_Employees_1ea4dfTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  581150 Jun  5 13:18 AI's_Secret_Weapon_Reclaim_10__4f0cc6TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  793584 Jul 13 12:00 AI_Healing_Videos_Automate_You_7a7b70TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  707127 Jul 10 17:00 AI_Just_Took_Over_Your_Health__3351cdTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  862729 Jun 16 03:00 AI_Reveals_Your_Businesss_Hidd_6b191fTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  677560 Jul  9 07:00 AI_SEO_Secret_Command_Search_G_d24f34TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  463537 Jun 26 17:00 Big_Pharmas_Dark_Secret_You_De_e8301eTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  634306 Jun 25 07:00 Big_Pharmas_Secret_What_They_D_2e1553TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  550158 Jun 29 07:00 Broke_Entrepreneurs_Your_AI_We_1e9993TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8   26867 May 10 18:38 CLAUDE.md
+-rw-r--r--  1 malachisingleton8 malachisingleton8  570963 Jun 28 22:00 Crush_Outreach_10_Clients_Zero_1840d8TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  778741 Jul 13 17:00 Eat_Pure_Grow_Your_Own_Food_Wi_c258c1TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  580279 Jul  8 12:00 Free_10_Hours_Weekly_AI_Made_I_b32cbbTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  864769 Jul 15 12:00 Grow_Health_Grow_Wealth_The_Se_4e339aTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  584478 Jul  5 07:00 Morro_Bays_Secret_Unlock_Your__22055dTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  653150 Jul 15 17:00 Sick__Broke_Unlock_Your_Health_4d7983TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  684708 Jul 10 22:00 Sick_of_Fads_Real_Results_for__09ab31TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  624424 Jul  4 22:00 Sick_of_Struggle_Automate_Your_557c9dTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  648482 Jun 15 03:00 Sleep-Proof_Your_Wealth_AI_Bui_0f46d8TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  655190 Jun 29 17:00 Sleep_More_Earn_More_AIs_Secre_76dea0TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  562153 Jun 29 12:00 Stop_Grinding_AI_Scales_Your_B_d1725bTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  635377 Jul  1 12:00 Stop_Losing_10_Hours_Weekly_AI_5a41a2TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  727970 Jul 14 12:00 Stop_Wasting_Time_AI_Builds_We_eeff33TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  711731 Jul 16 22:00 Unlock_10_Extra_Hours_Weekly_A_d74400TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  866285 Jun 28 17:00 Unlock_10_Extra_Hours_Weekly_w_724b6cTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  694680 Jul 14 22:00 Your_Air_Fryer_is_Toxic_The_Cl_834d94TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  939522 Jul 14 17:00 Your_Aura_Is_Failing_Reclaim_Y_976caeTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  611838 Jun 26 07:00 Your_Business_is_Leaking_Money_5868eaTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  583129 Jul  8 17:00 Your_First_10_Clients_AI_Does__f0e8d5TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  720125 Jul 15 22:00 Your_Health_Data_Who_REALLY_Ow_20d00fTEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  759918 Jul  4 12:00 Your_Health_Should_PAY_You_Pas_f48ba0TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  645865 Jul 16 07:00 Your_Phone_is_Draining_You_AI__fc2f50TEMP_MPY_wvf_snd.mp4
+-rw-r--r--  1 malachisingleton8 malachisingleton8  757352 Jul  4 17:00 Your_Wellness_Lab_Unlock_Real__6e409cTEMP_MPY_wvf_snd.mp4
+drwxr-xr-x  2 malachisingleton8 malachisingleton8    4096 Jun 30 16:59 __pycache__
+-rw-r--r--  1 malachisingleton8 malachisingleton8    2564 Jul 20 02:00 affiliate_content.json
+drwxr-xr-x  4 malachisingleton8 malachisingleton8    4096 Jul 16 11:58 agents
+--- /home/malachisingleton8/aura-ecosystem ---
+total 44
+drwxr-xr-x  8 malachisingleton8 malachisingleton8 4096 Apr 11 03:29 .
+drwxr-xr-x 71 malachisingleton8 malachisingleton8 4096 Jul 20 07:00 ..
+-rw-r--r--  1 malachisingleton8 malachisingleton8  108 Apr 11 03:29 .env.gpg
+-rw-r--r--  1 malachisingleton8 malachisingleton8  129 Feb 21 00:56 Caddyfile
+drwxr-xr-x 17 malachisingleton8 malachisingleton8 4096 Jul 15 02:11 agency-website
+drwxr-xr-x  2 malachisingleton8 malachisingleton8 4096 Feb 21 00:43 aura-backend
+drwxr-xr-x  3 malachisingleton8 malachisingleton8 4096 Apr 25 07:07 automation-bots
+drwxr-xr-x  3 malachisingleton8 malachisingleton8 4096 Jun 25 17:24 dominion-publisher
+drwxr-xr-x  3 malachisingleton8 malachisingleton8 4096 Mar 18 04:01 fulfillment
+drwxr-xr-x  3 malachisingleton8 malachisingleton8 4096 Mar 18 10:39 public
+-rw-r--r--  1 malachisingleton8 malachisingleton8    9 Feb 21 03:43 requirements.txt
+--- /opt/dominion ---
+total 734788
+drwxr-xr-x 6 malachisingleton8 malachisingleton8      4096 Jun 10 21:23 .
+drwxr-xr-x 9 root              root                   4096 May 29 18:24 ..
+-rw------- 1 malachisingleton8 malachisingleton8       113 May  5 19:44 .env
+-rwxr-xr-x 1 root              root                    480 Jun 10 20:28 FIVE_PILLARS_OATH.sh
+-rw-r--r-- 1 malachisingleton8 malachisingleton8      6222 Jun 10 21:23 OPS_LOG.md
+-rw-r--r-- 1 malachisingleton8 malachisingleton8       403 May  6 15:29 adc.json
+drwxr-xr-x 4 malachisingleton8 malachisingleton8      4096 May  5 19:30 dominion-seo
+drwxr-xr-x 7 malachisingleton8 malachisingleton8      4096 May  5 16:13 dominion-store
+-rw-r--r-- 1 malachisingleton8 malachisingleton8      2372 May  5 19:42 gcp-key.json
+drwxr-xr-x 2 malachisingleton8 malachisingleton8      4096 May  8 18:55 marketplace
+-rw-r--r-- 1 malachisingleton8 malachisingleton8 752358795 Jun 10 20:25 snapshot_20260610_202448.tar.gz
+-rw-r--r-- 1 malachisingleton8 root                   5745 Jun 10 20:58 tiktok_uploader.py
+drwxr-xr-x 5 malachisingleton8 malachisingleton8      4096 Jun 14 11:01 youtube
+--- /var/www ---
+total 28
+drwxr-xr-x  7 root              root              4096 Jul 15 02:11 .
+drwxr-xr-x 13 root              root              4096 Feb 27 11:23 ..
+drwxr-xr-x  2 malachisingleton8 malachisingleton8 4096 Jan  4  2026 dominion
+drwxr-xr-x  7 www-data          www-data          4096 Feb  1 05:29 dominionhealing
+drwxr-xr-x  2 root              root              4096 Jun 20 23:36 downloads
+drwxr-xr-x  2 root              root              4096 Jan  4  2026 html
+drwxr-xr-x  2 root              root              4096 Jul 15 02:11 surplus-public
+
+===== GIT WORKTREES =====
+--- /home/malachisingleton8 ---
+master
+AM .bash_history
+A  .bash_logout
+A  .bashrc
+A  .cache/fontconfig/0bd3dc0958fa2205aaaa8ebb13e2872b-le64.cache-11
+A  .cache/fontconfig/0fafd173547752dce4dee1a69e0b3c95-le64.cache-11
+A  .cache/fontconfig/3047814df9a2f067bd2d96a2b9c36e5a-le64.cache-11
+A  .cache/fontconfig/3830d5c3ddfd5cd38a049b759396e72e-le64.cache-11
+A  .cache/fontconfig/4c599c202bc5c08e2d34565a40eac3b2-le64.cache-11
+A  .cache/fontconfig/4d6aee6d44eccb37054d3216e945f618-le64.cache-11
+A  .cache/fontconfig/573ec803664ed168555e0e8b6d0f0c7f-le64.cache-11
+A  .cache/fontconfig/6333f38776742d18e214673cd2c24e34-le64.cache-11
+A  .cache/fontconfig/707971e003b4ae6c8121c3a920e507f5-le64.cache-11
+A  .cache/fontconfig/7ef2298fde41cc6eeb7af42e48b7d293-le64.cache-11
+A  .cache/fontconfig/7ef2298fde41cc6eeb7af42e48b7d293-le64.cache-8
+A  .cache/fontconfig/99e8ed0e538f840c565b6ed5dad60d56-le64.cache-11
+A  .cache/fontconfig/bb9ef35e7661cc55c3d6e0d2d8cc2051-le64.cache-11
+A  .cache/fontconfig/c855463f699352c367813e37f3f70ea7-le64.cache-11
+A  .cache/fontconfig/d52a8644073d54c13679302ca1180695-le64.cache-11
+A  .cache/fontconfig/d589a48862398ed80a3d6066f4f56f4c-le64.cache-11
+A  .cache/fontconfig/da82082e1ef13c4097208324d67c180c-le64.cache-11
+A  .cache/fontconfig/e13b20fdb08344e0e664864cc2ede53d-le64.cache-11
+A  .cache/fontconfig/e13b20fdb08344e0e664864cc2ede53d-le64.cache-8
+A  .cache/fontconfig/fe547fea3a41b43a38975d292a2b19c7-le64.cache-11
+A  .cache/huggingface/hub/CACHEDIR.TAG
+A  .cache/huggingface/hub/models--sentence-transformers--all-MiniLM-L6-v2/.no_exist/c9745ed1d9f207416be6d2e6f8de32d1f16199bf/adapter_config.json
+A  .cache/huggingface/hub/models--sentence-transformers--all-MiniLM-L6-v2/.no_exist/c9745ed1d9f207416be6d2e6f8de32d1f16199bf/added_tokens.json
+A  .cache/huggingface/hub/models--sentence-transformers--all-MiniLM-L6-v2/.no_exist/c9745ed1d9f207416be6d2e6f8de32d1f16199bf/chat_template.jinja
+A  .cache/huggingface/hub/models--sentence-transformers--all-MiniLM-L6-v2/.no_exist/c9745ed1d9f207416be6d2e6f8de32d1f16199bf/preprocessor_config.json
+A  .cache/huggingface/hub/models--sentence-transformers--all-MiniLM-L6-v2/.no_exist/c9745ed1d9f207416be6d2e6f8de32d1f16199bf/processor_config.json
+A  .cache/huggingface/hub/models--sentence-transformers--all-MiniLM-L6-v2/.no_exist/c9745ed1d9f207416be6d2e6f8de32d1f16199bf/video_preprocessor_config.json
+--- /home/malachisingleton8/dominion-ops ---
+claude/movie-generator-youtube-b50wx2
+aa2d7d2 2026-07-17T04:33:17+00:00 sync: VM live state  workflow updates, apps, STATE as of 2026-07-16
+ M .env.example
+?? .env
+
+===== N8N, CONDUCTOR, AND JARVIS DISCOVERY =====
+/home/malachisingleton8/n8n.log
+/home/malachisingleton8/n8n-database.sqlite
+/home/malachisingleton8/n8n-container-inspect-backup.json
+/home/malachisingleton8/dominion/backups/n8n_data_2026-02-27_1617.tgz
+/home/malachisingleton8/dominion/backups/n8n_data_2026-02-27_1630.tgz
+/home/malachisingleton8/dominion/.n8n
+/home/malachisingleton8/dominion/.n8n/n8nEventLog.log
+/home/malachisingleton8/dominion/conductor
+/home/malachisingleton8/audits/n8n_nervous_system_audit_2026-06-01.md
+/home/malachisingleton8/n8n
+/home/malachisingleton8/n8n/rescue-data-corrupt-held-20260504-233338/.n8n
+/home/malachisingleton8/n8n/rescue-data-corrupt-held-20260504-233338/.n8n/n8nEventLog.log
+/home/malachisingleton8/n8n/rescue-data-corrupt-held-20260504-233338/.n8n/n8nEventLog-2.log
+/home/malachisingleton8/n8n/rescue-data-corrupt-held-20260504-233338/.n8n/n8nEventLog-3.log
+/home/malachisingleton8/n8n/rescue-data-corrupt-held-20260504-233338/.n8n/n8nEventLog-1.log
+/home/malachisingleton8/n8n/rescue-data-corrupt-held-20260504-233338/.cache/n8n
+/home/malachisingleton8/n8n/data/n8nEventLog.log
+/home/malachisingleton8/n8n/data/database.sqlite.pre_n8n_fix.2026-05-03_19-13-21
+/home/malachisingleton8/n8n/data/n8nEventLog-2.log
+/home/malachisingleton8/n8n/data/n8nEventLog-3.log
+/home/malachisingleton8/n8n/data/n8nEventLog-1.log
+/home/malachisingleton8/n8n/rescue-data/.n8n
+/home/malachisingleton8/n8n/rescue-data/.n8n/n8nEventLog.log
+/home/malachisingleton8/n8n/rescue-data/.n8n/n8nEventLog-2.log
+/home/malachisingleton8/n8n/rescue-data/.n8n/n8nEventLog-3.log
+/home/malachisingleton8/n8n/rescue-data/.n8n/n8nEventLog-1.log
+/home/malachisingleton8/n8n/rescue-data/.cache/n8n
+/home/malachisingleton8/surplus_recovery/n8n_surplus_workflow.json
+/home/malachisingleton8/freelancer_proposals/fed_to_conductor.json
+/home/malachisingleton8/.n8n
+/home/malachisingleton8/.n8n/n8nEventLog.log
+/home/malachisingleton8/auric_edge/deploy/n8n_auricedge_workflow.json
+/home/malachisingleton8/buddy_core/browser/jarvis_browser.py
+/home/malachisingleton8/buddy_core/core/conductor.py
+/home/malachisingleton8/buddy_core/agents/n8n_handler.py
+/home/malachisingleton8/buddy_core/jarvis
+/home/malachisingleton8/buddy_core/jarvis/jarvis_core.py.bak
+/home/malachisingleton8/buddy_core/jarvis/jarvis_core.py
+/home/malachisingleton8/buddy_core/deploy/n8n_content_distribution_workflow.json
+/home/malachisingleton8/buddy_core/deploy/n8n_setup.py
+/home/malachisingleton8/buddy_core/deploy/n8n_dual_book_workflow.json
+/home/malachisingleton8/buddy_core/deploy/start_n8n.bat
+/home/malachisingleton8/dominion-ops/n8n-enable.sh
+/home/malachisingleton8/dominion-ops/n8n-workflows
+/home/malachisingleton8/dominion-ops/apps/jarvis
+/home/malachisingleton8/dominion-ops/.github/workflows/setup-n8n-gumroad.yml
+/home/malachisingleton8/dominion-ops/.github/workflows/fix-n8n-url.yml
+/home/malachisingleton8/dominion-ops/.github/workflows/vault-n8n-fix.yml
+/home/malachisingleton8/dominion-ops/.github/workflows/n8n-debug.yml
+/home/malachisingleton8/dominion-ops/n8n workflow
+/home/malachisingleton8/dominion-ops/n8n-recover.sh
+/home/malachisingleton8/n8n-backups
+/home/malachisingleton8/conductor
+/home/malachisingleton8/conductor/core/__pycache__/conductor.cpython-311.pyc
+/home/malachisingleton8/conductor/core/conductor.py.bak
+/home/malachisingleton8/conductor/core/conductor.py
+/home/malachisingleton8/conductor/send_to_conductor.py
+/home/malachisingleton8/conductor/conductor_bridge.json
+/home/malachisingleton8/conductor/conductor
+/home/malachisingleton8/conductor/conductor.log
+/home/malachisingleton8/n8n-clean-rebuild
+/home/malachisingleton8/dominion-backups/conductor.env.20260314-135436.bak
+/etc/systemd/system/conductor-scheduler.service
+/etc/systemd/system/conductor.service
+/etc/systemd/system/conductor-api.service
+/etc/systemd/system/conductor-autonomous.service
+/etc/systemd/system/conductor-worker.service
+/etc/systemd/system/multi-user.target.wants/conductor-scheduler.service
+/etc/systemd/system/multi-user.target.wants/conductor-worker.service
+/etc/systemd/system/timers.target.wants/conductor-autonomous.timer
+/etc/systemd/system/conductor-autonomous.timer
+/etc/systemd/system/conductor-autonomous.service.bak.2026-05-04_01-33-04
+/etc/systemd/system/dominion-n8n-watchdog.service
+/etc/systemd/system/dominion-conductor.service
+/etc/systemd/system/conductor.service.bak
+/etc/systemd/system/n8n.service
+
+===== AUDIT COMPLETE =====
+Mon Jul 20 14:56:56 UTC 2026

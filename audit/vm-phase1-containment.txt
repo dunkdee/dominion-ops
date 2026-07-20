@@ -1,0 +1,64 @@
+
+===== PRECHECK =====
+Mon Jul 20 18:19:45 UTC 2026
+Conductor 5060 health: {"status":"ok"}
+MainPID=4070265
+NRestarts=10
+ActiveState=active
+SubState=running
+MainPID=2239680
+NRestarts=491
+ActiveState=active
+SubState=running
+
+===== BACKUP CURRENT SECURITY METADATA =====
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/.env
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/.env.gpg
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/buddy_core/.env
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/buddy_core/youtube_credentials.json
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/conductor/.env.gpg
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion-ops/.env
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion/alpha_engine/.env
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/n8n-clean-rebuild/export/credentials.json
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/n8n/rescue-data/import/credentials.json
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/n8n/.env.gpg
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/stripe-verifier/.env.gpg
+644 malachisingleton8:malachisingleton8 /opt/dominion/adc.json
+644 malachisingleton8:malachisingleton8 /opt/dominion/gcp-key.json
+777 malachisingleton8:malachisingleton8 /home/malachisingleton8/logs
+
+===== LOCK CREDENTIAL FILES =====
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/.env
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/.env.gpg
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/buddy_core/.env
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/buddy_core/youtube_credentials.json
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/conductor/.env.gpg
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion-ops/.env
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion/alpha_engine/.env
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/n8n-clean-rebuild/export/credentials.json
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/n8n/rescue-data/import/credentials.json
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/n8n/.env.gpg
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/stripe-verifier/.env.gpg
+600 malachisingleton8:malachisingleton8 /opt/dominion/adc.json
+600 malachisingleton8:malachisingleton8 /opt/dominion/gcp-key.json
+
+===== HARDEN LOG DIRECTORY =====
+750 malachisingleton8:malachisingleton8 /home/malachisingleton8/logs
+logrotate debug validation passed
+
+===== STOP DUPLICATE CONDUCTOR API LOOP =====
+NRestarts=491
+ActiveState=failed
+SubState=failed
+Canonical Conductor after containment: {"status":"ok"}
+
+===== POSTCHECK =====
+UNIT                  LOAD   ACTIVE SUB    DESCRIPTION
+conductor-api.service loaded failed failed Dominion Conductor API
+
+LOAD   = Reflects whether the unit definition was properly loaded.
+ACTIVE = The high-level unit activation state, i.e. generalization of SUB.
+SUB    = The low-level unit activation state, values depend on unit type.
+1 loaded units listed.
+Local backup: /home/malachisingleton8/backups/hardening-20260720T181945Z
+Mon Jul 20 18:19:46 UTC 2026

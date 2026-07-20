@@ -1,17 +1,24 @@
 import os
-import httpx
 from typing import Optional
 
+import httpx
+
+
 WIX_API_KEY = os.getenv("WIX_API_KEY", "")
-WIX_SITE_ID = os.getenv("WIX_SITE_ID", "a790d430-a3a0-4b0e-9be6-4c874c229167")
+WIX_SITE_ID = os.getenv(
+    "WIX_SITE_ID", "a790d430-a3a0-4b0e-9be6-4c874c229167"
+)
 
 BASE_V3 = "https://www.wixapis.com/stores/v3"
-BASE_V1 = "https://www.wixapis.com/stores/v1"
+BASE_V1_READ = "https://www.wixapis.com/stores-reader/v1"
+BASE_V1_WRITE = "https://www.wixapis.com/stores/v1"
 ECOM_BASE = "https://www.wixapis.com/ecom/v1"
-PAGES_BASE = "https://www.wixapis.com/site-pages/v2"
-STORE_SETTINGS_URL = "https://www.wixapis.com/stores/v2/storeSettings"
 
 TIMEOUT = 30.0
+
+
+class UnsupportedWixOperation(RuntimeError):
+    pass
 
 
 def _headers() -> dict:
@@ -24,9 +31,11 @@ def _headers() -> dict:
 
 def detect_catalog_version() -> str:
     try:
-        r = httpx.get(f"{BASE_V3}/provision/version", headers=_headers(), timeout=TIMEOUT)
-        if r.status_code == 200:
-            version = r.json().get("version", "")
+        response = httpx.get(
+            f"{BASE_V3}/provision/version", headers=_headers(), timeout=TIMEOUT
+        )
+        if response.status_code == 200:
+            version = response.json().get("version", "")
             if "V3" in version.upper():
                 return "v3"
     except Exception:
@@ -34,139 +43,239 @@ def detect_catalog_version() -> str:
     return "v1"
 
 
-def get_all_products(catalog_version: str = "v3") -> list[dict]:
-    url = f"{BASE_V3}/products/query" if catalog_version == "v3" else f"{BASE_V1}/products/query"
+def _get_all_products_v3() -> list[dict]:
     products = []
     cursor = None
-    first_page = True
     while True:
-        if first_page:
-            body = {"query": {"fields": ["DESCRIPTION", "MEDIA_ITEMS_INFO"], "cursorPaging": {"limit": 100}}}
-            first_page = False
-        else:
-            body = {"query": {"cursorPaging": {"limit": 100, "cursor": cursor}}}
-        r = httpx.post(url, headers=_headers(), json=body, timeout=TIMEOUT)
-        r.raise_for_status()
-        data = r.json()
-        products.extend(data.get("products", []))
+        cursor_paging = {"limit": 100}
+        if cursor:
+            cursor_paging["cursor"] = cursor
+        body = {
+            "query": {
+                "fields": ["DESCRIPTION", "MEDIA_ITEMS_INFO"],
+                "cursorPaging": cursor_paging,
+            }
+        }
+        response = httpx.post(
+            f"{BASE_V3}/products/query",
+            headers=_headers(),
+            json=body,
+            timeout=TIMEOUT,
+        )
+        response.raise_for_status()
+        data = response.json()
+        page = data.get("products", [])
+        products.extend(page)
         paging = data.get("pagingMetadata", {})
-        if not paging.get("hasNext"):
-            break
         cursor = paging.get("cursors", {}).get("next")
-        if not cursor:
+        if not paging.get("hasNext") or not cursor:
             break
     return products
 
 
-def get_all_inventory_items(catalog_version: str = "v3") -> list[dict]:
+def _get_all_products_v1() -> list[dict]:
+    products = []
+    offset = 0
+    page_size = 100
+    while True:
+        body = {
+            "includeVariants": True,
+            "query": {"paging": {"limit": page_size, "offset": offset}},
+        }
+        response = httpx.post(
+            f"{BASE_V1_READ}/products/query",
+            headers=_headers(),
+            json=body,
+            timeout=TIMEOUT,
+        )
+        response.raise_for_status()
+        data = response.json()
+        page = data.get("products", [])
+        products.extend(page)
+        total = data.get("totalResults")
+        if not page or len(page) < page_size:
+            break
+        if isinstance(total, int) and len(products) >= total:
+            break
+        offset += len(page)
+    return products
+
+
+def get_all_products(catalog_version: str = "v3") -> list[dict]:
     if catalog_version == "v3":
-        url = f"{BASE_V3}/inventory-items/query"
-        page_size = 1000
-    else:
-        url = "https://www.wixapis.com/stores-reader/v2/inventoryItems/query"
-        page_size = 100
+        return _get_all_products_v3()
+    return _get_all_products_v1()
+
+
+def _get_all_inventory_items_v3() -> list[dict]:
     items = []
     cursor = None
-    first_page = True
     while True:
-        if first_page:
-            body = {"query": {"cursorPaging": {"limit": page_size}}}
-            first_page = False
-        else:
-            body = {"query": {"cursorPaging": {"limit": page_size, "cursor": cursor}}}
-        r = httpx.post(url, headers=_headers(), json=body, timeout=TIMEOUT)
-        r.raise_for_status()
-        data = r.json()
-        items.extend(data.get("inventoryItems", []))
+        cursor_paging = {"limit": 1000}
+        if cursor:
+            cursor_paging["cursor"] = cursor
+        body = {"query": {"cursorPaging": cursor_paging}}
+        response = httpx.post(
+            f"{BASE_V3}/inventory-items/query",
+            headers=_headers(),
+            json=body,
+            timeout=TIMEOUT,
+        )
+        response.raise_for_status()
+        data = response.json()
+        page = data.get("inventoryItems", [])
+        items.extend(page)
         paging = data.get("pagingMetadata", {})
-        if not paging.get("hasNext"):
-            break
         cursor = paging.get("cursors", {}).get("next")
-        if not cursor:
+        if not paging.get("hasNext") or not cursor:
             break
     return items
 
 
-def update_inventory_item_v3(item_id: str, in_stock: bool, quantity: Optional[int] = None, track_quantity: bool = True) -> dict:
+def _get_all_inventory_items_v1() -> list[dict]:
+    items = []
+    offset = 0
+    page_size = 100
+    while True:
+        body = {"query": {"paging": {"limit": page_size, "offset": offset}}}
+        response = httpx.post(
+            "https://www.wixapis.com/stores-reader/v2/inventoryItems/query",
+            headers=_headers(),
+            json=body,
+            timeout=TIMEOUT,
+        )
+        response.raise_for_status()
+        data = response.json()
+        page = data.get("inventoryItems", [])
+        items.extend(page)
+        total = data.get("totalResults")
+        if not page or len(page) < page_size:
+            break
+        if isinstance(total, int) and len(items) >= total:
+            break
+        offset += len(page)
+    return items
+
+
+def get_all_inventory_items(catalog_version: str = "v3") -> list[dict]:
+    if catalog_version == "v3":
+        return _get_all_inventory_items_v3()
+    return _get_all_inventory_items_v1()
+
+
+def update_inventory_item_v3(
+    item_id: str,
+    in_stock: bool,
+    quantity: Optional[int] = None,
+    track_quantity: bool = True,
+) -> dict:
     url = f"{BASE_V3}/inventory-items/{item_id}"
     patch = {"inventoryItem": {"trackQuantity": track_quantity}}
     if track_quantity and quantity is not None:
         patch["inventoryItem"]["quantity"] = quantity
     else:
         patch["inventoryItem"]["inStock"] = in_stock
-    r = httpx.patch(url, headers=_headers(), json=patch, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()
+    response = httpx.patch(url, headers=_headers(), json=patch, timeout=TIMEOUT)
+    response.raise_for_status()
+    return response.json()
 
 
-def update_inventory_item_v1(product_id: str, in_stock: bool, quantity: Optional[int] = None) -> dict:
-    url = f"https://www.wixapis.com/stores/v2/inventoryItems/product/{product_id}"
+def update_inventory_item_v1(
+    product_id: str, in_stock: bool, quantity: Optional[int] = None
+) -> dict:
+    url = (
+        "https://www.wixapis.com/stores/v2/inventoryItems/product/"
+        f"{product_id}"
+    )
     body = {"inventoryItem": {"trackQuantity": quantity is not None}}
     if quantity is not None:
         body["inventoryItem"]["variants"] = [{"quantity": quantity}]
     else:
         body["inventoryItem"]["variants"] = [{"inStock": in_stock}]
-    r = httpx.patch(url, headers=_headers(), json=body, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()
+    response = httpx.patch(url, headers=_headers(), json=body, timeout=TIMEOUT)
+    response.raise_for_status()
+    return response.json()
 
 
-def set_product_visibility(product_id: str, visible: bool, catalog_version: str = "v3") -> dict:
-    base = BASE_V3 if catalog_version == "v3" else BASE_V1
+def set_product_visibility(
+    product_id: str, visible: bool, catalog_version: str = "v3"
+) -> dict:
+    base = BASE_V3 if catalog_version == "v3" else BASE_V1_WRITE
     url = f"{base}/products/{product_id}"
-    r = httpx.patch(url, headers=_headers(), json={"product": {"visible": visible}}, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()
+    response = httpx.patch(
+        url,
+        headers=_headers(),
+        json={"product": {"visible": visible}},
+        timeout=TIMEOUT,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
-def get_orders(fulfillment_status: str = "NOT_FULFILLED", limit: int = 100) -> list[dict]:
+def get_orders(
+    fulfillment_status: str = "NOT_FULFILLED", limit: int = 100
+) -> list[dict]:
     url = f"{ECOM_BASE}/orders/search"
-    body = {"search": {"filter": {"fulfillmentStatus": fulfillment_status}, "cursorPaging": {"limit": limit}}}
-    r = httpx.post(url, headers=_headers(), json=body, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json().get("orders", [])
+    body = {
+        "search": {
+            "filter": {"fulfillmentStatus": fulfillment_status},
+            "cursorPaging": {"limit": limit},
+        }
+    }
+    response = httpx.post(
+        url, headers=_headers(), json=body, timeout=TIMEOUT
+    )
+    response.raise_for_status()
+    return response.json().get("orders", [])
 
 
-def fulfill_order(order_id: str, tracking_number: str, shipping_provider: str = "OTHER") -> dict:
+def fulfill_order(
+    order_id: str, tracking_number: str, shipping_provider: str = "OTHER"
+) -> dict:
     url = f"{ECOM_BASE}/fulfillments"
-    body = {"fulfillment": {"orderId": order_id, "trackingInfo": {"trackingNumber": tracking_number, "shippingProvider": shipping_provider}}}
-    r = httpx.post(url, headers=_headers(), json=body, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()
+    body = {
+        "fulfillment": {
+            "orderId": order_id,
+            "trackingInfo": {
+                "trackingNumber": tracking_number,
+                "shippingProvider": shipping_provider,
+            },
+        }
+    }
+    response = httpx.post(
+        url, headers=_headers(), json=body, timeout=TIMEOUT
+    )
+    response.raise_for_status()
+    return response.json()
 
-
-# ── Store settings (checkout policies) ────────────────────────────────────────
 
 def get_store_settings() -> dict:
-    r = httpx.get(STORE_SETTINGS_URL, headers=_headers(), timeout=TIMEOUT)
-    r.raise_for_status()
-    data = r.json()
-    return data.get("storeSettings", data)
+    raise UnsupportedWixOperation(
+        "Checkout policy settings are not available through the documented "
+        "Wix Stores REST API; verify them in the Wix dashboard"
+    )
 
 
 def update_store_settings(policy_patch: dict) -> dict:
-    body = {"storeSettings": {"generalSettings": policy_patch}}
-    r = httpx.patch(STORE_SETTINGS_URL, headers=_headers(), json=body, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()
+    raise UnsupportedWixOperation(
+        "Checkout policy settings are not available through the documented "
+        "Wix Stores REST API; update them in the Wix dashboard"
+    )
 
-
-# ── Site pages ─────────────────────────────────────────────────────────────────
 
 def get_pages() -> list[dict]:
-    r = httpx.get(f"{PAGES_BASE}/pages", headers=_headers(), timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json().get("pages", [])
+    raise UnsupportedWixOperation(
+        "Wix editor page creation is not available through the documented "
+        "site-level REST API; verify published pages in the Wix editor"
+    )
 
 
 def create_page(title: str, slug: str) -> dict:
-    body = {"page": {"title": title, "slug": slug}}
-    r = httpx.post(f"{PAGES_BASE}/pages", headers=_headers(), json=body, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()
+    raise UnsupportedWixOperation(
+        "Wix editor page creation is not available through the documented "
+        "site-level REST API; create this page in the Wix editor"
+    )
 
-
-# ── Product content & SEO ──────────────────────────────────────────────────────
 
 def update_product_content(
     product_id: str,
@@ -182,16 +291,26 @@ def update_product_content(
                 "description": description,
                 "seoData": {
                     "tags": [
-                        {"type": "title", "children": seo_title, "custom": True},
-                        {"type": "meta", "props": {"name": "description", "content": seo_description}, "custom": True},
+                        {
+                            "type": "title",
+                            "children": seo_title,
+                            "custom": True,
+                        },
+                        {
+                            "type": "meta",
+                            "props": {
+                                "name": "description",
+                                "content": seo_description,
+                            },
+                            "custom": True,
+                        },
                     ]
                 },
             },
             "mask": {"paths": ["description", "seoData"]},
         }
-        r = httpx.patch(url, headers=_headers(), json=payload, timeout=TIMEOUT)
     else:
-        url = f"{BASE_V1}/products/{product_id}"
+        url = f"{BASE_V1_WRITE}/products/{product_id}"
         payload = {
             "product": {
                 "description": description,
@@ -199,6 +318,8 @@ def update_product_content(
                 "seoDescription": seo_description,
             }
         }
-        r = httpx.patch(url, headers=_headers(), json=payload, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()
+    response = httpx.patch(
+        url, headers=_headers(), json=payload, timeout=TIMEOUT
+    )
+    response.raise_for_status()
+    return response.json()

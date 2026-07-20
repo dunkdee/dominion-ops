@@ -8,11 +8,15 @@ on:
       - "apps/wix-agent/**"
       - "docker-compose.yml"
       - ".github/workflows/wix-agent-ci.yml"
+      - ".github/workflows/wix-auto-sync.yml"
+      - ".github/workflows/wix-agent-preflight.yml"
   pull_request:
     paths:
       - "apps/wix-agent/**"
       - "docker-compose.yml"
       - ".github/workflows/wix-agent-ci.yml"
+      - ".github/workflows/wix-auto-sync.yml"
+      - ".github/workflows/wix-agent-preflight.yml"
 
 permissions:
   contents: read
@@ -46,6 +50,9 @@ jobs:
 
       - name: Run regression tests
         run: python -m unittest discover -s apps/wix-agent/tests -v
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
 
       - name: Build Wix agent image
         run: docker build --tag dominion/wix-agent:ci apps/wix-agent

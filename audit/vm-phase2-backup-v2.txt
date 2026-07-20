@@ -1,0 +1,49 @@
+backup_directory=/home/malachisingleton8/backups/phase2-20260720T200037Z
+
+===== EXISTING PARTIAL BACKUP =====
+/home/malachisingleton8/backups/phase2-20260720T200037Z/dominion-ops-all-refs.bundle 487771 bytes
+/home/malachisingleton8/backups/phase2-20260720T200037Z/dominion-ops-complete.tgz 1127655 bytes
+/home/malachisingleton8/backups/phase2-20260720T200037Z/production.env 3117 bytes
+/home/malachisingleton8/backups/phase2-20260720T200037Z/worktree-status.txt 24 bytes
+/home/malachisingleton8/backups/phase2-20260720T200037Z/worktree.patch 492 bytes
+
+===== CODE AND GIT =====
+code_archive=PASS
+git_bundle=PASS
+git_bundle_verify=PASS
+worktree_patch=PASS
+production_env_copy=PASS
+
+===== WIX =====
+wix_db_in_container=FAIL(1)
+wix_db_copy=PASS
+wix_db_quick_check=FAIL(1)
+wix_logs_copy=PASS
+
+===== N8N =====
+n8n_database_location=/home/malachisingleton8/n8n/rescue-data/database.sqlite
+n8n_db_backup=PASS
+n8n_db_quick_check=PASS
+n8n_files_archive=PASS
+
+===== POSTGRES =====
+postgres_dump=PASS
+postgres_dump_verify=PASS
+
+===== DEPLOYMENT STATE =====
+docker_inventory=PASS
+service_inventory=PASS
+
+===== FINAL VALIDATION =====
+dominion-ops-complete.tgz=present
+dominion-ops-all-refs.bundle=present
+production.env=present
+wix_agent.db=present
+n8n-database.sqlite=present
+n8n-files.tgz=present
+postgres.dump=present
+backup_set=COMPLETE
+backup_size=16M
+free_disk_after=13G
+Mon Jul 20 20:03:08 UTC 2026
+ssh_exit=0

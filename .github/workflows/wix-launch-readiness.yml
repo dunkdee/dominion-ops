@@ -1,0 +1,89 @@
+name: Wix revenue launch readiness audit
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - .github/workflows/wix-launch-readiness.yml
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/vm-readonly-20260720
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+      - name: Run Wix launch readiness audit
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          mkdir -p audit
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes "$VM_USER@$VM_HOST" 'bash -s' > audit/wix-launch-readiness.txt <<'REMOTE'
+          set +e
+          section() { printf '\n===== %s =====\n' "$1"; }
+          TMP=$(mktemp -d)
+          trap 'rm -rf "$TMP"' EXIT
+
+          section "AGENT AND REQUIRED CONFIG"
+          docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}}' wix-agent
+          for key in WIX_API_KEY WIX_SITE_ID ZENDROP_API_KEY N8N_WEBHOOK_URL; do
+            count=$(docker exec wix-agent sh -lc 'v=$(printenv "$1"); printf %s "$v" | wc -c' sh "$key" 2>/dev/null)
+            if [ "${count:-0}" -gt 0 ]; then echo "$key=set(length:$count)"; else echo "$key=MISSING"; fi
+          done
+          curl -fsS -m 10 http://127.0.0.1:8082/health
+          echo
+
+          section "FULFILLMENT DATABASE"
+          docker exec wix-agent sh -lc 'test -f /app/wix_agent.db; echo db_file_rc=$?; test -d /app/wix_agent.db; echo db_directory_rc=$?'
+          code=$(curl -sS -o "$TMP/fulfillment.json" -m 15 -w '%{http_code}' http://127.0.0.1:8082/fulfillments/status)
+          echo "fulfillment_status_http=$code"
+
+          section "WIX STORE READINESS"
+          code=$(curl -sS -o "$TMP/store.json" -m 120 -w '%{http_code}' http://127.0.0.1:8082/store/audit)
+          echo "store_audit_http=$code"
+          if [ "$code" = 200 ]; then
+            python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); p=d.get("pages",{}); s=d.get("store_settings",{}); x=d.get("products",{}); print("pages_total="+str(p.get("total"))); print("pages_missing="+",".join(p.get("missing",[]))); print("return_policy="+str(s.get("has_return_policy"))); print("shipping_policy="+str(s.get("has_shipping_policy"))); print("products_total="+str(x.get("total"))); print("products_needing_description="+str(x.get("need_description_update"))); print("audit_errors="+",".join(k for k,v in d.items() if isinstance(v,dict) and "error" in v))' "$TMP/store.json"
+          else
+            python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print("error_type="+type(d.get("detail")).__name__)' "$TMP/store.json" 2>/dev/null || true
+          fi
+
+          section "UNFULFILLED ORDER COUNT (NO CUSTOMER DATA STORED)"
+          code=$(curl -sS -o "$TMP/orders.json" -m 60 -w '%{http_code}' http://127.0.0.1:8082/orders)
+          echo "orders_http=$code"
+          if [ "$code" = 200 ]; then
+            python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print("unfulfilled_order_count="+str(d.get("count")))' "$TMP/orders.json"
+          fi
+
+          section "PUBLIC STOREFRONT"
+          for url in https://voltedgegoods.com https://www.voltedgegoods.com; do
+            printf '%s -> ' "$url"
+            curl -L -sS -o /dev/null -m 20 -w 'HTTP %{http_code} final=%{url_effective}\n' "$url" 2>&1
+          done
+          getent ahostsv4 voltedgegoods.com 2>/dev/null | awk '{print $1}' | sort -u | sed 's/^/dns_ipv4=/' || true
+
+          section "READINESS AUDIT COMPLETE"
+          date -u
+          exit 0
+          REMOTE
+      - name: Commit sanitized readiness report
+        run: |
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/wix-launch-readiness.txt
+          git commit -m "audit: capture sanitized Wix launch readiness"
+          git push origin HEAD:audit/vm-readonly-20260720

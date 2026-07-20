@@ -1,54 +1,25 @@
-name: Baby CI/CD
+name: Legacy full-stack deploy (disabled)
+
+# This workflow previously rewrote the VM environment file, pulled into a
+# divergent production checkout, and rebuilt every container on every push to
+# main. It is intentionally held until the immutable release pipeline is ready.
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type ACKNOWLEDGE to confirm this workflow is disabled"
+        required: true
+
+permissions:
+  contents: read
 
 jobs:
-  deploy:
+  deployment-hold:
+    if: ${{ github.event.inputs.confirm == 'ACKNOWLEDGE' }}
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy to prod VM
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          script: |
-            set -e
-            cd ~/dominion-ops
-
-            printf 'GUMROAD_TOKEN=%s\n'         '${{ secrets.GUMROAD_TOKEN }}'         > .env
-            printf 'BREVO_API_KEY=%s\n'          '${{ secrets.BREVO_API_KEY }}'         >> .env
-            printf 'YOUTUBE_API_KEY=%s\n'        '${{ secrets.YOUTUBE_API_KEY }}'       >> .env
-            printf 'YOUTUBE_CLIENT_ID=%s\n'      '${{ secrets.YOUTUBE_CLIENT_ID }}'     >> .env
-            printf 'YOUTUBE_CLIENT_SECRET=%s\n'  '${{ secrets.YOUTUBE_CLIENT_SECRET }}' >> .env
-            printf 'OANDA_API_KEY=%s\n'          '${{ secrets.OANDA_API_KEY }}'         >> .env
-            printf 'OANDA_ACCOUNT_ID=%s\n'       '${{ secrets.OANDA_ACCOUNT_ID }}'      >> .env
-            printf 'BINANCE_API_KEY=%s\n'        '${{ secrets.BINANCE_API_KEY }}'       >> .env
-            printf 'BINANCE_API_SECRET=%s\n'     '${{ secrets.BINANCE_API_SECRET }}'    >> .env
-            printf 'TIKTOK_CLIENT_ID=%s\n'       '${{ secrets.TIKTOK_CLIENT_ID }}'      >> .env
-            printf 'TIKTOK_CLIENT_SECRET=%s\n'   '${{ secrets.TIKTOK_CLIENT_SECRET }}'  >> .env
-            printf 'ANTHROPIC_API_KEY=%s\n'      '${{ secrets.ANTHROPIC_API_KEY }}'     >> .env
-            printf 'GCP_PROJECT_ID=%s\n'                '${{ secrets.GCP_PROJECT_ID }}'                >> .env
-            printf 'GCP_REGION=%s\n'                   '${{ secrets.GCP_REGION }}'                   >> .env
-            printf 'GOOGLE_SERVICE_ACCOUNT_JSON=%s\n'  '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}'  >> .env
-            printf 'GA4_MEASUREMENT_ID=%s\n'           '${{ secrets.GA4_MEASUREMENT_ID }}'           >> .env
-
-            # Set up vault directory structure if not exists
-            VAULT_DIR="${HOME}/vault"
-            mkdir -p "${VAULT_DIR}/00-inbox" "${VAULT_DIR}/10-research" "${VAULT_DIR}/20-deals" \
-              "${VAULT_DIR}/30-surplus-cases" "${VAULT_DIR}/40-manual" \
-              "${VAULT_DIR}/90-meta/templates" "${VAULT_DIR}/_attachments" "${VAULT_DIR}/_health"
-
-            git pull origin main
-            docker compose up -d --build
-            sleep 10
-            curl -sf http://localhost:8080/ && echo 'baby-api OK' || echo 'baby-api FAILED'
-            curl -sf http://localhost:80/health && echo 'web OK' || echo 'web FAILED'
+      - name: Explain deployment hold
+        run: |
+          echo "The legacy all-service deployment is disabled."
+          echo "Use a tested, service-specific release with health checks and rollback."

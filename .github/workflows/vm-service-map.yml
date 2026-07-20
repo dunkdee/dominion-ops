@@ -1,0 +1,104 @@
+name: Read-only VM service and security map
+
+on:
+  push:
+    branches:
+      - audit/vm-readonly-20260720
+    paths:
+      - .github/workflows/vm-service-map.yml
+
+permissions:
+  contents: write
+
+jobs:
+  map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/vm-readonly-20260720
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+
+      - name: Pull service and security map
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          mkdir -p audit
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > audit/vm-service-map.txt <<'REMOTE'
+          set +e
+          section() { printf '\n===== %s =====\n' "$1"; }
+
+          section "SERVICE OWNERSHIP AND RESTART MAP"
+          units=$(systemctl list-unit-files --type=service --no-legend | awk '{print $1}' | grep -Ei 'dominion|n8n|caddy|docker|redis|ollama|jarvis|gemini|surplus|wix|proposal|dashboard|affiliate|kdp|conductor')
+          for unit in $units; do
+            echo "--- $unit ---"
+            systemctl show "$unit"               -p ActiveState -p SubState -p Result -p NRestarts -p ExecMainStatus               -p MainPID -p MemoryCurrent -p FragmentPath -p User -p Group -p WorkingDirectory               --no-pager 2>/dev/null
+          done
+
+          section "DOCKER OWNERSHIP AND HEALTH"
+          for cid in $(docker ps -aq 2>/dev/null); do
+            docker inspect --format 'name={{.Name}} image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}} compose_project={{index .Config.Labels "com.docker.compose.project"}} compose_dir={{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$cid"
+          done
+
+          section "SECRET FILE PERMISSIONS (VALUES NOT READ)"
+          find "$HOME" /opt/dominion -maxdepth 5 -type f \( -name '.env' -o -name '.env.*' -o -iname '*key*.json' -o -iname '*credential*.json' -o -iname '*secret*.json' -o -name 'adc.json' \)             -printf '%m %u:%g %p\n' 2>/dev/null | sort
+
+          section "GIT REPOSITORY MAP"
+          find "$HOME" /opt -maxdepth 5 -type d -name .git 2>/dev/null | while read -r gitdir; do
+            repo=${gitdir%/.git}
+            echo "--- $repo ---"
+            printf 'branch='; git -C "$repo" branch --show-current 2>/dev/null
+            printf 'head='; git -C "$repo" rev-parse --short HEAD 2>/dev/null
+            printf 'origin_main='; git -C "$repo" rev-parse --short origin/main 2>/dev/null || echo absent
+            printf 'main='; git -C "$repo" rev-parse --short main 2>/dev/null || echo absent
+            printf 'tracked_files='; git -C "$repo" ls-files 2>/dev/null | wc -l
+            printf 'dirty_entries='; git -C "$repo" status --porcelain 2>/dev/null | wc -l
+            printf 'tracked_sensitive_names:\n'
+            git -C "$repo" ls-files 2>/dev/null | grep -Ei '(^|/)(\.env($|\.)|.*key.*\.json$|.*credential.*\.json$|.*secret.*\.json$|\.bash_history$)' | head -50 || true
+          done
+
+          section "LEGACY PATH DRIFT"
+          for p in "$HOME/desktop-tutorial" "$HOME/dominion-ops" "$HOME/buddy_core" "$HOME/conductor" "$HOME/dominion" "$HOME/aura-ecosystem"; do
+            if [ -e "$p" ]; then
+              stat -c '%A %U:%G %n' "$p"
+            else
+              echo "ABSENT $p"
+            fi
+          done
+
+          section "GCP FIREWALL RULES"
+          gcloud compute firewall-rules list --project=dominion-ascendant             --format='table(name,direction,priority,sourceRanges.list():label=SOURCE_RANGES,allowed[].map().firewall_rule().list():label=ALLOW,disabled)' 2>&1 || echo 'gcloud firewall query unavailable'
+
+          section "HOST FIREWALL"
+          if command -v ufw >/dev/null; then sudo -n ufw status verbose 2>&1; else echo 'ufw not installed'; fi
+          if command -v nft >/dev/null; then sudo -n nft list ruleset 2>&1 | head -250; else echo 'nft not installed'; fi
+
+          section "SSH HARDENING SUMMARY"
+          sudo -n sshd -T 2>/dev/null | grep -Ei '^(permitrootlogin|passwordauthentication|pubkeyauthentication|maxauthtries|permitemptyPasswords|x11forwarding|allowusers|allowgroups|clientaliveinterval|clientalivecountmax) ' || echo 'sshd effective config unavailable'
+
+          section "LOGROTATE FAILURE"
+          systemctl status logrotate.service --no-pager -l 2>&1 | tail -80
+          journalctl -u logrotate.service -n 80 --no-pager 2>&1
+
+          section "AUDIT COMPLETE"
+          date -u
+          REMOTE
+
+      - name: Commit service map
+        run: |
+          git config user.name "Dominion Audit Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add audit/vm-service-map.txt
+          git commit -m "audit: capture VM service and security map"
+          git push origin HEAD:audit/vm-readonly-20260720

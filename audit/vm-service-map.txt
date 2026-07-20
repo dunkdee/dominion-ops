@@ -1,0 +1,835 @@
+
+===== SERVICE OWNERSHIP AND RESTART MAP =====
+--- caddy-api.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=
+User=caddy
+Group=caddy
+ActiveState=inactive
+SubState=dead
+FragmentPath=/lib/systemd/system/caddy-api.service
+--- caddy.service ---
+MainPID=885057
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=56659968
+WorkingDirectory=
+User=caddy
+Group=caddy
+ActiveState=active
+SubState=running
+FragmentPath=/lib/systemd/system/caddy.service
+--- conductor-api.service ---
+MainPID=0
+Result=exit-code
+NRestarts=278
+ExecMainStatus=1
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/conductor
+User=malachisingleton8
+Group=
+ActiveState=activating
+SubState=auto-restart
+FragmentPath=/etc/systemd/system/conductor-api.service
+--- conductor-autonomous.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/conductor
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/conductor-autonomous.service
+--- conductor-scheduler.service ---
+MainPID=387
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=16306176
+WorkingDirectory=/home/malachisingleton8/conductor
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/conductor-scheduler.service
+--- conductor-worker.service ---
+MainPID=1245651
+Result=success
+NRestarts=8
+ExecMainStatus=0
+MemoryCurrent=17797120
+WorkingDirectory=/home/malachisingleton8/conductor
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/conductor-worker.service
+--- conductor.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=
+User=
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/conductor.service
+--- docker.service ---
+MainPID=822119
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=174555136
+WorkingDirectory=
+User=
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/lib/systemd/system/docker.service
+--- dominion-3d-dashboard.service ---
+MainPID=394
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=36167680
+WorkingDirectory=/home/malachisingleton8/dominion_3d_dashboard
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-3d-dashboard.service
+--- dominion-affiliate.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-affiliate.service
+--- dominion-alchemist.service ---
+MainPID=2308281
+Result=success
+NRestarts=2
+ExecMainStatus=0
+MemoryCurrent=11993088
+WorkingDirectory=/home/malachisingleton8/dominion/agents/health
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-alchemist.service
+--- dominion-alpha.service ---
+MainPID=3584163
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=65347584
+WorkingDirectory=/home/malachisingleton8/dominion/alpha_engine
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-alpha.service
+--- dominion-backup.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=
+User=
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-backup.service
+--- dominion-buddy-web.service ---
+MainPID=3604584
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=81244160
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-buddy-web.service
+--- dominion-command-deck.service ---
+MainPID=395
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=7180288
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-command-deck.service
+--- dominion-conductor.service ---
+MainPID=4070265
+Result=success
+NRestarts=10
+ExecMainStatus=0
+MemoryCurrent=45019136
+WorkingDirectory=/home/malachisingleton8/conductor
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-conductor.service
+--- dominion-dashboard.service ---
+MainPID=727352
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=39460864
+WorkingDirectory=/home/malachisingleton8/dominion/dashboard
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-dashboard.service
+--- dominion-email-drip.service ---
+MainPID=3089646
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=39661568
+WorkingDirectory=/home/malachisingleton8/email_drip
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-email-drip.service
+--- dominion-email-monitor.service ---
+MainPID=398
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=12263424
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-email-monitor.service
+--- dominion-executor.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-executor.service
+--- dominion-gatekeeper.service ---
+MainPID=399
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=55820288
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-gatekeeper.service
+--- dominion-generate-payload.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=
+User=
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-generate-payload.service
+--- dominion-guardian.service ---
+MainPID=1453
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=94777344
+WorkingDirectory=/home/malachisingleton8
+User=malachisingleton8
+Group=malachisingleton8
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-guardian.service
+--- dominion-healthcheck.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=
+User=
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-healthcheck.service
+--- dominion-intel.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-intel.service
+--- dominion-juris.service ---
+MainPID=1454438
+Result=success
+NRestarts=15689
+ExecMainStatus=0
+MemoryCurrent=79966208
+WorkingDirectory=/home/malachisingleton8/dominion/agents/juris
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-juris.service
+--- dominion-kdp.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-kdp.service
+--- dominion-monitor.service ---
+MainPID=400
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=22323200
+WorkingDirectory=/home/malachisingleton8
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-monitor.service
+--- dominion-n8n-watchdog.service ---
+MainPID=822554
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=28725248
+WorkingDirectory=
+User=root
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-n8n-watchdog.service
+--- dominion-ops-dashboard.service ---
+MainPID=401
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=22896640
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-ops-dashboard.service
+--- dominion-overseer.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-overseer.service
+--- dominion-paper-trade.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-paper-trade.service
+--- dominion-port-healer.service ---
+MainPID=3071834
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=8609792
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=root
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-port-healer.service
+--- dominion-proposal-queue.service ---
+MainPID=872368
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=17149952
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-proposal-queue.service
+--- dominion-publish.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=
+User=root
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-publish.service
+--- dominion-report.service ---
+MainPID=431
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=38420480
+WorkingDirectory=/home/malachisingleton8
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-report.service
+--- dominion-review-queue.service ---
+MainPID=3208532
+Result=success
+NRestarts=152427
+ExecMainStatus=0
+MemoryCurrent=13762560
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-review-queue.service
+--- dominion-scout.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-scout.service
+--- dominion-sentinel.service ---
+MainPID=729068
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=28352512
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-sentinel.service
+--- dominion-site.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/aura-ecosystem/agency-website
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-site.service
+--- dominion-social-poster.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-social-poster.service
+--- dominion-store.service ---
+MainPID=804084
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=38047744
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-store.service
+--- dominion-surplus-api.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-surplus-api.service
+--- dominion-surplus-dashboard.service ---
+MainPID=1718732
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=38215680
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-surplus-dashboard.service
+--- dominion-surplus-scraper.service ---
+MainPID=2179083
+Result=success
+NRestarts=2575
+ExecMainStatus=0
+MemoryCurrent=294486016
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+User=malachisingleton8
+Group=
+ActiveState=activating
+SubState=start
+FragmentPath=/etc/systemd/system/dominion-surplus-scraper.service
+--- dominion-tiktok.service ---
+MainPID=1515843
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=39440384
+WorkingDirectory=/home/malachisingleton8
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-tiktok.service
+--- dominion-tracker.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-tracker.service
+--- dominion-trade-report.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-trade-report.service
+--- dominion-twilio-router.service ---
+MainPID=405
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=12734464
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-twilio-router.service
+--- dominion-watchdog.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=
+User=
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-watchdog.service
+--- dominion-wholesale.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-wholesale.service
+--- dominion-youtube.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=/home/malachisingleton8/buddy_core
+User=malachisingleton8
+Group=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/dominion-youtube.service
+--- gemini-server.service ---
+MainPID=3604500
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=49483776
+WorkingDirectory=/opt/ai_agents/gemini
+User=malachisingleton8
+Group=
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/gemini-server.service
+--- n8n.service ---
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=[not set]
+WorkingDirectory=
+User=malachisingleton8
+Group=malachisingleton8
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/n8n.service
+--- ollama.service ---
+MainPID=441
+Result=success
+NRestarts=0
+ExecMainStatus=0
+MemoryCurrent=16982016
+WorkingDirectory=
+User=ollama
+Group=ollama
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/ollama.service
+
+===== DOCKER OWNERSHIP AND HEALTH =====
+name=/movie-generator image=movie-generator status=running health=none restarts=0 compose_project= compose_dir=
+name=/wix-agent image=desktop-tutorial-wix-agent status=running health=healthy restarts=0 compose_project=desktop-tutorial compose_dir=/home/malachisingleton8/desktop-tutorial
+name=/baby-api image=desktop-tutorial-baby-api status=running health=healthy restarts=0 compose_project=desktop-tutorial compose_dir=/home/malachisingleton8/desktop-tutorial
+name=/dominion-web image=desktop-tutorial-dominion-web status=running health=none restarts=0 compose_project=desktop-tutorial compose_dir=/home/malachisingleton8/desktop-tutorial
+name=/baby-logger image=alpine:latest status=running health=none restarts=0 compose_project=desktop-tutorial compose_dir=/home/malachisingleton8/desktop-tutorial
+name=/dominion-seo image=dominion-seo:latest status=running health=none restarts=2 compose_project= compose_dir=
+name=/dominion-n8n image=n8nio/n8n:latest status=running health=none restarts=0 compose_project= compose_dir=
+name=/dominion-db image=postgres:15 status=running health=none restarts=0 compose_project= compose_dir=
+
+===== SECRET FILE PERMISSIONS (VALUES NOT READ) =====
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/.claude/.credentials.json
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/DOMINION_VAULT_2026/real_estate/.env
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/auric_edge/.env
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/conductor/.env
+600 malachisingleton8:malachisingleton8 /home/malachisingleton8/surplus_recovery/.env
+600 malachisingleton8:malachisingleton8 /opt/dominion/.env
+600 malachisingleton8:malachisingleton8 /opt/dominion/dominion-store/.env
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/.env
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/.env.gpg
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/aura-ecosystem/.env.gpg
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/bots/kraken/.env.gpg
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/buddy_core/.env
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/buddy_core/youtube_credentials.json
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/conductor/.env.gpg
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion-ops/.env
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion-ops/.env.example
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion-ops/.env.production.example
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion-ops/alpha_engine/.env.example
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion/alpha_engine/.env
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion/alpha_engine/.env.example
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/n8n-clean-rebuild/export/credentials.json
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/n8n/.env.gpg
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/n8n/rescue-data/import/credentials.json
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/stripe-verifier/.env.gpg
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/surplus_recovery/.env.example
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/youtube_videos/dominion_healing/2026-06-01_The_lymphatic_system_secret_that_changes_meta.json
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/youtube_videos/dominion_healing/2026-06-01_The_lymphatic_system_secret_that_changes_script.json
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/youtube_videos/dominion_healing/2026-07-17_The_lymphatic_system_secret_that_changes_meta.json
+644 malachisingleton8:malachisingleton8 /home/malachisingleton8/youtube_videos/dominion_healing/2026-07-17_The_lymphatic_system_secret_that_changes_script.json
+644 malachisingleton8:malachisingleton8 /opt/dominion/adc.json
+644 malachisingleton8:malachisingleton8 /opt/dominion/gcp-key.json
+
+===== GIT REPOSITORY MAP =====
+--- /home/malachisingleton8 ---
+branch=master
+head=origin_main=absent
+main=absent
+tracked_files=318144
+dirty_entries=322673
+tracked_sensitive_names:
+.bash_history
+.env
+.env.gpg
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-agent-runtime/node_modules/@aws-sdk/credential-provider-env/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-agent-runtime/node_modules/@aws-sdk/credential-provider-http/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-agent-runtime/node_modules/@aws-sdk/credential-provider-ini/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-agent-runtime/node_modules/@aws-sdk/credential-provider-node/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-agent-runtime/node_modules/@aws-sdk/credential-provider-process/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-agent-runtime/node_modules/@aws-sdk/credential-provider-sso/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-agent-runtime/node_modules/@aws-sdk/credential-provider-web-identity/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-runtime/node_modules/@aws-sdk/credential-provider-env/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-runtime/node_modules/@aws-sdk/credential-provider-http/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-runtime/node_modules/@aws-sdk/credential-provider-ini/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-runtime/node_modules/@aws-sdk/credential-provider-node/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-runtime/node_modules/@aws-sdk/credential-provider-process/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-runtime/node_modules/@aws-sdk/credential-provider-sso/node_modules/@aws-sdk/token-providers/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-runtime/node_modules/@aws-sdk/credential-provider-sso/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-bedrock-runtime/node_modules/@aws-sdk/credential-provider-web-identity/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-cognito-identity/node_modules/@aws-sdk/credential-provider-env/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-cognito-identity/node_modules/@aws-sdk/credential-provider-http/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-cognito-identity/node_modules/@aws-sdk/credential-provider-ini/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-cognito-identity/node_modules/@aws-sdk/credential-provider-node/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-cognito-identity/node_modules/@aws-sdk/credential-provider-process/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-cognito-identity/node_modules/@aws-sdk/credential-provider-sso/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-cognito-identity/node_modules/@aws-sdk/credential-provider-web-identity/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-kendra/node_modules/@aws-sdk/credential-provider-env/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-kendra/node_modules/@aws-sdk/credential-provider-http/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-kendra/node_modules/@aws-sdk/credential-provider-ini/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-kendra/node_modules/@aws-sdk/credential-provider-node/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-kendra/node_modules/@aws-sdk/credential-provider-process/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-kendra/node_modules/@aws-sdk/credential-provider-sso/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-kendra/node_modules/@aws-sdk/credential-provider-web-identity/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-s3/node_modules/@aws-sdk/credential-provider-env/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-s3/node_modules/@aws-sdk/credential-provider-http/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-s3/node_modules/@aws-sdk/credential-provider-ini/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-s3/node_modules/@aws-sdk/credential-provider-node/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-s3/node_modules/@aws-sdk/credential-provider-process/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-s3/node_modules/@aws-sdk/credential-provider-sso/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-s3/node_modules/@aws-sdk/credential-provider-web-identity/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-sagemaker/node_modules/@aws-sdk/credential-provider-env/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-sagemaker/node_modules/@aws-sdk/credential-provider-http/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-sagemaker/node_modules/@aws-sdk/credential-provider-ini/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-sagemaker/node_modules/@aws-sdk/credential-provider-node/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-sagemaker/node_modules/@aws-sdk/credential-provider-process/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-sagemaker/node_modules/@aws-sdk/credential-provider-sso/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-sagemaker/node_modules/@aws-sdk/credential-provider-web-identity/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-secrets-manager/node_modules/uuid/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/client-secrets-manager/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/credential-provider-cognito-identity/node_modules/@aws-sdk/core/package.json
+.npm/_npx/a8a7eec953f1f314/node_modules/@aws-sdk/credential-provider-cognito-identity/node_modules/@aws-sdk/middleware-host-header/package.json
+--- /home/malachisingleton8/dominion-ops ---
+branch=claude/movie-generator-youtube-b50wx2
+head=aa2d7d2
+origin_main=8be563b
+main=af33b4d
+tracked_files=167
+dirty_entries=2
+tracked_sensitive_names:
+.env.example
+.env.production.example
+alpha_engine/.env.example
+
+===== LEGACY PATH DRIFT =====
+ABSENT /home/malachisingleton8/desktop-tutorial
+drwxr-xr-x malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion-ops
+drwxr-xr-x malachisingleton8:malachisingleton8 /home/malachisingleton8/buddy_core
+drwxr-xr-x malachisingleton8:malachisingleton8 /home/malachisingleton8/conductor
+drwxr-xr-x malachisingleton8:malachisingleton8 /home/malachisingleton8/dominion
+drwxr-xr-x malachisingleton8:malachisingleton8 /home/malachisingleton8/aura-ecosystem
+
+===== GCP FIREWALL RULES =====
+NAME                          DIRECTION  PRIORITY  SOURCE_RANGES                      ALLOW                    DISABLED
+allow-buddy-web-auth          INGRESS    1000      0.0.0.0/0                          tcp:5070                 False
+allow-dominion-ssh            INGRESS    1000      35.235.240.0/20,172.56.101.234/32  tcp:22                   False
+allow-dominion-web            INGRESS    1000      0.0.0.0/0                          tcp:80,tcp:443           False
+allow-egress-core             EGRESS     1000                                         tcp:443,udp:53,tcp:53    False
+allow-github-actions-ssh      INGRESS    1000      0.0.0.0/0                          tcp:22                   False
+allow-https-dominion          INGRESS    1000      0.0.0.0/0                          tcp:443                  False
+allow-iap                     INGRESS    1000      35.235.240.0/20                    tcp:22                   False
+allow-n8n                     INGRESS    1000      35.235.240.0/20,172.56.101.234/32  tcp:5678                 False
+allow-ops-dashboard           INGRESS    1000      0.0.0.0/0                          tcp:5100                 False
+allow-proposal-queue          INGRESS    1000      0.0.0.0/0                          tcp:5101                 False
+allow-pulse-dash              INGRESS    1000      10.0.0.0/8                         tcp:8080                 False
+allow-smtp-egress             EGRESS     900                                          tcp:587,tcp:465,tcp:993  False
+allow-ssh-cloudshell-malachi  INGRESS    1000      34.148.102.13/32                   tcp:22                   False
+allow-ssh-from-me             INGRESS    1000      35.227.38.129/32                   tcp:22                   False
+allow-twilio-router           INGRESS    1000      0.0.0.0/0                          tcp:5102                 False
+deny-all-egress               EGRESS     65534                                                                 False
+deny-all-ingress              INGRESS    65534     0.0.0.0/0                                                   False
+dominion                      INGRESS    1000      0.0.0.0/0                          tcp:80,tcp:443           False
+
+===== HOST FIREWALL =====
+ufw not installed
+nft not installed
+
+===== SSH HARDENING SUMMARY =====
+maxauthtries 6
+clientaliveinterval 120
+clientalivecountmax 3
+permitrootlogin no
+pubkeyauthentication yes
+passwordauthentication no
+x11forwarding yes
+permitemptypasswords no
+
+===== LOGROTATE FAILURE =====
+× logrotate.service - Rotate log files
+     Loaded: loaded (/lib/systemd/system/logrotate.service; static)
+     Active: failed (Result: exit-code) since Mon 2026-07-20 00:00:02 UTC; 14h ago
+TriggeredBy: ● logrotate.timer
+       Docs: man:logrotate(8)
+             man:logrotate.conf(5)
+    Process: 1917986 ExecStart=/usr/sbin/logrotate /etc/logrotate.conf (code=exited, status=1/FAILURE)
+   Main PID: 1917986 (code=exited, status=1/FAILURE)
+        CPU: 1.343s
+
+Notice: journal has been rotated since unit was started, output may be incomplete.
+-- No entries --
+
+===== AUDIT COMPLETE =====
+Mon Jul 20 14:58:55 UTC 2026

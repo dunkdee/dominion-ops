@@ -1,0 +1,570 @@
+
+===== RESTART LOOP UNIT DEFINITIONS =====
+--- conductor-api.service ---
+Restart=always
+RestartUSec=5s
+Result=exit-code
+NRestarts=292
+ExecMainStatus=1
+ExecStart={ path=/bin/bash ; argv[]=/bin/bash -lc set -a; source /home/malachisingleton8/conductor/.env; set +a; exec /home/malachisingleton8/conductor/venv/bin/python -m uvicorn api:app --host 127.0.0.1 --port 5060 ; ignore_errors=no ; start_time=[Mon 2026-07-20 15:00:09 UTC] ; stop_time=[Mon 2026-07-20 15:00:10 UTC] ; pid=2180774 ; code=exited ; status=1 }
+WorkingDirectory=/home/malachisingleton8/conductor
+ActiveState=activating
+SubState=auto-restart
+FragmentPath=/etc/systemd/system/conductor-api.service
+unit directives (environment values omitted):
+# /etc/systemd/system/conductor-api.service
+[Unit]
+Description=Dominion Conductor API
+After=network.target
+
+[Service]
+Type=simple
+User=malachisingleton8
+WorkingDirectory=/home/malachisingleton8/conductor
+ExecStart=/bin/bash -lc 'set -a; source /home/malachisingleton8/conductor/.env; set +a; exec /home/malachisingleton8/conductor/venv/bin/python -m uvicorn api:app --host 127.0.0.1 --port 5060'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+--- dominion-juris.service ---
+Restart=always
+RestartUSec=10s
+Result=success
+NRestarts=15689
+ExecMainStatus=0
+ExecStart={ path=/home/malachisingleton8/dominion_env/bin/python3 ; argv[]=/home/malachisingleton8/dominion_env/bin/python3 /home/malachisingleton8/dominion/agents/juris/juris_api.py ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+WorkingDirectory=/home/malachisingleton8/dominion/agents/juris
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-juris.service
+unit directives (environment values omitted):
+# /etc/systemd/system/dominion-juris.service
+[Unit]
+Description=Juris Legal Intelligence API
+After=network.target
+
+[Service]
+Type=simple
+User=malachisingleton8
+WorkingDirectory=/home/malachisingleton8/dominion/agents/juris
+ExecStart=/home/malachisingleton8/dominion_env/bin/python3 /home/malachisingleton8/dominion/agents/juris/juris_api.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+--- dominion-review-queue.service ---
+Restart=always
+RestartUSec=5s
+Result=success
+NRestarts=152427
+ExecMainStatus=0
+ExecStart={ path=/home/malachisingleton8/dominion_env/bin/python ; argv[]=/home/malachisingleton8/dominion_env/bin/python review_queue.py --serve --port 5103 ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+ActiveState=active
+SubState=running
+FragmentPath=/etc/systemd/system/dominion-review-queue.service
+unit directives (environment values omitted):
+# /etc/systemd/system/dominion-review-queue.service
+[Unit]
+Description=Dominion Surplus Review Queue
+After=network.target
+
+[Service]
+Type=simple
+User=malachisingleton8
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+ExecStart=/home/malachisingleton8/dominion_env/bin/python review_queue.py --serve --port 5103
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+--- dominion-surplus-scraper.service ---
+Restart=on-failure
+RestartUSec=30s
+Result=success
+NRestarts=2575
+ExecMainStatus=0
+ExecStart={ path=/home/malachisingleton8/dominion_env/bin/python ; argv[]=/home/malachisingleton8/dominion_env/bin/python surplus_runner.py --scrape ; ignore_errors=no ; start_time=[Mon 2026-07-20 14:56:30 UTC] ; stop_time=[n/a] ; pid=2179083 ; code=(null) ; status=0/0 }
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+ActiveState=activating
+SubState=start
+FragmentPath=/etc/systemd/system/dominion-surplus-scraper.service
+unit directives (environment values omitted):
+# /etc/systemd/system/dominion-surplus-scraper.service
+[Unit]
+Description=Dominion Surplus Fund Scraper
+After=network.target
+
+[Service]
+Type=oneshot
+User=malachisingleton8
+WorkingDirectory=/home/malachisingleton8/surplus_recovery
+ExecStart=/home/malachisingleton8/dominion_env/bin/python surplus_runner.py --scrape
+TimeoutStartSec=3600
+
+[Install]
+WantedBy=multi-user.target
+
+# /etc/systemd/system/dominion-surplus-scraper.service.d/limits.conf
+[Service]
+MemoryMax=1500M
+TimeoutStartSec=600
+Restart=on-failure
+RestartSec=30
+
+===== RECENT LOOP ERRORS =====
+--- conductor-api.service ---
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+conductor-api.service: Failed with result 'exit-code'.
+--- dominion-juris.service ---
+--- dominion-review-queue.service ---
+--- dominion-surplus-scraper.service ---
+dominion-surplus-scraper.service: start operation timed out. Terminating.
+dominion-surplus-scraper.service: Main process exited, code=killed, status=15/TERM
+dominion-surplus-scraper.service: Failed with result 'timeout'.
+Failed to start dominion-surplus-scraper.service - Dominion Surplus Fund Scraper.
+dominion-surplus-scraper.service: start operation timed out. Terminating.
+dominion-surplus-scraper.service: Main process exited, code=killed, status=15/TERM
+dominion-surplus-scraper.service: Failed with result 'timeout'.
+Failed to start dominion-surplus-scraper.service - Dominion Surplus Fund Scraper.
+dominion-surplus-scraper.service: start operation timed out. Terminating.
+dominion-surplus-scraper.service: Main process exited, code=killed, status=15/TERM
+dominion-surplus-scraper.service: Failed with result 'timeout'.
+Failed to start dominion-surplus-scraper.service - Dominion Surplus Fund Scraper.
+
+===== LOGROTATE DEBUG =====
+considering log /home/malachisingleton8/surplus_recovery/logs/trace.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-02 00:00
+  log does not need rotating (log size is below the 'size' threshold)
+considering log /home/malachisingleton8/surplus_recovery/logs/wholesale.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-02 00:00
+  log does not need rotating (log size is below the 'size' threshold)
+considering log /home/malachisingleton8/surplus_recovery/logs/youtube_engine.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-02 00:00
+  log does not need rotating (log size is below the 'size' threshold)
+
+rotating pattern: /home/malachisingleton8/logs/*.log  10485760 bytes (7 rotations)
+empty log files are not rotated, old logs are removed
+considering log /home/malachisingleton8/logs/affiliate_engine.log
+error: skipping "/home/malachisingleton8/logs/affiliate_engine.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/content_bridge.log
+error: skipping "/home/malachisingleton8/logs/content_bridge.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/digest.log
+error: skipping "/home/malachisingleton8/logs/digest.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/dominion_intel.log
+error: skipping "/home/malachisingleton8/logs/dominion_intel.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/dominion_intel_service.log
+error: skipping "/home/malachisingleton8/logs/dominion_intel_service.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/dominion_monitor.log
+error: skipping "/home/malachisingleton8/logs/dominion_monitor.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/growth_engine.log
+error: skipping "/home/malachisingleton8/logs/growth_engine.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/guardian.log
+error: skipping "/home/malachisingleton8/logs/guardian.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/juris.log
+error: skipping "/home/malachisingleton8/logs/juris.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/kdp_generator.log
+error: skipping "/home/malachisingleton8/logs/kdp_generator.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/kdp_publisher.log
+error: skipping "/home/malachisingleton8/logs/kdp_publisher.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/kdp_status.log
+error: skipping "/home/malachisingleton8/logs/kdp_status.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/multi_content.log
+error: skipping "/home/malachisingleton8/logs/multi_content.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/pph_agent.log
+error: skipping "/home/malachisingleton8/logs/pph_agent.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/proposals.log
+error: skipping "/home/malachisingleton8/logs/proposals.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/re_outreach.log
+error: skipping "/home/malachisingleton8/logs/re_outreach.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/re_scout.log
+error: skipping "/home/malachisingleton8/logs/re_scout.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/social_poster.log
+error: skipping "/home/malachisingleton8/logs/social_poster.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/tiktok_api.log
+error: skipping "/home/malachisingleton8/logs/tiktok_api.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/tiktok_pipeline.log
+error: skipping "/home/malachisingleton8/logs/tiktok_pipeline.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/tiktok_poster.log
+error: skipping "/home/malachisingleton8/logs/tiktok_poster.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/tiktok_uploader.log
+error: skipping "/home/malachisingleton8/logs/tiktok_uploader.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/vault_reporter.log
+error: skipping "/home/malachisingleton8/logs/vault_reporter.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/wholesale_scrape.log
+error: skipping "/home/malachisingleton8/logs/wholesale_scrape.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/youtube_upload.log
+error: skipping "/home/malachisingleton8/logs/youtube_upload.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+considering log /home/malachisingleton8/logs/yt_pipeline.log
+error: skipping "/home/malachisingleton8/logs/yt_pipeline.log" because parent directory has insecure permissions (It's world writable or writable by group which is not "root") Set "su" directive in config file to tell logrotate which user/group should be used for rotation.
+
+rotating pattern: /var/log/syslog
+/var/log/auth.log  52428800 bytes (3 rotations)
+empty log files are not rotated, old logs are removed
+considering log /var/log/syslog
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-20 00:00
+  log does not need rotating (log size is below the 'size' threshold)
+considering log /var/log/auth.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-06-28 00:00
+  log does not need rotating (log size is below the 'size' threshold)
+
+rotating pattern: /var/log/dpkg.log  monthly (12 rotations)
+empty log files are not rotated, old logs are removed
+considering log /var/log/dpkg.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-01 00:00
+  log does not need rotating (log has been rotated at 2026-07-01 00:00, which is less than a month ago)
+
+rotating pattern: /var/log/exim4/mainlog /var/log/exim4/rejectlog  after 1 days (10 rotations)
+empty log files are not rotated, old logs are removed
+considering log /var/log/exim4/mainlog
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-20 00:00
+  log does not need rotating (log has been rotated at 2026-07-20 00:00, which is less than a day ago)
+considering log /var/log/exim4/rejectlog
+  log /var/log/exim4/rejectlog does not exist -- skipping
+
+rotating pattern: /var/log/exim4/paniclog  10485760 bytes (10 rotations)
+empty log files are not rotated, old logs are removed
+considering log /var/log/exim4/paniclog
+  Now: 2026-07-20 15:00
+  Last rotated at 2025-12-21 00:00
+  log does not need rotating (log size is below the 'size' threshold)
+
+rotating pattern: /var/log/fail2ban.log  weekly (4 rotations)
+empty log files are not rotated, old logs are removed
+considering log /var/log/fail2ban.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-19 00:00
+  log does not need rotating (log has been rotated at 2026-07-19 00:00, which is less than a week ago)
+
+rotating pattern: /var/log/syslog
+/var/log/mail.log
+/var/log/kern.log
+/var/log/auth.log
+/var/log/user.log
+/var/log/cron.log
+ weekly (4 rotations)
+empty log files are not rotated, old logs are removed
+considering log /var/log/mail.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-19 00:00
+  log does not need rotating (log has been rotated at 2026-07-19 00:00, which is less than a week ago)
+considering log /var/log/kern.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-19 00:00
+  log does not need rotating (log has been rotated at 2026-07-19 00:00, which is less than a week ago)
+considering log /var/log/user.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-19 00:00
+  log does not need rotating (log has been rotated at 2026-07-19 00:00, which is less than a week ago)
+considering log /var/log/cron.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-19 00:00
+  log does not need rotating (log has been rotated at 2026-07-19 00:00, which is less than a week ago)
+not running postrotate script, since no logs were rotated
+
+rotating pattern: /var/log/unattended-upgrades/unattended-upgrades.log 
+/var/log/unattended-upgrades/unattended-upgrades-dpkg.log
+/var/log/unattended-upgrades/unattended-upgrades-shutdown.log
+ monthly (6 rotations)
+empty log files are not rotated, old logs are removed
+considering log /var/log/unattended-upgrades/unattended-upgrades.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-01 00:00
+  log does not need rotating (log has been rotated at 2026-07-01 00:00, which is less than a month ago)
+considering log /var/log/unattended-upgrades/unattended-upgrades-dpkg.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2026-07-01 00:00
+  log does not need rotating (log has been rotated at 2026-07-01 00:00, which is less than a month ago)
+considering log /var/log/unattended-upgrades/unattended-upgrades-shutdown.log
+  Now: 2026-07-20 15:00
+  Last rotated at 2025-12-21 00:00
+  log does not need rotating (log is empty)
+
+rotating pattern: /var/log/wtmp  monthly (1 rotations)
+empty log files are rotated, only log files >= 1048576 bytes are rotated, old logs are removed
+considering log /var/log/wtmp
+  Now: 2026-07-20 15:00
+  Last rotated at 2025-12-21 00:00
+  log does not need rotating ('minsize' directive is used and the log size is smaller than the minsize value)
+
+===== HEALTH ROUTE DISCOVERY =====
+
+--- port 3000 ---
+/ 302
+/health 302
+/healthz 302
+/api/health 302
+/api/healthz 302
+
+--- port 5000 ---
+/ 404
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5052 ---
+/ 404
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5055 ---
+/ 404
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5060 ---
+/ 200
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5070 ---
+/ 404
+/health 404
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5080 ---
+/ 200
+/health 200
+/healthz 200
+/api/health 200
+/api/healthz 200
+
+--- port 5090 ---
+/ 200
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5095 ---
+/ 200
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5100 ---
+/ 200
+/health 404
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5101 ---
+/ 200
+/health 404
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5102 ---
+/ 404
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5103 ---
+/ 404
+/health 404
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5110 ---
+/ 200
+/health 404
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5120 ---
+/ 404
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 5678 ---
+/ 200
+/health 200
+/healthz 200
+/api/health 200
+/api/healthz 200
+
+--- port 8080 ---
+/ 200
+/health 404
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 8082 ---
+/ 404
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 8090 ---
+/ 200
+/health 200
+/healthz 200
+/api/health 404
+/api/healthz 404
+
+--- port 8099 ---
+/ 404
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 8100 ---
+/ 200
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 8200 ---
+/ 200
+/health 404
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 8787 ---
+/ 200
+/health 200
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+--- port 9380 ---
+/ 200
+/health 404
+/healthz 404
+/api/health 404
+/api/healthz 404
+
+===== TIMERS FOR CORE SERVICES =====
+Mon 2026-07-20 15:00:16 UTC 1s left       Mon 2026-07-20 10:00:08 UTC 5h 0min ago   dominion-intel.timer         dominion-intel.service
+Mon 2026-07-20 15:00:39 UTC 24s left      Mon 2026-07-20 14:55:39 UTC 4min 35s ago  conductor-autonomous.timer   conductor-autonomous.service
+Mon 2026-07-20 15:00:56 UTC 40s left      Mon 2026-07-20 14:58:56 UTC 1min 19s ago  dominion-watchdog.timer      dominion-watchdog.service
+Mon 2026-07-20 15:01:06 UTC 51s left      Mon 2026-07-20 15:00:06 UTC 8s ago        dominion-executor.timer      dominion-executor.service
+Mon 2026-07-20 15:03:40 UTC 3min 25s left Mon 2026-07-20 14:58:40 UTC 1min 34s ago  dominion-healthcheck.timer   dominion-healthcheck.service
+Mon 2026-07-20 17:00:00 UTC 1h 59min left Mon 2026-07-20 12:00:00 UTC 3h 0min ago   dominion-social-poster.timer dominion-social-poster.service
+Mon 2026-07-20 17:00:00 UTC 1h 59min left Mon 2026-07-20 12:00:00 UTC 3h 0min ago   dominion-youtube.timer       dominion-youtube.service
+Tue 2026-07-21 00:00:00 UTC 8h left       Mon 2026-07-20 00:00:01 UTC 15h ago       dpkg-db-backup.timer         dpkg-db-backup.service
+Tue 2026-07-21 00:00:00 UTC 8h left       Mon 2026-07-20 00:00:01 UTC 15h ago       logrotate.timer              logrotate.service
+Tue 2026-07-21 02:00:00 UTC 10h left      Mon 2026-07-20 02:00:00 UTC 13h ago       dominion-affiliate.timer     dominion-affiliate.service
+Tue 2026-07-21 03:25:00 UTC 12h left      Mon 2026-07-20 03:25:00 UTC 11h ago       dominion-backup.timer        dominion-backup.service
+Tue 2026-07-21 06:00:00 UTC 14h left      Mon 2026-07-20 06:00:00 UTC 9h ago        dominion-scout.timer         dominion-scout.service
+Tue 2026-07-21 07:00:00 UTC 15h left      Mon 2026-07-20 07:00:01 UTC 8h ago        dominion-wholesale.timer     dominion-wholesale.service
+Tue 2026-07-21 13:10:00 UTC 22h left      Mon 2026-07-20 13:10:01 UTC 1h 50min ago  dominion-publish.timer       dominion-publish.service
+Tue 2026-07-21 14:02:14 UTC 23h left      Mon 2026-07-20 14:00:55 UTC 59min ago     dominion-paper-trade.timer   dominion-paper-trade.service
+Sun 2026-07-26 08:00:00 UTC 5 days left   Sun 2026-07-19 08:00:00 UTC 1 day 7h ago  dominion-trade-report.timer  dominion-trade-report.service
+Mon 2026-07-27 04:00:00 UTC 6 days left   Mon 2026-07-20 04:00:00 UTC 11h ago       dominion-kdp.timer           dominion-kdp.service
+-                           -             -                           -             dominion-growth-engine.timer 
+-                           -             -                           -             dominion-overseer.timer      dominion-overseer.service
+
+===== AUDIT COMPLETE =====
+Mon Jul 20 15:00:15 UTC 2026

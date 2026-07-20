@@ -1,7 +1,7 @@
 # Wix Catalog Launch and Profitability Audit
 
-- Generated: 2026-07-20T21:28:57.504084+00:00
-- Audit result: **COMPLETE**
+- Generated: 2026-07-20T21:33:07.482643+00:00
+- Audit result: **COMPLETE_WITH_LIMITATIONS**
 - Mode: **READ ONLY**
 - Customer/order data: **EXCLUDED**
 - API keys and secret values: **EXCLUDED**
@@ -9,6 +9,7 @@
 - Currency used for display: **USD**
 - Merchant-specific catalog access: **True**
 - Zendrop key configured on current container: **False**
+- Automated catalog pricing gates: **PASS**
 - V3 product fieldset used: **PLAIN_DESCRIPTION, MEDIA_ITEMS_INFO, INFO_SECTION, MERCHANT_DATA, CURRENCY**
 - V3 variant fieldset used: **MERCHANT_DATA, CURRENCY**
 
@@ -57,107 +58,108 @@ Site Properties API status: 200
 - Hidden products: **0**
 - Descriptions under 200 characters: **0**
 - Products with fewer than 3 media items: **14**
-- Products missing custom SEO: **0**
-- Inventory API status: **PASS**
+- Products missing custom SEO: **94**
+- Variant inventory-status coverage: **PASS**
+- Variant summary counts checked: **94**; mismatches: **0**
 
 ## Product content and launch information
 
-| Product | Visible | Type | Description chars | Media | Brand | Custom SEO | Info sections | Inventory | Flags |
+| Product | Visible | Type | Description chars | Media | Brand | Custom SEO | Info sections | Inventory/preorder | Flags |
 |---|---:|---|---:|---:|---:|---:|---:|---|---|
-| 128G SD Memory Card Ultra SDHC UHS-I 90MB/s, C10, U1, Full HD, SD Card | True | PHYSICAL | 227 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| 2-In-1 Smart Watch & Earbuds Fitness True Wireless Combo | True | PHYSICAL | 253 | 15 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| 2-Pack For Baofeng UV5R UV-82 144/430MHz Dual Band Antenna NA771 SMA Female 10W | True | PHYSICAL | 252 | 11 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| 20000mAh External Battery Power Bank Dual USB With LED Flashlight | True | PHYSICAL | 238 | 7 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| 2024 Version R4 Gold Pro SDHC R4i For DS/3DS/2DS Revolution Cartridge + USB | True | PHYSICAL | 227 | 19 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| 5 USB Port Super Fast Car Charger Adapter For iPhone Samsung Android Cell Phone | True | PHYSICAL | 237 | 23 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| 5-50x LITHIUM BATTERY 3V CR2032 CR 2032 BR2032 DL2032 Remote Button Cell Watch | True | PHYSICAL | 247 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Adjustable Universal Tablet Stand Desktop Holder Mount Mobile Phone iPad iPhone | True | PHYSICAL | 254 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Aluminium Motorcycle Bike Cell Phone Holder Bicycle GPS Handlebar Mount | True | PHYSICAL | 247 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Bluetooth Mini GPS Tracking Air Key Tag Child Pet Finder Tracker Location Device | True | PHYSICAL | 223 | 22 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Creative Q Light Analog Sunrise Digital Display Alarm Clock Bluetooth Audio Inte | True | PHYSICAL | 247 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Electronic Computing Scale LCD Digital Commercial Food Produce Scales 30kg x 1g | True | PHYSICAL | 226 | 7 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Emergency Radio Crank Solar Hand Weather 1000mAh Power Bank Charger Flash Light | True | PHYSICAL | 311 | 16 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Esoulk 12W 2.4A Dual USB Travel Wall Charger With 5FT Type-C Charging Cable | True | PHYSICAL | 257 | 7 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Esoulk 18W PD Fast Charger Wall & 5FT C To C Cable | True | PHYSICAL | 257 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Esoulk 2A Heavy Duty Braided USB Lightning Cable 2M (6.6f) Black | True | PHYSICAL | 227 | 8 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Esoulk 3.3ft Nylon Braided USB Cable For Type-C | True | PHYSICAL | 233 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Esoulk 3M [10ft] Nylon Fabric Tangle-Free Male To Male 3.5mm Auxiliary Cable Bla | True | PHYSICAL | 243 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Esoulk 5ft Faster Speed Charging Cable For IOS | True | PHYSICAL | 216 | 2 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Esoulk 5ft Faster Speed Charging Cable Type-C | True | PHYSICAL | 233 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Esoulk Black 18W PD Charger & USB-A 3ft C To iPhone Cable | True | PHYSICAL | 264 | 2 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Esoulk Black 18W PD Fast Charger & 3FT C To 8 Pin Cable | True | PHYSICAL | 257 | 1 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Esoulk Black 18W PD Fast Charger Wall & 5FT C To 8Pin Cable For iPhone 12/11 | True | PHYSICAL | 257 | 1 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Esoulk QI Certified 10W Wireless Charging Fast Charger Pad | True | PHYSICAL | 237 | 12 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| External CD DVD Drive USB 3.0 Writer Burner Player for PC Laptop Windows 11 10 | True | PHYSICAL | 254 | 24 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| External DVD Drive USB CD DVD 30 Burner Writer Rewriter For MacBook Laptops | True | PHYSICAL | 254 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| FINOCLAY 2 Slime Pack Clear Crystal Slime & Cloud Slime Kit for Girls Boys Creat | True | PHYSICAL | 233 | 1 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Folding Camera Smart Selfie 4k Professional Mini Rc Drone | True | PHYSICAL | 234 | 11 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Galaxy A51 5G / S20 FE Black edged Tempered Glass | True | PHYSICAL | 261 | 1 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Galaxy NOTE 10 Plus Triangle Package Color Case | True | PHYSICAL | 259 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Glitter Camera Protector for iPhone 15 6.1 | True | PHYSICAL | 298 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Ip65 Waterproof Portable Wireless Solar Power Bank Panel Charger Solar Powerbank | True | PHYSICAL | 237 | 1 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 11 Pro Dual Hybrid Case | True | PHYSICAL | 232 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 11 Pro Dual Max Case | True | PHYSICAL | 235 | 4 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 11 PRO Folio Wallet Premium Detachable case | True | PHYSICAL | 238 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 11 PRO Glitter Hybrid Case | True | PHYSICAL | 257 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 11 Pro Glitter TPU Bumper Case | True | PHYSICAL | 257 | 4 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 11 Pro High-Quality Carbon/Black Case | True | PHYSICAL | 211 | 1 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 11 Pro Lux Multi Card Case | True | PHYSICAL | 217 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 12 5.4 TPU Bumper Ultra Clear Back Case | True | PHYSICAL | 229 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 12 5.4 TPU Frame with Soft Texture Button | True | PHYSICAL | 229 | 4 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 12 5.4 Two Tone Diamond Glitter Case | True | PHYSICAL | 238 | 4 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 12 5.4" Chrome Glitter Hybrid Case | True | PHYSICAL | 238 | 4 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| iPhone 12 5.4" Diamond Electroplated Hybrid Case | True | PHYSICAL | 232 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Karaoke Machine for Kids - Bluetooth Speaker with 2 Microphone - Portable Kids K | True | PHYSICAL | 248 | 9 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Lenovo M20 Mini Tiny Wired 3D Optical Mouse | True | PHYSICAL | 247 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Mini Projector 4K 1080P Support, Portable Projector WiFi6 BT 5.0 Android 11, Sma | True | PHYSICAL | 259 | 10 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| New Bluetooth 5.1 Headset Wireless Earbuds Earphones Stereo Headphones Ear Hook | True | PHYSICAL | 265 | 20 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Nylon Braided USB Cable For IPhone | True | PHYSICAL | 227 | 2 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Octopus Tripod Universal Adjustable Stand Phone Holder for iPhone Camera | True | PHYSICAL | 251 | 4 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Portable Outdoor Waterproof Bluetooth Speaker | True | PHYSICAL | 248 | 4 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Portable Solar Power Bank with Built-in Cables | True | PHYSICAL | 246 | 7 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Portable Wireless Bluetooth Speaker with TWS Function - Rechargeable Bluetooth S | True | PHYSICAL | 248 | 13 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Power Strip Surge Protector - 8 Outlets, 3 USB Ports & 1 USB-C Port | True | PHYSICAL | 240 | 8 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Quantum Anti Radiation Shield 5G EMF Protection - Phones Laptops - 12 Stickers | True | PHYSICAL | 259 | 19 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Retractable Car Charger 4 in 1 Fast Car Phone Charger 120W With USB Type C Cable | True | PHYSICAL | 257 | 24 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Risebass Portable Karaoke Machine with Microphone - Home Karaoke System with Par | True | PHYSICAL | 246 | 8 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| RISEBASS Water Resistant Bluetooth Shower Speaker, Handsfree Portable Speakerpho | True | PHYSICAL | 227 | 9 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung A01 ID Card Holder Case | True | PHYSICAL | 217 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung Galaxy Note 20 Luxury Design Case | True | PHYSICAL | 230 | 4 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung Galaxy Note 20 Plus Luxury Design Case | True | PHYSICAL | 230 | 2 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung Galaxy S10 Triangle Case | True | PHYSICAL | 259 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung Galaxy S10E Heavy Duty Case | True | PHYSICAL | 232 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung Note 20 5G Gradient Shimmering Ring Stand Case | True | PHYSICAL | 223 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung Note 20 Ultra 5G Gradient Shimmering Ring Stand Case | True | PHYSICAL | 223 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung S10 Triangle Package Case | True | PHYSICAL | 259 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung S10E Triangle Package Case | True | PHYSICAL | 259 | 7 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung S20 Shimmering Ring Stand Case Cover | True | PHYSICAL | 223 | 4 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung S21/S30 Plus 6.8 inch Vogue Glitter Case | True | PHYSICAL | 257 | 2 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung S21/S30 Plus 6.8" Trendy Design Case | True | PHYSICAL | 239 | 2 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung S21/S30 Ultra 7.1 inch Vogue Glitter Case | True | PHYSICAL | 238 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Samsung S21/S30 Ultra 7.1" Trendy Design Case | True | PHYSICAL | 239 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Screen Protector For iPad Pro 11 Tempered | True | PHYSICAL | 261 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Sleek Guard iPhone 12 Case – 5.4 Inch Cover | True | PHYSICAL | 265 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Smartphone 0.45X Super Wide Angle Lens with Macro Attachment | True | PHYSICAL | 253 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Square Case Cow Design for iPhone 13 Pro Max | True | PHYSICAL | 233 | 1 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Strong Magnetic 360° Rotation Mag Safe Air Vent Car Mount Dashboard Phone Holder | True | PHYSICAL | 270 | 16 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Tempered Glass Screen Protector For iPad Pro 12.9 Sensitive Scratch Water Resist | True | PHYSICAL | 261 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Tempered Glass Screen Protector Lens Hydrogel For Samsung S23 S22 Ultra Plus USA | True | PHYSICAL | 261 | 41 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| THUNDERBOLT 3 USB TYPE-C HUB DOCK FOR ANDROID PHONE OR TABLET | True | PHYSICAL | 246 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Thunderbolt 3FT USB C To C Fast Charging Cable | True | PHYSICAL | 233 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Triangle iPhone 12 Max Case – 6.1 Inch Cover | True | PHYSICAL | 248 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Triangle iPhone 12 PRO MAX 6.7 Case | True | PHYSICAL | 259 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| USB C to IOS PD 18W 2.4A Charging Cable For Lightning adapter | True | PHYSICAL | 227 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| V9 Micro USBCar Charger Combo | True | PHYSICAL | 237 | 1 | False | True | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Waterproof Solar Charging 10000mAh Battery Backup | True | PHYSICAL | 238 | 12 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Wifi 6.5ft Endoscope Camera HD720P 8mm Lens USB Camera Cable Wireless Inspection | True | PHYSICAL | 298 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| WiFi Mini Camera – Wireless Smart Security Cam | True | PHYSICAL | 239 | 6 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| WiFi Range Extender Internet Booster Network Router Wireless Signal Repeater | True | PHYSICAL | 241 | 21 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| WiFi Signal Amplifier 5G WiFi Repeater 2.4G Wi-Fi Range Extender Internet Booste | True | PHYSICAL | 272 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Wireless Bluetooth 5.0 Headphones Headset Over-Ear FM Radio MIC Foldable TF Card | True | PHYSICAL | 265 | 27 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Wireless Gaming Earbuds | True | PHYSICAL | 253 | 3 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Wireless Security Camera 1080P Night Vision, Motion Detection, Activity Alert, D | True | PHYSICAL | 239 | 5 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
-| Wood Phone Docking Station Natural Ash Phone Key Holder Wallet Watch Stand Gift | True | PHYSICAL | 254 | 7 | False | True | 0 | IN_STOCK | BRAND_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| 128G SD Memory Card Ultra SDHC UHS-I 90MB/s, C10, U1, Full HD, SD Card | True | PHYSICAL | 227 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| 2-In-1 Smart Watch & Earbuds Fitness True Wireless Combo | True | PHYSICAL | 253 | 15 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| 2-Pack For Baofeng UV5R UV-82 144/430MHz Dual Band Antenna NA771 SMA Female 10W | True | PHYSICAL | 252 | 11 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| 20000mAh External Battery Power Bank Dual USB With LED Flashlight | True | PHYSICAL | 238 | 7 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| 2024 Version R4 Gold Pro SDHC R4i For DS/3DS/2DS Revolution Cartridge + USB | True | PHYSICAL | 227 | 19 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| 5 USB Port Super Fast Car Charger Adapter For iPhone Samsung Android Cell Phone | True | PHYSICAL | 237 | 23 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| 5-50x LITHIUM BATTERY 3V CR2032 CR 2032 BR2032 DL2032 Remote Button Cell Watch | True | PHYSICAL | 247 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Adjustable Universal Tablet Stand Desktop Holder Mount Mobile Phone iPad iPhone | True | PHYSICAL | 254 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Aluminium Motorcycle Bike Cell Phone Holder Bicycle GPS Handlebar Mount | True | PHYSICAL | 247 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Bluetooth Mini GPS Tracking Air Key Tag Child Pet Finder Tracker Location Device | True | PHYSICAL | 223 | 22 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Creative Q Light Analog Sunrise Digital Display Alarm Clock Bluetooth Audio Inte | True | PHYSICAL | 247 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Electronic Computing Scale LCD Digital Commercial Food Produce Scales 30kg x 1g | True | PHYSICAL | 226 | 7 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Emergency Radio Crank Solar Hand Weather 1000mAh Power Bank Charger Flash Light | True | PHYSICAL | 311 | 16 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Esoulk 12W 2.4A Dual USB Travel Wall Charger With 5FT Type-C Charging Cable | True | PHYSICAL | 257 | 7 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Esoulk 18W PD Fast Charger Wall & 5FT C To C Cable | True | PHYSICAL | 257 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Esoulk 2A Heavy Duty Braided USB Lightning Cable 2M (6.6f) Black | True | PHYSICAL | 227 | 8 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Esoulk 3.3ft Nylon Braided USB Cable For Type-C | True | PHYSICAL | 233 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Esoulk 3M [10ft] Nylon Fabric Tangle-Free Male To Male 3.5mm Auxiliary Cable Bla | True | PHYSICAL | 243 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Esoulk 5ft Faster Speed Charging Cable For IOS | True | PHYSICAL | 216 | 2 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Esoulk 5ft Faster Speed Charging Cable Type-C | True | PHYSICAL | 233 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Esoulk Black 18W PD Charger & USB-A 3ft C To iPhone Cable | True | PHYSICAL | 264 | 2 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Esoulk Black 18W PD Fast Charger & 3FT C To 8 Pin Cable | True | PHYSICAL | 257 | 1 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Esoulk Black 18W PD Fast Charger Wall & 5FT C To 8Pin Cable For iPhone 12/11 | True | PHYSICAL | 257 | 1 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Esoulk QI Certified 10W Wireless Charging Fast Charger Pad | True | PHYSICAL | 237 | 12 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| External CD DVD Drive USB 3.0 Writer Burner Player for PC Laptop Windows 11 10 | True | PHYSICAL | 254 | 24 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| External DVD Drive USB CD DVD 30 Burner Writer Rewriter For MacBook Laptops | True | PHYSICAL | 254 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| FINOCLAY 2 Slime Pack Clear Crystal Slime & Cloud Slime Kit for Girls Boys Creat | True | PHYSICAL | 233 | 1 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Folding Camera Smart Selfie 4k Professional Mini Rc Drone | True | PHYSICAL | 234 | 11 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Galaxy A51 5G / S20 FE Black edged Tempered Glass | True | PHYSICAL | 261 | 1 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Galaxy NOTE 10 Plus Triangle Package Color Case | True | PHYSICAL | 259 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Glitter Camera Protector for iPhone 15 6.1 | True | PHYSICAL | 298 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Ip65 Waterproof Portable Wireless Solar Power Bank Panel Charger Solar Powerbank | True | PHYSICAL | 237 | 1 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 11 Pro Dual Hybrid Case | True | PHYSICAL | 232 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 11 Pro Dual Max Case | True | PHYSICAL | 235 | 4 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 11 PRO Folio Wallet Premium Detachable case | True | PHYSICAL | 238 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 11 PRO Glitter Hybrid Case | True | PHYSICAL | 257 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 11 Pro Glitter TPU Bumper Case | True | PHYSICAL | 257 | 4 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 11 Pro High-Quality Carbon/Black Case | True | PHYSICAL | 211 | 1 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 11 Pro Lux Multi Card Case | True | PHYSICAL | 217 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 12 5.4 TPU Bumper Ultra Clear Back Case | True | PHYSICAL | 229 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 12 5.4 TPU Frame with Soft Texture Button | True | PHYSICAL | 229 | 4 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 12 5.4 Two Tone Diamond Glitter Case | True | PHYSICAL | 238 | 4 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 12 5.4" Chrome Glitter Hybrid Case | True | PHYSICAL | 238 | 4 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| iPhone 12 5.4" Diamond Electroplated Hybrid Case | True | PHYSICAL | 232 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Karaoke Machine for Kids - Bluetooth Speaker with 2 Microphone - Portable Kids K | True | PHYSICAL | 248 | 9 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Lenovo M20 Mini Tiny Wired 3D Optical Mouse | True | PHYSICAL | 247 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Mini Projector 4K 1080P Support, Portable Projector WiFi6 BT 5.0 Android 11, Sma | True | PHYSICAL | 259 | 10 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| New Bluetooth 5.1 Headset Wireless Earbuds Earphones Stereo Headphones Ear Hook | True | PHYSICAL | 265 | 20 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Nylon Braided USB Cable For IPhone | True | PHYSICAL | 227 | 2 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Octopus Tripod Universal Adjustable Stand Phone Holder for iPhone Camera | True | PHYSICAL | 251 | 4 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Portable Outdoor Waterproof Bluetooth Speaker | True | PHYSICAL | 248 | 4 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Portable Solar Power Bank with Built-in Cables | True | PHYSICAL | 246 | 7 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Portable Wireless Bluetooth Speaker with TWS Function - Rechargeable Bluetooth S | True | PHYSICAL | 248 | 13 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Power Strip Surge Protector - 8 Outlets, 3 USB Ports & 1 USB-C Port | True | PHYSICAL | 240 | 8 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Quantum Anti Radiation Shield 5G EMF Protection - Phones Laptops - 12 Stickers | True | PHYSICAL | 259 | 19 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Retractable Car Charger 4 in 1 Fast Car Phone Charger 120W With USB Type C Cable | True | PHYSICAL | 257 | 24 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Risebass Portable Karaoke Machine with Microphone - Home Karaoke System with Par | True | PHYSICAL | 246 | 8 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| RISEBASS Water Resistant Bluetooth Shower Speaker, Handsfree Portable Speakerpho | True | PHYSICAL | 227 | 9 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung A01 ID Card Holder Case | True | PHYSICAL | 217 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung Galaxy Note 20 Luxury Design Case | True | PHYSICAL | 230 | 4 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung Galaxy Note 20 Plus Luxury Design Case | True | PHYSICAL | 230 | 2 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung Galaxy S10 Triangle Case | True | PHYSICAL | 259 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung Galaxy S10E Heavy Duty Case | True | PHYSICAL | 232 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung Note 20 5G Gradient Shimmering Ring Stand Case | True | PHYSICAL | 223 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung Note 20 Ultra 5G Gradient Shimmering Ring Stand Case | True | PHYSICAL | 223 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung S10 Triangle Package Case | True | PHYSICAL | 259 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung S10E Triangle Package Case | True | PHYSICAL | 259 | 7 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung S20 Shimmering Ring Stand Case Cover | True | PHYSICAL | 223 | 4 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung S21/S30 Plus 6.8 inch Vogue Glitter Case | True | PHYSICAL | 257 | 2 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung S21/S30 Plus 6.8" Trendy Design Case | True | PHYSICAL | 239 | 2 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung S21/S30 Ultra 7.1 inch Vogue Glitter Case | True | PHYSICAL | 238 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Samsung S21/S30 Ultra 7.1" Trendy Design Case | True | PHYSICAL | 239 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Screen Protector For iPad Pro 11 Tempered | True | PHYSICAL | 261 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Sleek Guard iPhone 12 Case – 5.4 Inch Cover | True | PHYSICAL | 265 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Smartphone 0.45X Super Wide Angle Lens with Macro Attachment | True | PHYSICAL | 253 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Square Case Cow Design for iPhone 13 Pro Max | True | PHYSICAL | 233 | 1 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Strong Magnetic 360° Rotation Mag Safe Air Vent Car Mount Dashboard Phone Holder | True | PHYSICAL | 270 | 16 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Tempered Glass Screen Protector For iPad Pro 12.9 Sensitive Scratch Water Resist | True | PHYSICAL | 261 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Tempered Glass Screen Protector Lens Hydrogel For Samsung S23 S22 Ultra Plus USA | True | PHYSICAL | 261 | 41 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| THUNDERBOLT 3 USB TYPE-C HUB DOCK FOR ANDROID PHONE OR TABLET | True | PHYSICAL | 246 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Thunderbolt 3FT USB C To C Fast Charging Cable | True | PHYSICAL | 233 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Triangle iPhone 12 Max Case – 6.1 Inch Cover | True | PHYSICAL | 248 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Triangle iPhone 12 PRO MAX 6.7 Case | True | PHYSICAL | 259 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| USB C to IOS PD 18W 2.4A Charging Cable For Lightning adapter | True | PHYSICAL | 227 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| V9 Micro USBCar Charger Combo | True | PHYSICAL | 237 | 1 | False | False | 0 | IN_STOCK | FEWER_THAN_3_MEDIA_ITEMS, BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Waterproof Solar Charging 10000mAh Battery Backup | True | PHYSICAL | 238 | 12 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Wifi 6.5ft Endoscope Camera HD720P 8mm Lens USB Camera Cable Wireless Inspection | True | PHYSICAL | 298 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| WiFi Mini Camera – Wireless Smart Security Cam | True | PHYSICAL | 239 | 6 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| WiFi Range Extender Internet Booster Network Router Wireless Signal Repeater | True | PHYSICAL | 241 | 21 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| WiFi Signal Amplifier 5G WiFi Repeater 2.4G Wi-Fi Range Extender Internet Booste | True | PHYSICAL | 272 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Wireless Bluetooth 5.0 Headphones Headset Over-Ear FM Radio MIC Foldable TF Card | True | PHYSICAL | 265 | 27 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Wireless Gaming Earbuds | True | PHYSICAL | 253 | 3 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Wireless Security Camera 1080P Night Vision, Motion Detection, Activity Alert, D | True | PHYSICAL | 239 | 5 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
+| Wood Phone Docking Station Natural Ash Phone Key Holder Wallet Watch Stand Gift | True | PHYSICAL | 254 | 7 | False | False | 0 | IN_STOCK | BRAND_MISSING, CUSTOM_SEO_MISSING, PRODUCT_INFO_SECTIONS_MISSING |
 
 ## Product and variant profitability
 
@@ -412,7 +414,7 @@ Site Properties API status: 200
 
 ## Audit limitations and errors
 
-- Limitations: none
+- Limitations: v3_query_variants_is_eventually_consistent; canonical_product_read_required_before_automated_fulfillment
 - Fatal errors: none
 - V3 variant schema field names (values excluded): top_level=id,internalMetadata,inventoryStatus,locations,media,optionChoices,physicalProperties,price,productData,revenueDetails,sku,variantId,visible; price=actualPrice; revenueDetails=cost,profit,profitMargin
 - Public desktop/mobile layout, navigation, checkout, policy-page text, shipping rules, tax rules, and payment activation require separate customer-journey verification.
@@ -422,7 +424,7 @@ Site Properties API status: 200
 1. Complete API-visible business fields: Logo.
 2. Resolve 0 missing COGS rows and 0 zero physical-product COGS rows using verified landed supplier costs.
 3. Reprice or reduce verified cost for 0 rows below the 40% standard-card baseline target.
-4. Improve 0 weak descriptions, 14 weak media sets, and 0 missing custom SEO records.
+4. Improve 0 weak descriptions, 14 weak media sets, and 94 missing custom SEO records.
 5. Verify Zendrop product/variant mapping and landed costs before enabling automated fulfillment or approving final prices.
 6. Run a public desktop/mobile, cart, checkout, payment, shipping, tax, returns, privacy, terms, and contact-flow launch test.
 

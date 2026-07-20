@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -283,64 +283,13 @@ def dashboard():
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-# Store setup
+# Store audit
 
 
 @app.get("/store/audit")
 def store_audit():
     try:
         return JSONResponse(content=store.audit_store(_catalog_version()))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.post("/store/setup")
-def trigger_store_setup():
-    raise HTTPException(
-        status_code=409,
-        detail=(
-            "Bulk store mutation is disabled. Review GET /store/pages and run "
-            "POST /store/setup/products?dry_run=true before any explicit update."
-        ),
-    )
-
-
-@app.post("/store/setup/products")
-def setup_products(dry_run: bool = Query(default=True)):
-    try:
-        if not dry_run:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Product writes are disabled until a revision-safe, reviewed "
-                    "update plan is approved; rerun with dry_run=true"
-                ),
-            )
-        return JSONResponse(
-            content=store.enhance_products(_catalog_version(), dry_run=dry_run)
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.get("/store/pages")
-def store_pages_content():
-    return {
-        page["slug"]: {
-            "title": page["title"],
-            "url": f"https://voltedgegoods.com/{page['slug']}",
-            "html": page["content"],
-        }
-        for page in store.PAGES_TO_CREATE
-    }
-
-
-@app.post("/store/policies")
-def update_policies_only():
-    try:
-        return JSONResponse(content=store.setup_store_policies())
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

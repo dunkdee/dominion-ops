@@ -103,10 +103,12 @@ services:
     cpus: 1.0
     environment:
       WIX_API_KEY: ${WIX_API_KEY}
-      WIX_SITE_ID: ${WIX_SITE_ID:-a790d430-a3a0-4b0e-9be6-4c874c229167}
+      WIX_SITE_ID: ${WIX_SITE_ID}
       WIX_AGENT_DB: /data/wix_agent.db
       WIX_AGENT_OPERATOR_TOKEN: ${WIX_AGENT_OPERATOR_TOKEN}
+      WIX_FULFILLMENT_MODE: ${WIX_FULFILLMENT_MODE:-record_only}
       ZENDROP_API_KEY: ${ZENDROP_API_KEY}
+      ZENDROP_VARIANT_MAP_JSON: ${ZENDROP_VARIANT_MAP_JSON:-}
       BABY_API_URL: http://baby-api:8080
       N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
     healthcheck:

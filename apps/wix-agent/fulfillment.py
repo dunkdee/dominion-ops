@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -10,6 +11,43 @@ import zendrop_client as zendrop
 
 
 DEFAULT_DB_PATH = Path(__file__).with_name("wix_agent.db")
+VALID_FULFILLMENT_MODES = {"record_only", "live"}
+
+
+def fulfillment_mode() -> str:
+    return os.getenv("WIX_FULFILLMENT_MODE", "record_only").strip().lower()
+
+
+def _variant_mapping() -> dict:
+    raw = os.getenv("ZENDROP_VARIANT_MAP_JSON", "").strip()
+    if not raw:
+        return {}
+    try:
+        mapping = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Zendrop variant mapping is not valid JSON") from exc
+    if not isinstance(mapping, dict):
+        raise RuntimeError("Zendrop variant mapping must be a JSON object")
+    return mapping
+
+
+def variant_mapping_health() -> dict:
+    try:
+        mapping = _variant_mapping()
+        invalid = 0
+        for value in mapping.values():
+            if not isinstance(value, dict) or not value.get(
+                "product_id"
+            ) or not value.get("variant_id"):
+                invalid += 1
+        if invalid:
+            return {"status": "error", "entries": len(mapping), "invalid": invalid}
+        return {
+            "status": "ok" if mapping else "missing",
+            "entries": len(mapping),
+        }
+    except Exception as exc:
+        return {"status": "error", "error_type": exc.__class__.__name__}
 
 
 def database_path() -> Path:
@@ -132,18 +170,53 @@ def _map_wix_order_to_zendrop(order: dict) -> dict:
     )
     contact = order.get("buyerInfo", {})
     contact_name = contact.get("email", "").split("@")[0]
+    mapping = _variant_mapping()
     line_items = []
     for line_item in order.get("lineItems", []):
         catalog_ref = line_item.get("catalogReference", {})
+        wix_product_id = str(catalog_ref.get("catalogItemId") or "")
+        wix_variant_id = str(
+            (catalog_ref.get("options") or {}).get("variantId") or ""
+        )
+        mapping_key = f"{wix_product_id}:{wix_variant_id}"
+        supplier = mapping.get(mapping_key)
+        if not wix_product_id or not wix_variant_id or not isinstance(supplier, dict):
+            raise RuntimeError(
+                "Order contains a Wix variant without an exact Zendrop mapping"
+            )
+        supplier_product_id = str(supplier.get("product_id") or "")
+        supplier_variant_id = str(supplier.get("variant_id") or "")
+        if not supplier_product_id or not supplier_variant_id:
+            raise RuntimeError("Zendrop mapping is missing a product or variant ID")
+        quantity = line_item.get("quantity", 1)
+        if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity < 1:
+            raise RuntimeError("Order contains an invalid line-item quantity")
+        wix_sku = str(
+            (line_item.get("physicalProperties") or {}).get("sku") or ""
+        )
+        expected_sku = str(supplier.get("wix_sku") or "")
+        if expected_sku and wix_sku != expected_sku:
+            raise RuntimeError("Wix SKU does not match the approved Zendrop mapping")
         line_items.append(
             {
-                "product_id": catalog_ref.get("catalogItemId", ""),
-                "variant_id": catalog_ref.get("options", {}).get("variantId", ""),
-                "quantity": line_item.get("quantity", 1),
-                "sku": line_item.get("physicalProperties", {}).get("sku", ""),
+                "product_id": supplier_product_id,
+                "variant_id": supplier_variant_id,
+                "quantity": quantity,
+                "sku": wix_sku,
                 "name": line_item.get("productName", {}).get("original", ""),
             }
         )
+    if not line_items:
+        raise RuntimeError("Order has no physical line items to fulfill")
+    required_address = {
+        "first_name": shipping.get("firstName", contact_name),
+        "address1": shipping.get("addressLine", ""),
+        "city": shipping.get("city", ""),
+        "zip": shipping.get("postalCode", ""),
+        "country": shipping.get("country", ""),
+    }
+    if any(not str(value or "").strip() for value in required_address.values()):
+        raise RuntimeError("Order shipping address is incomplete")
     return {
         "order": {
             "external_order_id": order.get("id", ""),
@@ -166,20 +239,37 @@ def _map_wix_order_to_zendrop(order: dict) -> dict:
 
 def run_fulfillment_cycle(catalog_version: str = "v3") -> dict:
     init_db()
+    mode = fulfillment_mode()
+    if mode not in VALID_FULFILLMENT_MODES:
+        raise RuntimeError("WIX_FULFILLMENT_MODE must be record_only or live")
     orders = wix.get_orders(fulfillment_status="NOT_FULFILLED")
     submitted = []
     already_tracked = []
+    held = []
+    ineligible = []
     errors = []
     for order in orders:
         order_id = order.get("id", "")
         if not order_id:
             errors.append({"wix_order_id": "", "error": "Wix order is missing an ID"})
             continue
+        status = str(order.get("status") or "").upper()
+        payment_status = str(order.get("paymentStatus") or "").upper()
+        if status != "APPROVED" or payment_status != "PAID":
+            ineligible.append(order_id)
+            continue
+        if mode == "record_only":
+            held.append(order_id)
+            continue
+        try:
+            payload = _map_wix_order_to_zendrop(order)
+        except Exception as exc:
+            errors.append({"wix_order_id": order_id, "error": str(exc)})
+            continue
         if not _reserve_order(order_id):
             already_tracked.append(order_id)
             continue
         try:
-            payload = _map_wix_order_to_zendrop(order)
             result = zendrop.submit_order(payload)
             zd_order = result.get("order", result)
             zd_id = str(zd_order.get("id", zd_order.get("order_id", "")))
@@ -199,6 +289,8 @@ def run_fulfillment_cycle(catalog_version: str = "v3") -> dict:
         "orders_found": len(orders),
         "submitted": submitted,
         "already_tracked": already_tracked,
+        "held_for_manual_fulfillment": held,
+        "ineligible": ineligible,
         "errors": errors,
     }
 

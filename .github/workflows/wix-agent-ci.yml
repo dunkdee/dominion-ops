@@ -10,6 +10,7 @@ on:
       - ".github/workflows/wix-agent-ci.yml"
       - ".github/workflows/wix-auto-sync.yml"
       - ".github/workflows/wix-agent-preflight.yml"
+      - ".github/workflows/wix-production-cutover-20260720.yml"
   pull_request:
     paths:
       - "apps/wix-agent/**"
@@ -17,6 +18,7 @@ on:
       - ".github/workflows/wix-agent-ci.yml"
       - ".github/workflows/wix-auto-sync.yml"
       - ".github/workflows/wix-agent-preflight.yml"
+      - ".github/workflows/wix-production-cutover-20260720.yml"
 
 permissions:
   contents: read

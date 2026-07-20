@@ -84,6 +84,7 @@ services:
 
   wix-agent:
     build: ./apps/wix-agent
+    image: ${WIX_AGENT_IMAGE:-dominion/wix-agent:local}
     container_name: wix-agent
     ports:
       - "127.0.0.1:8082:8000"

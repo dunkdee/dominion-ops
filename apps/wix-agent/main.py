@@ -62,6 +62,8 @@ def _catalog_version() -> str:
 
 def _readiness() -> dict:
     database = fulfill.database_health()
+    fulfillment_mode = fulfill.fulfillment_mode()
+    variant_mapping = fulfill.variant_mapping_health()
     integrations = {
         "wix_api_key": bool(wix.WIX_API_KEY),
         "wix_site_id": bool(wix.WIX_SITE_ID),
@@ -69,20 +71,43 @@ def _readiness() -> dict:
         "operator_token": bool(OPERATOR_TOKEN),
         "n8n_webhook": bool(empire.N8N_WEBHOOK_URL),
     }
+    catalog = {"status": "not_checked", "version": None}
     blockers = []
     if database.get("status") != "ok":
         blockers.append("fulfillment_database")
     for required in (
         "wix_api_key",
         "wix_site_id",
-        "zendrop_api_key",
         "operator_token",
     ):
         if not integrations[required]:
             blockers.append(required)
+    if fulfillment_mode not in fulfill.VALID_FULFILLMENT_MODES:
+        blockers.append("fulfillment_mode")
+    if fulfillment_mode == "live":
+        if not integrations["zendrop_api_key"]:
+            blockers.append("zendrop_api_key")
+        if variant_mapping.get("status") != "ok":
+            blockers.append("zendrop_variant_mapping")
+    if integrations["wix_api_key"] and integrations["wix_site_id"]:
+        try:
+            catalog_version = _catalog_version()
+            catalog = {"status": "ok", "version": catalog_version}
+        except Exception as exc:
+            catalog = {
+                "status": "error",
+                "version": None,
+                "error_type": exc.__class__.__name__,
+            }
+            blockers.append("wix_catalog_access")
     return {
         "ready": not blockers,
         "database": database,
+        "catalog": catalog,
+        "fulfillment": {
+            "mode": fulfillment_mode,
+            "variant_mapping": variant_mapping,
+        },
         "integrations": integrations,
         "blockers": blockers,
     }
@@ -103,7 +128,6 @@ def health():
         "status": "ok" if readiness["ready"] else "degraded",
         "service": "wix-agent",
         "version": "2.1.0",
-        "catalog_version": _catalog_version(),
         **readiness,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -152,12 +176,13 @@ def trigger_sync(background_tasks: BackgroundTasks):
 def fix_specific_products(req: FixRequest):
     try:
         catalog_version = _catalog_version()
-        if catalog_version == "v1" and not req.dry_run:
+        if not req.dry_run:
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    "Catalog V1 inventory writes are disabled until supplier "
-                    "variants are mapped explicitly; rerun with dry_run=true"
+                    "Inventory writes are disabled until supplier variants are "
+                    "mapped explicitly and revision-safe writes are reviewed; "
+                    "rerun with dry_run=true"
                 ),
             )
         report = sync.audit_inventory(catalog_version)
@@ -200,6 +225,14 @@ def _run_fulfill_bg():
 
 @app.post("/fulfill")
 def trigger_fulfillment(background_tasks: BackgroundTasks):
+    if fulfill.fulfillment_mode() != "live":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Automated fulfillment is in record-only mode; use the approved "
+                "manual fulfillment runbook"
+            ),
+        )
     if not zendrop.ZENDROP_API_KEY:
         raise HTTPException(status_code=503, detail="Zendrop integration is not configured")
     background_tasks.add_task(_run_fulfill_bg)
@@ -275,9 +308,19 @@ def trigger_store_setup():
 @app.post("/store/setup/products")
 def setup_products(dry_run: bool = Query(default=True)):
     try:
+        if not dry_run:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Product writes are disabled until a revision-safe, reviewed "
+                    "update plan is approved; rerun with dry_run=true"
+                ),
+            )
         return JSONResponse(
             content=store.enhance_products(_catalog_version(), dry_run=dry_run)
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

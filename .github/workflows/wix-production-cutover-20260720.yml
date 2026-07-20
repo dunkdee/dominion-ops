@@ -115,6 +115,7 @@ jobs:
           volume_state_file="$state_dir/wix-compose-volume-state-$DEPLOYMENT_ID.json"
           export WIX_AGENT_DATA_VOLUME="$new_data_volume"
           export WIX_AGENT_LOGS_VOLUME="$new_logs_volume"
+          export WIX_AGENT_IMAGE="$image"
           install -d -m 700 "$state_dir"
 
           write_state() {
@@ -171,7 +172,11 @@ jobs:
 
           source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
           state = {}
-          for key in ("WIX_AGENT_DATA_VOLUME", "WIX_AGENT_LOGS_VOLUME"):
+          for key in (
+              "WIX_AGENT_DATA_VOLUME",
+              "WIX_AGENT_LOGS_VOLUME",
+              "WIX_AGENT_IMAGE",
+          ):
               prefix = key + "="
               values = [line[len(prefix):] for line in source if line.startswith(prefix)]
               state[key] = {
@@ -274,6 +279,13 @@ jobs:
               config --format json \
               | python3 -c 'import json,sys; print(json.load(sys.stdin)["volumes"]["wix_agent_logs"]["name"])'
           )" = "$new_logs_volume"
+          test "$(
+            docker compose \
+              --env-file "$source_env" \
+              -f "$release_compose" \
+              config --format json \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["wix-agent"]["image"])'
+          )" = "$image"
 
           stage="BUILDING_CANDIDATE"
           write_state
@@ -450,7 +462,11 @@ jobs:
           path = Path(sys.argv[1])
           state = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
           lines = path.read_text(encoding="utf-8").splitlines()
-          for key in ("WIX_AGENT_DATA_VOLUME", "WIX_AGENT_LOGS_VOLUME"):
+          for key in (
+              "WIX_AGENT_DATA_VOLUME",
+              "WIX_AGENT_LOGS_VOLUME",
+              "WIX_AGENT_IMAGE",
+          ):
               prefix = key + "="
               lines = [line for line in lines if not line.startswith(prefix)]
               if state[key]["present"]:
@@ -518,7 +534,11 @@ jobs:
 
           path = Path(sys.argv[1])
           lines = path.read_text(encoding="utf-8").splitlines()
-          for key in ("WIX_AGENT_DATA_VOLUME", "WIX_AGENT_LOGS_VOLUME"):
+          for key in (
+              "WIX_AGENT_DATA_VOLUME",
+              "WIX_AGENT_LOGS_VOLUME",
+              "WIX_AGENT_IMAGE",
+          ):
               prefix = key + "="
               lines = [line for line in lines if not line.startswith(prefix)]
               lines.append(prefix + os.environ[key])
@@ -597,8 +617,16 @@ jobs:
               config --format json \
               | python3 -c 'import json,sys; print(json.load(sys.stdin)["volumes"]["wix_agent_logs"]["name"])'
           )"
+          compose_image="$(
+            docker compose \
+              --env-file "$source_env" \
+              -f "$compose_target" \
+              config --format json \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["wix-agent"]["image"])'
+          )"
           test "$compose_data_volume" = "$new_data_volume"
           test "$compose_logs_volume" = "$new_logs_volume"
+          test "$compose_image" = "$image"
 
           stage="SUCCESS"
           write_state
@@ -779,7 +807,7 @@ jobs:
               and release_path.is_file()
               and compose_path.read_bytes() == release_path.read_bytes()
           )
-          compose_volume_continuity = False
+          compose_runtime_continuity = False
           compose_result = command(
               "docker",
               "compose",
@@ -803,11 +831,17 @@ jobs:
                   .get("wix_agent_logs", {})
                   .get("name")
               )
-              compose_volume_continuity = bool(
+              configured_image = (
+                  compose_config.get("services", {})
+                  .get("wix-agent", {})
+                  .get("image")
+              )
+              compose_runtime_continuity = bool(
                   db_mount
                   and logs_mount
                   and configured_data == db_mount["name"]
                   and configured_logs == logs_mount["name"]
+                  and configured_image == image
               )
 
           print("# Wix Production Cutover Report")
@@ -845,7 +879,7 @@ jobs:
           print(f"| CPU, memory, and PID limits | {'PASS' if resource_limits else 'BLOCKED'} |")
           print(f"| Hardened temporary filesystem | {'PASS' if hardened_tmpfs else 'BLOCKED'} |")
           print(f"| Compose contract matches release | {'PASS' if compose_release_matches else 'BLOCKED'} |")
-          print(f"| Compose preserves active volumes | {'PASS' if compose_volume_continuity else 'BLOCKED'} |")
+          print(f"| Compose preserves active image and volumes | {'PASS' if compose_runtime_continuity else 'BLOCKED'} |")
           print(f"| Zendrop supplier submission | {'DISABLED' if mode == 'record_only' else 'REVIEW'} |")
           print()
           print("## Recovery evidence")
@@ -938,7 +972,7 @@ jobs:
             audit/wix-production-cutover-latest.md
           grep -q 'Compose contract matches release | PASS' \
             audit/wix-production-cutover-latest.md
-          grep -q 'Compose preserves active volumes | PASS' \
+          grep -q 'Compose preserves active image and volumes | PASS' \
             audit/wix-production-cutover-latest.md
           grep -q 'Verified backup retained: \*\*PASS\*\*' \
             audit/wix-production-cutover-latest.md

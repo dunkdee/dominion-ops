@@ -1,10 +1,556 @@
 {
+  "actions": [
+    {
+      "already_masked": false,
+      "backup_path": "/var/lib/dominion/unit-retirement/stage2d-r3-29874133137/alchemist-api.service",
+      "canonical": "dominion-alchemist.service",
+      "mask_path": "/etc/systemd/system/alchemist-api.service",
+      "original_fragment_path": "/etc/systemd/system/alchemist-api.service",
+      "original_sha256": "66e5c8477f315d4db346e83bc71bdd6b5d218b999eeb77cbfb844c0aaf1c3bd8",
+      "original_size_bytes": 349,
+      "unit": "alchemist-api.service"
+    },
+    {
+      "already_masked": false,
+      "backup_path": "/var/lib/dominion/unit-retirement/stage2d-r3-29874133137/conductor-api.service",
+      "canonical": "dominion-conductor.service",
+      "mask_path": "/etc/systemd/system/conductor-api.service",
+      "original_fragment_path": "/etc/systemd/system/conductor-api.service",
+      "original_sha256": "2a537325d54f11fff39d081265b3c05db676741afa31e3077b943360996b2672",
+      "original_size_bytes": 418,
+      "unit": "conductor-api.service"
+    },
+    {
+      "already_masked": false,
+      "backup_path": "/var/lib/dominion/unit-retirement/stage2d-r3-29874133137/juris-api.service",
+      "canonical": "dominion-juris.service",
+      "mask_path": "/etc/systemd/system/juris-api.service",
+      "original_fragment_path": "/etc/systemd/system/juris-api.service",
+      "original_sha256": "c470abaf90564ccfd5550bb423f30260d22ef446f88b66870d173ac22adeae60",
+      "original_size_bytes": 340,
+      "unit": "juris-api.service"
+    },
+    {
+      "already_masked": false,
+      "backup_path": "/var/lib/dominion/unit-retirement/stage2d-r3-29874133137/dominion-port-healer.service",
+      "canonical": null,
+      "mask_path": "/etc/systemd/system/dominion-port-healer.service",
+      "original_fragment_path": "/etc/systemd/system/dominion-port-healer.service",
+      "original_sha256": "a2b209a4a9f182eb5ecb61a10d08db0aa226f04fe4169f45c35239f389d6c7a5",
+      "original_size_bytes": 375,
+      "unit": "dominion-port-healer.service"
+    }
+  ],
+  "after_containers": [
+    {
+      "image": "a319b3721a52",
+      "name": "baby-api",
+      "state": "running",
+      "status": "Up 4 weeks (healthy)"
+    },
+    {
+      "image": "movie-generator",
+      "name": "movie-generator",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "name": "wix-agent",
+      "state": "running",
+      "status": "Up 24 hours (healthy)"
+    },
+    {
+      "image": "desktop-tutorial-wix-agent",
+      "name": "wix-agent-rollback-20260720T224801Z",
+      "state": "exited",
+      "status": "Exited (0) 24 hours ago"
+    }
+  ],
   "alignment_stage": "2D-R3-retire",
-  "status": "started",
+  "backup_root": "/var/lib/dominion/unit-retirement/stage2d-r3-29874133137",
+  "before_containers": [
+    {
+      "image": "a319b3721a52",
+      "name": "baby-api",
+      "state": "running",
+      "status": "Up 4 weeks (healthy)"
+    },
+    {
+      "image": "movie-generator",
+      "name": "movie-generator",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "name": "wix-agent",
+      "state": "running",
+      "status": "Up 24 hours (healthy)"
+    },
+    {
+      "image": "desktop-tutorial-wix-agent",
+      "name": "wix-agent-rollback-20260720T224801Z",
+      "state": "exited",
+      "status": "Exited (0) 24 hours ago"
+    }
+  ],
+  "containers_unchanged": true,
+  "errors": [],
+  "generated_at": "2026-07-21T22:32:48.558442+00:00",
+  "health_after": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "health_before": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "protected_after": {
+    "caddy.service": {
+      "active_state": "active",
+      "fragment_path": "/lib/systemd/system/caddy.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "caddy.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-alchemist.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-alchemist.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 2,
+      "sub_state": "running",
+      "unit": "dominion-alchemist.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-alpha.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-alpha.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-alpha.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-conductor.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-conductor.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 10,
+      "sub_state": "running",
+      "unit": "dominion-conductor.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-gatekeeper.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-gatekeeper.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-gatekeeper.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-guardian.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-guardian.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-guardian.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-juris.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-juris.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 15689,
+      "sub_state": "running",
+      "unit": "dominion-juris.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-sentinel.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-sentinel.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-sentinel.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-store.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-store.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-store.service",
+      "unit_file_state": "enabled"
+    },
+    "gemini-server.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/gemini-server.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "gemini-server.service",
+      "unit_file_state": "enabled"
+    }
+  },
+  "protected_before": {
+    "caddy.service": {
+      "active_state": "active",
+      "fragment_path": "/lib/systemd/system/caddy.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "caddy.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-alchemist.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-alchemist.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 2,
+      "sub_state": "running",
+      "unit": "dominion-alchemist.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-alpha.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-alpha.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-alpha.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-conductor.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-conductor.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 10,
+      "sub_state": "running",
+      "unit": "dominion-conductor.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-gatekeeper.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-gatekeeper.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-gatekeeper.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-guardian.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-guardian.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-guardian.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-juris.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-juris.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 15689,
+      "sub_state": "running",
+      "unit": "dominion-juris.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-sentinel.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-sentinel.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-sentinel.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-store.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/dominion-store.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-store.service",
+      "unit_file_state": "enabled"
+    },
+    "gemini-server.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/gemini-server.service",
+      "is_enabled": "enabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "gemini-server.service",
+      "unit_file_state": "enabled"
+    }
+  },
+  "restart_deltas_90_seconds": {
+    "caddy.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0
+    },
+    "dominion-alchemist.service": {
+      "delta": 0,
+      "end": 2,
+      "start": 2
+    },
+    "dominion-alpha.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0
+    },
+    "dominion-conductor.service": {
+      "delta": 0,
+      "end": 10,
+      "start": 10
+    },
+    "dominion-gatekeeper.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0
+    },
+    "dominion-guardian.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0
+    },
+    "dominion-juris.service": {
+      "delta": 0,
+      "end": 15689,
+      "start": 15689
+    },
+    "dominion-sentinel.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0
+    },
+    "dominion-store.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0
+    },
+    "gemini-server.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0
+    }
+  },
+  "retired_after": {
+    "alchemist-api.service": {
+      "active_state": "inactive",
+      "fragment_path": "/etc/systemd/system/alchemist-api.service",
+      "is_enabled": "masked",
+      "load_state": "masked",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "alchemist-api.service",
+      "unit_file_state": "masked"
+    },
+    "conductor-api.service": {
+      "active_state": "inactive",
+      "fragment_path": "/etc/systemd/system/conductor-api.service",
+      "is_enabled": "masked",
+      "load_state": "masked",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "conductor-api.service",
+      "unit_file_state": "masked"
+    },
+    "dominion-port-healer.service": {
+      "active_state": "inactive",
+      "fragment_path": "/etc/systemd/system/dominion-port-healer.service",
+      "is_enabled": "masked",
+      "load_state": "masked",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-port-healer.service",
+      "unit_file_state": "masked"
+    },
+    "juris-api.service": {
+      "active_state": "inactive",
+      "fragment_path": "/etc/systemd/system/juris-api.service",
+      "is_enabled": "masked",
+      "load_state": "masked",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "juris-api.service",
+      "unit_file_state": "masked"
+    }
+  },
+  "retired_before": {
+    "alchemist-api.service": {
+      "active_state": "activating",
+      "fragment_path": "/etc/systemd/system/alchemist-api.service",
+      "is_enabled": "disabled",
+      "load_state": "loaded",
+      "n_restarts": 836,
+      "sub_state": "auto-restart",
+      "unit": "alchemist-api.service",
+      "unit_file_state": "disabled"
+    },
+    "conductor-api.service": {
+      "active_state": "active",
+      "fragment_path": "/etc/systemd/system/conductor-api.service",
+      "is_enabled": "disabled",
+      "load_state": "loaded",
+      "n_restarts": 1492,
+      "sub_state": "running",
+      "unit": "conductor-api.service",
+      "unit_file_state": "disabled"
+    },
+    "dominion-port-healer.service": {
+      "active_state": "inactive",
+      "fragment_path": "/etc/systemd/system/dominion-port-healer.service",
+      "is_enabled": "disabled",
+      "load_state": "loaded",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-port-healer.service",
+      "unit_file_state": "disabled"
+    },
+    "juris-api.service": {
+      "active_state": "activating",
+      "fragment_path": "/etc/systemd/system/juris-api.service",
+      "is_enabled": "disabled",
+      "load_state": "loaded",
+      "n_restarts": 825,
+      "sub_state": "auto-restart",
+      "unit": "juris-api.service",
+      "unit_file_state": "disabled"
+    }
+  },
+  "rollback_performed": false,
+  "rollback_results": [],
+  "safety": {
+    "canonical_services_restarted": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "file_contents_collected": false,
+    "logs_collected": false,
+    "persistent_masks_reversible": true,
+    "production_containers_recreated": false,
+    "production_containers_started": false,
+    "production_containers_stopped": false,
+    "production_networks_changed": false,
+    "production_volumes_changed": false,
+    "repositories_changed": false,
+    "retired_unit_files_backed_up_locally": true,
+    "secret_values_collected": false
+  },
+  "status": "success",
+  "success": true,
   "workflow": {
     "run_id": 29874133137,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29874133137",
     "source_sha": "de7b309b693db3abd5c89714667d5fd4c4ed720a",
-    "artifact_name": "dominion-alignment-stage2d-r3-retire"
+    "artifact_name": "dominion-alignment-stage2d-r3-retire",
+    "job_status": "success"
   }
 }

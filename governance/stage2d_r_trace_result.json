@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "2D-R-trace",
+  "status": "started",
+  "workflow": {
+    "run_id": 29868756275,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29868756275",
+    "source_sha": "cc422000070472f518c294f1c206d80637d56698",
+    "artifact_name": "dominion-alignment-stage2d-r-trace"
+  }
+}

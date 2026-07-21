@@ -1,6 +1,8 @@
 name: Wix Agent CI
 
 on:
+  schedule:
+    - cron: "40 16 21 7 *"
   push:
     branches:
       - main
@@ -20,7 +22,7 @@ on:
       - ".github/recovery/juris-recovery-trigger.txt"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: wix-agent-ci-${{ github.ref }}
@@ -28,6 +30,7 @@ concurrency:
 
 jobs:
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -60,14 +63,102 @@ jobs:
 
   juris_recovery:
     if: >-
-      github.event_name == 'pull_request' &&
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.head_ref == 'agent/juris-recovery-execution-20260721'
+      github.head_ref == 'agent/juris-recovery-execution-20260721')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       RECOVERY_DIR: ${{ runner.temp }}/juris-trust-private-${{ github.run_id }}
+      REPORT_BRANCH: audit/juris-recovery-runtime-20260721
+      REPORT_PATH: .github/recovery/juris-run-report.json
+      ARTIFACT_NAME: juris-trust-case-private-recovery
     steps:
+      - name: Enforce one-time scheduled date
+        if: github.event_name == 'schedule'
+        run: test "$(date -u +%F)" = "2026-07-21"
+
+      - name: Write private run-start report
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_STATUS: started
+          RESET_REPORT_BRANCH: "true"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GITHUB_TOKEN"]
+          branch = os.environ["REPORT_BRANCH"]
+          path = os.environ["REPORT_PATH"]
+          sha = os.environ["GITHUB_SHA"]
+          status = os.environ["RUN_STATUS"]
+          reset = os.environ.get("RESET_REPORT_BRANCH") == "true"
+          api = f"https://api.github.com/repos/{repository}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {token}",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "Content-Type": "application/json",
+          }
+
+          def call(method, endpoint, payload=None):
+              data = None if payload is None else json.dumps(payload).encode("utf-8")
+              request = urllib.request.Request(
+                  api + endpoint, data=data, method=method, headers=headers
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  raw = response.read()
+                  return json.loads(raw) if raw else {}
+
+          ref_endpoint = "/git/refs/heads/" + urllib.parse.quote(branch, safe="/")
+          try:
+              call("GET", ref_endpoint)
+              if reset:
+                  call("PATCH", ref_endpoint, {"sha": sha, "force": True})
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+              call("POST", "/git/refs", {"ref": f"refs/heads/{branch}", "sha": sha})
+
+          report = {
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "status": status,
+              "workflow": os.environ["GITHUB_WORKFLOW"],
+              "event": os.environ["GITHUB_EVENT_NAME"],
+              "commit_sha": sha,
+              "artifact_name": os.environ["ARTIFACT_NAME"],
+          }
+          report_bytes = (json.dumps(report, indent=2, sort_keys=True) + "\n").encode("utf-8")
+          content_endpoint = "/contents/" + urllib.parse.quote(path, safe="/")
+          existing_sha = None
+          try:
+              current = call(
+                  "GET",
+                  content_endpoint + "?ref=" + urllib.parse.quote(branch, safe=""),
+              )
+              existing_sha = current.get("sha")
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+          payload = {
+              "message": f"audit: Juris recovery run {status}",
+              "content": base64.b64encode(report_bytes).decode("ascii"),
+              "branch": branch,
+          }
+          if existing_sha:
+              payload["sha"] = existing_sha
+          call("PUT", content_endpoint, payload)
+          PY
+
       - name: Validate VM connection secrets
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -167,7 +258,7 @@ jobs:
       - name: Upload 1-day private recovery artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: juris-trust-case-private-recovery
+          name: ${{ env.ARTIFACT_NAME }}
           path: ${{ env.RECOVERY_DIR }}/
           if-no-files-found: error
           retention-days: 1
@@ -187,3 +278,80 @@ jobs:
             find "$RECOVERY_DIR" -depth -type d -empty -delete
           fi
           rm -f ~/.ssh/id_vm ~/.ssh/known_hosts
+
+      - name: Write private run-result report
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GITHUB_TOKEN"]
+          branch = os.environ["REPORT_BRANCH"]
+          path = os.environ["REPORT_PATH"]
+          sha = os.environ["GITHUB_SHA"]
+          status = os.environ["RUN_STATUS"]
+          api = f"https://api.github.com/repos/{repository}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {token}",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "Content-Type": "application/json",
+          }
+
+          def call(method, endpoint, payload=None):
+              data = None if payload is None else json.dumps(payload).encode("utf-8")
+              request = urllib.request.Request(
+                  api + endpoint, data=data, method=method, headers=headers
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  raw = response.read()
+                  return json.loads(raw) if raw else {}
+
+          ref_endpoint = "/git/refs/heads/" + urllib.parse.quote(branch, safe="/")
+          try:
+              call("GET", ref_endpoint)
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+              call("POST", "/git/refs", {"ref": f"refs/heads/{branch}", "sha": sha})
+
+          report = {
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "status": status,
+              "workflow": os.environ["GITHUB_WORKFLOW"],
+              "event": os.environ["GITHUB_EVENT_NAME"],
+              "commit_sha": sha,
+              "artifact_name": os.environ["ARTIFACT_NAME"],
+          }
+          report_bytes = (json.dumps(report, indent=2, sort_keys=True) + "\n").encode("utf-8")
+          content_endpoint = "/contents/" + urllib.parse.quote(path, safe="/")
+          existing_sha = None
+          try:
+              current = call(
+                  "GET",
+                  content_endpoint + "?ref=" + urllib.parse.quote(branch, safe=""),
+              )
+              existing_sha = current.get("sha")
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+          payload = {
+              "message": f"audit: Juris recovery run {status}",
+              "content": base64.b64encode(report_bytes).decode("ascii"),
+              "branch": branch,
+          }
+          if existing_sha:
+              payload["sha"] = existing_sha
+          call("PUT", content_endpoint, payload)
+          PY

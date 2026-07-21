@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "system": "Dominion Ascendant",
+  "operating_order": [
+    "cash_flow",
+    "systems",
+    "scale"
+  ],
+  "principles": {
+    "human_final_authority": true,
+    "revenue_before_expansion": true,
+    "shared_infrastructure_separate_vertical_accountability": true,
+    "no_unverified_live_execution": true,
+    "paper_before_live_financial_execution": true,
+    "zero_secret_material_in_repository": true
+  },
+  "verticals": [
+    {
+      "id": "digital_products",
+      "pillar": "cash_flow",
+      "priority": 1,
+      "operator": "revenue-operator",
+      "status": "blocked",
+      "mode": "assisted",
+      "duty": "Create, publish, sell, and deliver owned digital products.",
+      "required_paths": [
+        "scripts/gen_blueprint.py",
+        "web/public/index.html"
+      ],
+      "dependencies": [
+        "infrastructure"
+      ],
+      "human_approval_required": [
+        "publish_product",
+        "change_price",
+        "change_customer_delivery"
+      ],
+      "exit_gate": "Gumroad product has its file attached, is visibly published, checkout succeeds, and delivery is verified with a test purchase."
+    },
+    {
+      "id": "commerce_fulfillment",
+      "pillar": "cash_flow",
+      "priority": 2,
+      "operator": "commerce-operator",
+      "status": "guarded",
+      "mode": "record_only",
+      "duty": "Audit the Wix catalog, ingest orders, and record fulfillment state without unapproved bulk mutation.",
+      "required_paths": [
+        "apps/wix-agent/main.py",
+        "apps/wix-agent/fulfillment.py",
+        "apps/wix-agent/README.md"
+      ],
+      "dependencies": [
+        "infrastructure",
+        "intelligence_orchestration"
+      ],
+      "human_approval_required": [
+        "enable_supplier_submission",
+        "bulk_catalog_change",
+        "publish_policy_or_shipping_claim"
+      ],
+      "exit_gate": "Readiness endpoint passes, supplier configuration is verified, and one sandbox purchase creates exactly one fulfillment record."
+    },
+    {
+      "id": "services_lead_generation",
+      "pillar": "cash_flow",
+      "priority": 3,
+      "operator": "services-operator",
+      "status": "unverified",
+      "mode": "assisted",
+      "duty": "Find qualified service opportunities, prepare proposals, and route leads for human approval.",
+      "required_paths": [
+        "apps/browser-agents/main.py"
+      ],
+      "dependencies": [
+        "infrastructure",
+        "intelligence_orchestration"
+      ],
+      "human_approval_required": [
+        "submit_proposal",
+        "accept_contract",
+        "represent_price_or_delivery_date"
+      ],
+      "exit_gate": "A controlled dry run produces a qualified lead and a reviewable proposal without submitting it."
+    },
+    {
+      "id": "content_traffic",
+      "pillar": "systems",
+      "priority": 4,
+      "operator": "content-operator",
+      "status": "unverified",
+      "mode": "draft_only",
+      "duty": "Generate platform-specific content, prepare media, and schedule approved distribution.",
+      "required_paths": [
+        "apps/youtube/pipeline.py",
+        "apps/tiktok/main.py"
+      ],
+      "dependencies": [
+        "infrastructure",
+        "intelligence_orchestration"
+      ],
+      "human_approval_required": [
+        "publish_content",
+        "use_personal_likeness",
+        "make_health_legal_or_income_claim"
+      ],
+      "exit_gate": "OAuth is verified per platform and one private or unlisted end-to-end test completes with an approval checkpoint."
+    },
+    {
+      "id": "surplus",
+      "pillar": "systems",
+      "priority": 5,
+      "operator": "surplus-operator",
+      "status": "incomplete",
+      "mode": "research_only",
+      "duty": "Discover, qualify, document, and route lawful surplus opportunities without filing or contacting claimants autonomously.",
+      "required_paths": [
+        "apps/site-fixes/surplus.html",
+        ".github/workflows/check-surplus-service.yml"
+      ],
+      "dependencies": [
+        "infrastructure",
+        "intelligence_orchestration",
+        "governance_legal"
+      ],
+      "human_approval_required": [
+        "contact_claimant",
+        "submit_document",
+        "sign_or_file",
+        "collect_sensitive_identity_data"
+      ],
+      "exit_gate": "A documented jurisdiction-specific workflow passes legal review and completes one synthetic case end to end."
+    },
+    {
+      "id": "trading",
+      "pillar": "systems",
+      "priority": 6,
+      "operator": "alpha-governor",
+      "status": "paper_only",
+      "mode": "paper",
+      "duty": "Scan markets, score setups, simulate entries and exits, and measure performance without real-money execution.",
+      "required_paths": [
+        "alpha_engine/dominion_alpha/governor.py",
+        "alpha_engine/dominion_alpha/risk.py",
+        "alpha_engine/dominion_alpha/paper_broker.py",
+        "alpha_engine/README.md"
+      ],
+      "dependencies": [
+        "infrastructure",
+        "intelligence_orchestration"
+      ],
+      "human_approval_required": [
+        "enable_live_trading",
+        "change_risk_limits",
+        "connect_exchange_with_withdrawal_permission"
+      ],
+      "exit_gate": "Paper tests meet documented sample-size, drawdown, profit-factor, and failure-recovery thresholds; live trading remains disabled until a separate approval record exists."
+    },
+    {
+      "id": "intelligence_orchestration",
+      "pillar": "systems",
+      "priority": 7,
+      "operator": "jarvis-governor",
+      "status": "incomplete",
+      "mode": "observe_and_route",
+      "duty": "Receive events, enforce contracts, route work to the correct vertical, record outcomes, and escalate exceptions.",
+      "required_paths": [
+        "apps/jarvis/worker.py",
+        "api/app.py"
+      ],
+      "dependencies": [
+        "infrastructure",
+        "governance_legal"
+      ],
+      "human_approval_required": [
+        "override_vertical_gate",
+        "change_governance_policy",
+        "authorize_external_execution"
+      ],
+      "exit_gate": "Each active vertical has an explicit input contract, output contract, health signal, failure queue, and human escalation path."
+    },
+    {
+      "id": "governance_legal",
+      "pillar": "systems",
+      "priority": 8,
+      "operator": "five-council",
+      "status": "foundational",
+      "mode": "review_and_veto",
+      "duty": "Enforce founder authority, auditability, legal boundaries, security rules, and veto conditions across all verticals.",
+      "required_paths": [
+        "governance/verticals.json"
+      ],
+      "dependencies": [
+        "infrastructure"
+      ],
+      "human_approval_required": [
+        "sign",
+        "file",
+        "publish_legal_document",
+        "change_constitution",
+        "use_or_disclose_sensitive_data"
+      ],
+      "exit_gate": "All active verticals pass automated alignment validation and have documented human approval gates."
+    },
+    {
+      "id": "infrastructure",
+      "pillar": "systems",
+      "priority": 9,
+      "operator": "platform-operator",
+      "status": "partially_verified",
+      "mode": "production_support",
+      "duty": "Provide secrets, deployment, networking, persistence, observability, backup, and rollback for approved verticals.",
+      "required_paths": [
+        "docker-compose.yml",
+        "STATE.md",
+        "ops/RUNBOOK.md"
+      ],
+      "dependencies": [],
+      "human_approval_required": [
+        "rotate_production_secret",
+        "delete_persistent_data",
+        "promote_to_production",
+        "change_public_dns"
+      ],
+      "exit_gate": "Production health is verified from the VM, required secrets are present, backups and rollback are tested, and the runtime inventory matches this registry."
+    }
+  ]
+}

@@ -1,0 +1,396 @@
+name: Production Alignment Stage 2B Map
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type exactly MAP_STAGE_2B to run the read-only deployment reconciliation map
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-alignment-stage2b-map
+  cancel-in-progress: false
+
+jobs:
+  map:
+    if: ${{ inputs.confirm == 'MAP_STAGE_2B' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      REPORT_DIR: /tmp/dominion-alignment-stage2b
+      REPORT_FILE: /tmp/dominion-alignment-stage2b/stage2b_map.json
+      REPORT_BRANCH: audit/alignment-stage2b-map-20260721
+      REPORT_PATH: governance/stage2b_map.json
+      ARTIFACT_NAME: dominion-alignment-stage2b-map
+
+    steps:
+      - name: Publish run pointer
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            const sourceSha = context.sha;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({
+                owner,
+                repo,
+                ref: `refs/heads/${branch}`,
+                sha: sourceSha,
+              });
+            }
+            const report = {
+              map_version: 1,
+              status: 'started',
+              workflow: {
+                run_id: context.runId,
+                run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                source_sha: sourceSha,
+                artifact_name: process.env.ARTIFACT_NAME,
+              },
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Stage-2B map run ${context.runId} started`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Configure strict SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Collect read-only deployment reconciliation map
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 "$REPORT_DIR"
+          ssh \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" 'python3 -' > "$REPORT_FILE" <<'PY'
+          import hashlib
+          import json
+          import re
+          import subprocess
+          import urllib.error
+          import urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          HOME = Path.home()
+          REPO = HOME / "dominion-ops"
+          LEGACY_ROOT = HOME / "desktop-tutorial"
+
+          def run(args, cwd=None, timeout=30):
+              try:
+                  result = subprocess.run(
+                      args,
+                      cwd=str(cwd) if cwd else None,
+                      check=False,
+                      capture_output=True,
+                      text=True,
+                      timeout=timeout,
+                  )
+              except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+                  return {
+                      "available": False,
+                      "returncode": None,
+                      "stdout": "",
+                      "error_type": type(exc).__name__,
+                  }
+              return {
+                  "available": True,
+                  "returncode": result.returncode,
+                  "stdout": (result.stdout or "").strip(),
+                  "error_type": None if not result.stderr else "stderr_present",
+              }
+
+          def first_line(value):
+              return value.splitlines()[0].strip() if value else None
+
+          def sha256_file(path):
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          def secret_path_risk(path_text):
+              lowered = path_text.lower()
+              risky_tokens = (
+                  ".env", "secret", "credential", "token", "private", "id_rsa",
+                  "pem", "key.json", "service-account", "customer", "vault",
+                  "database", ".db", "sqlite", "upload", "attachment",
+              )
+              return any(token in lowered for token in risky_tokens)
+
+          def content_risk_signals(path):
+              if not path.is_file():
+                  return []
+              try:
+                  if path.stat().st_size > 2 * 1024 * 1024:
+                      return ["not_scanned_over_2mb"]
+                  data = path.read_bytes()
+              except OSError:
+                  return ["unreadable"]
+              text = data.decode("utf-8", errors="ignore")
+              signals = []
+              patterns = {
+                  "private_key_marker": r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+                  "hardcoded_secret_assignment": r"(?i)(api[_-]?key|client[_-]?secret|password|access[_-]?token|auth[_-]?token)\s*[:=]\s*['\"][^$<{][^'\"]{7,}",
+                  "bearer_token_literal": r"(?i)bearer\s+[A-Za-z0-9._~+/=-]{16,}",
+              }
+              for name, pattern in patterns.items():
+                  if re.search(pattern, text):
+                      signals.append(name)
+              return signals
+
+          def git_record(path):
+              record = {
+                  "path": str(path),
+                  "exists": path.is_dir(),
+                  "is_git_repository": False,
+                  "branch": None,
+                  "head": None,
+                  "origin": None,
+                  "origin_main_head": None,
+                  "local_origin_main_head": None,
+                  "dirty_entries": [],
+              }
+              if not path.is_dir():
+                  return record
+              head = run(["git", "rev-parse", "HEAD"], cwd=path)
+              if head["returncode"] != 0:
+                  return record
+              record["is_git_repository"] = True
+              record["head"] = first_line(head["stdout"])
+              record["branch"] = first_line(run(["git", "branch", "--show-current"], cwd=path)["stdout"])
+              origin = run(["git", "remote", "get-url", "origin"], cwd=path)
+              record["origin"] = first_line(origin["stdout"]) if origin["returncode"] == 0 else None
+              remote_main = run(["git", "ls-remote", "origin", "refs/heads/main"], cwd=path, timeout=45)
+              record["origin_main_head"] = first_line(remote_main["stdout"]).split()[0] if remote_main["returncode"] == 0 and remote_main["stdout"] else None
+              local_main = run(["git", "rev-parse", "refs/remotes/origin/main"], cwd=path)
+              record["local_origin_main_head"] = first_line(local_main["stdout"]) if local_main["returncode"] == 0 else None
+
+              status = run(["git", "status", "--porcelain=v1", "--untracked-files=all"], cwd=path)
+              if status["returncode"] == 0:
+                  for line in status["stdout"].splitlines():
+                      if len(line) < 4:
+                          continue
+                      code = line[:2]
+                      raw_path = line[3:].strip().strip('"')
+                      if " -> " in raw_path:
+                          raw_path = raw_path.split(" -> ", 1)[1]
+                      candidate = path / raw_path
+                      try:
+                          size = candidate.stat().st_size if candidate.is_file() else None
+                          digest = sha256_file(candidate) if candidate.is_file() and size is not None and size <= 20 * 1024 * 1024 else None
+                      except OSError:
+                          size = None
+                          digest = None
+                      record["dirty_entries"].append({
+                          "status": code,
+                          "path": raw_path,
+                          "is_file": candidate.is_file(),
+                          "size_bytes": size,
+                          "sha256": digest,
+                          "secret_path_risk": secret_path_risk(raw_path),
+                          "content_risk_signals": content_risk_signals(candidate),
+                      })
+              return record
+
+          def compose_record(path):
+              record = {
+                  "path": str(path),
+                  "exists": path.is_file(),
+                  "sha256": None,
+                  "services": [],
+                  "images": [],
+                  "service_query_ok": False,
+                  "image_query_ok": False,
+              }
+              if not path.is_file():
+                  return record
+              try:
+                  record["sha256"] = sha256_file(path)
+              except OSError:
+                  pass
+              services = run(["docker", "compose", "-f", str(path), "config", "--services"], timeout=45)
+              if services["returncode"] == 0:
+                  record["service_query_ok"] = True
+                  record["services"] = sorted(filter(None, services["stdout"].splitlines()))
+              images = run(["docker", "compose", "-f", str(path), "config", "--images"], timeout=45)
+              if images["returncode"] == 0:
+                  record["image_query_ok"] = True
+                  record["images"] = sorted(filter(None, images["stdout"].splitlines()))
+              return record
+
+          def compose_projects():
+              result = run(["docker", "compose", "ls", "--format", "json"])
+              if result["returncode"] != 0 or not result["stdout"]:
+                  return []
+              try:
+                  parsed = json.loads(result["stdout"])
+              except json.JSONDecodeError:
+                  return []
+              parsed = parsed if isinstance(parsed, list) else [parsed]
+              return [
+                  {
+                      "name": item.get("Name"),
+                      "status": item.get("Status"),
+                      "config_files": item.get("ConfigFiles"),
+                  }
+                  for item in parsed
+                  if isinstance(item, dict)
+              ]
+
+          def conductor_routes():
+              common_paths = ("/", "/health", "/healthz", "/ready", "/status", "/docs", "/openapi.json")
+              probes = []
+              openapi_paths = []
+              for route in common_paths:
+                  url = f"http://127.0.0.1:5060{route}"
+                  try:
+                      with urllib.request.urlopen(url, timeout=5) as response:
+                          status = response.status
+                          body = response.read(1024 * 1024) if route == "/openapi.json" else b""
+                      probes.append({"path": route, "reachable": True, "status": status})
+                      if route == "/openapi.json" and status == 200:
+                          try:
+                              spec = json.loads(body.decode("utf-8"))
+                              openapi_paths = sorted((spec.get("paths") or {}).keys())[:200]
+                          except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+                              pass
+                  except urllib.error.HTTPError as exc:
+                      probes.append({"path": route, "reachable": True, "status": exc.code})
+                  except Exception as exc:
+                      probes.append({"path": route, "reachable": False, "status": None, "error_type": type(exc).__name__})
+              return {"probes": probes, "openapi_route_names": openapi_paths}
+
+          payload = {
+              "map_version": 1,
+              "status": "success",
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+              "repository": git_record(REPO),
+              "compose_manifests": [
+                  compose_record(REPO / "docker-compose.yml"),
+                  compose_record(LEGACY_ROOT / "docker-compose.yml"),
+              ],
+              "active_compose_projects": compose_projects(),
+              "conductor": conductor_routes(),
+              "safety": {
+                  "services_changed": False,
+                  "repository_changed": False,
+                  "compose_changed": False,
+                  "file_contents_collected": False,
+                  "file_contents_scanned_locally_for_secret_risk": True,
+                  "secret_values_collected": False,
+                  "logs_collected": False,
+                  "customer_data_collected": False,
+              },
+          }
+          print(json.dumps(payload, indent=2, sort_keys=True))
+          PY
+
+          python3 -m json.tool "$REPORT_FILE" >/dev/null
+          chmod 600 "$REPORT_FILE"
+
+      - name: Upload private Stage-2B map
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.REPORT_FILE }}
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 9
+
+      - name: Publish terminal Stage-2B map
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          JOB_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            let report;
+            if (fs.existsSync(process.env.REPORT_FILE)) {
+              report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, 'utf8'));
+            } else {
+              report = { map_version: 1, status: 'failed_before_report' };
+            }
+            report.workflow = {
+              run_id: context.runId,
+              run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              source_sha: context.sha,
+              artifact_name: process.env.ARTIFACT_NAME,
+              job_status: process.env.JOB_STATUS,
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Stage-2B deployment map run ${context.runId}`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Remove temporary audit material
+        if: ${{ always() }}
+        run: |
+          set -eu
+          rm -rf "$REPORT_DIR"
+          rm -f ~/.ssh/id_vm ~/.ssh/known_hosts

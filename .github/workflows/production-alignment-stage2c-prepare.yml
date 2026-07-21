@@ -1,0 +1,500 @@
+name: Production Alignment Stage 2C Prepare
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type exactly PREPARE_STAGE_2C to prepare the parallel canonical release
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-alignment-stage2c-prepare
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: ${{ inputs.confirm == 'PREPARE_STAGE_2C' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      REPORT_DIR: /tmp/dominion-alignment-stage2c
+      REPORT_FILE: /tmp/dominion-alignment-stage2c/result.json
+      ARCHIVE_FILE: /tmp/dominion-alignment-stage2c/release.tar.gz
+      REPORT_BRANCH: audit/alignment-stage2c-prepare-20260721
+      REPORT_PATH: governance/stage2c_prepare_result.json
+      ARTIFACT_NAME: dominion-alignment-stage2c-prepare
+
+    steps:
+      - name: Publish run pointer
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            const sourceSha = context.sha;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({
+                owner,
+                repo,
+                ref: `refs/heads/${branch}`,
+                sha: sourceSha,
+              });
+            }
+            const report = {
+              alignment_stage: '2C-prepare',
+              status: 'started',
+              workflow: {
+                run_id: context.runId,
+                run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                source_sha: sourceSha,
+                artifact_name: process.env.ARTIFACT_NAME,
+              },
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Stage-2C preparation run ${context.runId} started`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Checkout exact canonical source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build immutable source archive
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 "$REPORT_DIR"
+          printf '%s\n' '{"alignment_stage":"2C-prepare","status":"collector_not_completed","success":false}' > "$REPORT_FILE"
+          git archive --format=tar.gz --output "$ARCHIVE_FILE" "$GITHUB_SHA"
+          test -s "$ARCHIVE_FILE"
+          echo "ARCHIVE_SHA256=$(sha256sum "$ARCHIVE_FILE" | awk '{print $1}')" >> "$GITHUB_ENV"
+          echo "COMPOSE_SHA256=$(sha256sum docker-compose.yml | awk '{print $1}')" >> "$GITHUB_ENV"
+
+      - name: Configure strict SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Prepare parallel canonical release
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          REMOTE_ARCHIVE="/tmp/dominion-stage2c-${GITHUB_RUN_ID}.tar.gz"
+          scp \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$ARCHIVE_FILE" "$VM_USER@$VM_HOST:$REMOTE_ARCHIVE"
+
+          ssh \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" \
+            "SOURCE_SHA='$GITHUB_SHA' ARCHIVE_SHA='$ARCHIVE_SHA256' COMPOSE_SHA='$COMPOSE_SHA256' RUN_ID='$GITHUB_RUN_ID' REMOTE_ARCHIVE='$REMOTE_ARCHIVE' python3 -" \
+            > "$REPORT_FILE" <<'PY'
+          import hashlib
+          import json
+          import os
+          import shutil
+          import subprocess
+          import tarfile
+          import tempfile
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          SOURCE_SHA = os.environ["SOURCE_SHA"]
+          EXPECTED_ARCHIVE_SHA = os.environ["ARCHIVE_SHA"]
+          EXPECTED_COMPOSE_SHA = os.environ["COMPOSE_SHA"]
+          RUN_ID = os.environ["RUN_ID"]
+          ARCHIVE = Path(os.environ["REMOTE_ARCHIVE"])
+          HOME = Path.home()
+          OLD_ROOT = HOME / "dominion-ops"
+          RELEASE_PARENT = HOME / "dominion-releases"
+          RELEASE_ROOT = RELEASE_PARENT / f"dominion-ops-{SOURCE_SHA[:12]}"
+          RECOVERY_ROOT = HOME / ".dominion-recovery" / f"stage2c-{RUN_ID}"
+
+          errors = []
+          follow_up = []
+
+          def sha256_file(path):
+              digest = hashlib.sha256()
+              with Path(path).open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          def command(args, cwd=None, timeout=60):
+              try:
+                  result = subprocess.run(
+                      args,
+                      cwd=cwd,
+                      check=False,
+                      capture_output=True,
+                      text=True,
+                      timeout=timeout,
+                  )
+              except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+                  return {
+                      "available": False,
+                      "returncode": None,
+                      "stdout": "",
+                      "stderr_type": type(exc).__name__,
+                  }
+              return {
+                  "available": True,
+                  "returncode": result.returncode,
+                  "stdout": (result.stdout or "").strip(),
+                  "stderr_type": None if not result.stderr else "present",
+              }
+
+          def container_snapshot():
+              result = command(["docker", "ps", "--all", "--quiet"], timeout=30)
+              if result["returncode"] != 0:
+                  return {"available": False, "containers": []}
+              records = []
+              for container_id in result["stdout"].splitlines():
+                  inspected = command(["docker", "inspect", container_id], timeout=30)
+                  if inspected["returncode"] != 0:
+                      continue
+                  try:
+                      item = json.loads(inspected["stdout"])[0]
+                  except (json.JSONDecodeError, IndexError, TypeError):
+                      continue
+                  health = item.get("State", {}).get("Health") or {}
+                  records.append({
+                      "name": str(item.get("Name") or "").lstrip("/"),
+                      "image": item.get("Config", {}).get("Image"),
+                      "state": item.get("State", {}).get("Status"),
+                      "health": health.get("Status"),
+                  })
+              return {
+                  "available": True,
+                  "containers": sorted(records, key=lambda row: row.get("name") or ""),
+              }
+
+          def repository_metadata():
+              record = {
+                  "path": str(OLD_ROOT),
+                  "exists": OLD_ROOT.is_dir(),
+                  "branch": None,
+                  "head": None,
+                  "dirty_paths": [],
+              }
+              if not OLD_ROOT.is_dir():
+                  return record
+              branch = command(["git", "branch", "--show-current"], cwd=str(OLD_ROOT))
+              head = command(["git", "rev-parse", "HEAD"], cwd=str(OLD_ROOT))
+              dirty = command(["git", "status", "--porcelain"], cwd=str(OLD_ROOT))
+              record["branch"] = branch["stdout"].splitlines()[0] if branch["returncode"] == 0 and branch["stdout"] else None
+              record["head"] = head["stdout"].splitlines()[0] if head["returncode"] == 0 and head["stdout"] else None
+              if dirty["returncode"] == 0:
+                  record["dirty_paths"] = sorted(line[3:] for line in dirty["stdout"].splitlines() if len(line) > 3)
+              return record
+
+          def backup_local_path(source, destination_name):
+              source = Path(source)
+              if not source.exists() and not source.is_symlink():
+                  return {"source": str(source), "exists": False, "backup": None}
+              destination = RECOVERY_ROOT / destination_name
+              if source.is_symlink():
+                  target = os.readlink(source)
+                  destination.symlink_to(target)
+                  kind = "symlink"
+                  size = None
+                  digest = None
+              elif source.is_file():
+                  shutil.copy2(source, destination)
+                  os.chmod(destination, 0o600)
+                  kind = "file"
+                  size = destination.stat().st_size
+                  digest = sha256_file(destination)
+              elif source.is_dir():
+                  shutil.copytree(source, destination, symlinks=True)
+                  kind = "directory"
+                  size = None
+                  digest = None
+              else:
+                  kind = "other"
+                  size = None
+                  digest = None
+              return {
+                  "source": str(source),
+                  "exists": True,
+                  "backup": str(destination),
+                  "kind": kind,
+                  "size_bytes": size,
+                  "sha256": digest,
+              }
+
+          before_containers = container_snapshot()
+          old_repository = repository_metadata()
+
+          RELEASE_PARENT.mkdir(mode=0o700, parents=True, exist_ok=True)
+          RECOVERY_ROOT.mkdir(mode=0o700, parents=True, exist_ok=False)
+
+          recovery_records = [
+              backup_local_path(OLD_ROOT / ".env", "old-root.env"),
+              backup_local_path(OLD_ROOT / "docker-compose.yml", "old-root.docker-compose.yml"),
+              backup_local_path(OLD_ROOT / "env.example", "old-root.env.example"),
+          ]
+
+          archive_sha = sha256_file(ARCHIVE) if ARCHIVE.is_file() else None
+          if archive_sha != EXPECTED_ARCHIVE_SHA:
+              errors.append("archive_sha256_mismatch")
+
+          temporary_release = None
+          release_reused = False
+          if not errors:
+              temporary_release = Path(tempfile.mkdtemp(prefix=f".stage2c-{SOURCE_SHA[:12]}-", dir=str(RELEASE_PARENT)))
+              try:
+                  with tarfile.open(ARCHIVE, "r:gz") as handle:
+                      root = temporary_release.resolve()
+                      for member in handle.getmembers():
+                          target = (temporary_release / member.name).resolve()
+                          if target != root and root not in target.parents:
+                              raise ValueError("archive_path_escape")
+                          if member.issym() or member.islnk():
+                              link_target = Path(member.linkname)
+                              if link_target.is_absolute() or ".." in link_target.parts:
+                                  raise ValueError("unsafe_archive_link")
+                      handle.extractall(temporary_release)
+              except Exception as exc:
+                  errors.append(type(exc).__name__)
+
+          if temporary_release and not errors:
+              compose_path = temporary_release / "docker-compose.yml"
+              if not compose_path.is_file() or sha256_file(compose_path) != EXPECTED_COMPOSE_SHA:
+                  errors.append("compose_sha256_mismatch")
+
+          if temporary_release and not errors:
+              marker = temporary_release / ".dominion-release.json"
+              marker.write_text(json.dumps({
+                  "source_sha": SOURCE_SHA,
+                  "archive_sha256": EXPECTED_ARCHIVE_SHA,
+                  "compose_sha256": EXPECTED_COMPOSE_SHA,
+                  "prepared_at": datetime.now(timezone.utc).isoformat(),
+                  "run_id": RUN_ID,
+              }, indent=2) + "\n", encoding="utf-8")
+              os.chmod(marker, 0o600)
+
+              if RELEASE_ROOT.exists():
+                  existing_marker = RELEASE_ROOT / ".dominion-release.json"
+                  existing_ok = False
+                  if existing_marker.is_file():
+                      try:
+                          existing = json.loads(existing_marker.read_text(encoding="utf-8"))
+                          existing_ok = existing.get("source_sha") == SOURCE_SHA and existing.get("compose_sha256") == EXPECTED_COMPOSE_SHA
+                      except Exception:
+                          existing_ok = False
+                  if existing_ok:
+                      release_reused = True
+                      shutil.rmtree(temporary_release)
+                      temporary_release = None
+                  else:
+                      errors.append("release_path_exists_with_different_content")
+              else:
+                  os.replace(temporary_release, RELEASE_ROOT)
+                  temporary_release = None
+
+          env_source = OLD_ROOT / ".env"
+          env_preserved = False
+          env_record = {
+              "source": str(env_source),
+              "source_is_regular_file": env_source.is_file() and not env_source.is_symlink(),
+              "destination": str(RELEASE_ROOT / ".env"),
+              "copied": False,
+              "mode": None,
+              "size_bytes": None,
+              "sha256": None,
+          }
+          if RELEASE_ROOT.is_dir() and env_source.is_file() and not env_source.is_symlink():
+              destination = RELEASE_ROOT / ".env"
+              shutil.copy2(env_source, destination)
+              os.chmod(destination, 0o600)
+              env_preserved = True
+              env_record.update({
+                  "copied": True,
+                  "mode": oct(destination.stat().st_mode & 0o777),
+                  "size_bytes": destination.stat().st_size,
+                  "sha256": sha256_file(destination),
+              })
+          elif RELEASE_ROOT.is_dir():
+              follow_up.append("canonical_release_has_no_local_env_file")
+
+          compose_validation = {
+              "docker_available": shutil.which("docker") is not None,
+              "valid": None,
+              "services": [],
+              "stderr_type": None,
+          }
+          if RELEASE_ROOT.is_dir() and shutil.which("docker"):
+              base = ["docker", "compose", "-f", "docker-compose.yml"]
+              if env_preserved:
+                  base.extend(["--env-file", ".env"])
+              quiet = command(base + ["config", "--quiet"], cwd=str(RELEASE_ROOT), timeout=60)
+              services = command(base + ["config", "--services"], cwd=str(RELEASE_ROOT), timeout=60)
+              compose_validation["valid"] = quiet["returncode"] == 0
+              compose_validation["stderr_type"] = quiet["stderr_type"]
+              if services["returncode"] == 0:
+                  compose_validation["services"] = sorted(filter(None, services["stdout"].splitlines()))
+              if not compose_validation["valid"]:
+                  follow_up.append("compose_validation_requires_repair_before_cutover")
+
+          after_containers = container_snapshot()
+          containers_unchanged = before_containers == after_containers
+          if not containers_unchanged:
+              errors.append("container_inventory_changed_during_preparation")
+
+          try:
+              ARCHIVE.unlink(missing_ok=True)
+          except OSError:
+              follow_up.append("temporary_remote_archive_cleanup_failed")
+
+          payload = {
+              "alignment_stage": "2C-prepare",
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+              "status": "success" if not errors else "failed",
+              "success": not errors,
+              "source_sha": SOURCE_SHA,
+              "archive_sha256": archive_sha,
+              "expected_archive_sha256": EXPECTED_ARCHIVE_SHA,
+              "release_root": str(RELEASE_ROOT),
+              "release_exists": RELEASE_ROOT.is_dir(),
+              "release_reused": release_reused,
+              "release_compose_sha256": sha256_file(RELEASE_ROOT / "docker-compose.yml") if (RELEASE_ROOT / "docker-compose.yml").is_file() else None,
+              "old_repository": old_repository,
+              "local_recovery_root": str(RECOVERY_ROOT),
+              "recovery_records": recovery_records,
+              "environment_preservation": env_record,
+              "compose_validation": compose_validation,
+              "containers_unchanged": containers_unchanged,
+              "before_containers": before_containers,
+              "after_containers": after_containers,
+              "errors": errors,
+              "follow_up_required": sorted(set(follow_up)),
+              "safety": {
+                  "active_containers_started": False,
+                  "active_containers_stopped": False,
+                  "active_containers_recreated": False,
+                  "databases_changed": False,
+                  "dns_changed": False,
+                  "old_repository_changed": False,
+                  "secret_values_collected": False,
+                  "secret_file_uploaded": False,
+                  "secret_file_committed": False,
+              },
+          }
+          print(json.dumps(payload, indent=2, sort_keys=True))
+          PY
+
+          python3 -m json.tool "$REPORT_FILE" >/dev/null
+          chmod 600 "$REPORT_FILE"
+
+      - name: Upload private Stage-2C preparation result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.REPORT_FILE }}
+          if-no-files-found: warn
+          retention-days: 3
+          compression-level: 9
+
+      - name: Publish terminal Stage-2C result
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          JOB_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            let report;
+            if (fs.existsSync(process.env.REPORT_FILE)) {
+              try {
+                report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, 'utf8'));
+              } catch (error) {
+                report = { alignment_stage: '2C-prepare', status: 'report_parse_failed', success: false };
+              }
+            } else {
+              report = { alignment_stage: '2C-prepare', status: 'report_missing', success: false };
+            }
+            report.workflow = {
+              run_id: context.runId,
+              run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              source_sha: context.sha,
+              artifact_name: process.env.ARTIFACT_NAME,
+              job_status: process.env.JOB_STATUS,
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Stage-2C preparation run ${context.runId} ${process.env.JOB_STATUS}`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Remove temporary runner material
+        if: ${{ always() }}
+        run: |
+          set -eu
+          rm -rf "$REPORT_DIR"
+          rm -f ~/.ssh/id_vm ~/.ssh/known_hosts

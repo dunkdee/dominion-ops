@@ -17,6 +17,7 @@ on:
       - ".github/workflows/wix-agent-ci.yml"
       - ".github/workflows/wix-auto-sync.yml"
       - ".github/workflows/wix-agent-preflight.yml"
+      - ".github/recovery/juris-recovery-trigger.txt"
 
 permissions:
   contents: read
@@ -56,3 +57,133 @@ jobs:
 
       - name: Build Wix agent image
         run: docker build --tag dominion/wix-agent:ci apps/wix-agent
+
+  juris_recovery:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/juris-recovery-execution-20260721'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      RECOVERY_DIR: ${{ runner.temp }}/juris-trust-private-${{ github.run_id }}
+    steps:
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Configure strict SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Transfer only the verified Juris trust case
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 "$RECOVERY_DIR"
+          ssh \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" 'python3 -' \
+            > "$RECOVERY_DIR/trust_Dewayne_L_Singleton_20260414_084645.txt" <<'PY'
+          import hashlib
+          import stat
+          import sys
+          from pathlib import Path
+
+          expected_name = "trust_Dewayne_L_Singleton_20260414_084645.txt"
+          expected_size = 9299
+          expected_sha256 = (
+              "e45cb33b478df63e0edeba3a4a69882317bfe1786ee53e826"
+              "6c20de32e0d8f77"
+          )
+
+          cases_root = (
+              Path.home() / "dominion" / "agents" / "juris" / "cases"
+          ).resolve(strict=True)
+          candidate = cases_root / expected_name
+          if candidate.is_symlink():
+              raise SystemExit("Refusing symlinked case file")
+          target = candidate.resolve(strict=True)
+          if target.parent != cases_root:
+              raise SystemExit("Resolved case file escaped the authorized directory")
+          metadata = target.stat()
+          if not stat.S_ISREG(metadata.st_mode):
+              raise SystemExit("Authorized case path is not a regular file")
+          data = target.read_bytes()
+          if len(data) != expected_size:
+              raise SystemExit("Authorized case size no longer matches inventory")
+          digest = hashlib.sha256(data).hexdigest()
+          if digest != expected_sha256:
+              raise SystemExit("Authorized case hash no longer matches inventory")
+          sys.stdout.buffer.write(data)
+          PY
+
+          printf '%s  %s\n' \
+            'e45cb33b478df63e0edeba3a4a69882317bfe1786ee53e8266c20de32e0d8f77' \
+            "$RECOVERY_DIR/trust_Dewayne_L_Singleton_20260414_084645.txt" \
+            | sha256sum --check --status
+          test "$(wc -c < "$RECOVERY_DIR/trust_Dewayne_L_Singleton_20260414_084645.txt")" -eq 9299
+
+          cat > "$RECOVERY_DIR/RECOVERY_README.txt" <<'TXT'
+          PRIVATE LEGAL-DRAFT RECOVERY MATERIAL
+
+          Source: foundation-vm Juris case directory
+          Original relative path:
+          dominion/agents/juris/cases/trust_Dewayne_L_Singleton_20260414_084645.txt
+          Expected size: 9299 bytes
+          Expected SHA-256:
+          e45cb33b478df63e0edeba3a4a69882317bfe1786ee53e8266c20de32e0d8f77
+
+          This recovery is private and authorized for analysis only.
+          It is not signed, executed, filed, or attorney-approved.
+          Do not rely on any EIN unless independently verified against an
+          official IRS CP 575 or 147C notice.
+          TXT
+          chmod 600 "$RECOVERY_DIR"/*
+
+      - name: Upload 1-day private recovery artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: juris-trust-case-private-recovery
+          path: ${{ env.RECOVERY_DIR }}/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 9
+          include-hidden-files: false
+
+      - name: Remove temporary runner copies
+        if: ${{ always() }}
+        run: |
+          set -eu
+          if test -d "$RECOVERY_DIR"; then
+            if command -v shred >/dev/null 2>&1; then
+              find "$RECOVERY_DIR" -type f -exec shred -u -- {} +
+            else
+              find "$RECOVERY_DIR" -type f -delete
+            fi
+            find "$RECOVERY_DIR" -depth -type d -empty -delete
+          fi
+          rm -f ~/.ssh/id_vm ~/.ssh/known_hosts

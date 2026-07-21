@@ -1,10 +1,714 @@
 {
+  "after_containers": [
+    {
+      "image": "a319b3721a52",
+      "name": "baby-api",
+      "state": "running",
+      "status": "Up 4 weeks (healthy)"
+    },
+    {
+      "image": "alpine:latest",
+      "name": "baby-logger",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "postgres:15",
+      "name": "dominion-db",
+      "state": "running",
+      "status": "Up 5 weeks"
+    },
+    {
+      "image": "n8nio/n8n:latest",
+      "name": "dominion-n8n",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "dominion-seo:latest",
+      "name": "dominion-seo",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "3224bfc43c02",
+      "name": "dominion-web",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "movie-generator",
+      "name": "movie-generator",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "name": "wix-agent",
+      "state": "running",
+      "status": "Up 23 hours (healthy)"
+    },
+    {
+      "image": "desktop-tutorial-wix-agent",
+      "name": "wix-agent-rollback-20260720T224801Z",
+      "state": "exited",
+      "status": "Exited (0) 23 hours ago"
+    }
+  ],
   "alignment_stage": "2D-R2-inspect",
-  "status": "started",
+  "before_containers": [
+    {
+      "image": "a319b3721a52",
+      "name": "baby-api",
+      "state": "running",
+      "status": "Up 4 weeks (healthy)"
+    },
+    {
+      "image": "alpine:latest",
+      "name": "baby-logger",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "postgres:15",
+      "name": "dominion-db",
+      "state": "running",
+      "status": "Up 5 weeks"
+    },
+    {
+      "image": "n8nio/n8n:latest",
+      "name": "dominion-n8n",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "dominion-seo:latest",
+      "name": "dominion-seo",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "3224bfc43c02",
+      "name": "dominion-web",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "movie-generator",
+      "name": "movie-generator",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "name": "wix-agent",
+      "state": "running",
+      "status": "Up 23 hours (healthy)"
+    },
+    {
+      "image": "desktop-tutorial-wix-agent",
+      "name": "wix-agent-rollback-20260720T224801Z",
+      "state": "exited",
+      "status": "Exited (0) 23 hours ago"
+    }
+  ],
+  "containers_unchanged": true,
+  "generated_at": "2026-07-21T21:20:25.636898+00:00",
+  "reference_matches": [
+    {
+      "matches": [
+        {
+          "line": 3,
+          "matched": [
+            "conductor-api.service"
+          ],
+          "sanitized": "After=network.target conductor-api.service"
+        }
+      ],
+      "path": "/etc/systemd/system/conductor-scheduler.service",
+      "sha256": "2d409f7fdfdee299340211d6674ee2f1813cfed340b5fbf1ba0b845aa8f0ed9e",
+      "size_bytes": 445
+    },
+    {
+      "matches": [
+        {
+          "line": 3,
+          "matched": [
+            "conductor-api.service"
+          ],
+          "sanitized": "After=network.target conductor-api.service"
+        }
+      ],
+      "path": "/etc/systemd/system/conductor-worker.service",
+      "sha256": "96039bb7eed09a5bc70f10e2bd92f8862342e3913c112f816664b8eee15ef203",
+      "size_bytes": 439
+    },
+    {
+      "matches": [
+        {
+          "line": 9,
+          "matched": [
+            "port_healer.py"
+          ],
+          "sanitized": "ExecStart=/usr/bin/python3 /home/malachisingleton8/buddy_core/port_healer.py"
+        }
+      ],
+      "path": "/etc/systemd/system/dominion-port-healer.service",
+      "sha256": "a2b209a4a9f182eb5ecb61a10d08db0aa226f04fe4169f45c35239f389d6c7a5",
+      "size_bytes": 375
+    },
+    {
+      "matches": [
+        {
+          "line": 38,
+          "matched": [
+            "alchemist-api.service",
+            "conductor-api.service",
+            "juris-api.service"
+          ],
+          "sanitized": "# Stale duplicates (alchemist-api.service, juris-api.service, conductor-api.service)"
+        },
+        {
+          "line": 293,
+          "matched": [
+            "port_healer.py"
+          ],
+          "sanitized": "print(ERROR: port_healer.py must run as root, file=sys.stderr)"
+        }
+      ],
+      "path": "/home/malachisingleton8/buddy_core/port_healer.py",
+      "sha256": "c415ed547e5680fd7c6c4d75fd043acb2a6776de9c0fc31f746e65697301937f",
+      "size_bytes": 12043
+    }
+  ],
+  "safety": {
+    "cron_changed": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "environment_values_collected": false,
+    "logs_collected": false,
+    "only_whitelisted_directives_collected": true,
+    "process_arguments_redacted": true,
+    "production_containers_changed": false,
+    "repositories_changed": false,
+    "secret_values_collected": false,
+    "services_changed": false,
+    "timers_changed": false
+  },
+  "scan_summary": {
+    "files_scanned": 5985,
+    "max_file_bytes": 1048576,
+    "max_files": 6000,
+    "roots_considered": [
+      "/etc/systemd/system",
+      "/etc/cron.d",
+      "/etc/cron.daily",
+      "/etc/cron.hourly",
+      "/etc/cron.weekly",
+      "/home/malachisingleton8/buddy_core",
+      "/home/malachisingleton8/conductor",
+      "/home/malachisingleton8/dominion",
+      "/usr/local/bin",
+      "/opt/dominion"
+    ]
+  },
+  "status": "success",
+  "success": true,
+  "suspect_units": {
+    "conductor-scheduler.service": {
+      "directives": [
+        {
+          "directive": "Description",
+          "line": 2,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "Dominion Conductor Scheduler"
+        },
+        {
+          "directive": "After",
+          "line": 3,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": true,
+          "value": "network.target conductor-api.service"
+        },
+        {
+          "directive": "User",
+          "line": 7,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "malachisingleton8"
+        },
+        {
+          "directive": "WorkingDirectory",
+          "line": 8,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/home/malachisingleton8/conductor"
+        },
+        {
+          "directive": "ExecStart",
+          "line": 9,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/bin/bash -lc set -a; source /home/malachisingleton8/conductor/.env; set +a; exec /home/malachisingleton8/conductor/venv/bin/python /home/malachisingleton8/conductor/scheduler.py"
+        },
+        {
+          "directive": "Restart",
+          "line": 10,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "always"
+        },
+        {
+          "directive": "RestartSec",
+          "line": 11,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "5"
+        }
+      ],
+      "process": {
+        "command": "/home/malachisingleton8/conductor/venv/bin/python /home/malachisingleton8/conductor/scheduler.py",
+        "mentions_port_healer": false,
+        "mentions_retired_unit": false,
+        "pid": 387
+      },
+      "state": {
+        "active_state": "active",
+        "fragment_path": "/etc/systemd/system/conductor-scheduler.service",
+        "load_state": "loaded",
+        "main_pid": 387,
+        "n_restarts": 0,
+        "sub_state": "running",
+        "unit": "conductor-scheduler.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "conductor-worker.service": {
+      "directives": [
+        {
+          "directive": "Description",
+          "line": 2,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "Dominion Conductor Worker"
+        },
+        {
+          "directive": "After",
+          "line": 3,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": true,
+          "value": "network.target conductor-api.service"
+        },
+        {
+          "directive": "User",
+          "line": 7,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "malachisingleton8"
+        },
+        {
+          "directive": "WorkingDirectory",
+          "line": 8,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/home/malachisingleton8/conductor"
+        },
+        {
+          "directive": "ExecStart",
+          "line": 9,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/bin/bash -lc set -a; source /home/malachisingleton8/conductor/.env; set +a; exec /home/malachisingleton8/conductor/venv/bin/python /home/malachisingleton8/conductor/worker.py"
+        },
+        {
+          "directive": "Restart",
+          "line": 10,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "always"
+        },
+        {
+          "directive": "RestartSec",
+          "line": 11,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "5"
+        }
+      ],
+      "process": {
+        "command": "/home/malachisingleton8/conductor/venv/bin/python /home/malachisingleton8/conductor/worker.py",
+        "mentions_port_healer": false,
+        "mentions_retired_unit": false,
+        "pid": 1245651
+      },
+      "state": {
+        "active_state": "active",
+        "fragment_path": "/etc/systemd/system/conductor-worker.service",
+        "load_state": "loaded",
+        "main_pid": 1245651,
+        "n_restarts": 8,
+        "sub_state": "running",
+        "unit": "conductor-worker.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "dominion-guardian.service": {
+      "directives": [
+        {
+          "directive": "Description",
+          "line": 2,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "Dominion System Guardian"
+        },
+        {
+          "directive": "After",
+          "line": 3,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "network.target docker.service"
+        },
+        {
+          "directive": "Wants",
+          "line": 4,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "docker.service"
+        },
+        {
+          "directive": "User",
+          "line": 7,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "malachisingleton8"
+        },
+        {
+          "directive": "WorkingDirectory",
+          "line": 9,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/home/malachisingleton8"
+        },
+        {
+          "directive": "ExecStart",
+          "line": 11,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/home/malachisingleton8/dominion_env/bin/python3 /home/malachisingleton8/dominion_guardian.py"
+        },
+        {
+          "directive": "Restart",
+          "line": 12,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "always"
+        },
+        {
+          "directive": "RestartSec",
+          "line": 13,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "30"
+        }
+      ],
+      "process": {
+        "command": "/home/malachisingleton8/dominion_env/bin/python3 /home/malachisingleton8/dominion_guardian.py",
+        "mentions_port_healer": false,
+        "mentions_retired_unit": false,
+        "pid": 1453
+      },
+      "state": {
+        "active_state": "active",
+        "fragment_path": "/etc/systemd/system/dominion-guardian.service",
+        "load_state": "loaded",
+        "main_pid": 1453,
+        "n_restarts": 0,
+        "sub_state": "running",
+        "unit": "dominion-guardian.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "dominion-healthcheck.service": {
+      "directives": [
+        {
+          "directive": "Description",
+          "line": 2,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "Dominion Healthcheck"
+        },
+        {
+          "directive": "ExecStart",
+          "line": 6,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/etc/dominion/healthcheck.sh"
+        }
+      ],
+      "process": null,
+      "state": {
+        "active_state": "inactive",
+        "fragment_path": "/etc/systemd/system/dominion-healthcheck.service",
+        "load_state": "loaded",
+        "main_pid": 0,
+        "n_restarts": 0,
+        "sub_state": "dead",
+        "unit": "dominion-healthcheck.service",
+        "unit_file_state": "static"
+      }
+    },
+    "dominion-monitor.service": {
+      "directives": [
+        {
+          "directive": "Description",
+          "line": 2,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "Dominion System Monitor"
+        },
+        {
+          "directive": "After",
+          "line": 3,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "network.target"
+        },
+        {
+          "directive": "User",
+          "line": 7,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "malachisingleton8"
+        },
+        {
+          "directive": "WorkingDirectory",
+          "line": 8,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/home/malachisingleton8"
+        },
+        {
+          "directive": "ExecStart",
+          "line": 9,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/usr/bin/python3 /home/malachisingleton8/dominion_monitor.py --daemon"
+        },
+        {
+          "directive": "Restart",
+          "line": 10,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "always"
+        },
+        {
+          "directive": "RestartSec",
+          "line": 11,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "30"
+        }
+      ],
+      "process": {
+        "command": "/usr/bin/python3 /home/malachisingleton8/dominion_monitor.py --daemon",
+        "mentions_port_healer": false,
+        "mentions_retired_unit": false,
+        "pid": 400
+      },
+      "state": {
+        "active_state": "active",
+        "fragment_path": "/etc/systemd/system/dominion-monitor.service",
+        "load_state": "loaded",
+        "main_pid": 400,
+        "n_restarts": 0,
+        "sub_state": "running",
+        "unit": "dominion-monitor.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "dominion-port-healer.service": {
+      "directives": [
+        {
+          "directive": "Description",
+          "line": 2,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "Dominion Port Conflict Auto-Healer"
+        },
+        {
+          "directive": "After",
+          "line": 3,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "network.target dominion-sentinel.service"
+        },
+        {
+          "directive": "User",
+          "line": 7,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "root"
+        },
+        {
+          "directive": "WorkingDirectory",
+          "line": 8,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/home/malachisingleton8/buddy_core"
+        },
+        {
+          "directive": "ExecStart",
+          "line": 9,
+          "mentions_port_healer": true,
+          "mentions_retired_unit": false,
+          "value": "/usr/bin/python3 /home/malachisingleton8/buddy_core/port_healer.py"
+        },
+        {
+          "directive": "Restart",
+          "line": 10,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "always"
+        },
+        {
+          "directive": "RestartSec",
+          "line": 11,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "30"
+        }
+      ],
+      "process": null,
+      "state": {
+        "active_state": "inactive",
+        "fragment_path": "/etc/systemd/system/dominion-port-healer.service",
+        "load_state": "loaded",
+        "main_pid": 0,
+        "n_restarts": 0,
+        "sub_state": "dead",
+        "unit": "dominion-port-healer.service",
+        "unit_file_state": "disabled"
+      }
+    },
+    "dominion-sentinel.service": {
+      "directives": [
+        {
+          "directive": "Description",
+          "line": 2,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "Dominion Sentinel — Autonomous Guardian (phi=1.618)"
+        },
+        {
+          "directive": "After",
+          "line": 3,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "network-online.target docker.service"
+        },
+        {
+          "directive": "Wants",
+          "line": 4,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "network-online.target"
+        },
+        {
+          "directive": "User",
+          "line": 8,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "malachisingleton8"
+        },
+        {
+          "directive": "WorkingDirectory",
+          "line": 9,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/home/malachisingleton8/buddy_core"
+        },
+        {
+          "directive": "ExecStart",
+          "line": 10,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/home/malachisingleton8/dominion_env/bin/python3 sentinel.py"
+        },
+        {
+          "directive": "Restart",
+          "line": 11,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "always"
+        },
+        {
+          "directive": "RestartSec",
+          "line": 12,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "10"
+        }
+      ],
+      "process": {
+        "command": "/home/malachisingleton8/dominion_env/bin/python3 sentinel.py",
+        "mentions_port_healer": false,
+        "mentions_retired_unit": false,
+        "pid": 729068
+      },
+      "state": {
+        "active_state": "active",
+        "fragment_path": "/etc/systemd/system/dominion-sentinel.service",
+        "load_state": "loaded",
+        "main_pid": 729068,
+        "n_restarts": 0,
+        "sub_state": "running",
+        "unit": "dominion-sentinel.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "dominion-watchdog.service": {
+      "directives": [
+        {
+          "directive": "Description",
+          "line": 2,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "Dominion Watchdog Health Check"
+        },
+        {
+          "directive": "After",
+          "line": 3,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "network.target"
+        },
+        {
+          "directive": "ExecStart",
+          "line": 7,
+          "mentions_port_healer": false,
+          "mentions_retired_unit": false,
+          "value": "/usr/local/bin/dominion-watchdog.sh"
+        }
+      ],
+      "process": null,
+      "state": {
+        "active_state": "inactive",
+        "fragment_path": "/etc/systemd/system/dominion-watchdog.service",
+        "load_state": "loaded",
+        "main_pid": 0,
+        "n_restarts": 0,
+        "sub_state": "dead",
+        "unit": "dominion-watchdog.service",
+        "unit_file_state": "static"
+      }
+    }
+  },
   "workflow": {
     "run_id": 29869539712,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29869539712",
     "source_sha": "f0f109363bb4affa90efe70d367dd04ffd745ddc",
-    "artifact_name": "dominion-alignment-stage2d-r2-inspect"
+    "artifact_name": "dominion-alignment-stage2d-r2-inspect",
+    "job_status": "success"
   }
 }

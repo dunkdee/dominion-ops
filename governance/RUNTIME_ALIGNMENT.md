@@ -1,45 +1,48 @@
 # Dominion Production Runtime Alignment
 
-**Snapshot:** 2026-07-21 19:32 UTC  
-**Source:** `Production Ecosystem Audit` run `29861920503`  
+**Initial snapshot:** 2026-07-21 19:32 UTC  
+**Initial source:** `Production Ecosystem Audit` run `29861920503`  
+**Stage-1 verification:** `Production Alignment Stage 1` run `29862504700`  
 **Operating order:** Cash flow → Systems → Scale
 
 ## Executive determination
 
-The production VM is operational but not yet fully aligned. The revenue core is healthy. The principal drift is duplicate systemd ownership, unmanaged runtime sprawl, incomplete human-approval enforcement, and missing proof for several vertical exit gates.
+The production VM is operational and the first stabilization stage is complete. The protected revenue core remained healthy while proven duplicate restart loops, approval-gated publishers, and the stuck surplus scraper were removed from active execution.
+
+The ecosystem is **stabilized but not yet fully unified**. Stage 2 must establish one canonical runtime inventory, boot-persistent ownership, restart budgets, backup proof, and a deployment-root decision before any inactive vertical is promoted.
 
 No vertical may be promoted merely because code or a service exists. Promotion requires the exit gate in `governance/verticals.json`.
 
 ## Protected revenue core
 
-These components were reachable and must not be disrupted during Stage 1 alignment:
+These components remained healthy after Stage 1:
 
-| Component | Production evidence | Governance mode |
+| Component | Verified production evidence | Governance mode |
 |---|---|---|
-| Baby API | HTTP 200 on `127.0.0.1:8080/`; healthy Docker container | Production support |
-| Wix Agent | HTTP 200 on `127.0.0.1:8082/ready`; healthy Docker container | Record-only |
+| Baby API | HTTP 200 on `127.0.0.1:8080/` | Production support |
+| Wix Agent | HTTP 200 on `127.0.0.1:8082/ready` | Record-only |
 | Dominion Web | HTTP 200 on `127.0.0.1:8090/` | Production |
 | n8n | HTTP 200 on `127.0.0.1:5678/healthz` | Approved automation only |
-| Alpha Engine | HTTP 200 on `127.0.0.1:8787/health`; canonical systemd unit running | Paper-only |
-| Caddy | Canonical systemd unit running | Production edge |
-| Gatekeeper | Canonical systemd unit running | Revenue rail |
-| Store API | Canonical systemd unit running | Production payment surface |
+| Alpha Engine | HTTP 200 on `127.0.0.1:8787/health` | Paper-only |
+| Caddy | `active/running` | Production edge |
+| Gatekeeper | `active/running` | Revenue rail |
+| Store API | `active/running` | Production payment surface |
 
-## Canonical service ownership
+Stage 1 did not restart canonical services, delete persistent data, read secrets, or collect logs.
 
-The following canonical units were active and running. Their legacy duplicates were stuck in restart loops and are candidates for guarded removal:
+## Stage-1 verified actions
 
-| Vertical | Canonical unit | Legacy duplicate |
-|---|---|---|
-| Health / Alchemist | `dominion-alchemist.service` | `alchemist-api.service` |
-| Orchestration / Conductor | `dominion-conductor.service` | `conductor-api.service` |
-| Governance / Juris | `dominion-juris.service` | `juris-api.service` |
+The following duplicate units were stopped and disabled only after their canonical replacements were confirmed `active/running`:
 
-Stage 1 may stop and disable a legacy unit only when its canonical replacement is still `active/running` and the legacy unit is still `activating`, `failed`, or `auto-restart`.
+| Vertical | Canonical unit preserved | Duplicate removed from execution | Prior accumulated restarts |
+|---|---|---:|---:|
+| Health / Alchemist | `dominion-alchemist.service` | `alchemist-api.service` | 25,063 |
+| Orchestration / Conductor | `dominion-conductor.service` | `conductor-api.service` | 3,372 |
+| Governance / Juris | `dominion-juris.service` | `juris-api.service` | 38,097 |
 
-## Human-approval gates
+The stuck `dominion-surplus-scraper.service` was quarantined after 2,739 accumulated restarts. The human-facing surplus dashboard and review queue were preserved.
 
-The following autonomous publishing units must remain disabled until their vertical exit gates are satisfied:
+The following approval-gated publishers remain inactive:
 
 - `conductor-autonomous.service`
 - `dominion-social-poster.service`
@@ -47,7 +50,9 @@ The following autonomous publishing units must remain disabled until their verti
 - `dominion-youtube.service`
 - `dominion-kdp.service`
 
-The TikTok API may remain available for OAuth and draft validation, but publishing must default to disabled and require:
+## Human-approval gates
+
+TikTok publishing defaults to disabled and requires all of the following:
 
 1. A configured operator token.
 2. A matching `X-Operator-Token` header.
@@ -55,39 +60,37 @@ The TikTok API may remain available for OAuth and draft validation, but publishi
 4. An explicitly configured and verified account.
 5. `TIKTOK_PUBLISH_ENABLED=true` set by the human operator.
 
-## Surplus vertical
-
-The surplus dashboard and human review queue were running. The scraper was stuck in startup. Stage 1 may quarantine only the stuck scraper while preserving:
-
-- `dominion-surplus-dashboard.service`
-- `dominion-review-queue.service`
-
 The surplus vertical remains `research_only`. It may not autonomously contact claimants, collect sensitive identity data, sign, submit, or file documents.
 
-## Runtime drift requiring later reconciliation
+## Remaining Stage-2 reconciliation
 
 - The reported Compose project is `desktop-tutorial`, sourced from `/home/malachisingleton8/desktop-tutorial/docker-compose.yml`, while the canonical repository is `/home/malachisingleton8/dominion-ops`.
 - Multiple production containers and systemd units exist outside one declared deployment manifest.
-- Browser agents and Obsidian were not reachable on their expected ports.
+- `dominion-conductor.service` is active but was reported disabled for boot; boot persistence must be verified before changing it.
+- Caddy is active but was reported disabled for boot; package or socket ownership must be verified before changing it.
+- `dominion-juris.service` is currently running but has a high historical restart count; Stage 2 must measure restart delta rather than assume current instability.
+- Browser agents and Obsidian were not reachable on their expected ports and remain non-core.
 - The Conductor port was reachable but `/healthz` returned 404, so its health contract is not aligned.
 - The surplus webroot `/var/www/surplus` was absent.
-- Backup, timer, restart-policy, and rollback execution still require explicit verification.
-- Digital-product publication and delivery still require a test checkout and delivery proof.
+- Backup, timer, resource-limit, restart-policy, and rollback execution still require explicit verification.
+- Digital-product publication and delivery still require a controlled checkout and delivery proof.
 
 ## Stage sequence
 
-### Stage 1 — Stabilize
+### Stage 1 — Stabilize — COMPLETE
 
-- Remove proven duplicate restart loops.
-- Preserve the healthy revenue core.
-- Disable approval-gated autonomous publishers.
-- Quarantine the stuck surplus scraper.
-- Produce a before/after report and fail on core regression.
+- Removed proven duplicate restart loops.
+- Preserved the healthy revenue core.
+- Disabled approval-gated autonomous publishers.
+- Quarantined the stuck surplus scraper.
+- Produced a before/after report with zero core regressions.
 
-### Stage 2 — Unify control
+### Stage 2 — Unify control — ACTIVE
 
 - Declare one canonical deployment root.
-- Map every active service to one vertical and one owner.
+- Map every active service and container to one vertical and one owner.
+- Verify boot persistence without restarting healthy services.
+- Measure restart deltas for canonical services.
 - Correct the Conductor health contract.
 - Add restart budgets, resource limits, backup verification, and rollback tests.
 - Reconcile unmanaged Docker containers and systemd units into a runtime manifest.
@@ -103,4 +106,4 @@ The surplus vertical remains `research_only`. It may not autonomously contact cl
 
 ### Stage 4 — Scale
 
-Scale remains prohibited until the relevant Stage 3 exit gate is evidenced and recorded.
+Scale remains prohibited until the relevant Stage-3 exit gate is evidenced and recorded.

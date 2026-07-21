@@ -1,0 +1,205 @@
+name: One-time Dominion Vault trust-paper inventory
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/dominion-vault-trust-inventory.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dominion-vault-trust-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Configure pinned-host SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Build metadata-only trust document inventory
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          output_dir="$RUNNER_TEMP/dominion-vault-inventory"
+          manifest="$output_dir/trust-paper-inventory.jsonl"
+          install -d -m 700 "$output_dir"
+
+          ssh \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" 'bash -se' > "$manifest" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          vault_root="$HOME/dominion_vault"
+          test -d "$vault_root"
+          resolved_root="$(realpath -e -- "$vault_root")"
+          case "$resolved_root" in
+            "$HOME"/*) ;;
+            *) echo "Vault root is outside the VM user home" >&2; exit 1 ;;
+          esac
+
+          python3 - "$resolved_root" <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import stat
+          import sys
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root = Path(sys.argv[1]).resolve(strict=True)
+          allowed_extensions = {
+              ".pdf", ".doc", ".docx", ".odt", ".rtf", ".txt", ".md",
+              ".png", ".jpg", ".jpeg", ".tif", ".tiff",
+          }
+          legal_name = re.compile(
+              r"trust|trustee|declaration|certificate|agreement|indenture|"
+              r"assignment|memorandum|abstract|schedule[ _-]?[a-z0-9]|"
+              r"estate|beneficiar|settlor|grantor",
+              re.IGNORECASE,
+          )
+          records = []
+
+          for directory, directory_names, file_names in os.walk(root, followlinks=False):
+              directory_path = Path(directory)
+              directory_names[:] = sorted(
+                  name
+                  for name in directory_names
+                  if not (directory_path / name).is_symlink()
+                  and name not in {".git", "node_modules", "__pycache__"}
+              )
+              for file_name in sorted(file_names):
+                  path = directory_path / file_name
+                  try:
+                      metadata = path.lstat()
+                  except OSError:
+                      continue
+                  if not stat.S_ISREG(metadata.st_mode):
+                      continue
+                  relative_path = path.relative_to(root).as_posix()
+                  lower_path = relative_path.casefold()
+                  if path.suffix.casefold() not in allowed_extensions:
+                      continue
+                  trust_signature = (
+                      "trust" in lower_path
+                      or ("primal" in lower_path and "dominion" in lower_path)
+                      or ("dominion" in lower_path and "legacy" in lower_path)
+                  )
+                  if not trust_signature and not legal_name.search(relative_path):
+                      continue
+
+                  digest = None
+                  hash_status = "too_large_to_hash"
+                  if metadata.st_size <= 100 * 1024 * 1024:
+                      hasher = hashlib.sha256()
+                      try:
+                          with path.open("rb") as source:
+                              for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                                  hasher.update(chunk)
+                          digest = hasher.hexdigest()
+                          hash_status = "verified"
+                      except OSError:
+                          hash_status = "unreadable"
+
+                  records.append(
+                      {
+                          "type": "candidate",
+                          "relative_path": relative_path,
+                          "size_bytes": metadata.st_size,
+                          "modified_utc": datetime.fromtimestamp(
+                              metadata.st_mtime, timezone.utc
+                          ).isoformat(),
+                          "sha256": digest,
+                          "hash_status": hash_status,
+                      }
+                  )
+
+          records.sort(key=lambda item: item["relative_path"].casefold())
+          if len(records) > 2000:
+              raise SystemExit("Candidate inventory exceeded the 2,000-file safety cap")
+          print(
+              json.dumps(
+                  {
+                      "type": "inventory",
+                      "version": 1,
+                      "root_name": root.name,
+                      "scanned_utc": datetime.now(timezone.utc).isoformat(),
+                      "candidate_count": len(records),
+                  },
+                  sort_keys=True,
+              )
+          )
+          for record in records:
+              print(json.dumps(record, sort_keys=True))
+          PY
+          REMOTE
+
+          MANIFEST="$manifest" python3 <<'PY'
+          import json
+          import os
+          from pathlib import PurePosixPath
+
+          lines = [line for line in open(os.environ["MANIFEST"], encoding="utf-8") if line.strip()]
+          if not lines:
+              raise SystemExit("Inventory manifest is empty")
+          header = json.loads(lines[0])
+          if header.get("type") != "inventory" or header.get("version") != 1:
+              raise SystemExit("Inventory manifest header is invalid")
+          records = [json.loads(line) for line in lines[1:]]
+          if header.get("candidate_count") != len(records):
+              raise SystemExit("Inventory candidate count does not match")
+          if len(records) > 2000:
+              raise SystemExit("Inventory exceeded the safety cap")
+          allowed_keys = {
+              "type", "relative_path", "size_bytes", "modified_utc",
+              "sha256", "hash_status",
+          }
+          for record in records:
+              if set(record) != allowed_keys or record.get("type") != "candidate":
+                  raise SystemExit("Inventory contains an unexpected field")
+              path = PurePosixPath(record["relative_path"])
+              if path.is_absolute() or ".." in path.parts:
+                  raise SystemExit("Inventory contains an unsafe path")
+          print(f"Matched {len(records)} candidate trust documents.")
+          PY
+
+      - name: Upload short-lived private inventory
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dominion-vault-trust-inventory-${{ github.run_id }}
+          path: ${{ runner.temp }}/dominion-vault-inventory/trust-paper-inventory.jsonl
+          if-no-files-found: error
+          retention-days: 1

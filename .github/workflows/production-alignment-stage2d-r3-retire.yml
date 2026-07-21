@@ -1,0 +1,254 @@
+name: Production Alignment Stage 2D-R3 Retire
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type exactly RETIRE_STAGE_2D_R3 to persistently retire legacy units
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-alignment-stage2d-r3-retire
+  cancel-in-progress: false
+
+jobs:
+  retire:
+    if: ${{ inputs.confirm == 'RETIRE_STAGE_2D_R3' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      REPORT_DIR: /tmp/dominion-alignment-stage2d-r3
+      REPORT_FILE: /tmp/dominion-alignment-stage2d-r3/result.json
+      REMOTE_SCRIPT: /tmp/dominion-stage2d-r3-retire.py
+      REPORT_BRANCH: audit/alignment-stage2d-r3-retire-20260721
+      REPORT_PATH: governance/stage2d_r3_retire_result.json
+      ARTIFACT_NAME: dominion-alignment-stage2d-r3-retire
+
+    steps:
+      - name: Publish run pointer
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            const sourceSha = context.sha;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({
+                owner, repo, ref: `refs/heads/${branch}`, sha: sourceSha,
+              });
+            }
+            const report = {
+              alignment_stage: '2D-R3-retire',
+              status: 'started',
+              workflow: {
+                run_id: context.runId,
+                run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                source_sha: sourceSha,
+                artifact_name: process.env.ARTIFACT_NAME,
+              },
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Stage-2D-R3 retirement run ${context.runId} started`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Checkout exact retirement source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate retirement script
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/runtime/persistently_retire_units.py
+
+      - name: Configure strict SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Validate retirement target shape
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" \
+            "sudo -n python3 -" <<'PY'
+          import os
+          from pathlib import Path
+
+          units = (
+              "alchemist-api.service",
+              "conductor-api.service",
+              "juris-api.service",
+              "dominion-port-healer.service",
+          )
+          for unit in units:
+              path = Path("/etc/systemd/system") / unit
+              if path.is_symlink():
+                  target = os.readlink(path)
+                  if target != "/dev/null":
+                      raise SystemExit(f"unexpected_symlink:{unit}")
+              elif not path.is_file():
+                  raise SystemExit(f"local_unit_file_missing:{unit}")
+          PY
+
+      - name: Apply reversible persistent retirement
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 "$REPORT_DIR"
+          printf '%s\n' '{"alignment_stage":"2D-R3-retire","status":"collector_not_completed","success":false}' > "$REPORT_FILE"
+          scp \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            scripts/runtime/persistently_retire_units.py \
+            "$VM_USER@$VM_HOST:$REMOTE_SCRIPT"
+          set +e
+          ssh \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" \
+            "chmod 700 '$REMOTE_SCRIPT' && sudo -n env RUN_ID='$GITHUB_RUN_ID' python3 '$REMOTE_SCRIPT'; RC=\$?; rm -f '$REMOTE_SCRIPT'; exit \$RC" \
+            > "$REPORT_FILE"
+          RC=$?
+          set -e
+          python3 -m json.tool "$REPORT_FILE" >/dev/null
+          chmod 600 "$REPORT_FILE"
+          echo "RETIREMENT_RC=$RC" >> "$GITHUB_ENV"
+
+      - name: Upload private Stage-2D-R3 result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.REPORT_FILE }}
+          if-no-files-found: warn
+          retention-days: 3
+          compression-level: 9
+
+      - name: Publish terminal Stage-2D-R3 result
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          JOB_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            let report;
+            if (fs.existsSync(process.env.REPORT_FILE)) {
+              try {
+                report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, 'utf8'));
+              } catch (error) {
+                report = { alignment_stage: '2D-R3-retire', status: 'report_parse_failed', success: false };
+              }
+            } else {
+              report = { alignment_stage: '2D-R3-retire', status: 'report_missing', success: false };
+            }
+            report.workflow = {
+              run_id: context.runId,
+              run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              source_sha: context.sha,
+              artifact_name: process.env.ARTIFACT_NAME,
+              job_status: process.env.JOB_STATUS,
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Stage-2D-R3 retirement run ${context.runId} ${process.env.JOB_STATUS}`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Enforce retirement result
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["REPORT_FILE"])
+          if not path.is_file():
+              raise SystemExit("retirement report missing")
+          report = json.loads(path.read_text(encoding="utf-8"))
+          if not report.get("success"):
+              raise SystemExit("persistent retirement did not pass verification")
+          if report.get("rollback_performed"):
+              raise SystemExit("persistent retirement was rolled back")
+          PY
+
+      - name: Remove temporary runner material
+        if: ${{ always() }}
+        run: |
+          set -eu
+          rm -rf "$REPORT_DIR"
+          rm -f ~/.ssh/id_vm ~/.ssh/known_hosts

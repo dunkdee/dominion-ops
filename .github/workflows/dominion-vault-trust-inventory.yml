@@ -62,7 +62,7 @@ jobs:
             "$VM_USER@$VM_HOST" 'bash -se' > "$manifest" <<'REMOTE'
           set -euo pipefail
           umask 077
-          vault_root="$HOME/dominion_vault"
+          vault_root="$HOME/vault"
           test -d "$vault_root"
           resolved_root="$(realpath -e -- "$vault_root")"
           case "$resolved_root" in

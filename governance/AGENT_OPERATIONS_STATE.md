@@ -77,6 +77,17 @@ Evidence: workflow run `29867278124`.
 - Production containers were unchanged.
 - No cutover is authorized.
 
+### Stage 2D-R / R2 — Reactivation tracing
+
+Evidence: workflow runs `29868756275` and `29869539712`.
+
+- `conductor-scheduler.service` and `conductor-worker.service` reference `conductor-api.service` only through `After=` ordering directives; those directives do not start the retired API.
+- Their `ExecStart` commands run only `scheduler.py` and `worker.py`.
+- The three retired unit names in `buddy_core/port_healer.py` occur in a stale explanatory comment, not an execution command.
+- No matching user cron entry was found.
+- The retired unit files remain installed with `Restart=always`; once activated, they sustain their own restart loops.
+- Runtime-only masks did not provide durable retirement. The next control must back up the local unit files and install persistent, reversible `/dev/null` masks.
+
 ## Current protected production core
 
 - Baby API — port 8080
@@ -93,20 +104,32 @@ Evidence: workflow run `29867278124`.
 
 ## Current active work
 
-### Stage 2D-R — Retired-unit reactivation trace
+### Stage 2D-R3 — Persistent retirement
 
-**Goal:** Identify the exact timer, service, cron entry, executable, or script that starts the retired APIs after containment.
+**Goal:** Permanently but reversibly prevent the four retired systemd units from executing while preserving every canonical service.
 
 Required behavior:
 
-1. Read-only inspection only; do not stop, disable, mask, restart, or edit services.
-2. Record systemd dependencies, triggers, restart policy, fragment paths, and executable paths for retired units and monitoring services.
-3. Scan only bounded systemd, cron, and referenced executable files for literal retired-unit names.
-4. Report file paths, matched unit tokens, line numbers, hashes, and service metadata—never environment values or full file contents.
-5. Preserve all production containers, databases, DNS, volumes, networks, and repositories unchanged.
+1. Refuse unexpected unit-file shapes or symlinks.
+2. Verify canonical services and protected HTTP endpoints before changing anything.
+3. Copy each local unit file into a root-only recovery directory.
+4. Stop and disable the retired units.
+5. Replace their `/etc/systemd/system` unit files with `/dev/null` masks.
+6. Wait 90 seconds and verify retired units remain inactive and masked.
+7. Verify protected services record zero new restarts and all protected HTTP checks remain 200.
+8. Confirm production container inventory is unchanged.
+9. Automatically restore the backed-up unit files if any protected verification fails.
 
-## Blocked until Stage 2D-R evidence exists
+Retirement targets:
 
+- `alchemist-api.service`
+- `conductor-api.service`
+- `juris-api.service`
+- `dominion-port-healer.service`
+
+## Blocked until Stage 2D-R3 evidence exists
+
+- Re-running isolated image builds.
 - Switching the live Compose project to the canonical release.
 - Resetting, deleting, or renaming the old VM checkout.
 - Starting browser-agents or Obsidian.

@@ -1,10 +1,209 @@
 {
+  "after_containers": {
+    "available": true,
+    "containers": [
+      {
+        "health": "healthy",
+        "image": "desktop-tutorial-baby-api",
+        "name": "baby-api",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "alpine:latest",
+        "name": "baby-logger",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "postgres:15",
+        "name": "dominion-db",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "n8nio/n8n:latest",
+        "name": "dominion-n8n",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "dominion-seo:latest",
+        "name": "dominion-seo",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "desktop-tutorial-dominion-web",
+        "name": "dominion-web",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "movie-generator",
+        "name": "movie-generator",
+        "state": "running"
+      },
+      {
+        "health": "healthy",
+        "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+        "name": "wix-agent",
+        "state": "running"
+      },
+      {
+        "health": "unhealthy",
+        "image": "desktop-tutorial-wix-agent",
+        "name": "wix-agent-rollback-20260720T224801Z",
+        "state": "exited"
+      }
+    ]
+  },
   "alignment_stage": "2C-prepare",
-  "status": "started",
+  "archive_sha256": "f2271bde227b3795ecad31420a96e67e58b4c48c94de0af8e0b53b7afaaf56c3",
+  "before_containers": {
+    "available": true,
+    "containers": [
+      {
+        "health": "healthy",
+        "image": "desktop-tutorial-baby-api",
+        "name": "baby-api",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "alpine:latest",
+        "name": "baby-logger",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "postgres:15",
+        "name": "dominion-db",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "n8nio/n8n:latest",
+        "name": "dominion-n8n",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "dominion-seo:latest",
+        "name": "dominion-seo",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "desktop-tutorial-dominion-web",
+        "name": "dominion-web",
+        "state": "running"
+      },
+      {
+        "health": null,
+        "image": "movie-generator",
+        "name": "movie-generator",
+        "state": "running"
+      },
+      {
+        "health": "healthy",
+        "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+        "name": "wix-agent",
+        "state": "running"
+      },
+      {
+        "health": "unhealthy",
+        "image": "desktop-tutorial-wix-agent",
+        "name": "wix-agent-rollback-20260720T224801Z",
+        "state": "exited"
+      }
+    ]
+  },
+  "compose_validation": {
+    "docker_available": true,
+    "services": [
+      "baby-api",
+      "baby-logger",
+      "browser-agents",
+      "dominion-web",
+      "obsidian-remote",
+      "wix-agent"
+    ],
+    "stderr_type": "present",
+    "valid": true
+  },
+  "containers_unchanged": true,
+  "environment_preservation": {
+    "copied": true,
+    "destination": "/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a/.env",
+    "mode": "0o600",
+    "sha256": "757601b1009add4252902ee3176e5c16fb8fd39b8182b8883b2420a3aa9ad0cd",
+    "size_bytes": 3117,
+    "source": "/home/malachisingleton8/dominion-ops/.env",
+    "source_is_regular_file": true
+  },
+  "errors": [],
+  "expected_archive_sha256": "f2271bde227b3795ecad31420a96e67e58b4c48c94de0af8e0b53b7afaaf56c3",
+  "follow_up_required": [],
+  "generated_at": "2026-07-21T20:41:22.605319+00:00",
+  "local_recovery_root": "/home/malachisingleton8/.dominion-recovery/stage2c-29866812526",
+  "old_repository": {
+    "branch": "claude/movie-generator-youtube-b50wx2",
+    "dirty_paths": [
+      ".env",
+      "docker-compose.yml",
+      "env.example"
+    ],
+    "exists": true,
+    "head": "aa2d7d2e9e92124a3ebc131d4f0d326b5b1c872b",
+    "path": "/home/malachisingleton8/dominion-ops"
+  },
+  "recovery_records": [
+    {
+      "backup": "/home/malachisingleton8/.dominion-recovery/stage2c-29866812526/old-root.env",
+      "exists": true,
+      "kind": "file",
+      "sha256": "757601b1009add4252902ee3176e5c16fb8fd39b8182b8883b2420a3aa9ad0cd",
+      "size_bytes": 3117,
+      "source": "/home/malachisingleton8/dominion-ops/.env"
+    },
+    {
+      "backup": "/home/malachisingleton8/.dominion-recovery/stage2c-29866812526/old-root.docker-compose.yml",
+      "exists": true,
+      "kind": "file",
+      "sha256": "42e2e90c41e9c154bf96f3ba2dc277811f873626af41b747474fcea6a494c8eb",
+      "size_bytes": 4595,
+      "source": "/home/malachisingleton8/dominion-ops/docker-compose.yml"
+    },
+    {
+      "backup": null,
+      "exists": false,
+      "source": "/home/malachisingleton8/dominion-ops/env.example"
+    }
+  ],
+  "release_compose_sha256": "42e2e90c41e9c154bf96f3ba2dc277811f873626af41b747474fcea6a494c8eb",
+  "release_exists": true,
+  "release_reused": false,
+  "release_root": "/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a",
+  "safety": {
+    "active_containers_recreated": false,
+    "active_containers_started": false,
+    "active_containers_stopped": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "old_repository_changed": false,
+    "secret_file_committed": false,
+    "secret_file_uploaded": false,
+    "secret_values_collected": false
+  },
+  "source_sha": "10646094aa3a5a1e0d4d18dc5508a33d2f5ec2a3",
+  "status": "success",
+  "success": true,
   "workflow": {
     "run_id": 29866812526,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29866812526",
     "source_sha": "10646094aa3a5a1e0d4d18dc5508a33d2f5ec2a3",
-    "artifact_name": "dominion-alignment-stage2c-prepare"
+    "artifact_name": "dominion-alignment-stage2c-prepare",
+    "job_status": "success"
   }
 }

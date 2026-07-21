@@ -2,6 +2,7 @@ name: One-time private Juris trust case transfer
 
 on:
   pull_request_target:
+    types: [opened, reopened, synchronize]
     branches:
       - main
     paths:
@@ -24,6 +25,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      - name: Report recovery run start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --body "Authorized Juris recovery run started — run ID: $GITHUB_RUN_ID — trusted base SHA: $GITHUB_SHA"
+
       - name: Validate VM connection secrets
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -144,13 +154,13 @@ jobs:
           fi
           rm -f ~/.ssh/id_vm ~/.ssh/known_hosts
 
-      - name: Report run pointer to recovery PR
+      - name: Report recovery run result
         if: ${{ always() }}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_STATUS: ${{ job.status }}
         run: |
           set -euo pipefail
-          gh pr comment 25 \
+          gh pr comment "${{ github.event.pull_request.number }}" \
             --repo "$GITHUB_REPOSITORY" \
-            --body "Authorized Juris recovery run ID: $GITHUB_RUN_ID — job status: $RUN_STATUS — head SHA: $GITHUB_SHA"
+            --body "Authorized Juris recovery run ID: $GITHUB_RUN_ID — job status: $RUN_STATUS — trusted base SHA: $GITHUB_SHA"

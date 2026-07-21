@@ -64,29 +64,42 @@ Evidence: workflow run `29866812526`.
 - No production container was started, stopped, recreated, or changed.
 - The orphaned VM checkout remained untouched.
 
-### Stage 2D — Independent preflight — VETOED
+### Stage 2D — Independent preflight — VETOED AS DESIGNED
 
 Evidence: workflow run `29867278124`.
 
 - Runtime, secrets, deployment, rollback, and agent-runtime gates passed.
-- Baby API, Wix, Dominion Web, n8n, Alpha Engine, and Conductor returned HTTP 200.
-- Canonical Conductor, Guardian, Sentinel, and Juris services were verified active/running.
-- Conductor Watchmen status returned HTTP 200; no irreversible Watchmen call was made.
-- The governance gate failed because `alchemist-api.service`, `conductor-api.service`, and `juris-api.service` reactivated.
-- The isolated image build was correctly skipped because a prerequisite gate failed.
-- Production containers were unchanged.
-- No cutover is authorized.
+- Canonical Conductor, Guardian, Sentinel, and Juris were active/running.
+- The governance gate vetoed because retired APIs had reactivated.
+- The isolated image build was correctly skipped.
+- No cutover was authorized and production containers were unchanged.
 
 ### Stage 2D-R / R2 — Reactivation tracing
 
 Evidence: workflow runs `29868756275` and `29869539712`.
 
-- `conductor-scheduler.service` and `conductor-worker.service` reference `conductor-api.service` only through `After=` ordering directives; those directives do not start the retired API.
-- Their `ExecStart` commands run only `scheduler.py` and `worker.py`.
-- The three retired unit names in `buddy_core/port_healer.py` occur in a stale explanatory comment, not an execution command.
+- Scheduler and worker references to `conductor-api.service` were only `After=` ordering directives and did not start it.
+- Their commands ran only `scheduler.py` and `worker.py`.
+- The retired names in `buddy_core/port_healer.py` occurred in a stale comment.
 - No matching user cron entry was found.
-- The retired unit files remain installed with `Restart=always`; once activated, they sustain their own restart loops.
-- Runtime-only masks did not provide durable retirement. The next control must back up the local unit files and install persistent, reversible `/dev/null` masks.
+- The continuing failure mechanism was the installed retired unit files using `Restart=always`.
+
+### Stage 2D-R3 — Persistent retirement — COMPLETE
+
+Evidence: workflow run `29874133137`.
+
+- Root-only backups were created under `/var/lib/dominion/unit-retirement/stage2d-r3-29874133137`.
+- Persistent `/dev/null` masks were installed for:
+  - `alchemist-api.service`
+  - `conductor-api.service`
+  - `juris-api.service`
+  - `dominion-port-healer.service`
+- All four units verified `inactive/dead/masked` after the change.
+- Canonical Caddy, Alchemist, Alpha, Conductor, Gatekeeper, Guardian, Juris, Sentinel, Store, and Gemini services remained `active/running`.
+- Every protected canonical service recorded a zero restart delta over 90 seconds.
+- Baby API, Wix, Dominion Web, n8n, Alpha Engine, and Conductor remained HTTP 200.
+- Production container inventory was unchanged.
+- No rollback was required; the retirement remains locally reversible from the recorded backups.
 
 ## Current protected production core
 
@@ -104,32 +117,23 @@ Evidence: workflow runs `29868756275` and `29869539712`.
 
 ## Current active work
 
-### Stage 2D-R3 — Persistent retirement
+### Stage 2D-R4 — Independent gate verification and isolated builds
 
-**Goal:** Permanently but reversibly prevent the four retired systemd units from executing while preserving every canonical service.
+**Goal:** Re-run all prerequisite evidence after durable retirement and build only the protected core images without changing production execution.
 
-Required behavior:
+Required evidence:
 
-1. Refuse unexpected unit-file shapes or symlinks.
-2. Verify canonical services and protected HTTP endpoints before changing anything.
-3. Copy each local unit file into a root-only recovery directory.
-4. Stop and disable the retired units.
-5. Replace their `/etc/systemd/system` unit files with `/dev/null` masks.
-6. Wait 90 seconds and verify retired units remain inactive and masked.
-7. Verify protected services record zero new restarts and all protected HTTP checks remain 200.
-8. Confirm production container inventory is unchanged.
-9. Automatically restore the backed-up unit files if any protected verification fails.
+1. Runtime endpoints remain HTTP 200 before and after build.
+2. Release `.env` remains local, regular, mode `0600`, and hash-matched.
+3. Release source marker, Compose hash, and six-service manifest match the approved release.
+4. Recovery `.env`, Compose copies, and R3 unit-file backups remain present.
+5. All four retired units remain persistent `masked` and inactive.
+6. Canonical Conductor, Guardian, Sentinel, and Juris remain active/running; Watchmen status remains reachable.
+7. Only `baby-api`, `dominion-web`, and `wix-agent` images are built under isolated Stage-2D-R4 tags.
+8. Running container inventory remains identical and canonical restart deltas remain zero.
 
-Retirement targets:
+## Blocked until Stage 2D-R4 evidence exists
 
-- `alchemist-api.service`
-- `conductor-api.service`
-- `juris-api.service`
-- `dominion-port-healer.service`
-
-## Blocked until Stage 2D-R3 evidence exists
-
-- Re-running isolated image builds.
 - Switching the live Compose project to the canonical release.
 - Resetting, deleting, or renaming the old VM checkout.
 - Starting browser-agents or Obsidian.

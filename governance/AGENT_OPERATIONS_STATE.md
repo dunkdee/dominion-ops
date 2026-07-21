@@ -12,7 +12,7 @@
 | Coordinator | Sequence work, reconcile evidence, prevent conflicting changes | May prepare and verify; may not bypass human approval gates |
 | Conductor | Route approved jobs and maintain execution state | No autonomous publishing or irreversible execution |
 | Guardian | Detect service drift, regressions, and unhealthy runtime state | Observe and report; may not reactivate retired services |
-| Sentinel | Independent runtime and governance verification | Observe, challenge, and report |
+| Sentinel | Independent runtime verification | Observe, challenge, and report |
 | Juris | Legal/compliance review and documentary boundaries | Draft/review only; no signing, filing, or representation |
 | Five Council | Cross-check promotion gates and unresolved risks | Advisory evidence review; human retains final decision |
 
@@ -60,9 +60,22 @@ Evidence: workflow run `29866812526`.
 - Source archive SHA-256 matched the expected value.
 - The local `.env` was copied into the release with mode `0600`; its hash matched the protected recovery copy.
 - Recovery copies were created under `/home/malachisingleton8/.dominion-recovery/stage2c-29866812526`.
-- Compose validation passed for `baby-api`, `baby-logger`, `browser-agents`, `dominion-web`, `obsidian-remote`, and `wix-agent`.
+- Compose validation passed for all six declared services.
 - No production container was started, stopped, recreated, or changed.
 - The orphaned VM checkout remained untouched.
+
+### Stage 2D — Independent preflight — VETOED
+
+Evidence: workflow run `29867278124`.
+
+- Runtime, secrets, deployment, rollback, and agent-runtime gates passed.
+- Baby API, Wix, Dominion Web, n8n, Alpha Engine, and Conductor returned HTTP 200.
+- Canonical Conductor, Guardian, Sentinel, and Juris services were verified active/running.
+- Conductor Watchmen status returned HTTP 200; no irreversible Watchmen call was made.
+- The governance gate failed because `alchemist-api.service`, `conductor-api.service`, and `juris-api.service` reactivated.
+- The isolated image build was correctly skipped because a prerequisite gate failed.
+- Production containers were unchanged.
+- No cutover is authorized.
 
 ## Current protected production core
 
@@ -80,21 +93,19 @@ Evidence: workflow run `29866812526`.
 
 ## Current active work
 
-### Stage 2D — Independent council and build preflight
+### Stage 2D-R — Retired-unit reactivation trace
 
-**Goal:** Obtain independent operational evidence and isolated build proof before any production cutover.
+**Goal:** Identify the exact timer, service, cron entry, executable, or script that starts the retired APIs after containment.
 
-Required evidence:
+Required behavior:
 
-1. **Runtime gate:** protected HTTP endpoints remain healthy before and after the preflight.
-2. **Secrets gate:** release `.env` remains local, untracked, mode `0600`, and is never printed or uploaded.
-3. **Deployment gate:** release marker, source SHA, Compose hash, and resolved core services match the approved release.
-4. **Rollback gate:** recovery copies exist and match the recorded hashes.
-5. **Governance gate:** retired APIs, port healer, and approval-gated publishing timers remain inactive.
-6. **Agent status:** canonical Conductor, Guardian, Sentinel, and Juris runtime status is recorded; Conductor Watchmen routes are mapped without irreversible calls.
-7. **Build proof:** only the protected core images are built under isolated preflight tags; no production container is started, stopped, or recreated.
+1. Read-only inspection only; do not stop, disable, mask, restart, or edit services.
+2. Record systemd dependencies, triggers, restart policy, fragment paths, and executable paths for retired units and monitoring services.
+3. Scan only bounded systemd, cron, and referenced executable files for literal retired-unit names.
+4. Report file paths, matched unit tokens, line numbers, hashes, and service metadata—never environment values or full file contents.
+5. Preserve all production containers, databases, DNS, volumes, networks, and repositories unchanged.
 
-## Blocked until Stage 2D evidence exists
+## Blocked until Stage 2D-R evidence exists
 
 - Switching the live Compose project to the canonical release.
 - Resetting, deleting, or renaming the old VM checkout.

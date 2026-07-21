@@ -8,6 +8,8 @@ on:
         description: Type exactly RECOVER to authorize the one-time private transfer
         required: true
         type: string
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
@@ -24,7 +26,13 @@ env:
 
 jobs:
   recover:
-    if: inputs.confirm == 'RECOVER'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.confirm == 'RECOVER') ||
+      (github.event_name == 'issues' &&
+       github.event.action == 'opened' &&
+       github.event.issue.user.login == github.repository_owner &&
+       github.event.issue.title == 'AUTHORIZED: Juris trust recovery' &&
+       github.event.issue.body == 'RECOVER')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

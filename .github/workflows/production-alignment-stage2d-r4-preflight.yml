@@ -1,0 +1,689 @@
+name: Production Alignment Stage 2D-R4 Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type exactly PREFLIGHT_STAGE_2D_R4 to run final gates and isolated builds
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-alignment-stage2d-r4-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: ${{ inputs.confirm == 'PREFLIGHT_STAGE_2D_R4' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      REPORT_DIR: /tmp/dominion-alignment-stage2d-r4
+      REPORT_FILE: /tmp/dominion-alignment-stage2d-r4/result.json
+      REPORT_BRANCH: audit/alignment-stage2d-r4-preflight-20260721
+      REPORT_PATH: governance/stage2d_r4_preflight_result.json
+      ARTIFACT_NAME: dominion-alignment-stage2d-r4-preflight
+      APPROVED_SOURCE_SHA: 10646094aa3a5a1e0d4d18dc5508a33d2f5ec2a3
+      RELEASE_ROOT: /home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a
+      RECOVERY_ROOT: /home/malachisingleton8/.dominion-recovery/stage2c-29866812526
+      RETIREMENT_ROOT: /var/lib/dominion/unit-retirement/stage2d-r3-29874133137
+      EXPECTED_COMPOSE_SHA: 42e2e90c41e9c154bf96f3ba2dc277811f873626af41b747474fcea6a494c8eb
+      EXPECTED_ENV_SHA: 757601b1009add4252902ee3176e5c16fb8fd39b8182b8883b2420a3aa9ad0cd
+
+    steps:
+      - name: Publish run pointer
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            const sourceSha = context.sha;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({
+                owner, repo, ref: `refs/heads/${branch}`, sha: sourceSha,
+              });
+            }
+            const report = {
+              alignment_stage: '2D-R4-preflight',
+              status: 'started',
+              workflow: {
+                run_id: context.runId,
+                run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                source_sha: sourceSha,
+                artifact_name: process.env.ARTIFACT_NAME,
+              },
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Stage-2D-R4 preflight run ${context.runId} started`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Configure strict SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Run final gates and isolated builds
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 "$REPORT_DIR"
+          printf '%s\n' '{"alignment_stage":"2D-R4-preflight","status":"collector_not_completed","success":false}' > "$REPORT_FILE"
+          set +e
+          ssh \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" \
+            "APPROVED_SOURCE_SHA='$APPROVED_SOURCE_SHA' RELEASE_ROOT='$RELEASE_ROOT' RECOVERY_ROOT='$RECOVERY_ROOT' RETIREMENT_ROOT='$RETIREMENT_ROOT' EXPECTED_COMPOSE_SHA='$EXPECTED_COMPOSE_SHA' EXPECTED_ENV_SHA='$EXPECTED_ENV_SHA' python3 -" \
+            > "$REPORT_FILE" <<'PY'
+          import hashlib
+          import json
+          import os
+          import shutil
+          import subprocess
+          import time
+          import urllib.error
+          import urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          APPROVED_SOURCE_SHA = os.environ["APPROVED_SOURCE_SHA"]
+          RELEASE_ROOT = Path(os.environ["RELEASE_ROOT"])
+          RECOVERY_ROOT = Path(os.environ["RECOVERY_ROOT"])
+          RETIREMENT_ROOT = Path(os.environ["RETIREMENT_ROOT"])
+          EXPECTED_COMPOSE_SHA = os.environ["EXPECTED_COMPOSE_SHA"]
+          EXPECTED_ENV_SHA = os.environ["EXPECTED_ENV_SHA"]
+
+          errors = []
+          risks = []
+
+          def sha256_file(path):
+              digest = hashlib.sha256()
+              with Path(path).open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          def command(args, cwd=None, timeout=1200, env=None):
+              try:
+                  result = subprocess.run(
+                      args,
+                      cwd=cwd,
+                      env=env,
+                      check=False,
+                      capture_output=True,
+                      text=True,
+                      timeout=timeout,
+                  )
+              except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+                  return {
+                      "available": False,
+                      "returncode": None,
+                      "stdout": "",
+                      "stderr_type": type(exc).__name__,
+                  }
+              return {
+                  "available": True,
+                  "returncode": result.returncode,
+                  "stdout": (result.stdout or "").strip(),
+                  "stderr_type": None if not result.stderr else "present",
+              }
+
+          def safe_int(value):
+              try:
+                  return int(value)
+              except (TypeError, ValueError):
+                  return None
+
+          def systemd_state(unit):
+              props = command([
+                  "systemctl", "show", unit,
+                  "--property=LoadState,ActiveState,SubState,UnitFileState,NRestarts,FragmentPath",
+              ], timeout=30)
+              record = {
+                  "unit": unit,
+                  "load_state": None,
+                  "active_state": None,
+                  "sub_state": None,
+                  "unit_file_state": None,
+                  "n_restarts": None,
+                  "fragment_path": None,
+                  "is_enabled": None,
+              }
+              if props["returncode"] == 0:
+                  for line in props["stdout"].splitlines():
+                      key, _, value = line.partition("=")
+                      mapping = {
+                          "LoadState": "load_state",
+                          "ActiveState": "active_state",
+                          "SubState": "sub_state",
+                          "UnitFileState": "unit_file_state",
+                          "FragmentPath": "fragment_path",
+                      }
+                      if key in mapping:
+                          record[mapping[key]] = value or None
+                      elif key == "NRestarts":
+                          record["n_restarts"] = safe_int(value)
+              enabled = command(["systemctl", "is-enabled", unit], timeout=30)
+              record["is_enabled"] = enabled["stdout"].splitlines()[0] if enabled["stdout"] else None
+              return record
+
+          def http_probe(name, port, path, include_keys=False):
+              url = f"http://127.0.0.1:{port}{path}"
+              record = {"name": name, "port": port, "path": path, "reachable": False, "status": None}
+              try:
+                  with urllib.request.urlopen(url, timeout=5) as response:
+                      body = response.read(1024 * 1024)
+                      record.update({"reachable": True, "status": response.status})
+                      if include_keys:
+                          try:
+                              data = json.loads(body.decode("utf-8"))
+                              record["json_type"] = type(data).__name__
+                              record["top_level_keys"] = sorted(data.keys()) if isinstance(data, dict) else []
+                          except Exception:
+                              record["json_type"] = "unparsed"
+                              record["top_level_keys"] = []
+              except urllib.error.HTTPError as exc:
+                  record.update({"reachable": True, "status": exc.code})
+              except Exception as exc:
+                  record["error_type"] = type(exc).__name__
+              return record
+
+          def container_snapshot():
+              result = command(["docker", "ps", "--all", "--format", "{{json .}}"], timeout=30)
+              rows = []
+              if result["returncode"] == 0:
+                  for line in result["stdout"].splitlines():
+                      try:
+                          item = json.loads(line)
+                      except json.JSONDecodeError:
+                          continue
+                      rows.append({
+                          "name": item.get("Names"),
+                          "image": item.get("Image"),
+                          "state": item.get("State"),
+                          "status": item.get("Status"),
+                      })
+              return sorted(rows, key=lambda row: row.get("name") or "")
+
+          def compose_images(base):
+              result = command(base + ["images", "--format", "json"], cwd=str(RELEASE_ROOT), timeout=60)
+              rows = []
+              if result["returncode"] != 0:
+                  return rows
+              text = result["stdout"].strip()
+              if not text:
+                  return rows
+              try:
+                  parsed = json.loads(text)
+                  data = parsed if isinstance(parsed, list) else [parsed]
+              except json.JSONDecodeError:
+                  data = []
+                  for line in text.splitlines():
+                      try:
+                          data.append(json.loads(line))
+                      except json.JSONDecodeError:
+                          continue
+              for item in data:
+                  if not isinstance(item, dict):
+                      continue
+                  rows.append({
+                      "service": item.get("Service") or item.get("service"),
+                      "repository": item.get("Repository") or item.get("repository"),
+                      "tag": item.get("Tag") or item.get("tag"),
+                      "id": item.get("ID") or item.get("id"),
+                      "size": item.get("Size") or item.get("size"),
+                  })
+              return sorted(rows, key=lambda row: row.get("service") or "")
+
+          marker_path = RELEASE_ROOT / ".dominion-release.json"
+          compose_path = RELEASE_ROOT / "docker-compose.yml"
+          env_path = RELEASE_ROOT / ".env"
+          recovery_env = RECOVERY_ROOT / "old-root.env"
+          recovery_compose = RECOVERY_ROOT / "old-root.docker-compose.yml"
+
+          marker = {}
+          if marker_path.is_file():
+              try:
+                  marker = json.loads(marker_path.read_text(encoding="utf-8"))
+              except Exception as exc:
+                  errors.append(f"release_marker_{type(exc).__name__}")
+          else:
+              errors.append("release_marker_missing")
+
+          compose_hash = sha256_file(compose_path) if compose_path.is_file() else None
+          env_hash = sha256_file(env_path) if env_path.is_file() and not env_path.is_symlink() else None
+          env_mode = oct(env_path.stat().st_mode & 0o777) if env_path.is_file() else None
+          recovery_env_hash = sha256_file(recovery_env) if recovery_env.is_file() else None
+          recovery_compose_hash = sha256_file(recovery_compose) if recovery_compose.is_file() else None
+
+          before_containers = container_snapshot()
+          disk_before = shutil.disk_usage(RELEASE_ROOT) if RELEASE_ROOT.exists() else None
+
+          build_env = os.environ.copy()
+          build_env["WIX_AGENT_IMAGE"] = f"dominion/wix-agent:stage2d-r4-{APPROVED_SOURCE_SHA[:12]}"
+          base = [
+              "docker", "compose", "--project-name", "dominion-stage2d-r4",
+              "--env-file", ".env", "-f", "docker-compose.yml",
+          ]
+
+          compose_services = []
+          compose_valid = False
+          if RELEASE_ROOT.is_dir() and compose_path.is_file() and env_path.is_file() and shutil.which("docker"):
+              valid = command(base + ["config", "--quiet"], cwd=str(RELEASE_ROOT), timeout=60, env=build_env)
+              services = command(base + ["config", "--services"], cwd=str(RELEASE_ROOT), timeout=60, env=build_env)
+              compose_valid = valid["returncode"] == 0
+              if services["returncode"] == 0:
+                  compose_services = sorted(filter(None, services["stdout"].splitlines()))
+          else:
+              errors.append("compose_preconditions_missing")
+
+          protected_checks_before = [
+              http_probe("baby-api", 8080, "/"),
+              http_probe("wix-agent", 8082, "/ready"),
+              http_probe("dominion-web", 8090, "/"),
+              http_probe("n8n", 5678, "/healthz"),
+              http_probe("alpha-engine", 8787, "/health"),
+              http_probe("conductor", 5060, "/health", include_keys=True),
+          ]
+
+          canonical_units = {
+              "caddy": "caddy.service",
+              "alchemist": "dominion-alchemist.service",
+              "alpha": "dominion-alpha.service",
+              "conductor": "dominion-conductor.service",
+              "gatekeeper": "dominion-gatekeeper.service",
+              "guardian": "dominion-guardian.service",
+              "juris": "dominion-juris.service",
+              "sentinel": "dominion-sentinel.service",
+              "store": "dominion-store.service",
+              "gemini": "gemini-server.service",
+          }
+          canonical_before = {name: systemd_state(unit) for name, unit in canonical_units.items()}
+          restart_start = {name: record.get("n_restarts") for name, record in canonical_before.items()}
+
+          retired_units = (
+              "alchemist-api.service",
+              "conductor-api.service",
+              "juris-api.service",
+              "dominion-port-healer.service",
+          )
+          retired_states = {unit: systemd_state(unit) for unit in retired_units}
+          retirement_backups = {
+              unit: {
+                  "path": str(RETIREMENT_ROOT / unit),
+                  "exists": (RETIREMENT_ROOT / unit).is_file(),
+                  "sha256": sha256_file(RETIREMENT_ROOT / unit) if (RETIREMENT_ROOT / unit).is_file() else None,
+                  "size_bytes": (RETIREMENT_ROOT / unit).stat().st_size if (RETIREMENT_ROOT / unit).is_file() else None,
+              }
+              for unit in retired_units
+          }
+
+          publishing_timers = (
+              "conductor-autonomous.timer",
+              "dominion-kdp.timer",
+              "dominion-publish.timer",
+              "dominion-social-poster.timer",
+              "dominion-youtube.timer",
+          )
+          timer_states = {unit: systemd_state(unit) for unit in publishing_timers}
+
+          watchmen_status = http_probe("conductor-watchmen-status", 5060, "/watchmen/status", include_keys=True)
+
+          gates = {}
+          gates["runtime"] = {
+              "pass": all(item.get("status") == 200 for item in protected_checks_before),
+              "evidence": protected_checks_before,
+          }
+          gates["secrets"] = {
+              "pass": env_path.is_file() and not env_path.is_symlink() and env_mode == "0o600" and env_hash == EXPECTED_ENV_SHA,
+              "evidence": {
+                  "path": str(env_path),
+                  "regular_file": env_path.is_file() and not env_path.is_symlink(),
+                  "mode": env_mode,
+                  "sha256": env_hash,
+                  "git_metadata_present": (RELEASE_ROOT / ".git").exists(),
+              },
+          }
+          gates["deployment"] = {
+              "pass": (
+                  RELEASE_ROOT.is_dir()
+                  and marker.get("source_sha") == APPROVED_SOURCE_SHA
+                  and compose_hash == EXPECTED_COMPOSE_SHA
+                  and compose_valid
+                  and set(compose_services) == {"baby-api", "baby-logger", "browser-agents", "dominion-web", "obsidian-remote", "wix-agent"}
+              ),
+              "evidence": {
+                  "release_root": str(RELEASE_ROOT),
+                  "marker_source_sha": marker.get("source_sha"),
+                  "compose_sha256": compose_hash,
+                  "compose_valid": compose_valid,
+                  "services": compose_services,
+              },
+          }
+          gates["rollback"] = {
+              "pass": (
+                  recovery_env_hash == EXPECTED_ENV_SHA
+                  and recovery_compose_hash == EXPECTED_COMPOSE_SHA
+                  and all(item.get("exists") and item.get("sha256") for item in retirement_backups.values())
+              ),
+              "evidence": {
+                  "recovery_root": str(RECOVERY_ROOT),
+                  "env_backup_sha256": recovery_env_hash,
+                  "compose_backup_sha256": recovery_compose_hash,
+                  "retirement_root": str(RETIREMENT_ROOT),
+                  "retirement_backups": retirement_backups,
+              },
+          }
+          gates["governance"] = {
+              "pass": (
+                  all(
+                      record.get("active_state") == "inactive"
+                      and record.get("load_state") == "masked"
+                      and record.get("is_enabled") == "masked"
+                      for record in retired_states.values()
+                  )
+                  and all(
+                      record.get("active_state") != "active"
+                      and record.get("is_enabled") == "disabled"
+                      for record in timer_states.values()
+                  )
+              ),
+              "evidence": {
+                  "retired_units": retired_states,
+                  "publishing_timers": timer_states,
+              },
+          }
+          gates["agent_runtime"] = {
+              "pass": all(
+                  canonical_before[name].get("active_state") == "active"
+                  and canonical_before[name].get("sub_state") == "running"
+                  for name in ("conductor", "guardian", "sentinel", "juris")
+              ) and watchmen_status.get("status") == 200,
+              "evidence": {
+                  "agents": {name: canonical_before[name] for name in ("conductor", "guardian", "sentinel", "juris")},
+                  "watchmen_status": watchmen_status,
+              },
+          }
+
+          build = {
+              "attempted": False,
+              "returncode": None,
+              "stderr_type": None,
+              "isolated_project": "dominion-stage2d-r4",
+              "services": ["baby-api", "dominion-web", "wix-agent"],
+              "wix_image_tag": build_env["WIX_AGENT_IMAGE"],
+              "images": [],
+          }
+
+          prerequisite_names = ("runtime", "secrets", "deployment", "rollback", "governance", "agent_runtime")
+          if all(gates[name]["pass"] for name in prerequisite_names) and not errors:
+              if disk_before is None or disk_before.free < 2 * 1024 * 1024 * 1024:
+                  errors.append("insufficient_disk_for_isolated_build")
+              else:
+                  result = command(
+                      base + ["build", "baby-api", "dominion-web", "wix-agent"],
+                      cwd=str(RELEASE_ROOT),
+                      timeout=1800,
+                      env=build_env,
+                  )
+                  build.update({
+                      "attempted": True,
+                      "returncode": result["returncode"],
+                      "stderr_type": result["stderr_type"],
+                  })
+                  if result["returncode"] == 0:
+                      build["images"] = compose_images(base)
+          else:
+              risks.append("isolated_build_skipped_due_to_failed_gate")
+
+          time.sleep(30)
+          protected_checks_after = [
+              http_probe("baby-api", 8080, "/"),
+              http_probe("wix-agent", 8082, "/ready"),
+              http_probe("dominion-web", 8090, "/"),
+              http_probe("n8n", 5678, "/healthz"),
+              http_probe("alpha-engine", 8787, "/health"),
+              http_probe("conductor", 5060, "/health", include_keys=True),
+          ]
+          canonical_after = {name: systemd_state(unit) for name, unit in canonical_units.items()}
+          restart_deltas = {}
+          for name, record in canonical_after.items():
+              start = restart_start.get(name)
+              end = record.get("n_restarts")
+              restart_deltas[name] = {
+                  "unit": record.get("unit"),
+                  "start": start,
+                  "end": end,
+                  "delta": end - start if isinstance(start, int) and isinstance(end, int) else None,
+              }
+
+          after_containers = container_snapshot()
+          containers_unchanged = before_containers == after_containers
+          build_pass = (
+              build["attempted"]
+              and build["returncode"] == 0
+              and len(build["images"]) >= 3
+          )
+          gates["build"] = {
+              "pass": build_pass,
+              "evidence": build,
+          }
+          gates["post_build_stability"] = {
+              "pass": (
+                  containers_unchanged
+                  and all(item.get("status") == 200 for item in protected_checks_after)
+                  and all(record.get("delta") in {0, None} for record in restart_deltas.values())
+              ),
+              "evidence": {
+                  "containers_unchanged": containers_unchanged,
+                  "health_after": protected_checks_after,
+                  "restart_deltas": restart_deltas,
+              },
+          }
+
+          council = [
+              {"seat": "runtime", "result": "pass" if gates["runtime"]["pass"] else "fail"},
+              {"seat": "secrets", "result": "pass" if gates["secrets"]["pass"] else "fail"},
+              {"seat": "deployment", "result": "pass" if gates["deployment"]["pass"] else "fail"},
+              {"seat": "rollback", "result": "pass" if gates["rollback"]["pass"] else "fail"},
+              {"seat": "governance", "result": "pass" if gates["governance"]["pass"] else "fail"},
+          ]
+
+          failed_gates = sorted(name for name, gate in gates.items() if not gate["pass"])
+          success = not errors and not failed_gates
+          disk_after_usage = shutil.disk_usage(RELEASE_ROOT) if RELEASE_ROOT.exists() else None
+
+          payload = {
+              "alignment_stage": "2D-R4-preflight",
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+              "status": "success" if success else "failed",
+              "success": success,
+              "approved_source_sha": APPROVED_SOURCE_SHA,
+              "release_root": str(RELEASE_ROOT),
+              "agent_reports": [
+                  {
+                      "agent": name,
+                      "duty": {
+                          "conductor": "orchestration and Watchmen interface",
+                          "guardian": "runtime drift detection",
+                          "sentinel": "independent runtime verification",
+                          "juris": "governance and legal boundary service",
+                      }[name],
+                      "evidence": canonical_after[name],
+                      "result": "verified_running" if canonical_after[name].get("active_state") == "active" and canonical_after[name].get("sub_state") == "running" else "unverified",
+                      "risks": [],
+                      "next_action": "remain observe-only; no cutover in R4",
+                      "human_approval_required": True,
+                  }
+                  for name in ("conductor", "guardian", "sentinel", "juris")
+              ],
+              "deterministic_five_council": council,
+              "gates": gates,
+              "failed_gates": failed_gates,
+              "build": build,
+              "before_containers": before_containers,
+              "after_containers": after_containers,
+              "containers_unchanged": containers_unchanged,
+              "disk_before": {
+                  "total_bytes": disk_before.total,
+                  "used_bytes": disk_before.used,
+                  "free_bytes": disk_before.free,
+              } if disk_before else None,
+              "disk_after": {
+                  "total_bytes": disk_after_usage.total,
+                  "used_bytes": disk_after_usage.used,
+                  "free_bytes": disk_after_usage.free,
+              } if disk_after_usage else None,
+              "errors": errors,
+              "risks": sorted(set(risks)),
+              "safety": {
+                  "automated_council_is_deterministic_checks": True,
+                  "production_containers_started": False,
+                  "production_containers_stopped": False,
+                  "production_containers_recreated": False,
+                  "production_volumes_changed": False,
+                  "production_networks_changed": False,
+                  "databases_changed": False,
+                  "dns_changed": False,
+                  "secret_values_collected": False,
+                  "secret_file_uploaded": False,
+                  "browser_agents_started": False,
+                  "obsidian_started": False,
+                  "cutover_performed": False,
+                  "isolated_images_built_only": True,
+              },
+          }
+          print(json.dumps(payload, indent=2, sort_keys=True))
+          raise SystemExit(0 if success else 1)
+          PY
+          RC=$?
+          set -e
+          python3 -m json.tool "$REPORT_FILE" >/dev/null
+          chmod 600 "$REPORT_FILE"
+          echo "PREFLIGHT_RC=$RC" >> "$GITHUB_ENV"
+
+      - name: Upload private Stage-2D-R4 result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.REPORT_FILE }}
+          if-no-files-found: warn
+          retention-days: 3
+          compression-level: 9
+
+      - name: Publish terminal Stage-2D-R4 result
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          JOB_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            let report;
+            if (fs.existsSync(process.env.REPORT_FILE)) {
+              try {
+                report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, 'utf8'));
+              } catch (error) {
+                report = { alignment_stage: '2D-R4-preflight', status: 'report_parse_failed', success: false };
+              }
+            } else {
+              report = { alignment_stage: '2D-R4-preflight', status: 'report_missing', success: false };
+            }
+            report.workflow = {
+              run_id: context.runId,
+              run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              source_sha: context.sha,
+              artifact_name: process.env.ARTIFACT_NAME,
+              job_status: process.env.JOB_STATUS,
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Stage-2D-R4 preflight run ${context.runId} ${process.env.JOB_STATUS}`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Enforce preflight result
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["REPORT_FILE"])
+          if not path.is_file():
+              raise SystemExit("Stage-2D-R4 report missing")
+          report = json.loads(path.read_text(encoding="utf-8"))
+          if not report.get("success"):
+              raise SystemExit("Stage-2D-R4 preflight did not pass")
+          if not report.get("containers_unchanged"):
+              raise SystemExit("production container inventory changed")
+          if report.get("safety", {}).get("cutover_performed"):
+              raise SystemExit("unexpected cutover detected")
+          PY
+
+      - name: Remove temporary runner material
+        if: ${{ always() }}
+        run: |
+          set -eu
+          rm -rf "$REPORT_DIR"
+          rm -f ~/.ssh/id_vm ~/.ssh/known_hosts

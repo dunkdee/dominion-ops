@@ -2,20 +2,22 @@
 
 **Initial snapshot:** 2026-07-21 19:32 UTC  
 **Initial source:** `Production Ecosystem Audit` run `29861920503`  
-**Stage-1 verification:** `Production Alignment Stage 1` run `29862504700`  
+**Stage-1 verification:** run `29862504700`  
+**Stage-2 ownership map:** run `29863614231`  
+**Stage-2A verification:** run `29864120927`  
 **Operating order:** Cash flow → Systems → Scale
 
 ## Executive determination
 
-The production VM is operational and the first stabilization stage is complete. The protected revenue core remained healthy while proven duplicate restart loops, approval-gated publishers, and the stuck surplus scraper were removed from active execution.
+The production VM is operational and the stabilization and supervisor-containment stages are complete. The protected revenue core remained healthy while duplicate restart loops, the reactivation supervisor, approval-gated publisher timers, and the stuck surplus scraper were removed from active execution.
 
-The ecosystem is **stabilized but not yet fully unified**. Stage 2 must establish one canonical runtime inventory, boot-persistent ownership, restart budgets, backup proof, and a deployment-root decision before any inactive vertical is promoted.
+The ecosystem is **stable and governed, but deployment ownership is not yet unified**. Stage 2 must still reconcile the production Compose root, the local repository branch and dirty working tree, the Conductor health contract, unmanaged runtime ownership, and resource limits before inactive verticals are promoted.
 
 No vertical may be promoted merely because code or a service exists. Promotion requires the exit gate in `governance/verticals.json`.
 
 ## Protected revenue core
 
-These components remained healthy after Stage 1:
+These components remained healthy through Stage 2A:
 
 | Component | Verified production evidence | Governance mode |
 |---|---|---|
@@ -24,11 +26,13 @@ These components remained healthy after Stage 1:
 | Dominion Web | HTTP 200 on `127.0.0.1:8090/` | Production |
 | n8n | HTTP 200 on `127.0.0.1:5678/healthz` | Approved automation only |
 | Alpha Engine | HTTP 200 on `127.0.0.1:8787/health` | Paper-only |
-| Caddy | `active/running` | Production edge |
+| Caddy | `active/running`, boot-enabled | Production edge |
+| Conductor | `active/running`, boot-enabled | Observe and route |
+| Gemini server | `active/running`, boot-enabled | Intelligence service |
 | Gatekeeper | `active/running` | Revenue rail |
 | Store API | `active/running` | Production payment surface |
 
-Stage 1 did not restart canonical services, delete persistent data, read secrets, or collect logs.
+No protected service restarted during the Stage-2A 30-second verification window.
 
 ## Stage-1 verified actions
 
@@ -42,13 +46,24 @@ The following duplicate units were stopped and disabled only after their canonic
 
 The stuck `dominion-surplus-scraper.service` was quarantined after 2,739 accumulated restarts. The human-facing surplus dashboard and review queue were preserved.
 
-The following approval-gated publishers remain inactive:
+## Stage-2A verified containment
 
-- `conductor-autonomous.service`
-- `dominion-social-poster.service`
-- `dominion-publish.service`
-- `dominion-youtube.service`
-- `dominion-kdp.service`
+Stage 2A corrected the mechanism that had reactivated the retired duplicate APIs:
+
+- `dominion-port-healer.service` is inactive and disabled.
+- `alchemist-api.service`, `conductor-api.service`, and `juris-api.service` are inactive and remained unreactivated during verification.
+- `caddy.service`, `dominion-conductor.service`, and `gemini-server.service` are boot-enabled without being restarted.
+- Canonical Alchemist, Alpha, Conductor, Gatekeeper, Juris, Store, Gemini, Caddy, and Surplus Review Queue services recorded zero restart deltas during verification.
+
+The following approval-gated services remain inactive and their timers are disabled:
+
+- `conductor-autonomous.service` / `conductor-autonomous.timer`
+- `dominion-social-poster.service` / `dominion-social-poster.timer`
+- `dominion-publish.service` / `dominion-publish.timer`
+- `dominion-youtube.service` / `dominion-youtube.timer`
+- `dominion-kdp.service` / `dominion-kdp.timer`
+
+Stage 2A did not alter Compose, databases, DNS, repository working trees, persistent data, or secrets.
 
 ## Human-approval gates
 
@@ -64,15 +79,15 @@ The surplus vertical remains `research_only`. It may not autonomously contact cl
 
 ## Remaining Stage-2 reconciliation
 
-- The reported Compose project is `desktop-tutorial`, sourced from `/home/malachisingleton8/desktop-tutorial/docker-compose.yml`, while the canonical repository is `/home/malachisingleton8/dominion-ops`.
+- Production Compose runs from `/home/malachisingleton8/desktop-tutorial/docker-compose.yml`, which is not a Git repository.
+- The canonical `/home/malachisingleton8/dominion-ops` checkout is on branch `claude/movie-generator-youtube-b50wx2` with three dirty entries; it must be preserved before alignment to `main`.
 - Multiple production containers and systemd units exist outside one declared deployment manifest.
-- `dominion-conductor.service` is active but was reported disabled for boot; boot persistence must be verified before changing it.
-- Caddy is active but was reported disabled for boot; package or socket ownership must be verified before changing it.
-- `dominion-juris.service` is currently running but has a high historical restart count; Stage 2 must measure restart delta rather than assume current instability.
+- The Conductor port is reachable, but `/healthz` returns 404; the correct route or implementation must be established.
 - Browser agents and Obsidian were not reachable on their expected ports and remain non-core.
-- The Conductor port was reachable but `/healthz` returned 404, so its health contract is not aligned.
-- The surplus webroot `/var/www/surplus` was absent.
-- Backup, timer, resource-limit, restart-policy, and rollback execution still require explicit verification.
+- The surplus webroot `/var/www/surplus` is absent.
+- Docker resource limits are missing for several production containers; the healthy Wix container is the current hardened exception.
+- Recent backups exist and `dominion-backup.timer` is enabled, but restore testing and rollback evidence remain outstanding.
+- `dominion-juris.service` and `dominion-review-queue.service` have high historical restart counts but showed zero current restart delta; they require restart-budget monitoring rather than immediate disruption.
 - Digital-product publication and delivery still require a controlled checkout and delivery proof.
 
 ## Stage sequence
@@ -87,12 +102,12 @@ The surplus vertical remains `research_only`. It may not autonomously contact cl
 
 ### Stage 2 — Unify control — ACTIVE
 
-- Declare one canonical deployment root.
+- Supervisor containment and approval-timer enforcement are complete.
+- Boot persistence for Caddy, Conductor, and Gemini is complete.
+- Declare and migrate to one canonical deployment root without losing local work.
 - Map every active service and container to one vertical and one owner.
-- Verify boot persistence without restarting healthy services.
-- Measure restart deltas for canonical services.
 - Correct the Conductor health contract.
-- Add restart budgets, resource limits, backup verification, and rollback tests.
+- Add restart budgets, Docker resource limits, restore verification, and rollback tests.
 - Reconcile unmanaged Docker containers and systemd units into a runtime manifest.
 
 ### Stage 3 — Prove vertical duties

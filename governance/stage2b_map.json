@@ -1,10 +1,159 @@
 {
+  "active_compose_projects": [
+    {
+      "config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+      "name": "desktop-tutorial",
+      "status": "running(3)"
+    }
+  ],
+  "compose_manifests": [
+    {
+      "exists": true,
+      "image_query_ok": true,
+      "images": [
+        "alpine:latest",
+        "dominion-ops-baby-api",
+        "dominion-ops-browser-agents",
+        "dominion-ops-dominion-web",
+        "dominion/wix-agent:local",
+        "ghcr.io/sytone/obsidian-remote:latest"
+      ],
+      "path": "/home/malachisingleton8/dominion-ops/docker-compose.yml",
+      "service_query_ok": true,
+      "services": [
+        "baby-api",
+        "baby-logger",
+        "browser-agents",
+        "dominion-web",
+        "obsidian-remote",
+        "wix-agent"
+      ],
+      "sha256": "42e2e90c41e9c154bf96f3ba2dc277811f873626af41b747474fcea6a494c8eb"
+    },
+    {
+      "exists": false,
+      "image_query_ok": false,
+      "images": [],
+      "path": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+      "service_query_ok": false,
+      "services": [],
+      "sha256": null
+    }
+  ],
+  "conductor": {
+    "openapi_route_names": [
+      "/",
+      "/approvals/pending",
+      "/approvals/{approval_id}/approve",
+      "/execute-next",
+      "/health",
+      "/jobs",
+      "/jobs/executable",
+      "/jobs/queued",
+      "/lead",
+      "/leads",
+      "/route",
+      "/watchmen/consensus",
+      "/watchmen/saraqael/audit",
+      "/watchmen/status"
+    ],
+    "probes": [
+      {
+        "path": "/",
+        "reachable": true,
+        "status": 200
+      },
+      {
+        "path": "/health",
+        "reachable": true,
+        "status": 200
+      },
+      {
+        "path": "/healthz",
+        "reachable": true,
+        "status": 404
+      },
+      {
+        "path": "/ready",
+        "reachable": true,
+        "status": 404
+      },
+      {
+        "path": "/status",
+        "reachable": true,
+        "status": 404
+      },
+      {
+        "path": "/docs",
+        "reachable": true,
+        "status": 200
+      },
+      {
+        "path": "/openapi.json",
+        "reachable": true,
+        "status": 200
+      }
+    ]
+  },
+  "generated_at": "2026-07-21T20:09:56.841164+00:00",
   "map_version": 1,
-  "status": "started",
+  "repository": {
+    "branch": "claude/movie-generator-youtube-b50wx2",
+    "dirty_entries": [
+      {
+        "content_risk_signals": [],
+        "is_file": false,
+        "path": "env.example",
+        "secret_path_risk": false,
+        "sha256": null,
+        "size_bytes": null,
+        "status": "M "
+      },
+      {
+        "content_risk_signals": [],
+        "is_file": true,
+        "path": "docker-compose.yml",
+        "secret_path_risk": false,
+        "sha256": "42e2e90c41e9c154bf96f3ba2dc277811f873626af41b747474fcea6a494c8eb",
+        "size_bytes": 4595,
+        "status": " M"
+      },
+      {
+        "content_risk_signals": [
+          "private_key_marker"
+        ],
+        "is_file": true,
+        "path": ".env",
+        "secret_path_risk": true,
+        "sha256": "757601b1009add4252902ee3176e5c16fb8fd39b8182b8883b2420a3aa9ad0cd",
+        "size_bytes": 3117,
+        "status": "??"
+      }
+    ],
+    "exists": true,
+    "head": "aa2d7d2e9e92124a3ebc131d4f0d326b5b1c872b",
+    "is_git_repository": true,
+    "local_origin_main_head": "8be563b6a0070e6e350cc5b4bc92a15c85899401",
+    "origin": "git@github-dominion:dunkdee/dominion-ops.git",
+    "origin_main_head": null,
+    "path": "/home/malachisingleton8/dominion-ops"
+  },
+  "safety": {
+    "compose_changed": false,
+    "customer_data_collected": false,
+    "file_contents_collected": false,
+    "file_contents_scanned_locally_for_secret_risk": true,
+    "logs_collected": false,
+    "repository_changed": false,
+    "secret_values_collected": false,
+    "services_changed": false
+  },
+  "status": "success",
   "workflow": {
     "run_id": 29864574740,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29864574740",
     "source_sha": "b1939698aa9c1b852a86ebea30150b80a6caab2c",
-    "artifact_name": "dominion-alignment-stage2b-map"
+    "artifact_name": "dominion-alignment-stage2b-map",
+    "job_status": "success"
   }
 }

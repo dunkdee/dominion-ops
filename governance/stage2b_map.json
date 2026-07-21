@@ -1,0 +1,10 @@
+{
+  "map_version": 1,
+  "status": "started",
+  "workflow": {
+    "run_id": 29864574740,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29864574740",
+    "source_sha": "b1939698aa9c1b852a86ebea30150b80a6caab2c",
+    "artifact_name": "dominion-alignment-stage2b-map"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "2D-R3-retire",
+  "status": "started",
+  "workflow": {
+    "run_id": 29874133137,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29874133137",
+    "source_sha": "de7b309b693db3abd5c89714667d5fd4c4ed720a",
+    "artifact_name": "dominion-alignment-stage2d-r3-retire"
+  }
+}

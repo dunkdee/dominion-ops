@@ -1,10 +1,655 @@
 {
+  "actions": [
+    {
+      "action": "disabled_reactivation_supervisor",
+      "result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "unit": "dominion-port-healer.service"
+    },
+    {
+      "action": "retired_legacy_runtime_mask",
+      "canonical": "dominion-alchemist.service",
+      "mask_result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "stop_result": {
+        "returncode": 0,
+        "stderr_present": false
+      },
+      "unit": "alchemist-api.service"
+    },
+    {
+      "action": "retired_legacy_runtime_mask",
+      "canonical": "dominion-conductor.service",
+      "mask_result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "stop_result": {
+        "returncode": 0,
+        "stderr_present": false
+      },
+      "unit": "conductor-api.service"
+    },
+    {
+      "action": "retired_legacy_runtime_mask",
+      "canonical": "dominion-juris.service",
+      "mask_result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "stop_result": {
+        "returncode": 0,
+        "stderr_present": false
+      },
+      "unit": "juris-api.service"
+    },
+    {
+      "action": "disabled_approval_gated_timer",
+      "result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "unit": "conductor-autonomous.timer"
+    },
+    {
+      "action": "disabled_approval_gated_timer",
+      "result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "unit": "dominion-kdp.timer"
+    },
+    {
+      "action": "disabled_approval_gated_timer",
+      "result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "unit": "dominion-publish.timer"
+    },
+    {
+      "action": "disabled_approval_gated_timer",
+      "result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "unit": "dominion-social-poster.timer"
+    },
+    {
+      "action": "disabled_approval_gated_timer",
+      "result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "unit": "dominion-youtube.timer"
+    },
+    {
+      "action": "kept_approval_gated_service_inactive",
+      "result": {
+        "returncode": 0,
+        "stderr_present": false
+      },
+      "unit": "conductor-autonomous.service"
+    },
+    {
+      "action": "kept_approval_gated_service_inactive",
+      "result": {
+        "returncode": 0,
+        "stderr_present": false
+      },
+      "unit": "dominion-kdp.service"
+    },
+    {
+      "action": "kept_approval_gated_service_inactive",
+      "result": {
+        "returncode": 0,
+        "stderr_present": false
+      },
+      "unit": "dominion-publish.service"
+    },
+    {
+      "action": "kept_approval_gated_service_inactive",
+      "result": {
+        "returncode": 0,
+        "stderr_present": false
+      },
+      "unit": "dominion-social-poster.service"
+    },
+    {
+      "action": "kept_approval_gated_service_inactive",
+      "result": {
+        "returncode": 0,
+        "stderr_present": false
+      },
+      "unit": "dominion-youtube.service"
+    },
+    {
+      "action": "enabled_canonical_boot_persistence",
+      "result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "unit": "caddy.service"
+    },
+    {
+      "action": "enabled_canonical_boot_persistence",
+      "result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "unit": "dominion-conductor.service"
+    },
+    {
+      "action": "enabled_canonical_boot_persistence",
+      "result": {
+        "returncode": 0,
+        "stderr_present": true
+      },
+      "unit": "gemini-server.service"
+    }
+  ],
+  "after": {
+    "alchemist-api.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "alchemist-api.service",
+      "unit_file_state": "disabled"
+    },
+    "caddy.service": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "caddy.service",
+      "unit_file_state": "enabled"
+    },
+    "conductor-api.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "conductor-api.service",
+      "unit_file_state": "disabled"
+    },
+    "conductor-autonomous.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "conductor-autonomous.service",
+      "unit_file_state": "static"
+    },
+    "conductor-autonomous.timer": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "conductor-autonomous.timer",
+      "unit_file_state": "disabled"
+    },
+    "dominion-alchemist.service": {
+      "active_state": "active",
+      "n_restarts": 2,
+      "sub_state": "running",
+      "unit": "dominion-alchemist.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-alpha.service": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-alpha.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-conductor.service": {
+      "active_state": "active",
+      "n_restarts": 10,
+      "sub_state": "running",
+      "unit": "dominion-conductor.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-gatekeeper.service": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-gatekeeper.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-juris.service": {
+      "active_state": "active",
+      "n_restarts": 15689,
+      "sub_state": "running",
+      "unit": "dominion-juris.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-kdp.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-kdp.service",
+      "unit_file_state": "disabled"
+    },
+    "dominion-kdp.timer": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-kdp.timer",
+      "unit_file_state": "disabled"
+    },
+    "dominion-port-healer.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-port-healer.service",
+      "unit_file_state": "disabled"
+    },
+    "dominion-publish.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-publish.service",
+      "unit_file_state": "static"
+    },
+    "dominion-publish.timer": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-publish.timer",
+      "unit_file_state": "disabled"
+    },
+    "dominion-review-queue.service": {
+      "active_state": "active",
+      "n_restarts": 152427,
+      "sub_state": "running",
+      "unit": "dominion-review-queue.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-social-poster.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-social-poster.service",
+      "unit_file_state": "static"
+    },
+    "dominion-social-poster.timer": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-social-poster.timer",
+      "unit_file_state": "disabled"
+    },
+    "dominion-store.service": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-store.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-youtube.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-youtube.service",
+      "unit_file_state": "disabled"
+    },
+    "dominion-youtube.timer": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-youtube.timer",
+      "unit_file_state": "disabled"
+    },
+    "gemini-server.service": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "gemini-server.service",
+      "unit_file_state": "enabled"
+    },
+    "juris-api.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "juris-api.service",
+      "unit_file_state": "disabled"
+    }
+  },
   "alignment_stage": "2A",
-  "status": "started",
+  "approval_timers_left_active": [],
+  "before": {
+    "alchemist-api.service": {
+      "active_state": "activating",
+      "n_restarts": 109,
+      "sub_state": "auto-restart",
+      "unit": "alchemist-api.service",
+      "unit_file_state": "disabled"
+    },
+    "caddy.service": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "caddy.service",
+      "unit_file_state": "disabled"
+    },
+    "conductor-api.service": {
+      "active_state": "activating",
+      "n_restarts": 194,
+      "sub_state": "auto-restart",
+      "unit": "conductor-api.service",
+      "unit_file_state": "disabled"
+    },
+    "conductor-autonomous.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "conductor-autonomous.service",
+      "unit_file_state": "static"
+    },
+    "conductor-autonomous.timer": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "waiting",
+      "unit": "conductor-autonomous.timer",
+      "unit_file_state": "enabled"
+    },
+    "dominion-alchemist.service": {
+      "active_state": "active",
+      "n_restarts": 2,
+      "sub_state": "running",
+      "unit": "dominion-alchemist.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-alpha.service": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-alpha.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-conductor.service": {
+      "active_state": "active",
+      "n_restarts": 10,
+      "sub_state": "running",
+      "unit": "dominion-conductor.service",
+      "unit_file_state": "disabled"
+    },
+    "dominion-gatekeeper.service": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-gatekeeper.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-juris.service": {
+      "active_state": "active",
+      "n_restarts": 15689,
+      "sub_state": "running",
+      "unit": "dominion-juris.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-kdp.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-kdp.service",
+      "unit_file_state": "disabled"
+    },
+    "dominion-kdp.timer": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "waiting",
+      "unit": "dominion-kdp.timer",
+      "unit_file_state": "enabled"
+    },
+    "dominion-port-healer.service": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-port-healer.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-publish.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-publish.service",
+      "unit_file_state": "static"
+    },
+    "dominion-publish.timer": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "waiting",
+      "unit": "dominion-publish.timer",
+      "unit_file_state": "enabled"
+    },
+    "dominion-review-queue.service": {
+      "active_state": "active",
+      "n_restarts": 152427,
+      "sub_state": "running",
+      "unit": "dominion-review-queue.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-social-poster.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-social-poster.service",
+      "unit_file_state": "static"
+    },
+    "dominion-social-poster.timer": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "waiting",
+      "unit": "dominion-social-poster.timer",
+      "unit_file_state": "enabled"
+    },
+    "dominion-store.service": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "dominion-store.service",
+      "unit_file_state": "enabled"
+    },
+    "dominion-youtube.service": {
+      "active_state": "inactive",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-youtube.service",
+      "unit_file_state": "disabled"
+    },
+    "dominion-youtube.timer": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "waiting",
+      "unit": "dominion-youtube.timer",
+      "unit_file_state": "enabled"
+    },
+    "gemini-server.service": {
+      "active_state": "active",
+      "n_restarts": 0,
+      "sub_state": "running",
+      "unit": "gemini-server.service",
+      "unit_file_state": "disabled"
+    },
+    "juris-api.service": {
+      "active_state": "activating",
+      "n_restarts": 107,
+      "sub_state": "auto-restart",
+      "unit": "juris-api.service",
+      "unit_file_state": "disabled"
+    }
+  },
+  "canonical_restart_deltas": {},
+  "canonical_unhealthy": [],
+  "errors": [],
+  "follow_up_required": [],
+  "generated_at": "2026-07-21T20:04:09.096097+00:00",
+  "health_checks": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "legacy_reactivated": [],
+  "restart_deltas_30_seconds": {
+    "caddy.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "state": {
+        "active_state": "active",
+        "n_restarts": 0,
+        "sub_state": "running",
+        "unit": "caddy.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "dominion-alchemist.service": {
+      "delta": 0,
+      "end": 2,
+      "start": 2,
+      "state": {
+        "active_state": "active",
+        "n_restarts": 2,
+        "sub_state": "running",
+        "unit": "dominion-alchemist.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "dominion-alpha.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "state": {
+        "active_state": "active",
+        "n_restarts": 0,
+        "sub_state": "running",
+        "unit": "dominion-alpha.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "dominion-conductor.service": {
+      "delta": 0,
+      "end": 10,
+      "start": 10,
+      "state": {
+        "active_state": "active",
+        "n_restarts": 10,
+        "sub_state": "running",
+        "unit": "dominion-conductor.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "dominion-gatekeeper.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "state": {
+        "active_state": "active",
+        "n_restarts": 0,
+        "sub_state": "running",
+        "unit": "dominion-gatekeeper.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "dominion-juris.service": {
+      "delta": 0,
+      "end": 15689,
+      "start": 15689,
+      "state": {
+        "active_state": "active",
+        "n_restarts": 15689,
+        "sub_state": "running",
+        "unit": "dominion-juris.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "dominion-review-queue.service": {
+      "delta": 0,
+      "end": 152427,
+      "start": 152427,
+      "state": {
+        "active_state": "active",
+        "n_restarts": 152427,
+        "sub_state": "running",
+        "unit": "dominion-review-queue.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "dominion-store.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "state": {
+        "active_state": "active",
+        "n_restarts": 0,
+        "sub_state": "running",
+        "unit": "dominion-store.service",
+        "unit_file_state": "enabled"
+      }
+    },
+    "gemini-server.service": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "state": {
+        "active_state": "active",
+        "n_restarts": 0,
+        "sub_state": "running",
+        "unit": "gemini-server.service",
+        "unit_file_state": "enabled"
+      }
+    }
+  },
+  "safety": {
+    "compose_changed": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "environment_values_collected": false,
+    "logs_collected": false,
+    "persistent_data_deleted": false,
+    "repository_worktree_changed": false,
+    "secrets_collected": false
+  },
+  "success": true,
+  "unhealthy_health_checks": [],
   "workflow": {
     "run_id": 29864120927,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29864120927",
     "source_sha": "95c3606411c24bea88b053623ec93767fbbd016a",
-    "artifact_name": "dominion-alignment-stage2a"
+    "artifact_name": "dominion-alignment-stage2a",
+    "job_status": "success"
   }
 }

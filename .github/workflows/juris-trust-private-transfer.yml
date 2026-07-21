@@ -1,7 +1,7 @@
 name: One-time private Juris trust case transfer
 
 on:
-  push:
+  pull_request:
     branches:
       - main
     paths:
@@ -20,6 +20,7 @@ env:
 
 jobs:
   transfer:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

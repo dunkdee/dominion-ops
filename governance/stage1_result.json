@@ -1,0 +1,483 @@
+{
+  "actions": [
+    {
+      "action": "stopped_and_disabled_duplicate",
+      "canonical": "dominion-alchemist.service",
+      "unit": "alchemist-api.service"
+    },
+    {
+      "action": "stopped_and_disabled_duplicate",
+      "canonical": "dominion-conductor.service",
+      "unit": "conductor-api.service"
+    },
+    {
+      "action": "stopped_and_disabled_duplicate",
+      "canonical": "dominion-juris.service",
+      "unit": "juris-api.service"
+    },
+    {
+      "action": "disabled_pending_human_approval",
+      "unit": "conductor-autonomous.service"
+    },
+    {
+      "action": "disabled_pending_human_approval",
+      "unit": "dominion-social-poster.service"
+    },
+    {
+      "action": "disabled_pending_human_approval",
+      "unit": "dominion-publish.service"
+    },
+    {
+      "action": "disabled_pending_human_approval",
+      "unit": "dominion-youtube.service"
+    },
+    {
+      "action": "disabled_pending_human_approval",
+      "unit": "dominion-kdp.service"
+    },
+    {
+      "action": "quarantined_stuck_scraper",
+      "preserved_services": [
+        "dominion-surplus-dashboard.service",
+        "dominion-review-queue.service"
+      ],
+      "unit": "dominion-surplus-scraper.service"
+    }
+  ],
+  "after": {
+    "alchemist-api.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion Alchemist API",
+      "FragmentPath": "/etc/systemd/system/alchemist-api.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "alchemist-api.service"
+    },
+    "conductor-api.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion Conductor API",
+      "FragmentPath": "/etc/systemd/system/conductor-api.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "conductor-api.service"
+    },
+    "conductor-autonomous.service": {
+      "ActiveState": "inactive",
+      "Description": "Conductor Autonomous Publisher Worker",
+      "FragmentPath": "/etc/systemd/system/conductor-autonomous.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "static",
+      "query_returncode": 0,
+      "unit": "conductor-autonomous.service"
+    },
+    "dominion-alchemist.service": {
+      "ActiveState": "active",
+      "Description": "Dominion Alchemist Health AI",
+      "FragmentPath": "/etc/systemd/system/dominion-alchemist.service",
+      "LoadState": "loaded",
+      "MainPID": "2308281",
+      "NRestarts": "2",
+      "SubState": "running",
+      "UnitFileState": "enabled",
+      "query_returncode": 0,
+      "unit": "dominion-alchemist.service"
+    },
+    "dominion-conductor.service": {
+      "ActiveState": "active",
+      "Description": "Dominion Conductor API",
+      "FragmentPath": "/etc/systemd/system/dominion-conductor.service",
+      "LoadState": "loaded",
+      "MainPID": "4070265",
+      "NRestarts": "10",
+      "SubState": "running",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "dominion-conductor.service"
+    },
+    "dominion-juris.service": {
+      "ActiveState": "active",
+      "Description": "Juris Legal Intelligence API",
+      "FragmentPath": "/etc/systemd/system/dominion-juris.service",
+      "LoadState": "loaded",
+      "MainPID": "1454438",
+      "NRestarts": "15689",
+      "SubState": "running",
+      "UnitFileState": "enabled",
+      "query_returncode": 0,
+      "unit": "dominion-juris.service"
+    },
+    "dominion-kdp.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion KDP Book Generator + Publisher + Cover Generator + Status Report",
+      "FragmentPath": "/etc/systemd/system/dominion-kdp.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "dominion-kdp.service"
+    },
+    "dominion-publish.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion Daily Canonical Publish",
+      "FragmentPath": "/etc/systemd/system/dominion-publish.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "static",
+      "query_returncode": 0,
+      "unit": "dominion-publish.service"
+    },
+    "dominion-social-poster.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion Social Media Poster",
+      "FragmentPath": "/etc/systemd/system/dominion-social-poster.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "static",
+      "query_returncode": 0,
+      "unit": "dominion-social-poster.service"
+    },
+    "dominion-surplus-scraper.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion Surplus Fund Scraper",
+      "FragmentPath": "/etc/systemd/system/dominion-surplus-scraper.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "dominion-surplus-scraper.service"
+    },
+    "dominion-youtube.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion YouTube Shorts Generator + Uploader",
+      "FragmentPath": "/etc/systemd/system/dominion-youtube.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "dominion-youtube.service"
+    },
+    "juris-api.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion Juris API",
+      "FragmentPath": "/etc/systemd/system/juris-api.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "juris-api.service"
+    }
+  },
+  "alignment_stage": 1,
+  "before": {
+    "alchemist-api.service": {
+      "ActiveState": "activating",
+      "Description": "Dominion Alchemist API",
+      "FragmentPath": "/etc/systemd/system/alchemist-api.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "25063",
+      "SubState": "auto-restart",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "alchemist-api.service"
+    },
+    "conductor-api.service": {
+      "ActiveState": "activating",
+      "Description": "Dominion Conductor API",
+      "FragmentPath": "/etc/systemd/system/conductor-api.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "3372",
+      "SubState": "auto-restart",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "conductor-api.service"
+    },
+    "conductor-autonomous.service": {
+      "ActiveState": "inactive",
+      "Description": "Conductor Autonomous Publisher Worker",
+      "FragmentPath": "/etc/systemd/system/conductor-autonomous.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "static",
+      "query_returncode": 0,
+      "unit": "conductor-autonomous.service"
+    },
+    "dominion-alchemist.service": {
+      "ActiveState": "active",
+      "Description": "Dominion Alchemist Health AI",
+      "FragmentPath": "/etc/systemd/system/dominion-alchemist.service",
+      "LoadState": "loaded",
+      "MainPID": "2308281",
+      "NRestarts": "2",
+      "SubState": "running",
+      "UnitFileState": "enabled",
+      "query_returncode": 0,
+      "unit": "dominion-alchemist.service"
+    },
+    "dominion-conductor.service": {
+      "ActiveState": "active",
+      "Description": "Dominion Conductor API",
+      "FragmentPath": "/etc/systemd/system/dominion-conductor.service",
+      "LoadState": "loaded",
+      "MainPID": "4070265",
+      "NRestarts": "10",
+      "SubState": "running",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "dominion-conductor.service"
+    },
+    "dominion-juris.service": {
+      "ActiveState": "active",
+      "Description": "Juris Legal Intelligence API",
+      "FragmentPath": "/etc/systemd/system/dominion-juris.service",
+      "LoadState": "loaded",
+      "MainPID": "1454438",
+      "NRestarts": "15689",
+      "SubState": "running",
+      "UnitFileState": "enabled",
+      "query_returncode": 0,
+      "unit": "dominion-juris.service"
+    },
+    "dominion-kdp.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion KDP Book Generator + Publisher + Cover Generator + Status Report",
+      "FragmentPath": "/etc/systemd/system/dominion-kdp.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "dominion-kdp.service"
+    },
+    "dominion-publish.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion Daily Canonical Publish",
+      "FragmentPath": "/etc/systemd/system/dominion-publish.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "static",
+      "query_returncode": 0,
+      "unit": "dominion-publish.service"
+    },
+    "dominion-social-poster.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion Social Media Poster",
+      "FragmentPath": "/etc/systemd/system/dominion-social-poster.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "static",
+      "query_returncode": 0,
+      "unit": "dominion-social-poster.service"
+    },
+    "dominion-surplus-scraper.service": {
+      "ActiveState": "activating",
+      "Description": "Dominion Surplus Fund Scraper",
+      "FragmentPath": "/etc/systemd/system/dominion-surplus-scraper.service",
+      "LoadState": "loaded",
+      "MainPID": "2686555",
+      "NRestarts": "2739",
+      "SubState": "start",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "dominion-surplus-scraper.service"
+    },
+    "dominion-youtube.service": {
+      "ActiveState": "inactive",
+      "Description": "Dominion YouTube Shorts Generator + Uploader",
+      "FragmentPath": "/etc/systemd/system/dominion-youtube.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "0",
+      "SubState": "dead",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "dominion-youtube.service"
+    },
+    "juris-api.service": {
+      "ActiveState": "activating",
+      "Description": "Dominion Juris API",
+      "FragmentPath": "/etc/systemd/system/juris-api.service",
+      "LoadState": "loaded",
+      "MainPID": "0",
+      "NRestarts": "38097",
+      "SubState": "auto-restart",
+      "UnitFileState": "enabled",
+      "query_returncode": 0,
+      "unit": "juris-api.service"
+    }
+  },
+  "core_units": {
+    "caddy.service": {
+      "ActiveState": "active",
+      "Description": "Caddy",
+      "FragmentPath": "/lib/systemd/system/caddy.service",
+      "LoadState": "loaded",
+      "MainPID": "885057",
+      "NRestarts": "0",
+      "SubState": "running",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "caddy.service"
+    },
+    "dominion-alchemist.service": {
+      "ActiveState": "active",
+      "Description": "Dominion Alchemist Health AI",
+      "FragmentPath": "/etc/systemd/system/dominion-alchemist.service",
+      "LoadState": "loaded",
+      "MainPID": "2308281",
+      "NRestarts": "2",
+      "SubState": "running",
+      "UnitFileState": "enabled",
+      "query_returncode": 0,
+      "unit": "dominion-alchemist.service"
+    },
+    "dominion-alpha.service": {
+      "ActiveState": "active",
+      "Description": "Dominion Alpha Engine - Token Scanner + Paper Trader",
+      "FragmentPath": "/etc/systemd/system/dominion-alpha.service",
+      "LoadState": "loaded",
+      "MainPID": "3584163",
+      "NRestarts": "0",
+      "SubState": "running",
+      "UnitFileState": "enabled",
+      "query_returncode": 0,
+      "unit": "dominion-alpha.service"
+    },
+    "dominion-conductor.service": {
+      "ActiveState": "active",
+      "Description": "Dominion Conductor API",
+      "FragmentPath": "/etc/systemd/system/dominion-conductor.service",
+      "LoadState": "loaded",
+      "MainPID": "4070265",
+      "NRestarts": "10",
+      "SubState": "running",
+      "UnitFileState": "disabled",
+      "query_returncode": 0,
+      "unit": "dominion-conductor.service"
+    },
+    "dominion-gatekeeper.service": {
+      "ActiveState": "active",
+      "Description": "Dominion Gatekeeper Revenue Rail",
+      "FragmentPath": "/etc/systemd/system/dominion-gatekeeper.service",
+      "LoadState": "loaded",
+      "MainPID": "399",
+      "NRestarts": "0",
+      "SubState": "running",
+      "UnitFileState": "enabled",
+      "query_returncode": 0,
+      "unit": "dominion-gatekeeper.service"
+    },
+    "dominion-juris.service": {
+      "ActiveState": "active",
+      "Description": "Juris Legal Intelligence API",
+      "FragmentPath": "/etc/systemd/system/dominion-juris.service",
+      "LoadState": "loaded",
+      "MainPID": "1454438",
+      "NRestarts": "15689",
+      "SubState": "running",
+      "UnitFileState": "enabled",
+      "query_returncode": 0,
+      "unit": "dominion-juris.service"
+    },
+    "dominion-store.service": {
+      "ActiveState": "active",
+      "Description": "Dominion Store Payment API (port 5080)",
+      "FragmentPath": "/etc/systemd/system/dominion-store.service",
+      "LoadState": "loaded",
+      "MainPID": "804084",
+      "NRestarts": "0",
+      "SubState": "running",
+      "UnitFileState": "enabled",
+      "query_returncode": 0,
+      "unit": "dominion-store.service"
+    }
+  },
+  "errors": [],
+  "generated_at": "2026-07-21T19:40:36.384085+00:00",
+  "health_checks": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "safety": {
+    "canonical_services_restarted": false,
+    "environment_values_collected": false,
+    "logs_collected": false,
+    "persistent_data_deleted": false,
+    "secrets_collected": false,
+    "unit_file_contents_collected": false
+  },
+  "skipped": [],
+  "success": true,
+  "unhealthy_core_units": [],
+  "unhealthy_health_checks": [],
+  "workflow": {
+    "run_id": 29862504700,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29862504700",
+    "source_sha": "afb6712e192d10dd9d4847c2f31f176b79c9bd7b",
+    "artifact_name": "dominion-alignment-stage1"
+  }
+}

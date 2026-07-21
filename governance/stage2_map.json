@@ -1,6 +1,1588 @@
 {
+  "backup_inventory": [
+    {
+      "exists": true,
+      "file_count": 67,
+      "latest_mtime": "2026-07-21T03:25:05.267404+00:00",
+      "path": "/var/backups",
+      "total_bytes": 115851968
+    },
+    {
+      "exists": false,
+      "file_count": 0,
+      "latest_mtime": null,
+      "path": "/opt/dominion/backups",
+      "total_bytes": 0
+    },
+    {
+      "exists": true,
+      "file_count": 38,
+      "latest_mtime": "2026-07-21T06:01:56.138597+00:00",
+      "path": "/home/malachisingleton8/backups",
+      "total_bytes": 18221929
+    },
+    {
+      "exists": true,
+      "file_count": 2,
+      "latest_mtime": "2026-02-27T16:30:26.050372+00:00",
+      "path": "/home/malachisingleton8/dominion/backups",
+      "total_bytes": 745456
+    },
+    {
+      "exists": false,
+      "file_count": 0,
+      "latest_mtime": null,
+      "path": "/home/malachisingleton8/dominion-ops/backups",
+      "total_bytes": 0
+    }
+  ],
+  "caddy_validation": {
+    "config_exists": true,
+    "valid": true,
+    "validator_available": true
+  },
+  "docker": {
+    "available": true,
+    "compose_projects": [
+      {
+        "config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+        "name": "desktop-tutorial",
+        "status": "running(3)"
+      }
+    ],
+    "containers": [
+      {
+        "compose_config_files": null,
+        "compose_project": null,
+        "compose_service": null,
+        "compose_working_dir": null,
+        "health": "healthy",
+        "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+        "memory_limit": 536870912,
+        "name": "wix-agent",
+        "nano_cpus": 1000000000,
+        "pids_limit": 256,
+        "ports": [
+          {
+            "container_port": "8000/tcp",
+            "host_ip": "127.0.0.1",
+            "host_port": "8082"
+          }
+        ],
+        "restart_policy": "unless-stopped",
+        "state": "running"
+      },
+      {
+        "compose_config_files": null,
+        "compose_project": null,
+        "compose_service": null,
+        "compose_working_dir": null,
+        "health": null,
+        "image": "movie-generator",
+        "memory_limit": 0,
+        "name": "movie-generator",
+        "nano_cpus": 0,
+        "pids_limit": null,
+        "ports": [
+          {
+            "container_port": "8000/tcp",
+            "host_ip": "0.0.0.0",
+            "host_port": "8001"
+          },
+          {
+            "container_port": "8000/tcp",
+            "host_ip": "::",
+            "host_port": "8001"
+          }
+        ],
+        "restart_policy": "always",
+        "state": "running"
+      },
+      {
+        "compose_config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+        "compose_project": "desktop-tutorial",
+        "compose_service": "wix-agent",
+        "compose_working_dir": "/home/malachisingleton8/desktop-tutorial",
+        "health": "unhealthy",
+        "image": "desktop-tutorial-wix-agent",
+        "memory_limit": 0,
+        "name": "wix-agent-rollback-20260720T224801Z",
+        "nano_cpus": 0,
+        "pids_limit": null,
+        "ports": [],
+        "restart_policy": "unless-stopped",
+        "state": "exited"
+      },
+      {
+        "compose_config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+        "compose_project": "desktop-tutorial",
+        "compose_service": "baby-api",
+        "compose_working_dir": "/home/malachisingleton8/desktop-tutorial",
+        "health": "healthy",
+        "image": "desktop-tutorial-baby-api",
+        "memory_limit": 0,
+        "name": "baby-api",
+        "nano_cpus": 0,
+        "pids_limit": null,
+        "ports": [
+          {
+            "container_port": "8080/tcp",
+            "host_ip": "0.0.0.0",
+            "host_port": "8080"
+          },
+          {
+            "container_port": "8080/tcp",
+            "host_ip": "::",
+            "host_port": "8080"
+          }
+        ],
+        "restart_policy": "always",
+        "state": "running"
+      },
+      {
+        "compose_config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+        "compose_project": "desktop-tutorial",
+        "compose_service": "dominion-web",
+        "compose_working_dir": "/home/malachisingleton8/desktop-tutorial",
+        "health": null,
+        "image": "desktop-tutorial-dominion-web",
+        "memory_limit": 0,
+        "name": "dominion-web",
+        "nano_cpus": 0,
+        "pids_limit": null,
+        "ports": [
+          {
+            "container_port": "80/tcp",
+            "host_ip": "0.0.0.0",
+            "host_port": "8090"
+          },
+          {
+            "container_port": "80/tcp",
+            "host_ip": "::",
+            "host_port": "8090"
+          }
+        ],
+        "restart_policy": "always",
+        "state": "running"
+      },
+      {
+        "compose_config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+        "compose_project": "desktop-tutorial",
+        "compose_service": "baby-logger",
+        "compose_working_dir": "/home/malachisingleton8/desktop-tutorial",
+        "health": null,
+        "image": "alpine:latest",
+        "memory_limit": 0,
+        "name": "baby-logger",
+        "nano_cpus": 0,
+        "pids_limit": null,
+        "ports": [],
+        "restart_policy": "always",
+        "state": "running"
+      },
+      {
+        "compose_config_files": null,
+        "compose_project": null,
+        "compose_service": null,
+        "compose_working_dir": null,
+        "health": null,
+        "image": "dominion-seo:latest",
+        "memory_limit": 0,
+        "name": "dominion-seo",
+        "nano_cpus": 0,
+        "pids_limit": null,
+        "ports": [],
+        "restart_policy": "always",
+        "state": "running"
+      },
+      {
+        "compose_config_files": null,
+        "compose_project": null,
+        "compose_service": null,
+        "compose_working_dir": null,
+        "health": null,
+        "image": "n8nio/n8n:latest",
+        "memory_limit": 0,
+        "name": "dominion-n8n",
+        "nano_cpus": 0,
+        "pids_limit": null,
+        "ports": [
+          {
+            "container_port": "5678/tcp",
+            "host_ip": "0.0.0.0",
+            "host_port": "5678"
+          },
+          {
+            "container_port": "5678/tcp",
+            "host_ip": "::",
+            "host_port": "5678"
+          }
+        ],
+        "restart_policy": "unless-stopped",
+        "state": "running"
+      },
+      {
+        "compose_config_files": null,
+        "compose_project": null,
+        "compose_service": null,
+        "compose_working_dir": null,
+        "health": null,
+        "image": "postgres:15",
+        "memory_limit": 0,
+        "name": "dominion-db",
+        "nano_cpus": 0,
+        "pids_limit": null,
+        "ports": [
+          {
+            "container_port": "5432/tcp",
+            "host_ip": "127.0.0.1",
+            "host_port": "5432"
+          }
+        ],
+        "restart_policy": "unless-stopped",
+        "state": "running"
+      }
+    ]
+  },
+  "generated_at": "2026-07-21T19:57:22.332479+00:00",
+  "health_checks": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/healthz",
+      "port": 5060,
+      "reachable": true,
+      "status": 404
+    }
+  ],
+  "host": {
+    "hostname": "foundation-vm"
+  },
   "map_version": 2,
-  "status": "started",
+  "probe_errors": [],
+  "repositories": [
+    {
+      "branch": "claude/movie-generator-youtube-b50wx2",
+      "compose_sha256": "42e2e90c41e9c154bf96f3ba2dc277811f873626af41b747474fcea6a494c8eb",
+      "dirty_entry_count": 3,
+      "exists": true,
+      "head": "aa2d7d2e9e92124a3ebc131d4f0d326b5b1c872b",
+      "is_git_repository": true,
+      "origin": "git@github-dominion:dunkdee/dominion-ops.git",
+      "path": "/home/malachisingleton8/dominion-ops"
+    },
+    {
+      "branch": null,
+      "compose_sha256": null,
+      "dirty_entry_count": null,
+      "exists": true,
+      "head": null,
+      "is_git_repository": false,
+      "origin": null,
+      "path": "/home/malachisingleton8/desktop-tutorial"
+    },
+    {
+      "branch": null,
+      "compose_sha256": null,
+      "dirty_entry_count": null,
+      "exists": true,
+      "head": null,
+      "is_git_repository": false,
+      "origin": null,
+      "path": "/opt/dominion"
+    },
+    {
+      "branch": null,
+      "compose_sha256": null,
+      "dirty_entry_count": null,
+      "exists": false,
+      "head": null,
+      "is_git_repository": false,
+      "origin": null,
+      "path": "/opt/dominions-ark"
+    }
+  ],
+  "restart_deltas_20_seconds": {
+    "caddy.service": {
+      "active_state": "active",
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "sub_state": "running"
+    },
+    "dominion-alchemist.service": {
+      "active_state": "active",
+      "delta": 0,
+      "end": 2,
+      "start": 2,
+      "sub_state": "running"
+    },
+    "dominion-alpha.service": {
+      "active_state": "active",
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "sub_state": "running"
+    },
+    "dominion-conductor.service": {
+      "active_state": "active",
+      "delta": 0,
+      "end": 10,
+      "start": 10,
+      "sub_state": "running"
+    },
+    "dominion-gatekeeper.service": {
+      "active_state": "active",
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "sub_state": "running"
+    },
+    "dominion-juris.service": {
+      "active_state": "active",
+      "delta": 0,
+      "end": 15689,
+      "start": 15689,
+      "sub_state": "running"
+    },
+    "dominion-store.service": {
+      "active_state": "active",
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "sub_state": "running"
+    },
+    "gemini-server.service": {
+      "active_state": "active",
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "sub_state": "running"
+    }
+  },
+  "safety": {
+    "command_arguments_collected": false,
+    "customer_data_collected": false,
+    "environment_values_collected": false,
+    "file_contents_collected": false,
+    "logs_collected": false,
+    "services_changed": false
+  },
+  "services": [
+    {
+      "active_state": "activating",
+      "description": "Dominion Alchemist API",
+      "fragment_path": "/etc/systemd/system/alchemist-api.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 72,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "exit-code",
+      "sub_state": "auto-restart",
+      "triggered_by": [],
+      "unit": "alchemist-api.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/dominion/agents/health"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Caddy",
+      "fragment_path": "/lib/systemd/system/caddy-api.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [],
+      "unit": "caddy-api.service",
+      "unit_file_state": "disabled",
+      "user": "caddy",
+      "working_directory": null
+    },
+    {
+      "active_state": "active",
+      "description": "Caddy",
+      "fragment_path": "/lib/systemd/system/caddy.service",
+      "load_state": "loaded",
+      "memory_current": 52248576,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "caddy.service",
+      "unit_file_state": "disabled",
+      "user": "caddy",
+      "working_directory": null
+    },
+    {
+      "active_state": "activating",
+      "description": "Dominion Conductor API",
+      "fragment_path": "/etc/systemd/system/conductor-api.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 128,
+      "restart_policy": "always",
+      "restart_usec": "5s",
+      "result": "exit-code",
+      "sub_state": "auto-restart",
+      "triggered_by": [],
+      "unit": "conductor-api.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/conductor"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Conductor Autonomous Publisher Worker",
+      "fragment_path": "/etc/systemd/system/conductor-autonomous.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "conductor-autonomous.timer"
+      ],
+      "unit": "conductor-autonomous.service",
+      "unit_file_state": "static",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/conductor"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Conductor Scheduler",
+      "fragment_path": "/etc/systemd/system/conductor-scheduler.service",
+      "load_state": "loaded",
+      "memory_current": 16363520,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "5s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "conductor-scheduler.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/conductor"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Conductor Worker",
+      "fragment_path": "/etc/systemd/system/conductor-worker.service",
+      "load_state": "loaded",
+      "memory_current": 17915904,
+      "n_restarts": 8,
+      "restart_policy": "always",
+      "restart_usec": "5s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "conductor-worker.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/conductor"
+    },
+    {
+      "active_state": "inactive",
+      "description": "conductor.service",
+      "fragment_path": "/etc/systemd/system/conductor.service",
+      "load_state": "masked",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [],
+      "unit": "conductor.service",
+      "unit_file_state": "masked",
+      "user": null,
+      "working_directory": null
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion 3D Command Center (port 8200)",
+      "fragment_path": "/etc/systemd/system/dominion-3d-dashboard.service",
+      "load_state": "loaded",
+      "memory_current": 34451456,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-3d-dashboard.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/dominion_3d_dashboard"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Affiliate Content Engine",
+      "fragment_path": "/etc/systemd/system/dominion-affiliate.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-affiliate.timer"
+      ],
+      "unit": "dominion-affiliate.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Alchemist Health AI",
+      "fragment_path": "/etc/systemd/system/dominion-alchemist.service",
+      "load_state": "loaded",
+      "memory_current": 11919360,
+      "n_restarts": 2,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-alchemist.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/dominion/agents/health"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Alpha Engine - Token Scanner + Paper Trader",
+      "fragment_path": "/etc/systemd/system/dominion-alpha.service",
+      "load_state": "loaded",
+      "memory_current": 65261568,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "15s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-alpha.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/dominion/alpha_engine"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Nightly Backups (site, caddy, n8n)",
+      "fragment_path": "/etc/systemd/system/dominion-backup.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-backup.timer"
+      ],
+      "unit": "dominion-backup.service",
+      "unit_file_state": "static",
+      "user": null,
+      "working_directory": null
+    },
+    {
+      "active_state": "active",
+      "description": "Buddy Web Chat — Phone-accessible AI (port 5070)",
+      "fragment_path": "/etc/systemd/system/dominion-buddy-web.service",
+      "load_state": "loaded",
+      "memory_current": 80801792,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-buddy-web.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Command Deck - Overseer Dashboard (port 5110)",
+      "fragment_path": "/etc/systemd/system/dominion-command-deck.service",
+      "load_state": "loaded",
+      "memory_current": 22003712,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-command-deck.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/surplus_recovery"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Conductor API",
+      "fragment_path": "/etc/systemd/system/dominion-conductor.service",
+      "load_state": "loaded",
+      "memory_current": 44998656,
+      "n_restarts": 10,
+      "restart_policy": "always",
+      "restart_usec": "3s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-conductor.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/conductor"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Dashboard Command Center",
+      "fragment_path": "/etc/systemd/system/dominion-dashboard.service",
+      "load_state": "loaded",
+      "memory_current": 39510016,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-dashboard.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/dominion/dashboard"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion KDP Email Drip Engine",
+      "fragment_path": "/etc/systemd/system/dominion-email-drip.service",
+      "load_state": "loaded",
+      "memory_current": 39768064,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-email-drip.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/email_drip"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Email Monitor — SMS alerts for new emails",
+      "fragment_path": "/etc/systemd/system/dominion-email-monitor.service",
+      "load_state": "loaded",
+      "memory_current": 12177408,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "30s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-email-monitor.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/surplus_recovery"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Executor - run next eligible job",
+      "fragment_path": "/etc/systemd/system/dominion-executor.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-executor.timer"
+      ],
+      "unit": "dominion-executor.service",
+      "unit_file_state": "static",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Gatekeeper Revenue Rail",
+      "fragment_path": "/etc/systemd/system/dominion-gatekeeper.service",
+      "load_state": "loaded",
+      "memory_current": 55803904,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "5s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-gatekeeper.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Generate Dominion publish payload from Conductor",
+      "fragment_path": "/etc/systemd/system/dominion-generate-payload.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [],
+      "unit": "dominion-generate-payload.service",
+      "unit_file_state": "static",
+      "user": null,
+      "working_directory": null
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion System Guardian",
+      "fragment_path": "/etc/systemd/system/dominion-guardian.service",
+      "load_state": "loaded",
+      "memory_current": 86077440,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "30s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-guardian.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Healthcheck",
+      "fragment_path": "/etc/systemd/system/dominion-healthcheck.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-healthcheck.timer"
+      ],
+      "unit": "dominion-healthcheck.service",
+      "unit_file_state": "static",
+      "user": null,
+      "working_directory": null
+    },
+    {
+      "active_state": "inactive",
+      "description": "DominionIntel Intelligence Pipeline",
+      "fragment_path": "/etc/systemd/system/dominion-intel.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-intel.timer"
+      ],
+      "unit": "dominion-intel.service",
+      "unit_file_state": "static",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "active",
+      "description": "Juris Legal Intelligence API",
+      "fragment_path": "/etc/systemd/system/dominion-juris.service",
+      "load_state": "loaded",
+      "memory_current": 78811136,
+      "n_restarts": 15689,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-juris.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/dominion/agents/juris"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion KDP Book Generator + Publisher + Cover Generator + Status Report",
+      "fragment_path": "/etc/systemd/system/dominion-kdp.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-kdp.timer"
+      ],
+      "unit": "dominion-kdp.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion System Monitor",
+      "fragment_path": "/etc/systemd/system/dominion-monitor.service",
+      "load_state": "loaded",
+      "memory_current": 22409216,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "30s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-monitor.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion n8n Watchdog",
+      "fragment_path": "/etc/systemd/system/dominion-n8n-watchdog.service",
+      "load_state": "loaded",
+      "memory_current": 28168192,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-n8n-watchdog.service",
+      "unit_file_state": "disabled",
+      "user": "root",
+      "working_directory": null
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Operations Dashboard (port 5100)",
+      "fragment_path": "/etc/systemd/system/dominion-ops-dashboard.service",
+      "load_state": "loaded",
+      "memory_current": 22925312,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-ops-dashboard.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Overseer - Lane Verification",
+      "fragment_path": "/etc/systemd/system/dominion-overseer.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-overseer.timer"
+      ],
+      "unit": "dominion-overseer.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/surplus_recovery"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Markov Paper Trader (daily iteration)",
+      "fragment_path": "/etc/systemd/system/dominion-paper-trade.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-paper-trade.timer"
+      ],
+      "unit": "dominion-paper-trade.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Port Conflict Auto-Healer",
+      "fragment_path": "/etc/systemd/system/dominion-port-healer.service",
+      "load_state": "loaded",
+      "memory_current": 8646656,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "30s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-port-healer.service",
+      "unit_file_state": "enabled",
+      "user": "root",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Proposal Queue",
+      "fragment_path": "/etc/systemd/system/dominion-proposal-queue.service",
+      "load_state": "loaded",
+      "memory_current": 17137664,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-proposal-queue.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Daily Canonical Publish",
+      "fragment_path": "/etc/systemd/system/dominion-publish.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-publish.timer"
+      ],
+      "unit": "dominion-publish.service",
+      "unit_file_state": "static",
+      "user": "root",
+      "working_directory": null
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion CEO Report Dashboard (port 5095)",
+      "fragment_path": "/etc/systemd/system/dominion-report.service",
+      "load_state": "loaded",
+      "memory_current": 38428672,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-report.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Surplus Review Queue",
+      "fragment_path": "/etc/systemd/system/dominion-review-queue.service",
+      "load_state": "loaded",
+      "memory_current": 17371136,
+      "n_restarts": 152427,
+      "restart_policy": "always",
+      "restart_usec": "5s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-review-queue.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/surplus_recovery"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Real Estate Scout - Daily Lead Sourcing",
+      "fragment_path": "/etc/systemd/system/dominion-scout.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-scout.timer"
+      ],
+      "unit": "dominion-scout.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Sentinel — Autonomous Guardian (phi=1.618)",
+      "fragment_path": "/etc/systemd/system/dominion-sentinel.service",
+      "load_state": "loaded",
+      "memory_current": 29052928,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-sentinel.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion static site on 8080",
+      "fragment_path": "/etc/systemd/system/dominion-site.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "3s",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [],
+      "unit": "dominion-site.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/aura-ecosystem/agency-website"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Social Media Poster",
+      "fragment_path": "/etc/systemd/system/dominion-social-poster.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-social-poster.timer"
+      ],
+      "unit": "dominion-social-poster.service",
+      "unit_file_state": "static",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Store Payment API (port 5080)",
+      "fragment_path": "/etc/systemd/system/dominion-store.service",
+      "load_state": "loaded",
+      "memory_current": 37928960,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-store.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Surplus REST API (port 8100)",
+      "fragment_path": "/etc/systemd/system/dominion-surplus-api.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [],
+      "unit": "dominion-surplus-api.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/surplus_recovery"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Surplus Recovery Dashboard",
+      "fragment_path": "/etc/systemd/system/dominion-surplus-dashboard.service",
+      "load_state": "loaded",
+      "memory_current": 37937152,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-surplus-dashboard.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/surplus_recovery"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Surplus Fund Scraper",
+      "fragment_path": "/etc/systemd/system/dominion-surplus-scraper.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "on-failure",
+      "restart_usec": "30s",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [],
+      "unit": "dominion-surplus-scraper.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/surplus_recovery"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion TikTok OAuth and Auto-Poster (port 5120)",
+      "fragment_path": "/etc/systemd/system/dominion-tiktok.service",
+      "load_state": "loaded",
+      "memory_current": 39006208,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-tiktok.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Trading Bot — Live Signal Tracker (90-Day POC)",
+      "fragment_path": "/etc/systemd/system/dominion-tracker.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "30s",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [],
+      "unit": "dominion-tracker.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Weekly Trade Report Email",
+      "fragment_path": "/etc/systemd/system/dominion-trade-report.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-trade-report.timer"
+      ],
+      "unit": "dominion-trade-report.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "active",
+      "description": "Dominion Twilio Call/SMS Router (port 5102)",
+      "fragment_path": "/etc/systemd/system/dominion-twilio-router.service",
+      "load_state": "loaded",
+      "memory_current": 13475840,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "dominion-twilio-router.service",
+      "unit_file_state": "enabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/surplus_recovery"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Watchdog Health Check",
+      "fragment_path": "/etc/systemd/system/dominion-watchdog.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-watchdog.timer"
+      ],
+      "unit": "dominion-watchdog.service",
+      "unit_file_state": "static",
+      "user": null,
+      "working_directory": null
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion Wholesale Pipeline (scout > analyze > outreach > buyers > blast)",
+      "fragment_path": "/etc/systemd/system/dominion-wholesale.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-wholesale.timer"
+      ],
+      "unit": "dominion-wholesale.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Dominion YouTube Shorts Generator + Uploader",
+      "fragment_path": "/etc/systemd/system/dominion-youtube.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-youtube.timer"
+      ],
+      "unit": "dominion-youtube.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/buddy_core"
+    },
+    {
+      "active_state": "inactive",
+      "description": "Daily dpkg database backup service",
+      "fragment_path": "/lib/systemd/system/dpkg-db-backup.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "no",
+      "restart_usec": "100ms",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [
+        "dpkg-db-backup.timer"
+      ],
+      "unit": "dpkg-db-backup.service",
+      "unit_file_state": "static",
+      "user": null,
+      "working_directory": null
+    },
+    {
+      "active_state": "active",
+      "description": "Gemini Orchestrator API Server",
+      "fragment_path": "/etc/systemd/system/gemini-server.service",
+      "load_state": "loaded",
+      "memory_current": 49000448,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "5s",
+      "result": "success",
+      "sub_state": "running",
+      "triggered_by": [],
+      "unit": "gemini-server.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/opt/ai_agents/gemini"
+    },
+    {
+      "active_state": "activating",
+      "description": "Dominion Juris API",
+      "fragment_path": "/etc/systemd/system/juris-api.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 71,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "exit-code",
+      "sub_state": "auto-restart",
+      "triggered_by": [],
+      "unit": "juris-api.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": "/home/malachisingleton8/dominion/agents/juris"
+    },
+    {
+      "active_state": "inactive",
+      "description": "n8n Automation Service",
+      "fragment_path": "/etc/systemd/system/n8n.service",
+      "load_state": "loaded",
+      "memory_current": null,
+      "n_restarts": 0,
+      "restart_policy": "always",
+      "restart_usec": "10s",
+      "result": "success",
+      "sub_state": "dead",
+      "triggered_by": [],
+      "unit": "n8n.service",
+      "unit_file_state": "disabled",
+      "user": "malachisingleton8",
+      "working_directory": null
+    }
+  ],
+  "status": "success",
+  "timers": [
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 19:56:13 UTC",
+      "next_elapse": "Wed 2026-07-22 07:00:00 UTC",
+      "triggers": [
+        "conductor-autonomous.service"
+      ],
+      "unit": "conductor-autonomous.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 02:00:00 UTC",
+      "next_elapse": "Wed 2026-07-22 02:00:00 UTC",
+      "triggers": [
+        "dominion-affiliate.service"
+      ],
+      "unit": "dominion-affiliate.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 03:25:00 UTC",
+      "next_elapse": "Wed 2026-07-22 03:25:00 UTC",
+      "triggers": [
+        "dominion-backup.service"
+      ],
+      "unit": "dominion-backup.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 19:56:40 UTC",
+      "next_elapse": null,
+      "triggers": [
+        "dominion-executor.service"
+      ],
+      "unit": "dominion-executor.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "inactive",
+      "last_trigger": null,
+      "next_elapse": null,
+      "triggers": [
+        "dominion-generate-payload.service"
+      ],
+      "unit": "dominion-generate-payload.timer",
+      "unit_file_state": "disabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 19:56:45 UTC",
+      "next_elapse": null,
+      "triggers": [
+        "dominion-healthcheck.service"
+      ],
+      "unit": "dominion-healthcheck.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 15:00:48 UTC",
+      "next_elapse": "Tue 2026-07-21 20:00:10 UTC",
+      "triggers": [
+        "dominion-intel.service"
+      ],
+      "unit": "dominion-intel.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Mon 2026-07-20 04:00:00 UTC",
+      "next_elapse": "Mon 2026-07-27 04:00:00 UTC",
+      "triggers": [
+        "dominion-kdp.service"
+      ],
+      "unit": "dominion-kdp.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "inactive",
+      "last_trigger": null,
+      "next_elapse": null,
+      "triggers": [
+        "dominion-overseer.service"
+      ],
+      "unit": "dominion-overseer.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 14:02:20 UTC",
+      "next_elapse": "Wed 2026-07-22 14:09:54 UTC",
+      "triggers": [
+        "dominion-paper-trade.service"
+      ],
+      "unit": "dominion-paper-trade.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 13:10:01 UTC",
+      "next_elapse": "Wed 2026-07-22 13:10:00 UTC",
+      "triggers": [
+        "dominion-publish.service"
+      ],
+      "unit": "dominion-publish.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 06:00:01 UTC",
+      "next_elapse": "Wed 2026-07-22 06:00:00 UTC",
+      "triggers": [
+        "dominion-scout.service"
+      ],
+      "unit": "dominion-scout.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 17:00:00 UTC",
+      "next_elapse": "Tue 2026-07-21 22:00:00 UTC",
+      "triggers": [
+        "dominion-social-poster.service"
+      ],
+      "unit": "dominion-social-poster.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "inactive",
+      "last_trigger": null,
+      "next_elapse": null,
+      "triggers": [
+        "dominion-surplus-scraper.service"
+      ],
+      "unit": "dominion-surplus-scraper.timer",
+      "unit_file_state": "disabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Sun 2026-07-19 08:00:00 UTC",
+      "next_elapse": "Sun 2026-07-26 08:00:00 UTC",
+      "triggers": [
+        "dominion-trade-report.service"
+      ],
+      "unit": "dominion-trade-report.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 19:56:07 UTC",
+      "next_elapse": null,
+      "triggers": [
+        "dominion-watchdog.service"
+      ],
+      "unit": "dominion-watchdog.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 07:00:01 UTC",
+      "next_elapse": "Wed 2026-07-22 07:00:00 UTC",
+      "triggers": [
+        "dominion-wholesale.service"
+      ],
+      "unit": "dominion-wholesale.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 17:00:00 UTC",
+      "next_elapse": "Tue 2026-07-21 22:00:00 UTC",
+      "triggers": [
+        "dominion-youtube.service"
+      ],
+      "unit": "dominion-youtube.timer",
+      "unit_file_state": "enabled"
+    },
+    {
+      "active_state": "active",
+      "last_trigger": "Tue 2026-07-21 00:00:00 UTC",
+      "next_elapse": "Wed 2026-07-22 00:00:00 UTC",
+      "triggers": [
+        "dpkg-db-backup.service"
+      ],
+      "unit": "dpkg-db-backup.timer",
+      "unit_file_state": "enabled"
+    }
+  ],
   "workflow": {
     "run_id": 29863614231,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29863614231",

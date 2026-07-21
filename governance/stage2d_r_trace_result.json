@@ -1,10 +1,649 @@
 {
+  "after_containers": [
+    {
+      "image": "a319b3721a52",
+      "name": "baby-api",
+      "state": "running",
+      "status": "Up 4 weeks (healthy)"
+    },
+    {
+      "image": "alpine:latest",
+      "name": "baby-logger",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "postgres:15",
+      "name": "dominion-db",
+      "state": "running",
+      "status": "Up 5 weeks"
+    },
+    {
+      "image": "n8nio/n8n:latest",
+      "name": "dominion-n8n",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "dominion-seo:latest",
+      "name": "dominion-seo",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "3224bfc43c02",
+      "name": "dominion-web",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "movie-generator",
+      "name": "movie-generator",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "name": "wix-agent",
+      "state": "running",
+      "status": "Up 22 hours (healthy)"
+    },
+    {
+      "image": "desktop-tutorial-wix-agent",
+      "name": "wix-agent-rollback-20260720T224801Z",
+      "state": "exited",
+      "status": "Exited (0) 22 hours ago"
+    }
+  ],
   "alignment_stage": "2D-R-trace",
-  "status": "started",
+  "before_containers": [
+    {
+      "image": "a319b3721a52",
+      "name": "baby-api",
+      "state": "running",
+      "status": "Up 4 weeks (healthy)"
+    },
+    {
+      "image": "alpine:latest",
+      "name": "baby-logger",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "postgres:15",
+      "name": "dominion-db",
+      "state": "running",
+      "status": "Up 5 weeks"
+    },
+    {
+      "image": "n8nio/n8n:latest",
+      "name": "dominion-n8n",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "dominion-seo:latest",
+      "name": "dominion-seo",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "3224bfc43c02",
+      "name": "dominion-web",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "movie-generator",
+      "name": "movie-generator",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "name": "wix-agent",
+      "state": "running",
+      "status": "Up 22 hours (healthy)"
+    },
+    {
+      "image": "desktop-tutorial-wix-agent",
+      "name": "wix-agent-rollback-20260720T224801Z",
+      "state": "exited",
+      "status": "Exited (0) 22 hours ago"
+    }
+  ],
+  "candidate_file_matches": [
+    {
+      "matches": {
+        "conductor-api.service": [
+          3
+        ]
+      },
+      "path": "/etc/systemd/system/conductor-scheduler.service",
+      "sha256": "2d409f7fdfdee299340211d6674ee2f1813cfed340b5fbf1ba0b845aa8f0ed9e",
+      "size_bytes": 445
+    },
+    {
+      "matches": {
+        "conductor-api.service": [
+          3
+        ]
+      },
+      "path": "/etc/systemd/system/conductor-worker.service",
+      "sha256": "96039bb7eed09a5bc70f10e2bd92f8862342e3913c112f816664b8eee15ef203",
+      "size_bytes": 439
+    },
+    {
+      "matches": {
+        "alchemist-api.service": [
+          38
+        ],
+        "conductor-api.service": [
+          38
+        ],
+        "juris-api.service": [
+          38
+        ]
+      },
+      "path": "/home/malachisingleton8/buddy_core/port_healer.py",
+      "sha256": "c415ed547e5680fd7c6c4d75fd043acb2a6776de9c0fc31f746e65697301937f",
+      "size_bytes": 12043
+    }
+  ],
+  "containers_unchanged": true,
+  "generated_at": "2026-07-21T21:08:53.353186+00:00",
+  "monitor_units": {
+    "conductor-scheduler.service": {
+      "active_state": "active",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/bin/bash"
+      ],
+      "fragment_path": "/etc/systemd/system/conductor-scheduler.service",
+      "load_state": "loaded",
+      "main_pid": 387,
+      "n_restarts": 0,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "-.mount",
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "always",
+      "restart_usec": "5s",
+      "reverse_dependencies": [
+        "graphical.target",
+        "multi-user.target"
+      ],
+      "source_path": null,
+      "sub_state": "running",
+      "triggered_by": [],
+      "triggers": [],
+      "unit": "conductor-scheduler.service",
+      "unit_file_state": "enabled",
+      "wants": []
+    },
+    "conductor-worker.service": {
+      "active_state": "active",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/bin/bash"
+      ],
+      "fragment_path": "/etc/systemd/system/conductor-worker.service",
+      "load_state": "loaded",
+      "main_pid": 1245651,
+      "n_restarts": 8,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "-.mount",
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "always",
+      "restart_usec": "5s",
+      "reverse_dependencies": [
+        "graphical.target",
+        "multi-user.target"
+      ],
+      "source_path": null,
+      "sub_state": "running",
+      "triggered_by": [],
+      "triggers": [],
+      "unit": "conductor-worker.service",
+      "unit_file_state": "enabled",
+      "wants": []
+    },
+    "dominion-executor.service": {
+      "active_state": "inactive",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/usr/local/bin/dominion-execute-next.sh"
+      ],
+      "fragment_path": "/etc/systemd/system/dominion-executor.service",
+      "load_state": "loaded",
+      "main_pid": 0,
+      "n_restarts": 0,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "-.mount",
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "no",
+      "restart_usec": "100ms",
+      "reverse_dependencies": [],
+      "source_path": null,
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-executor.timer"
+      ],
+      "triggers": [],
+      "unit": "dominion-executor.service",
+      "unit_file_state": "static",
+      "wants": []
+    },
+    "dominion-guardian.service": {
+      "active_state": "active",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/home/malachisingleton8/dominion_env/bin/python3"
+      ],
+      "fragment_path": "/etc/systemd/system/dominion-guardian.service",
+      "load_state": "loaded",
+      "main_pid": 1453,
+      "n_restarts": 0,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "-.mount",
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "always",
+      "restart_usec": "30s",
+      "reverse_dependencies": [
+        "graphical.target",
+        "multi-user.target"
+      ],
+      "source_path": null,
+      "sub_state": "running",
+      "triggered_by": [],
+      "triggers": [],
+      "unit": "dominion-guardian.service",
+      "unit_file_state": "enabled",
+      "wants": [
+        "docker.service"
+      ]
+    },
+    "dominion-healthcheck.service": {
+      "active_state": "inactive",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/etc/dominion/healthcheck.sh"
+      ],
+      "fragment_path": "/etc/systemd/system/dominion-healthcheck.service",
+      "load_state": "loaded",
+      "main_pid": 0,
+      "n_restarts": 0,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "no",
+      "restart_usec": "100ms",
+      "reverse_dependencies": [],
+      "source_path": null,
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-healthcheck.timer"
+      ],
+      "triggers": [],
+      "unit": "dominion-healthcheck.service",
+      "unit_file_state": "static",
+      "wants": []
+    },
+    "dominion-monitor.service": {
+      "active_state": "active",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/usr/bin/python3"
+      ],
+      "fragment_path": "/etc/systemd/system/dominion-monitor.service",
+      "load_state": "loaded",
+      "main_pid": 400,
+      "n_restarts": 0,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "-.mount",
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "always",
+      "restart_usec": "30s",
+      "reverse_dependencies": [
+        "graphical.target",
+        "multi-user.target"
+      ],
+      "source_path": null,
+      "sub_state": "running",
+      "triggered_by": [],
+      "triggers": [],
+      "unit": "dominion-monitor.service",
+      "unit_file_state": "enabled",
+      "wants": []
+    },
+    "dominion-n8n-watchdog.service": {
+      "active_state": "active",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/bin/bash"
+      ],
+      "fragment_path": "/etc/systemd/system/dominion-n8n-watchdog.service",
+      "load_state": "loaded",
+      "main_pid": 822554,
+      "n_restarts": 0,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "docker.service",
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "always",
+      "restart_usec": "10s",
+      "reverse_dependencies": [],
+      "source_path": null,
+      "sub_state": "running",
+      "triggered_by": [],
+      "triggers": [],
+      "unit": "dominion-n8n-watchdog.service",
+      "unit_file_state": "disabled",
+      "wants": []
+    },
+    "dominion-port-healer.service": {
+      "active_state": "inactive",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/usr/bin/python3"
+      ],
+      "fragment_path": "/etc/systemd/system/dominion-port-healer.service",
+      "load_state": "loaded",
+      "main_pid": 0,
+      "n_restarts": 0,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "-.mount",
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "always",
+      "restart_usec": "30s",
+      "reverse_dependencies": [],
+      "source_path": null,
+      "sub_state": "dead",
+      "triggered_by": [],
+      "triggers": [],
+      "unit": "dominion-port-healer.service",
+      "unit_file_state": "disabled",
+      "wants": []
+    },
+    "dominion-sentinel.service": {
+      "active_state": "active",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/home/malachisingleton8/dominion_env/bin/python3"
+      ],
+      "fragment_path": "/etc/systemd/system/dominion-sentinel.service",
+      "load_state": "loaded",
+      "main_pid": 729068,
+      "n_restarts": 0,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "-.mount",
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "always",
+      "restart_usec": "10s",
+      "reverse_dependencies": [
+        "graphical.target",
+        "multi-user.target"
+      ],
+      "source_path": null,
+      "sub_state": "running",
+      "triggered_by": [],
+      "triggers": [],
+      "unit": "dominion-sentinel.service",
+      "unit_file_state": "enabled",
+      "wants": [
+        "network-online.target"
+      ]
+    },
+    "dominion-watchdog.service": {
+      "active_state": "inactive",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/usr/local/bin/dominion-watchdog.sh"
+      ],
+      "fragment_path": "/etc/systemd/system/dominion-watchdog.service",
+      "load_state": "loaded",
+      "main_pid": 0,
+      "n_restarts": 0,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "no",
+      "restart_usec": "100ms",
+      "reverse_dependencies": [],
+      "source_path": null,
+      "sub_state": "dead",
+      "triggered_by": [
+        "dominion-watchdog.timer"
+      ],
+      "triggers": [],
+      "unit": "dominion-watchdog.service",
+      "unit_file_state": "static",
+      "wants": []
+    }
+  },
+  "retired_units": {
+    "alchemist-api.service": {
+      "active_state": "activating",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/home/malachisingleton8/dominion_env/bin/python3"
+      ],
+      "fragment_path": "/etc/systemd/system/alchemist-api.service",
+      "load_state": "loaded",
+      "main_pid": 0,
+      "n_restarts": 357,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "-.mount",
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "always",
+      "restart_usec": "10s",
+      "reverse_dependencies": [],
+      "source_path": null,
+      "sub_state": "auto-restart",
+      "triggered_by": [],
+      "triggers": [],
+      "unit": "alchemist-api.service",
+      "unit_file_state": "disabled",
+      "wants": []
+    },
+    "conductor-api.service": {
+      "active_state": "activating",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/bin/bash"
+      ],
+      "fragment_path": "/etc/systemd/system/conductor-api.service",
+      "load_state": "loaded",
+      "main_pid": 0,
+      "n_restarts": 638,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "-.mount",
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "always",
+      "restart_usec": "5s",
+      "reverse_dependencies": [],
+      "source_path": null,
+      "sub_state": "auto-restart",
+      "triggered_by": [],
+      "triggers": [],
+      "unit": "conductor-api.service",
+      "unit_file_state": "disabled",
+      "wants": []
+    },
+    "juris-api.service": {
+      "active_state": "activating",
+      "binds_to": [],
+      "conflicts": [
+        "shutdown.target"
+      ],
+      "executables": [
+        "/home/malachisingleton8/dominion_env/bin/python3"
+      ],
+      "fragment_path": "/etc/systemd/system/juris-api.service",
+      "load_state": "loaded",
+      "main_pid": 0,
+      "n_restarts": 352,
+      "on_failure": [],
+      "part_of": [],
+      "requires": [
+        "-.mount",
+        "sysinit.target",
+        "system.slice"
+      ],
+      "restart": "always",
+      "restart_usec": "10s",
+      "reverse_dependencies": [],
+      "source_path": null,
+      "sub_state": "auto-restart",
+      "triggered_by": [],
+      "triggers": [],
+      "unit": "juris-api.service",
+      "unit_file_state": "disabled",
+      "wants": []
+    }
+  },
+  "safety": {
+    "cron_changed": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "environment_values_collected": false,
+    "file_contents_collected": false,
+    "file_contents_scanned_locally_for_retired_unit_names": true,
+    "logs_collected": false,
+    "production_containers_changed": false,
+    "repositories_changed": false,
+    "secret_values_collected": false,
+    "services_changed": false,
+    "timers_changed": false
+  },
+  "scan_summary": {
+    "candidate_paths_considered": [
+      "/bin/bash",
+      "/etc/dominion/healthcheck.sh",
+      "/etc/systemd/system/alchemist-api.service",
+      "/etc/systemd/system/conductor-api.service",
+      "/etc/systemd/system/conductor-scheduler.service",
+      "/etc/systemd/system/conductor-worker.service",
+      "/etc/systemd/system/dominion-executor.service",
+      "/etc/systemd/system/dominion-guardian.service",
+      "/etc/systemd/system/dominion-healthcheck.service",
+      "/etc/systemd/system/dominion-monitor.service",
+      "/etc/systemd/system/dominion-n8n-watchdog.service",
+      "/etc/systemd/system/dominion-port-healer.service",
+      "/etc/systemd/system/dominion-sentinel.service",
+      "/etc/systemd/system/dominion-watchdog.service",
+      "/etc/systemd/system/juris-api.service",
+      "/home/malachisingleton8/dominion_env/bin/python3",
+      "/usr/bin/python3",
+      "/usr/local/bin/dominion-execute-next.sh",
+      "/usr/local/bin/dominion-watchdog.sh"
+    ],
+    "files_scanned": 6000,
+    "max_file_bytes": 1048576,
+    "max_files": 6000,
+    "roots_considered": [
+      "/etc/systemd/system",
+      "/lib/systemd/system",
+      "/usr/lib/systemd/system",
+      "/etc/cron.d",
+      "/etc/cron.daily",
+      "/etc/cron.hourly",
+      "/etc/cron.weekly",
+      "/home/malachisingleton8/buddy_core",
+      "/home/malachisingleton8/conductor",
+      "/home/malachisingleton8/dominion",
+      "/usr/local/bin",
+      "/opt/dominion"
+    ]
+  },
+  "status": "success",
+  "success": true,
+  "user_crontab_matches": [],
   "workflow": {
     "run_id": 29868756275,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29868756275",
     "source_sha": "cc422000070472f518c294f1c206d80637d56698",
-    "artifact_name": "dominion-alignment-stage2d-r-trace"
+    "artifact_name": "dominion-alignment-stage2d-r-trace",
+    "job_status": "success"
   }
 }

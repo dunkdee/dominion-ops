@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: juris-trust-private-transfer
@@ -141,3 +142,14 @@ jobs:
             find "$RECOVERY_DIR" -depth -type d -empty -delete
           fi
           rm -f ~/.ssh/id_vm ~/.ssh/known_hosts
+
+      - name: Report run pointer to recovery PR
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          gh pr comment 25 \
+            --repo "$GITHUB_REPOSITORY" \
+            --body "Authorized Juris recovery run ID: $GITHUB_RUN_ID — job status: $RUN_STATUS — head SHA: $GITHUB_SHA"

@@ -1,0 +1,337 @@
+name: Production Ecosystem Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type exactly AUDIT to run the read-only production inventory
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-ecosystem-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: ${{ inputs.confirm == 'AUDIT' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      AUDIT_DIR: /tmp/dominion-ecosystem-audit
+      AUDIT_FILE: /tmp/dominion-ecosystem-audit/runtime_inventory.json
+      REPORT_BRANCH: audit/ecosystem-runtime-20260721
+      REPORT_PATH: governance/runtime_inventory.json
+      ARTIFACT_NAME: dominion-production-ecosystem-audit
+
+    steps:
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Configure strict SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Collect safe runtime inventory
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 "$AUDIT_DIR"
+          ssh \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" 'python3 -' > "$AUDIT_FILE" <<'PY'
+          import json
+          import os
+          import platform
+          import shutil
+          import socket
+          import subprocess
+          import urllib.error
+          import urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          def command(args, timeout=15):
+              try:
+                  result = subprocess.run(
+                      args,
+                      check=False,
+                      capture_output=True,
+                      text=True,
+                      timeout=timeout,
+                  )
+              except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+                  return {"available": False, "returncode": None, "output": str(exc)}
+              output = (result.stdout or result.stderr).strip()
+              return {
+                  "available": True,
+                  "returncode": result.returncode,
+                  "output": output[:20000],
+              }
+
+          def docker_containers():
+              if not shutil.which("docker"):
+                  return []
+              result = command([
+                  "docker",
+                  "ps",
+                  "--all",
+                  "--format",
+                  "{{json .}}",
+              ])
+              containers = []
+              for line in result["output"].splitlines():
+                  try:
+                      row = json.loads(line)
+                  except json.JSONDecodeError:
+                      continue
+                  containers.append({
+                      "name": row.get("Names"),
+                      "image": row.get("Image"),
+                      "state": row.get("State"),
+                      "status": row.get("Status"),
+                      "ports": row.get("Ports"),
+                  })
+              return containers
+
+          def compose_projects():
+              if not shutil.which("docker"):
+                  return []
+              result = command(["docker", "compose", "ls", "--format", "json"])
+              if result["returncode"] != 0 or not result["output"]:
+                  return []
+              try:
+                  data = json.loads(result["output"])
+              except json.JSONDecodeError:
+                  return []
+              projects = data if isinstance(data, list) else [data]
+              safe = []
+              for item in projects:
+                  if not isinstance(item, dict):
+                      continue
+                  safe.append({
+                      "name": item.get("Name"),
+                      "status": item.get("Status"),
+                      "config_files": item.get("ConfigFiles"),
+                  })
+              return safe
+
+          def relevant_systemd_units():
+              if not shutil.which("systemctl"):
+                  return []
+              result = command([
+                  "systemctl",
+                  "list-units",
+                  "--all",
+                  "--type=service",
+                  "--no-legend",
+                  "--no-pager",
+              ])
+              keywords = (
+                  "dominion", "jarvis", "n8n", "wix", "alpha", "surplus",
+                  "youtube", "tiktok", "gemini", "conductor", "caddy",
+              )
+              units = []
+              for line in result["output"].splitlines():
+                  normalized = " ".join(line.split())
+                  if any(keyword in normalized.lower() for keyword in keywords):
+                      fields = normalized.split(" ", 4)
+                      units.append({
+                          "unit": fields[0] if fields else None,
+                          "load": fields[1] if len(fields) > 1 else None,
+                          "active": fields[2] if len(fields) > 2 else None,
+                          "sub": fields[3] if len(fields) > 3 else None,
+                          "description": fields[4] if len(fields) > 4 else None,
+                      })
+              return units
+
+          def listening_ports():
+              if not shutil.which("ss"):
+                  return []
+              result = command(["ss", "-lntH"])
+              ports = []
+              for line in result["output"].splitlines():
+                  parts = line.split()
+                  if len(parts) < 4:
+                      continue
+                  local = parts[3]
+                  port = local.rsplit(":", 1)[-1]
+                  if port.isdigit():
+                      ports.append(int(port))
+              return sorted(set(ports))
+
+          def health_check(name, port, path):
+              url = f"http://127.0.0.1:{port}{path}"
+              request = urllib.request.Request(url, method="GET")
+              try:
+                  with urllib.request.urlopen(request, timeout=4) as response:
+                      return {
+                          "name": name,
+                          "port": port,
+                          "path": path,
+                          "reachable": True,
+                          "status": response.status,
+                      }
+              except urllib.error.HTTPError as exc:
+                  return {
+                      "name": name,
+                      "port": port,
+                      "path": path,
+                      "reachable": True,
+                      "status": exc.code,
+                  }
+              except Exception as exc:
+                  return {
+                      "name": name,
+                      "port": port,
+                      "path": path,
+                      "reachable": False,
+                      "status": None,
+                      "error_type": type(exc).__name__,
+                  }
+
+          home = Path.home()
+          path_candidates = [
+              home / "dominion",
+              home / "dominion" / "agents",
+              home / "dominion" / "agents" / "juris",
+              home / "dominion-ops",
+              Path("/opt/dominions-ark"),
+              Path("/opt/dominion"),
+              Path("/var/www/dominionhealing"),
+              Path("/var/www/surplus"),
+          ]
+
+          checks = [
+              ("baby-api", 8080, "/"),
+              ("browser-agents", 8081, "/health"),
+              ("wix-agent", 8082, "/ready"),
+              ("obsidian-remote", 8083, "/"),
+              ("dominion-web", 8090, "/"),
+              ("conductor", 5060, "/healthz"),
+              ("n8n", 5678, "/healthz"),
+              ("alpha-engine", 8787, "/health"),
+          ]
+
+          payload = {
+              "audit_version": 1,
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+              "host": {
+                  "hostname": socket.gethostname(),
+                  "platform": platform.platform(),
+                  "python": platform.python_version(),
+              },
+              "docker_containers": docker_containers(),
+              "compose_projects": compose_projects(),
+              "systemd_units": relevant_systemd_units(),
+              "listening_tcp_ports": listening_ports(),
+              "health_checks": [health_check(*item) for item in checks],
+              "paths": [
+                  {"path": str(path), "exists": path.exists(), "is_dir": path.is_dir()}
+                  for path in path_candidates
+              ],
+              "safety": {
+                  "environment_values_collected": False,
+                  "file_contents_collected": False,
+                  "logs_collected": False,
+                  "customer_data_collected": False,
+              },
+          }
+          print(json.dumps(payload, indent=2, sort_keys=True))
+          PY
+
+          python3 -m json.tool "$AUDIT_FILE" >/dev/null
+          chmod 600 "$AUDIT_FILE"
+
+      - name: Upload private audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.AUDIT_FILE }}
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 9
+
+      - name: Publish audit report branch
+        uses: actions/github-script@v7
+        env:
+          RUN_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            const sourceSha = context.sha;
+            const ref = `heads/${branch}`;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({
+                owner,
+                repo,
+                ref: `refs/heads/${branch}`,
+                sha: sourceSha,
+              });
+            }
+            const inventory = JSON.parse(fs.readFileSync(process.env.AUDIT_FILE, 'utf8'));
+            inventory.workflow = {
+              run_id: context.runId,
+              run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              status: process.env.RUN_STATUS,
+              source_sha: sourceSha,
+              artifact_name: process.env.ARTIFACT_NAME,
+            };
+            const content = Buffer.from(`${JSON.stringify(inventory, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner,
+              repo,
+              path,
+              branch,
+              message: `audit: production ecosystem run ${context.runId}`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Remove temporary audit material
+        if: ${{ always() }}
+        run: |
+          set -eu
+          rm -rf "$AUDIT_DIR"
+          rm -f ~/.ssh/id_vm ~/.ssh/known_hosts

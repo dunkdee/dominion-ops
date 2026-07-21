@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "2A",
+  "status": "started",
+  "workflow": {
+    "run_id": 29864120927,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29864120927",
+    "source_sha": "95c3606411c24bea88b053623ec93767fbbd016a",
+    "artifact_name": "dominion-alignment-stage2a"
+  }
+}

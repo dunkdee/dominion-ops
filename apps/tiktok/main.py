@@ -21,7 +21,7 @@ from typing import Any
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Header, HTTPException, UploadFile, status
+from fastapi import FastAPI, Form, Header, HTTPException, Query, UploadFile, status
 
 ROOT = Path(os.getenv("TIKTOK_DATA_ROOT", "~/DominionsArk")).expanduser()
 ENV_FILE = ROOT / ".env"
@@ -106,11 +106,14 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/tiktok/callback")
-def tiktok_callback(code: str, state_value: str = Header(alias="X-OAuth-State")) -> dict[str, str]:
+def tiktok_callback(
+    code: str,
+    oauth_state: str = Query(alias="state"),
+) -> dict[str, str]:
     """Complete OAuth only when the preconfigured anti-CSRF state matches."""
     if not all((CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, OAUTH_STATE)):
         raise HTTPException(status_code=503, detail="TikTok OAuth is not fully configured")
-    if not hmac.compare_digest(state_value, OAUTH_STATE):
+    if not hmac.compare_digest(oauth_state, OAUTH_STATE):
         raise HTTPException(status_code=403, detail="OAuth state validation failed")
 
     response = requests.post(

@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "2D-R2-inspect",
+  "status": "started",
+  "workflow": {
+    "run_id": 29869539712,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29869539712",
+    "source_sha": "f0f109363bb4affa90efe70d367dd04ffd745ddc",
+    "artifact_name": "dominion-alignment-stage2d-r2-inspect"
+  }
+}

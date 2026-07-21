@@ -1,0 +1,9 @@
+{
+  "artifact_name": "juris-trust-case-private-recovery",
+  "commit_sha": "a5eea2eea88e434733862ca21529efd07d2aa941",
+  "event": "workflow_dispatch",
+  "run_id": 29860511456,
+  "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29860511456",
+  "status": "started",
+  "workflow": "Juris Trust Recovery"
+}

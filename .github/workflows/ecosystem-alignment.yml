@@ -1,0 +1,47 @@
+name: Ecosystem Alignment
+
+on:
+  pull_request:
+    paths:
+      - "governance/**"
+      - "scripts/validate_ecosystem_alignment.py"
+      - "apps/**"
+      - "alpha_engine/**"
+      - "api/**"
+      - "web/**"
+      - "docker-compose.yml"
+      - "STATE.md"
+      - "ops/RUNBOOK.md"
+      - ".github/workflows/ecosystem-alignment.yml"
+  push:
+    branches: [main]
+    paths:
+      - "governance/**"
+      - "scripts/validate_ecosystem_alignment.py"
+      - "apps/**"
+      - "alpha_engine/**"
+      - "api/**"
+      - "web/**"
+      - "docker-compose.yml"
+      - "STATE.md"
+      - "ops/RUNBOOK.md"
+      - ".github/workflows/ecosystem-alignment.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ecosystem-alignment-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate vertical registry and repository contracts
+        run: python3 scripts/validate_ecosystem_alignment.py

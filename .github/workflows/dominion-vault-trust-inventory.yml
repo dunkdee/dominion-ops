@@ -75,8 +75,11 @@ jobs:
           import json
           import os
           import re
+          import shutil
           import stat
+          import subprocess
           import sys
+          import zipfile
           from datetime import datetime, timezone
           from pathlib import Path
 
@@ -92,6 +95,60 @@ jobs:
               re.IGNORECASE,
           )
           records = []
+          total_regular_files = 0
+          eligible_document_files = 0
+          filename_matches = 0
+          content_matches = 0
+
+          trust_terms = (
+              b"primal dominion",
+              b"dominion legacy",
+              b"legacy trust",
+              b"trust agreement",
+              b"declaration of trust",
+              b"certificate of trust",
+              b"memorandum of trust",
+              b"trustee",
+              b"settlor",
+              b"grantor",
+              b"beneficiary",
+          )
+
+          def contains_trust_term(data: bytes) -> bool:
+              lowered = data.lower()
+              return any(term in lowered for term in trust_terms)
+
+          def content_indicates_trust(path: Path, suffix: str, size: int) -> bool:
+              if size > 25 * 1024 * 1024:
+                  return False
+              try:
+                  if suffix in {".txt", ".md", ".rtf", ".doc"}:
+                      return contains_trust_term(path.read_bytes())
+                  if suffix in {".docx", ".odt"}:
+                      inspected = 0
+                      with zipfile.ZipFile(path) as archive:
+                          for member in archive.infolist():
+                              name = member.filename.casefold()
+                              if not name.endswith(".xml"):
+                                  continue
+                              inspected += member.file_size
+                              if inspected > 50 * 1024 * 1024:
+                                  return False
+                              if contains_trust_term(archive.read(member)):
+                                  return True
+                      return False
+                  if suffix == ".pdf" and shutil.which("pdftotext"):
+                      result = subprocess.run(
+                          ["pdftotext", str(path), "-"],
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL,
+                          timeout=20,
+                          check=False,
+                      )
+                      return result.returncode == 0 and contains_trust_term(result.stdout)
+              except (OSError, subprocess.SubprocessError, zipfile.BadZipFile):
+                  return False
+              return False
 
           for directory, directory_names, file_names in os.walk(root, followlinks=False):
               directory_path = Path(directory)
@@ -109,17 +166,32 @@ jobs:
                       continue
                   if not stat.S_ISREG(metadata.st_mode):
                       continue
+                  total_regular_files += 1
                   relative_path = path.relative_to(root).as_posix()
                   lower_path = relative_path.casefold()
-                  if path.suffix.casefold() not in allowed_extensions:
+                  suffix = path.suffix.casefold()
+                  if suffix not in allowed_extensions:
                       continue
+                  eligible_document_files += 1
                   trust_signature = (
                       "trust" in lower_path
                       or ("primal" in lower_path and "dominion" in lower_path)
                       or ("dominion" in lower_path and "legacy" in lower_path)
                   )
-                  if not trust_signature and not legal_name.search(relative_path):
+                  filename_matched = bool(
+                      trust_signature or legal_name.search(relative_path)
+                  )
+                  content_matched = False
+                  if not filename_matched:
+                      content_matched = content_indicates_trust(
+                          path, suffix, metadata.st_size
+                      )
+                  if not filename_matched and not content_matched:
                       continue
+                  if filename_matched:
+                      filename_matches += 1
+                  else:
+                      content_matches += 1
 
                   digest = None
                   hash_status = "too_large_to_hash"
@@ -144,6 +216,7 @@ jobs:
                           ).isoformat(),
                           "sha256": digest,
                           "hash_status": hash_status,
+                          "match_basis": "filename" if filename_matched else "content",
                       }
                   )
 
@@ -158,6 +231,12 @@ jobs:
                       "root_name": root.name,
                       "scanned_utc": datetime.now(timezone.utc).isoformat(),
                       "candidate_count": len(records),
+                      "total_regular_files": total_regular_files,
+                      "eligible_document_files": eligible_document_files,
+                      "filename_matches": filename_matches,
+                      "content_matches": content_matches,
+                      "root_is_mountpoint": os.path.ismount(root),
+                      "content_exported": False,
                   },
                   sort_keys=True,
               )
@@ -185,7 +264,7 @@ jobs:
               raise SystemExit("Inventory exceeded the safety cap")
           allowed_keys = {
               "type", "relative_path", "size_bytes", "modified_utc",
-              "sha256", "hash_status",
+              "sha256", "hash_status", "match_basis",
           }
           for record in records:
               if set(record) != allowed_keys or record.get("type") != "candidate":

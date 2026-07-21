@@ -1,4 +1,4 @@
-name: One-time Juris trust-project recovery
+name: One-time Juris trust-project file recovery
 
 on:
   pull_request:
@@ -18,7 +18,7 @@ jobs:
   recover:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - name: Validate VM connection secrets
         env:
@@ -43,85 +43,7 @@ jobs:
           ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Ask Juris for recovery evidence only
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-        run: |
-          set -euo pipefail
-          ssh \
-            -i ~/.ssh/id_vm \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o ConnectTimeout=15 \
-            "$VM_USER@$VM_HOST" 'bash -se' <<'REMOTE'
-          set -euo pipefail
-          umask 077
-
-          service_state="$(systemctl is-active dominion-juris 2>/dev/null || true)"
-          printf 'JURIS_SERVICE_STATE=%s\n' "${service_state:-unknown}"
-
-          request_file="$(mktemp)"
-          response_file="$(mktemp)"
-          cleanup() {
-            rm -f "$request_file" "$response_file"
-          }
-          trap cleanup EXIT
-
-          python3 - "$request_file" <<'PY'
-          import json
-          import os
-          import sys
-
-          query = """Recovery-only audit. Do not create, overwrite, sign, execute,
-          file, or publish any legal document. Search only your configured memory,
-          checkpoints, and source records for the trust-paper project previously
-          prepared for Dewayne Singleton. Return evidence for: exact trust name or
-          names; document titles; existing output or storage paths; jurisdiction;
-          roles and names only if already stored; any EIN and whether an official
-          IRS source was verified; clauses/facts already used; unresolved conflicts;
-          the generator function, command, or mode; and whether the papers were
-          drafts or executed. There is a known conflict between 'PRIMAL DOMINIONS
-          LEGACY TRUST' and 'Primal Dominion Legacy Trust'. Do not choose between
-          them without evidence. If no source memory exists, state NOT_FOUND. Do
-          not hallucinate, do not add legal advice, and do not generate the papers
-          in this recovery pass."""
-          with open(sys.argv[1], "w", encoding="utf-8") as target:
-              json.dump({"query": query, "mode": "trust_formation"}, target)
-          os.chmod(sys.argv[1], 0o600)
-          PY
-
-          if ! curl -fsS \
-            --max-time 120 \
-            -X POST \
-            -H 'Content-Type: application/json' \
-            --data-binary "@$request_file" \
-            http://127.0.0.1:5055 \
-            > "$response_file"; then
-            curl -fsS \
-              --max-time 120 \
-              -X POST \
-              -H 'Content-Type: application/json' \
-              --data-binary "@$request_file" \
-              http://127.0.0.1:8080/ask/juris \
-              > "$response_file"
-          fi
-
-          python3 - "$response_file" <<'PY'
-          import json
-          import sys
-
-          raw = open(sys.argv[1], encoding="utf-8").read()
-          if len(raw) > 100_000:
-              raise SystemExit("Juris response exceeded the recovery safety cap")
-          payload = json.loads(raw)
-          print("JURIS_RECOVERY_REPLY_BEGIN")
-          print(json.dumps(payload, indent=2, sort_keys=True))
-          print("JURIS_RECOVERY_REPLY_END")
-          PY
-          REMOTE
-
-      - name: Locate existing Juris trust-project files without reading them
+      - name: Locate authorized Juris trust-project file metadata
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -145,20 +67,27 @@ jobs:
               home / "buddy_core" / "agents" / "juris",
               home / "buddy_core" / "checkpoints" / "juris",
           ]
-          allowed = {".py", ".json", ".md", ".txt", ".yaml", ".yml", ".pdf", ".docx"}
+          allowed = {
+              ".py", ".json", ".md", ".txt", ".yaml", ".yml",
+              ".pdf", ".doc", ".docx", ".odt", ".rtf",
+          }
           name_pattern = re.compile(
-              r"trust|primal|dominion|legacy|settlor|grantor|trustee|beneficiar|"
-              r"certificate|declaration|schedule|agreement",
+              r"trust|primal|dominion|legacy|settlor|grantor|trustee|"
+              r"beneficiar|certificate|declaration|schedule|agreement|"
+              r"indenture|memorandum",
               re.IGNORECASE,
           )
           matches = []
           for root in roots:
               if not root.is_dir():
                   continue
-              for directory, directory_names, file_names in os.walk(root, followlinks=False):
+              for directory, directory_names, file_names in os.walk(
+                  root, followlinks=False
+              ):
                   directory_path = Path(directory)
                   directory_names[:] = [
-                      name for name in directory_names
+                      name
+                      for name in directory_names
                       if not (directory_path / name).is_symlink()
                       and name not in {".git", "__pycache__", "node_modules"}
                   ]
@@ -180,16 +109,23 @@ jobs:
                           hasher = hashlib.sha256()
                           try:
                               with path.open("rb") as source:
-                                  for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                                  for chunk in iter(
+                                      lambda: source.read(1024 * 1024), b""
+                                  ):
                                       hasher.update(chunk)
                               digest = hasher.hexdigest()
                           except OSError:
                               pass
                       matches.append((relative, metadata.st_size, digest))
 
+          if len(matches) > 500:
+              raise SystemExit("Juris metadata match count exceeded safety cap")
           print("JURIS_PROJECT_FILE_MATCHES_BEGIN")
           for relative, size, digest in sorted(matches):
-              print(f"{relative}\t{size}\t{digest or 'UNREADABLE_OR_TOO_LARGE'}")
+              print(
+                  f"{relative}\t{size}\t"
+                  f"{digest or 'UNREADABLE_OR_TOO_LARGE'}"
+              )
           print("JURIS_PROJECT_FILE_MATCHES_END")
           print(f"JURIS_PROJECT_FILE_MATCH_COUNT={len(matches)}")
           PY

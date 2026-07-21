@@ -28,6 +28,51 @@ jobs:
       ARTIFACT_NAME: dominion-alignment-stage2-map
 
     steps:
+      - name: Publish run pointer
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            const sourceSha = context.sha;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({
+                owner,
+                repo,
+                ref: `refs/heads/${branch}`,
+                sha: sourceSha,
+              });
+            }
+            const report = {
+              map_version: 2,
+              status: 'started',
+              workflow: {
+                run_id: context.runId,
+                run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                source_sha: sourceSha,
+                artifact_name: process.env.ARTIFACT_NAME,
+              },
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Stage-2 map run ${context.runId} started`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
       - name: Validate VM connection secrets
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -52,7 +97,7 @@ jobs:
           test -s ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Collect read-only ownership and stability map
+      - name: Collect fault-tolerant read-only map
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -69,7 +114,6 @@ jobs:
             "$VM_USER@$VM_HOST" 'python3 -' > "$REPORT_FILE" <<'PY'
           import hashlib
           import json
-          import os
           import re
           import shutil
           import socket
@@ -86,230 +130,158 @@ jobs:
               "gemini", "alpha", "surplus", "wix", "tiktok", "youtube",
               "kdp", "backup", "guardian", "sentinel", "gatekeeper",
           )
-
-          CRITICAL_UNITS = (
-              "caddy.service",
-              "dominion-alchemist.service",
-              "dominion-alpha.service",
-              "dominion-conductor.service",
-              "dominion-gatekeeper.service",
-              "dominion-juris.service",
-              "dominion-store.service",
-              "gemini-server.service",
+          CRITICAL = (
+              "caddy.service", "dominion-alchemist.service", "dominion-alpha.service",
+              "dominion-conductor.service", "dominion-gatekeeper.service",
+              "dominion-juris.service", "dominion-store.service", "gemini-server.service",
           )
-
-          HEALTH_CHECKS = (
-              ("baby-api", 8080, "/"),
-              ("wix-agent", 8082, "/ready"),
-              ("dominion-web", 8090, "/"),
-              ("n8n", 5678, "/healthz"),
-              ("alpha-engine", 8787, "/health"),
-              ("conductor-healthz", 5060, "/healthz"),
+          HEALTH = (
+              ("baby-api", 8080, "/"), ("wix-agent", 8082, "/ready"),
+              ("dominion-web", 8090, "/"), ("n8n", 5678, "/healthz"),
+              ("alpha-engine", 8787, "/health"), ("conductor", 5060, "/healthz"),
           )
+          probe_errors = []
 
           def command(args, timeout=20, cwd=None):
               try:
                   result = subprocess.run(
-                      args,
-                      cwd=cwd,
-                      check=False,
-                      capture_output=True,
-                      text=True,
-                      timeout=timeout,
+                      args, cwd=cwd, check=False, capture_output=True,
+                      text=True, timeout=timeout,
                   )
-              except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
-                  return {
-                      "available": False,
-                      "returncode": None,
-                      "stdout": "",
-                      "stderr_type": type(exc).__name__,
-                  }
-              return {
-                  "available": True,
-                  "returncode": result.returncode,
-                  "stdout": (result.stdout or "").strip(),
-                  "stderr_type": None if not result.stderr else "present",
-              }
+                  return {"returncode": result.returncode, "stdout": (result.stdout or "").strip()}
+              except Exception as exc:
+                  probe_errors.append({"probe": args[0] if args else "unknown", "error_type": type(exc).__name__})
+                  return {"returncode": None, "stdout": ""}
 
-          def first_line(value):
+          def first(value):
               return value.splitlines()[0].strip() if value else ""
 
-          def systemctl_value(unit, prop):
-              result = command(["systemctl", "show", unit, "--property", prop, "--value"])
-              return first_line(result["stdout"]) if result["returncode"] == 0 else ""
-
-          def safe_exec_path(raw):
-              if not raw:
+          def safe_int(value):
+              match = re.search(r"-?\d+", value or "")
+              if not match:
                   return None
-              match = re.search(r"(?:^|[ {;])path=([^ ;}]+)", raw)
-              if match:
-                  return match.group(1)
-              token = raw.strip().split(" ", 1)[0]
-              return token if token.startswith("/") else None
+              try:
+                  return int(match.group(0))
+              except ValueError:
+                  return None
 
-          def environment_file_paths(raw):
-              if not raw:
-                  return []
-              values = []
-              for match in re.finditer(r"(?:^|\s)-?([^\s;]+)", raw):
-                  value = match.group(1).strip("\"'")
-                  if value.startswith("/"):
-                      values.append(value)
-              return sorted(set(values))
+          def prop(unit, name):
+              result = command(["systemctl", "show", unit, "--property", name, "--value"])
+              return first(result["stdout"]) if result["returncode"] == 0 else ""
 
-          def relevant_service_names():
-              names = set(CRITICAL_UNITS)
+          def service_names():
+              names = set(CRITICAL)
               for args in (
                   ["systemctl", "list-units", "--all", "--type=service", "--no-legend", "--no-pager"],
                   ["systemctl", "list-unit-files", "--type=service", "--no-legend", "--no-pager"],
               ):
                   result = command(args)
-                  if result["returncode"] != 0:
-                      continue
                   for line in result["stdout"].splitlines():
-                      name = line.split(None, 1)[0] if line.split() else ""
+                      parts = line.split()
+                      name = parts[0] if parts else ""
                       lowered = name.lower()
                       if name.endswith(".service") and any(key in lowered for key in KEYWORDS):
                           names.add(name)
               return sorted(names)
 
           def service_record(unit):
-              raw_exec = systemctl_value(unit, "ExecStart")
-              record = {
+              return {
                   "unit": unit,
-                  "description": systemctl_value(unit, "Description"),
-                  "load_state": systemctl_value(unit, "LoadState"),
-                  "active_state": systemctl_value(unit, "ActiveState"),
-                  "sub_state": systemctl_value(unit, "SubState"),
-                  "unit_file_state": systemctl_value(unit, "UnitFileState"),
-                  "fragment_path": systemctl_value(unit, "FragmentPath") or None,
-                  "working_directory": systemctl_value(unit, "WorkingDirectory") or None,
-                  "user": systemctl_value(unit, "User") or None,
-                  "group": systemctl_value(unit, "Group") or None,
-                  "exec_start_path": safe_exec_path(raw_exec),
-                  "environment_files": environment_file_paths(systemctl_value(unit, "EnvironmentFiles")),
-                  "restart_policy": systemctl_value(unit, "Restart") or None,
-                  "restart_usec": systemctl_value(unit, "RestartUSec") or None,
-                  "n_restarts": int(systemctl_value(unit, "NRestarts") or 0),
-                  "result": systemctl_value(unit, "Result") or None,
-                  "exec_main_status": systemctl_value(unit, "ExecMainStatus") or None,
-                  "active_enter_timestamp": systemctl_value(unit, "ActiveEnterTimestamp") or None,
-                  "memory_current": int(systemctl_value(unit, "MemoryCurrent") or 0),
-                  "wants": sorted(filter(None, systemctl_value(unit, "Wants").split())),
-                  "requires": sorted(filter(None, systemctl_value(unit, "Requires").split())),
-                  "part_of": sorted(filter(None, systemctl_value(unit, "PartOf").split())),
-                  "triggered_by": sorted(filter(None, systemctl_value(unit, "TriggeredBy").split())),
+                  "description": prop(unit, "Description"),
+                  "load_state": prop(unit, "LoadState"),
+                  "active_state": prop(unit, "ActiveState"),
+                  "sub_state": prop(unit, "SubState"),
+                  "unit_file_state": prop(unit, "UnitFileState"),
+                  "fragment_path": prop(unit, "FragmentPath") or None,
+                  "working_directory": prop(unit, "WorkingDirectory") or None,
+                  "user": prop(unit, "User") or None,
+                  "restart_policy": prop(unit, "Restart") or None,
+                  "restart_usec": prop(unit, "RestartUSec") or None,
+                  "n_restarts": safe_int(prop(unit, "NRestarts")),
+                  "memory_current": safe_int(prop(unit, "MemoryCurrent")),
+                  "result": prop(unit, "Result") or None,
+                  "triggered_by": sorted(filter(None, prop(unit, "TriggeredBy").split())),
               }
-              return record
 
           def timer_records():
               result = command(["systemctl", "list-unit-files", "--type=timer", "--no-legend", "--no-pager"])
-              names = []
-              if result["returncode"] == 0:
-                  for line in result["stdout"].splitlines():
-                      name = line.split(None, 1)[0] if line.split() else ""
-                      lowered = name.lower()
-                      if name.endswith(".timer") and any(key in lowered for key in KEYWORDS):
-                          names.append(name)
               records = []
-              for unit in sorted(set(names)):
+              for line in result["stdout"].splitlines():
+                  parts = line.split()
+                  unit = parts[0] if parts else ""
+                  lowered = unit.lower()
+                  if not unit.endswith(".timer") or not any(key in lowered for key in KEYWORDS):
+                      continue
                   records.append({
                       "unit": unit,
-                      "description": systemctl_value(unit, "Description"),
-                      "active_state": systemctl_value(unit, "ActiveState"),
-                      "sub_state": systemctl_value(unit, "SubState"),
-                      "unit_file_state": systemctl_value(unit, "UnitFileState"),
-                      "next_elapse": systemctl_value(unit, "NextElapseUSecRealtime") or None,
-                      "last_trigger": systemctl_value(unit, "LastTriggerUSec") or None,
-                      "triggers": sorted(filter(None, systemctl_value(unit, "Triggers").split())),
+                      "active_state": prop(unit, "ActiveState"),
+                      "unit_file_state": prop(unit, "UnitFileState"),
+                      "next_elapse": prop(unit, "NextElapseUSecRealtime") or None,
+                      "last_trigger": prop(unit, "LastTriggerUSec") or None,
+                      "triggers": sorted(filter(None, prop(unit, "Triggers").split())),
                   })
               return records
 
           def docker_records():
               if not shutil.which("docker"):
                   return {"available": False, "containers": [], "compose_projects": []}
-              ids_result = command(["docker", "ps", "--all", "--quiet"])
+              result = command(["docker", "ps", "--all", "--quiet"])
               containers = []
-              if ids_result["returncode"] == 0:
-                  for container_id in ids_result["stdout"].splitlines():
-                      inspect = command(["docker", "inspect", container_id], timeout=30)
-                      if inspect["returncode"] != 0:
-                          continue
-                      try:
-                          item = json.loads(inspect["stdout"])[0]
-                      except (json.JSONDecodeError, IndexError, TypeError):
-                          continue
-                      labels = item.get("Config", {}).get("Labels") or {}
-                      compose_labels = {
-                          key: value
-                          for key, value in labels.items()
-                          if key in {
-                              "com.docker.compose.project",
-                              "com.docker.compose.project.config_files",
-                              "com.docker.compose.project.working_dir",
-                              "com.docker.compose.service",
-                              "com.docker.compose.version",
-                          }
-                      }
-                      ports = []
-                      for container_port, bindings in (item.get("NetworkSettings", {}).get("Ports") or {}).items():
-                          if not bindings:
-                              continue
-                          for binding in bindings:
-                              ports.append({
-                                  "container_port": container_port,
-                                  "host_ip": binding.get("HostIp"),
-                                  "host_port": binding.get("HostPort"),
-                              })
-                      mounts = []
-                      for mount in item.get("Mounts") or []:
-                          mounts.append({
-                              "type": mount.get("Type"),
-                              "source": mount.get("Source"),
-                              "destination": mount.get("Destination"),
-                              "rw": mount.get("RW"),
+              for container_id in result["stdout"].splitlines():
+                  inspected = command(["docker", "inspect", container_id], timeout=30)
+                  if inspected["returncode"] != 0:
+                      continue
+                  try:
+                      item = json.loads(inspected["stdout"])[0]
+                  except Exception as exc:
+                      probe_errors.append({"probe": "docker-inspect", "error_type": type(exc).__name__})
+                      continue
+                  labels = item.get("Config", {}).get("Labels") or {}
+                  ports = []
+                  for container_port, bindings in (item.get("NetworkSettings", {}).get("Ports") or {}).items():
+                      for binding in bindings or []:
+                          ports.append({
+                              "container_port": container_port,
+                              "host_ip": binding.get("HostIp"),
+                              "host_port": binding.get("HostPort"),
                           })
-                      health = item.get("State", {}).get("Health") or {}
-                      restart_policy = item.get("HostConfig", {}).get("RestartPolicy") or {}
-                      containers.append({
-                          "name": str(item.get("Name") or "").lstrip("/"),
-                          "id_short": str(item.get("Id") or "")[:12],
-                          "image": item.get("Config", {}).get("Image"),
-                          "state": item.get("State", {}).get("Status"),
-                          "health": health.get("Status"),
-                          "created": item.get("Created"),
-                          "restart_policy": restart_policy.get("Name"),
-                          "memory_limit": item.get("HostConfig", {}).get("Memory"),
-                          "nano_cpus": item.get("HostConfig", {}).get("NanoCpus"),
-                          "pids_limit": item.get("HostConfig", {}).get("PidsLimit"),
-                          "network_mode": item.get("HostConfig", {}).get("NetworkMode"),
-                          "compose_labels": compose_labels,
-                          "ports": sorted(ports, key=lambda row: (row.get("host_port") or "", row.get("container_port") or "")),
-                          "mounts": sorted(mounts, key=lambda row: row.get("destination") or ""),
-                      })
+                  host = item.get("HostConfig", {}) or {}
+                  state = item.get("State", {}) or {}
+                  health = state.get("Health") or {}
+                  restart = host.get("RestartPolicy") or {}
+                  containers.append({
+                      "name": str(item.get("Name") or "").lstrip("/"),
+                      "image": item.get("Config", {}).get("Image"),
+                      "state": state.get("Status"),
+                      "health": health.get("Status"),
+                      "restart_policy": restart.get("Name"),
+                      "memory_limit": host.get("Memory"),
+                      "nano_cpus": host.get("NanoCpus"),
+                      "pids_limit": host.get("PidsLimit"),
+                      "compose_project": labels.get("com.docker.compose.project"),
+                      "compose_service": labels.get("com.docker.compose.service"),
+                      "compose_working_dir": labels.get("com.docker.compose.project.working_dir"),
+                      "compose_config_files": labels.get("com.docker.compose.project.config_files"),
+                      "ports": ports,
+                  })
               compose = command(["docker", "compose", "ls", "--format", "json"])
               projects = []
               if compose["returncode"] == 0 and compose["stdout"]:
                   try:
                       parsed = json.loads(compose["stdout"])
-                      parsed = parsed if isinstance(parsed, list) else [parsed]
-                      for item in parsed:
+                      for item in parsed if isinstance(parsed, list) else [parsed]:
                           if isinstance(item, dict):
                               projects.append({
                                   "name": item.get("Name"),
                                   "status": item.get("Status"),
                                   "config_files": item.get("ConfigFiles"),
                               })
-                  except json.JSONDecodeError:
-                      pass
-              return {
-                  "available": True,
-                  "containers": sorted(containers, key=lambda row: row.get("name") or ""),
-                  "compose_projects": projects,
-              }
+                  except Exception as exc:
+                      probe_errors.append({"probe": "docker-compose", "error_type": type(exc).__name__})
+              return {"available": True, "containers": containers, "compose_projects": projects}
 
           def sanitize_remote(value):
-              value = value.strip()
+              value = (value or "").strip()
               if not value:
                   return None
               if "://" not in value:
@@ -320,156 +292,114 @@ jobs:
                   host = f"{host}:{parsed.port}"
               return urllib.parse.urlunsplit((parsed.scheme, host, parsed.path, parsed.query, parsed.fragment))
 
-          def sha256_file(path):
+          def file_hash(path):
               digest = hashlib.sha256()
-              with path.open("rb") as handle:
-                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                      digest.update(chunk)
-              return digest.hexdigest()
+              try:
+                  with path.open("rb") as handle:
+                      for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                          digest.update(chunk)
+                  return digest.hexdigest()
+              except OSError as exc:
+                  probe_errors.append({"probe": "file-hash", "error_type": type(exc).__name__})
+                  return None
 
           def repository_record(path):
               path = path.expanduser()
               record = {
-                  "path": str(path),
-                  "exists": path.exists(),
-                  "resolved_path": str(path.resolve()) if path.exists() else None,
-                  "is_git_repository": False,
-                  "head": None,
-                  "branch": None,
-                  "origin": None,
-                  "dirty_entry_count": None,
-                  "compose_sha256": None,
+                  "path": str(path), "exists": path.exists(), "is_git_repository": False,
+                  "head": None, "branch": None, "origin": None,
+                  "dirty_entry_count": None, "compose_sha256": None,
               }
               if not path.is_dir():
                   return record
               head = command(["git", "rev-parse", "HEAD"], cwd=str(path))
-              if head["returncode"] != 0:
-                  compose_path = path / "docker-compose.yml"
-                  if compose_path.is_file():
-                      record["compose_sha256"] = sha256_file(compose_path)
-                  return record
-              record["is_git_repository"] = True
-              record["head"] = first_line(head["stdout"])
-              branch = command(["git", "branch", "--show-current"], cwd=str(path))
-              record["branch"] = first_line(branch["stdout"]) or None
-              origin = command(["git", "remote", "get-url", "origin"], cwd=str(path))
-              record["origin"] = sanitize_remote(first_line(origin["stdout"])) if origin["returncode"] == 0 else None
-              dirty = command(["git", "status", "--porcelain"], cwd=str(path))
-              record["dirty_entry_count"] = len(dirty["stdout"].splitlines()) if dirty["returncode"] == 0 else None
-              compose_path = path / "docker-compose.yml"
-              if compose_path.is_file():
-                  record["compose_sha256"] = sha256_file(compose_path)
+              if head["returncode"] == 0:
+                  record["is_git_repository"] = True
+                  record["head"] = first(head["stdout"])
+                  branch = command(["git", "branch", "--show-current"], cwd=str(path))
+                  record["branch"] = first(branch["stdout"]) or None
+                  origin = command(["git", "remote", "get-url", "origin"], cwd=str(path))
+                  record["origin"] = sanitize_remote(first(origin["stdout"])) if origin["returncode"] == 0 else None
+                  dirty = command(["git", "status", "--porcelain"], cwd=str(path))
+                  record["dirty_entry_count"] = len(dirty["stdout"].splitlines()) if dirty["returncode"] == 0 else None
+              compose = path / "docker-compose.yml"
+              if compose.is_file():
+                  record["compose_sha256"] = file_hash(compose)
               return record
 
-          def listening_ports():
-              if not shutil.which("ss"):
-                  return []
-              result = command(["ss", "-lntpH"])
-              records = []
-              if result["returncode"] != 0:
-                  return records
-              for line in result["stdout"].splitlines():
-                  fields = line.split()
-                  if len(fields) < 4:
-                      continue
-                  local = fields[3]
-                  process_field = " ".join(fields[5:]) if len(fields) > 5 else ""
-                  process_names = sorted(set(re.findall(r'\(\("([^\"]+)"', process_field)))
-                  pid_values = sorted(set(int(value) for value in re.findall(r"pid=(\d+)", process_field)))
-                  records.append({
-                      "local": local,
-                      "process_names": process_names,
-                      "pids": pid_values,
-                  })
-              return records
-
           def health_check(name, port, path):
-              url = f"http://127.0.0.1:{port}{path}"
               try:
-                  with urllib.request.urlopen(url, timeout=5) as response:
+                  with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as response:
                       return {"name": name, "port": port, "path": path, "reachable": True, "status": response.status}
               except urllib.error.HTTPError as exc:
                   return {"name": name, "port": port, "path": path, "reachable": True, "status": exc.code}
               except Exception as exc:
                   return {"name": name, "port": port, "path": path, "reachable": False, "status": None, "error_type": type(exc).__name__}
 
-          def backup_records():
-              candidates = (
-                  Path("/var/backups"),
-                  Path("/opt/dominion/backups"),
-                  Path.home() / "backups",
-                  Path.home() / "dominion" / "backups",
-                  Path.home() / "dominion-ops" / "backups",
-              )
+          def backup_inventory():
               records = []
-              for path in candidates:
+              for path in (
+                  Path("/var/backups"), Path("/opt/dominion/backups"),
+                  Path.home() / "backups", Path.home() / "dominion" / "backups",
+                  Path.home() / "dominion-ops" / "backups",
+              ):
                   record = {"path": str(path), "exists": path.is_dir(), "file_count": 0, "latest_mtime": None, "total_bytes": 0}
+                  latest = None
                   if path.is_dir():
-                      latest = None
-                      for item in path.rglob("*"):
-                          try:
-                              if not item.is_file():
+                      try:
+                          iterator = path.rglob("*")
+                          for item in iterator:
+                              try:
+                                  if not item.is_file():
+                                      continue
+                                  stat = item.stat()
+                              except OSError:
                                   continue
-                              stat = item.stat()
-                          except OSError:
-                              continue
-                          record["file_count"] += 1
-                          record["total_bytes"] += stat.st_size
-                          latest = max(latest or stat.st_mtime, stat.st_mtime)
-                      if latest is not None:
-                          record["latest_mtime"] = datetime.fromtimestamp(latest, timezone.utc).isoformat()
+                              record["file_count"] += 1
+                              record["total_bytes"] += stat.st_size
+                              latest = max(latest or stat.st_mtime, stat.st_mtime)
+                      except OSError as exc:
+                          probe_errors.append({"probe": "backup-inventory", "error_type": type(exc).__name__})
+                  if latest is not None:
+                      record["latest_mtime"] = datetime.fromtimestamp(latest, timezone.utc).isoformat()
                   records.append(record)
               return records
 
-          service_names = relevant_service_names()
-          services = [service_record(unit) for unit in service_names]
-
-          restart_start = {
-              unit: int(systemctl_value(unit, "NRestarts") or 0)
-              for unit in CRITICAL_UNITS
-          }
-          time.sleep(45)
-          restart_end = {
-              unit: int(systemctl_value(unit, "NRestarts") or 0)
-              for unit in CRITICAL_UNITS
-          }
-          restart_deltas = {
+          names = service_names()
+          services = [service_record(unit) for unit in names]
+          start = {unit: safe_int(prop(unit, "NRestarts")) or 0 for unit in CRITICAL}
+          time.sleep(20)
+          end = {unit: safe_int(prop(unit, "NRestarts")) or 0 for unit in CRITICAL}
+          deltas = {
               unit: {
-                  "start": restart_start[unit],
-                  "end": restart_end[unit],
-                  "delta": restart_end[unit] - restart_start[unit],
-                  "active_state": systemctl_value(unit, "ActiveState"),
-                  "sub_state": systemctl_value(unit, "SubState"),
+                  "start": start[unit], "end": end[unit], "delta": end[unit] - start[unit],
+                  "active_state": prop(unit, "ActiveState"), "sub_state": prop(unit, "SubState"),
               }
-              for unit in CRITICAL_UNITS
+              for unit in CRITICAL
           }
 
-          caddy_config = Path("/etc/caddy/Caddyfile")
-          caddy_validation = {"config_exists": caddy_config.is_file(), "validator_available": bool(shutil.which("caddy")), "valid": None}
-          if caddy_config.is_file() and shutil.which("caddy"):
-              result = command(["caddy", "validate", "--config", str(caddy_config)], timeout=20)
-              caddy_validation["valid"] = result["returncode"] == 0
-
-          repo_candidates = (
-              Path.home() / "dominion-ops",
-              Path.home() / "desktop-tutorial",
-              Path("/opt/dominion"),
-              Path("/opt/dominions-ark"),
-          )
+          caddy_file = Path("/etc/caddy/Caddyfile")
+          caddy = {"config_exists": caddy_file.is_file(), "validator_available": bool(shutil.which("caddy")), "valid": None}
+          if caddy_file.is_file() and shutil.which("caddy"):
+              caddy["valid"] = command(["caddy", "validate", "--config", str(caddy_file)])["returncode"] == 0
 
           payload = {
-              "map_version": 1,
+              "map_version": 2,
+              "status": "success",
               "generated_at": datetime.now(timezone.utc).isoformat(),
               "host": {"hostname": socket.gethostname()},
-              "repositories": [repository_record(path) for path in repo_candidates],
+              "repositories": [repository_record(path) for path in (
+                  Path.home() / "dominion-ops", Path.home() / "desktop-tutorial",
+                  Path("/opt/dominion"), Path("/opt/dominions-ark"),
+              )],
               "services": services,
               "timers": timer_records(),
-              "restart_deltas_45_seconds": restart_deltas,
+              "restart_deltas_20_seconds": deltas,
               "docker": docker_records(),
-              "listening_ports": listening_ports(),
-              "health_checks": [health_check(*item) for item in HEALTH_CHECKS],
-              "backup_inventory": backup_records(),
-              "caddy_validation": caddy_validation,
+              "health_checks": [health_check(*item) for item in HEALTH],
+              "backup_inventory": backup_inventory(),
+              "caddy_validation": caddy,
+              "probe_errors": probe_errors,
               "safety": {
                   "services_changed": False,
                   "environment_values_collected": False,
@@ -494,8 +424,11 @@ jobs:
           retention-days: 3
           compression-level: 9
 
-      - name: Publish Stage-2 map branch
+      - name: Publish terminal Stage-2 map
+        if: ${{ always() }}
         uses: actions/github-script@v7
+        env:
+          JOB_STATUS: ${{ job.status }}
         with:
           script: |
             const fs = require('fs');
@@ -504,14 +437,14 @@ jobs:
             const branch = process.env.REPORT_BRANCH;
             const path = process.env.REPORT_PATH;
             const sourceSha = context.sha;
-            const ref = `heads/${branch}`;
-            try {
-              await github.rest.git.getRef({ owner, repo, ref });
-            } catch (error) {
-              if (error.status !== 404) throw error;
-              await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: sourceSha });
+            let report = {
+              map_version: 2,
+              status: process.env.JOB_STATUS,
+            };
+            if (fs.existsSync(process.env.REPORT_FILE)) {
+              report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, 'utf8'));
+              report.status = process.env.JOB_STATUS === 'success' ? 'success' : process.env.JOB_STATUS;
             }
-            const report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, 'utf8'));
             report.workflow = {
               run_id: context.runId,
               run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
@@ -527,11 +460,8 @@ jobs:
               if (error.status !== 404) throw error;
             }
             await github.rest.repos.createOrUpdateFileContents({
-              owner,
-              repo,
-              path,
-              branch,
-              message: `audit: Stage-2 ownership map run ${context.runId}`,
+              owner, repo, path, branch,
+              message: `audit: Stage-2 map run ${context.runId} ${report.status}`,
               content,
               ...(sha ? { sha } : {}),
             });

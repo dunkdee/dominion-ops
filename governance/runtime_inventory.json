@@ -1,0 +1,591 @@
+{
+  "audit_version": 1,
+  "compose_projects": [
+    {
+      "config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+      "name": "desktop-tutorial",
+      "status": "running(3)"
+    }
+  ],
+  "docker_containers": [
+    {
+      "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "name": "wix-agent",
+      "ports": "127.0.0.1:8082->8000/tcp",
+      "state": "running",
+      "status": "Up 21 hours (healthy)"
+    },
+    {
+      "image": "movie-generator",
+      "name": "movie-generator",
+      "ports": "0.0.0.0:8001->8000/tcp, [::]:8001->8000/tcp",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "desktop-tutorial-wix-agent",
+      "name": "wix-agent-rollback-20260720T224801Z",
+      "ports": "",
+      "state": "exited",
+      "status": "Exited (0) 21 hours ago"
+    },
+    {
+      "image": "a319b3721a52",
+      "name": "baby-api",
+      "ports": "0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp",
+      "state": "running",
+      "status": "Up 4 weeks (healthy)"
+    },
+    {
+      "image": "3224bfc43c02",
+      "name": "dominion-web",
+      "ports": "0.0.0.0:8090->80/tcp, [::]:8090->80/tcp",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "alpine:latest",
+      "name": "baby-logger",
+      "ports": "",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "dominion-seo:latest",
+      "name": "dominion-seo",
+      "ports": "",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "n8nio/n8n:latest",
+      "name": "dominion-n8n",
+      "ports": "0.0.0.0:5678->5678/tcp, [::]:5678->5678/tcp",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "postgres:15",
+      "name": "dominion-db",
+      "ports": "127.0.0.1:5432->5432/tcp",
+      "state": "running",
+      "status": "Up 5 weeks"
+    }
+  ],
+  "generated_at": "2026-07-21T19:32:20.680951+00:00",
+  "health_checks": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "error_type": "URLError",
+      "name": "browser-agents",
+      "path": "/health",
+      "port": 8081,
+      "reachable": false,
+      "status": null
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "error_type": "URLError",
+      "name": "obsidian-remote",
+      "path": "/",
+      "port": 8083,
+      "reachable": false,
+      "status": null
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/healthz",
+      "port": 5060,
+      "reachable": true,
+      "status": 404
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "host": {
+    "hostname": "foundation-vm",
+    "platform": "Linux-6.1.0-49-cloud-amd64-x86_64-with-glibc2.36",
+    "python": "3.11.2"
+  },
+  "listening_tcp_ports": [
+    22,
+    25,
+    53,
+    80,
+    443,
+    2019,
+    3000,
+    5000,
+    5050,
+    5052,
+    5055,
+    5056,
+    5060,
+    5070,
+    5080,
+    5090,
+    5095,
+    5100,
+    5101,
+    5102,
+    5103,
+    5110,
+    5120,
+    5355,
+    5432,
+    5678,
+    8001,
+    8080,
+    8082,
+    8090,
+    8099,
+    8100,
+    8200,
+    8384,
+    8787,
+    8888,
+    9380,
+    11434,
+    20201,
+    20202,
+    22000
+  ],
+  "paths": [
+    {
+      "exists": true,
+      "is_dir": true,
+      "path": "/home/malachisingleton8/dominion"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "path": "/home/malachisingleton8/dominion/agents"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "path": "/home/malachisingleton8/dominion/agents/juris"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "path": "/home/malachisingleton8/dominion-ops"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "path": "/opt/dominions-ark"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "path": "/opt/dominion"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "path": "/var/www/dominionhealing"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "path": "/var/www/surplus"
+    }
+  ],
+  "safety": {
+    "customer_data_collected": false,
+    "environment_values_collected": false,
+    "file_contents_collected": false,
+    "logs_collected": false
+  },
+  "systemd_units": [
+    {
+      "active": "activating",
+      "description": "Dominion Alchemist API",
+      "load": "loaded",
+      "sub": "auto-restart",
+      "unit": "alchemist-api.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion AuricEdge Real Estate SaaS phi=1.618",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "auric_edge.service"
+    },
+    {
+      "active": "active",
+      "description": "Caddy",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "caddy.service"
+    },
+    {
+      "active": "activating",
+      "description": "Dominion Conductor API",
+      "load": "loaded",
+      "sub": "auto-restart",
+      "unit": "conductor-api.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Conductor Autonomous Publisher Worker",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "conductor-autonomous.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Conductor Scheduler",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "conductor-scheduler.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Conductor Worker",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "conductor-worker.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Covenant Watchdog",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "covenant-watchdog.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion 3D Command Center (port 8200)",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-3d-dashboard.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Affiliate Content Engine",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-affiliate.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Alchemist Health AI",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-alchemist.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Alpha Engine - Token Scanner + Paper Trader",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-alpha.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Nightly Backups (site, caddy, n8n)",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-backup.service"
+    },
+    {
+      "active": "active",
+      "description": "Buddy Web Chat — Phone-accessible AI (port 5070)",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-buddy-web.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Command Deck - Overseer Dashboard (port 5110)",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-command-deck.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Conductor API",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-conductor.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Dashboard Command Center",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-dashboard.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion KDP Email Drip Engine",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-email-drip.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Email Monitor — SMS alerts for new emails",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-email-monitor.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Executor - run next eligible job",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-executor.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Gatekeeper Revenue Rail",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-gatekeeper.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion System Guardian",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-guardian.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Healthcheck",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-healthcheck.service"
+    },
+    {
+      "active": "inactive",
+      "description": "DominionIntel Intelligence Pipeline",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-intel.service"
+    },
+    {
+      "active": "active",
+      "description": "Juris Legal Intelligence API",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-juris.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion KDP Book Generator + Publisher + Cover Generator + Status Report",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-kdp.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion System Monitor",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-monitor.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion n8n Watchdog",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-n8n-watchdog.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Operations Dashboard (port 5100)",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-ops-dashboard.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Overseer - Lane Verification",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-overseer.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Markov Paper Trader (daily iteration)",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-paper-trade.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Port Conflict Auto-Healer",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-port-healer.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Proposal Queue",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-proposal-queue.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Daily Canonical Publish",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-publish.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion CEO Report Dashboard (port 5095)",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-report.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Surplus Review Queue",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-review-queue.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Real Estate Scout - Daily Lead Sourcing",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-scout.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Sentinel — Autonomous Guardian (phi=1.618)",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-sentinel.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Social Media Poster",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-social-poster.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Store Payment API (port 5080)",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-store.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Surplus Recovery Dashboard",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-surplus-dashboard.service"
+    },
+    {
+      "active": "activating",
+      "description": "start Dominion Surplus Fund Scraper",
+      "load": "loaded",
+      "sub": "start",
+      "unit": "dominion-surplus-scraper.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion TikTok OAuth and Auto-Poster (port 5120)",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-tiktok.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Weekly Trade Report Email",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-trade-report.service"
+    },
+    {
+      "active": "active",
+      "description": "Dominion Twilio Call/SMS Router (port 5102)",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "dominion-twilio-router.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Watchdog Health Check",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-watchdog.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion Wholesale Pipeline (scout > analyze > outreach > buyers > blast)",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-wholesale.service"
+    },
+    {
+      "active": "inactive",
+      "description": "Dominion YouTube Shorts Generator + Uploader",
+      "load": "loaded",
+      "sub": "dead",
+      "unit": "dominion-youtube.service"
+    },
+    {
+      "active": "active",
+      "description": "Gemini Orchestrator API Server",
+      "load": "loaded",
+      "sub": "running",
+      "unit": "gemini-server.service"
+    },
+    {
+      "active": "activating",
+      "description": "Dominion Juris API",
+      "load": "loaded",
+      "sub": "auto-restart",
+      "unit": "juris-api.service"
+    }
+  ],
+  "workflow": {
+    "run_id": 29861920503,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29861920503",
+    "status": "success",
+    "source_sha": "f394573ff698f74f95642f223cb38723091d07fa",
+    "artifact_name": "dominion-production-ecosystem-audit"
+  }
+}

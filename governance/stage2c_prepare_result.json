@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "2C-prepare",
+  "status": "started",
+  "workflow": {
+    "run_id": 29866812526,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29866812526",
+    "source_sha": "10646094aa3a5a1e0d4d18dc5508a33d2f5ec2a3",
+    "artifact_name": "dominion-alignment-stage2c-prepare"
+  }
+}

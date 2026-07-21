@@ -14,7 +14,7 @@
 | Guardian | Detect service drift, regressions, and unhealthy runtime state | Observe and report; may not reactivate retired services |
 | Sentinel | Independent runtime and governance verification | Observe, challenge, and report |
 | Juris | Legal/compliance review and documentary boundaries | Draft/review only; no signing, filing, or representation |
-| Five Council | Cross-check promotion gates and unresolved risks | Advisory review; human retains final decision |
+| Five Council | Cross-check promotion gates and unresolved risks | Advisory evidence review; human retains final decision |
 
 ## Evidence rules
 
@@ -24,6 +24,7 @@
 4. Duplicate service ownership is prohibited. One production duty must have one canonical owner.
 5. A failed or retired unit must not be auto-healed back into service unless its canonical owner is unavailable and the human explicitly approves failover.
 6. Secret values, customer data, private keys, and `.env` contents must never be committed to Git or included in reports.
+7. Automated council checks must be identified as deterministic evidence checks; they may not be represented as human or model opinions.
 
 ## Verified completed work
 
@@ -47,9 +48,21 @@
 - Live Docker Compose project reports the name `desktop-tutorial`.
 - Its recorded manifest path `/home/malachisingleton8/desktop-tutorial/docker-compose.yml` no longer exists.
 - The actual VM repository checkout `/home/malachisingleton8/dominion-ops` is on an orphaned local feature branch.
-- That checkout contains a modified `docker-compose.yml`, a modified/non-file `env.example` entry, and an untracked `.env` containing private-key risk indicators.
-- The `.env` must remain local and private; it must not be uploaded or committed.
+- That checkout contains a modified `docker-compose.yml` and an untracked `.env` containing private-key risk indicators.
+- The `.env` remains local and private; it was not uploaded or committed.
 - The correct Conductor health endpoint is `/health`, not `/healthz`.
+
+### Stage 2C — Parallel canonical release preparation
+
+Evidence: workflow run `29866812526`.
+
+- Immutable release prepared at `/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a` from source commit `10646094aa3a5a1e0d4d18dc5508a33d2f5ec2a3`.
+- Source archive SHA-256 matched the expected value.
+- The local `.env` was copied into the release with mode `0600`; its hash matched the protected recovery copy.
+- Recovery copies were created under `/home/malachisingleton8/.dominion-recovery/stage2c-29866812526`.
+- Compose validation passed for `baby-api`, `baby-logger`, `browser-agents`, `dominion-web`, `obsidian-remote`, and `wix-agent`.
+- No production container was started, stopped, recreated, or changed.
+- The orphaned VM checkout remained untouched.
 
 ## Current protected production core
 
@@ -67,25 +80,26 @@
 
 ## Current active work
 
-### Stage 2C — Prepare parallel canonical release
+### Stage 2D — Independent council and build preflight
 
-**Goal:** Prepare a clean immutable release from current GitHub `main` beside the live system without changing production containers.
+**Goal:** Obtain independent operational evidence and isolated build proof before any production cutover.
 
-Required behavior:
+Required evidence:
 
-- Preserve the existing VM checkout untouched.
-- Preserve `.env` locally with mode `0600`; never print or upload its contents.
-- Record only hashes, paths, modes, and status metadata.
-- Build a parallel release directory from the exact approved GitHub commit.
-- Validate Compose configuration without starting, replacing, stopping, or recreating containers.
-- Produce a rollback-safe preparation report.
+1. **Runtime gate:** protected HTTP endpoints remain healthy before and after the preflight.
+2. **Secrets gate:** release `.env` remains local, untracked, mode `0600`, and is never printed or uploaded.
+3. **Deployment gate:** release marker, source SHA, Compose hash, and resolved core services match the approved release.
+4. **Rollback gate:** recovery copies exist and match the recorded hashes.
+5. **Governance gate:** retired APIs, port healer, and approval-gated publishing timers remain inactive.
+6. **Agent status:** canonical Conductor, Guardian, Sentinel, and Juris runtime status is recorded; Conductor Watchmen routes are mapped without irreversible calls.
+7. **Build proof:** only the protected core images are built under isolated preflight tags; no production container is started, stopped, or recreated.
 
-## Blocked until Stage 2C evidence exists
+## Blocked until Stage 2D evidence exists
 
 - Switching the live Compose project to the canonical release.
-- Resetting or deleting the old VM checkout.
+- Resetting, deleting, or renaming the old VM checkout.
 - Starting browser-agents or Obsidian.
-- Changing container images, volumes, networks, or environment variables.
+- Replacing production images, volumes, networks, or environment variables.
 - Production publishing.
 - Live trading.
 - Surplus claimant contact or filing.

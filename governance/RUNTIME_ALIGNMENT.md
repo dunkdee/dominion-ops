@@ -7,15 +7,18 @@
 **Stage-2A verification:** run `29864120927`  
 **Stage-2B reconciliation map:** run `29864574740`  
 **Stage-2C preparation:** run `29866812526`  
+**Stage-2D preflight veto:** run `29867278124`  
+**Stage-2D-R trace:** runs `29868756275`, `29869539712`  
+**Stage-2D-R3 persistent retirement:** run `29874133137`  
 **Operating order:** Cash flow → Systems → Scale
 
 ## Executive determination
 
-The production VM is operational, stabilized, and governed. Duplicate restart loops, the reactivation supervisor, approval-gated publisher timers, and the stuck surplus scraper have been removed from active execution without regressing the protected revenue core.
+The production VM is operational and the protected revenue core is stable. The duplicate restart loops are now durably contained: the retired Alchemist, Conductor, and Juris API units and the obsolete port healer are persistently masked after root-only local backups were created.
 
-A clean immutable release from current GitHub `main` now exists beside the live system. Its Compose manifest validates, the local secret-bearing `.env` is preserved with mode `0600`, rollback copies exist, and the active container inventory was unchanged during preparation.
+A clean immutable release from approved GitHub source exists beside the live system. Its Compose manifest validates, the local secret-bearing `.env` is preserved with mode `0600`, rollback copies exist, and production containers remained unchanged during all preparation, trace, and retirement operations.
 
-The ecosystem is **not yet cut over to unified deployment ownership**. Independent council evidence, isolated image builds, rollback validation, and a guarded cutover plan are still required.
+The ecosystem is **not yet cut over to unified deployment ownership**. One final independent gate-and-build preflight is required before a guarded cutover plan may be presented.
 
 No vertical may be promoted merely because code or a service exists. Promotion requires the exit gate in `governance/verticals.json`.
 
@@ -33,16 +36,24 @@ No vertical may be promoted merely because code or a service exists. Promotion r
 | Gemini server | `active/running`, boot-enabled | Intelligence service |
 | Gatekeeper | `active/running` | Revenue rail |
 | Store API | `active/running` | Production payment surface |
+| Guardian | `active/running`, boot-enabled | Observe and report |
+| Sentinel | `active/running`, boot-enabled | Independent verification |
+| Juris | `active/running`, boot-enabled | Governance intelligence |
 
-## Stabilization and containment
+## Stabilization and durable containment
 
-- Canonical Alchemist, Conductor, and Juris services were preserved.
-- Legacy `alchemist-api.service`, `conductor-api.service`, and `juris-api.service` were removed from active execution.
-- `dominion-port-healer.service` is inactive and disabled.
-- The surplus scraper is quarantined; the dashboard and review queue remain available.
+- Canonical Alchemist, Conductor, and Juris services are preserved.
+- The following retired units are persistently masked and inactive:
+  - `alchemist-api.service`
+  - `conductor-api.service`
+  - `juris-api.service`
+  - `dominion-port-healer.service`
+- Root-only recovery copies are stored at `/var/lib/dominion/unit-retirement/stage2d-r3-29874133137`.
+- The surplus scraper remains quarantined; the dashboard and review queue remain available.
 - Approval-gated publishers and their timers remain inactive.
 - Caddy, canonical Conductor, and Gemini are boot-enabled.
-- Protected services recorded zero restart deltas during Stage-2A verification.
+- All protected canonical units recorded zero restart deltas over the Stage-2D-R3 90-second verification window.
+- No rollback was required.
 
 ## Stage-2B verified deployment findings
 
@@ -64,6 +75,20 @@ No vertical may be promoted merely because code or a service exists. Promotion r
 - Production containers were identical before and after preparation.
 - Databases, DNS, volumes, networks, production images, and the old checkout were not changed.
 
+## Stage-2D governance veto and remediation
+
+The first Stage-2D preflight correctly failed closed because the retired APIs had reactivated. Runtime, secrets, deployment, rollback, Watchmen, and agent-runtime evidence passed, but the governance gate vetoed and isolated builds were skipped.
+
+Read-only traces established that:
+
+- Conductor scheduler and worker references were only `After=` ordering directives.
+- Their commands executed only `scheduler.py` and `worker.py`.
+- The healer's retired-unit names appeared in a stale comment.
+- No matching user cron entry was found.
+- The installed retired units used `Restart=always`, sustaining their own loops after any activation.
+
+Stage-2D-R3 replaced weak runtime containment with persistent, backed-up `/dev/null` masks. All protected services and HTTP checks remained healthy, every canonical restart delta was zero, and production containers were unchanged.
+
 ## Human-approval gates
 
 TikTok publishing defaults to disabled and requires all of the following:
@@ -78,11 +103,9 @@ The surplus vertical remains `research_only`. It may not autonomously contact cl
 
 ## Remaining Stage-2 reconciliation
 
-- Complete Stage-2D independent council and isolated build preflight.
-- Record Conductor, Guardian, Sentinel, and Juris runtime evidence.
-- Verify the five deterministic gates: runtime, secrets, deployment, rollback, and governance.
-- Build only the protected core images under isolated tags without changing running containers.
-- Define a guarded cutover and automatic rollback plan.
+- Complete Stage-2D-R4 independent gates and isolated builds.
+- Build only Baby API, Dominion Web, and Wix Agent under isolated tags without changing running containers.
+- Define a guarded cutover and automatic rollback plan only after all R4 evidence passes.
 - Reconcile unmanaged n8n, database, SEO, and movie-generator containers into declared ownership without disrupting them.
 - Add resource limits to currently unlimited production containers.
 - Perform a restore test using non-production data.
@@ -105,7 +128,8 @@ The surplus vertical remains `research_only`. It may not autonomously contact cl
 - Boot persistence — complete.
 - Deployment reconciliation map — complete.
 - Parallel immutable release preparation — complete.
-- Independent council and build preflight — pending.
+- Persistent retirement of legacy APIs and healer — complete.
+- Independent gate and isolated-build preflight — pending.
 - Guarded cutover and rollback verification — blocked pending preflight.
 
 ### Stage 3 — Prove vertical duties

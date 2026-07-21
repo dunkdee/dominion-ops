@@ -1,6 +1,0 @@
-Authorized one-time Juris recovery trigger.
-Target: trust_Dewayne_L_Singleton_20260414_084645.txt
-Expected size: 9299 bytes
-Expected SHA-256: e45cb33b478df63e0edeba3a4a69882317bfe1786ee53e8266c20de32e0d8f77
-Execution: final trusted trigger, July 21, 2026.
-Reporter: private audit branch.

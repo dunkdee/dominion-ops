@@ -1,10 +1,607 @@
 {
+  "active_compose_projects": [
+    {
+      "config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+      "name": "desktop-tutorial",
+      "status": "running(3)"
+    }
+  ],
   "alignment_stage": "2E-cutover-map",
-  "status": "started",
+  "approved_images": {
+    "baby-api": {
+      "created": "2026-07-22T00:08:02.082828473Z",
+      "exists": true,
+      "image_id": "sha256:089445475d96ca3630fd4821af3c0304d38de5ece89a529b3782a398e38c3c82",
+      "inspect_returncode": 0,
+      "reference": "dominion-stage2d-r4-baby-api:latest",
+      "repo_digests": [
+        "dominion-stage2d-r4-baby-api@sha256:089445475d96ca3630fd4821af3c0304d38de5ece89a529b3782a398e38c3c82"
+      ],
+      "repo_tags": [
+        "dominion-stage2d-r4-baby-api:latest"
+      ],
+      "size_bytes": 62730237
+    },
+    "dominion-web": {
+      "created": "2026-07-22T00:07:47.510876997Z",
+      "exists": true,
+      "image_id": "sha256:77583ed35a7537206aeae97e97fa015f21d9d3b112a3885ca50e6cdd1cc03847",
+      "inspect_returncode": 0,
+      "reference": "dominion-stage2d-r4-dominion-web:latest",
+      "repo_digests": [
+        "dominion-stage2d-r4-dominion-web@sha256:77583ed35a7537206aeae97e97fa015f21d9d3b112a3885ca50e6cdd1cc03847"
+      ],
+      "repo_tags": [
+        "dominion-stage2d-r4-dominion-web:latest"
+      ],
+      "size_bytes": 26079494
+    },
+    "wix-agent": {
+      "created": "2026-07-22T00:07:57.029016972Z",
+      "exists": true,
+      "image_id": "sha256:ef792a2ac99184cd51192becb7ead9d0ef3b5347a57b5f41eba6ce5bd834292e",
+      "inspect_returncode": 0,
+      "reference": "dominion/wix-agent:stage2d-r4-10646094aa3a",
+      "repo_digests": [
+        "dominion/wix-agent@sha256:ef792a2ac99184cd51192becb7ead9d0ef3b5347a57b5f41eba6ce5bd834292e"
+      ],
+      "repo_tags": [
+        "dominion/wix-agent:stage2d-r4-10646094aa3a"
+      ],
+      "size_bytes": 57365385
+    }
+  },
+  "collision_analysis": {
+    "host_port_owners": {
+      "127.0.0.1:8082": [
+        "wix-agent"
+      ],
+      ":8080": [
+        "baby-api"
+      ],
+      ":8090": [
+        "dominion-web"
+      ]
+    },
+    "named_volumes_in_use": [
+      "wix_agent_data_a33ce2044d95-29785123140-1",
+      "wix_agent_logs_a33ce2044d95-29785123140-1"
+    ],
+    "networks_in_use": [
+      "desktop-tutorial_default"
+    ],
+    "target_names_currently_occupied": [
+      "baby-api",
+      "baby-logger",
+      "dominion-web",
+      "wix-agent"
+    ]
+  },
+  "compose_ownership": {
+    "baby-api": {
+      "config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+      "project": "desktop-tutorial",
+      "service": "baby-api",
+      "working_dir": "/home/malachisingleton8/desktop-tutorial"
+    },
+    "baby-logger": {
+      "config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+      "project": "desktop-tutorial",
+      "service": "baby-logger",
+      "working_dir": "/home/malachisingleton8/desktop-tutorial"
+    },
+    "dominion-web": {
+      "config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+      "project": "desktop-tutorial",
+      "service": "dominion-web",
+      "working_dir": "/home/malachisingleton8/desktop-tutorial"
+    },
+    "wix-agent": {
+      "config_files": null,
+      "project": null,
+      "service": null,
+      "working_dir": null
+    }
+  },
+  "containers": {
+    "baby-api": {
+      "cap_drop": [],
+      "compose_labels": {
+        "com.docker.compose.config-hash": "5843a9545e243975c4b876fbf5a0b8a9de1be2c5982de399cb2f75dfe0614dd8",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:a319b3721a52e31c166c5a311301f656affef7f4acaeb4ff047c2cc971af000d",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "desktop-tutorial",
+        "com.docker.compose.project.config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+        "com.docker.compose.project.working_dir": "/home/malachisingleton8/desktop-tutorial",
+        "com.docker.compose.replace": "baby-api",
+        "com.docker.compose.service": "baby-api",
+        "com.docker.compose.version": "5.1.1"
+      },
+      "container_id": "601c5388480132a0a5ef4584fcfff0dacb575db5f7001ad4f677d48a17a7d38a",
+      "created": "2026-06-23T17:51:56.885807884Z",
+      "exists": true,
+      "health": "healthy",
+      "image_id": "sha256:a319b3721a52e31c166c5a311301f656affef7f4acaeb4ff047c2cc971af000d",
+      "image_reference": "desktop-tutorial-baby-api",
+      "inspect_returncode": 0,
+      "memory_bytes": 0,
+      "mounts": [
+        {
+          "destination": "/app",
+          "name": null,
+          "propagation": "rprivate",
+          "rw": true,
+          "source": "/home/malachisingleton8/desktop-tutorial/api",
+          "type": "bind"
+        },
+        {
+          "destination": "/vault",
+          "name": null,
+          "propagation": "rprivate",
+          "rw": true,
+          "source": "/home/malachisingleton8/vault",
+          "type": "bind"
+        }
+      ],
+      "name": "baby-api",
+      "nano_cpus": 0,
+      "networks": [
+        {
+          "aliases": [
+            "baby-api"
+          ],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "pids_limit": null,
+      "ports": [
+        {
+          "container_port": "8080/tcp",
+          "host_ip": "",
+          "host_port": "8080"
+        }
+      ],
+      "read_only_rootfs": false,
+      "restart_policy": {
+        "MaximumRetryCount": 0,
+        "Name": "always"
+      },
+      "running": true,
+      "security_opt": [],
+      "started_at": "2026-06-23T17:52:07.747099419Z",
+      "state": "running"
+    },
+    "baby-logger": {
+      "cap_drop": [],
+      "compose_labels": {
+        "com.docker.compose.config-hash": "264fb88def4cacd13ea0b4bf30bf292508a214bff9c007ad8ad09168ef109804",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "desktop-tutorial",
+        "com.docker.compose.project.config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+        "com.docker.compose.project.working_dir": "/home/malachisingleton8/desktop-tutorial",
+        "com.docker.compose.replace": "baby-logger",
+        "com.docker.compose.service": "baby-logger",
+        "com.docker.compose.version": "5.1.1"
+      },
+      "container_id": "c3d390494b902672bd7ef1aabc0fcc4a0fe770368439933fd1a47c5b70813161",
+      "created": "2026-06-17T09:54:44.356295008Z",
+      "exists": true,
+      "health": null,
+      "image_id": "sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4",
+      "image_reference": "alpine:latest",
+      "inspect_returncode": 0,
+      "memory_bytes": 0,
+      "mounts": [],
+      "name": "baby-logger",
+      "nano_cpus": 0,
+      "networks": [
+        {
+          "aliases": [
+            "baby-logger"
+          ],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "pids_limit": null,
+      "ports": [],
+      "read_only_rootfs": false,
+      "restart_policy": {
+        "MaximumRetryCount": 0,
+        "Name": "always"
+      },
+      "running": true,
+      "security_opt": [],
+      "started_at": "2026-06-17T12:02:44.443073436Z",
+      "state": "running"
+    },
+    "dominion-web": {
+      "cap_drop": [],
+      "compose_labels": {
+        "com.docker.compose.config-hash": "e96306434dd6e72d58d6c36caa59d85c3e1ef667c76bcaeecfd60554ffb0725a",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:3224bfc43c02ab75c9a651cd3b8988e8778cae57006a96da16a03d9b730d9810",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "desktop-tutorial",
+        "com.docker.compose.project.config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+        "com.docker.compose.project.working_dir": "/home/malachisingleton8/desktop-tutorial",
+        "com.docker.compose.replace": "dominion-web",
+        "com.docker.compose.service": "dominion-web",
+        "com.docker.compose.version": "5.1.1"
+      },
+      "container_id": "cf8294541b1ab3c7ea29896950f6e87e38683ac32b400afb8a1850a0be6f61c5",
+      "created": "2026-06-17T09:56:45.93316405Z",
+      "exists": true,
+      "health": null,
+      "image_id": "sha256:3224bfc43c02ab75c9a651cd3b8988e8778cae57006a96da16a03d9b730d9810",
+      "image_reference": "desktop-tutorial-dominion-web",
+      "inspect_returncode": 0,
+      "memory_bytes": 0,
+      "mounts": [],
+      "name": "dominion-web",
+      "nano_cpus": 0,
+      "networks": [
+        {
+          "aliases": [
+            "dominion-web"
+          ],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "pids_limit": null,
+      "ports": [
+        {
+          "container_port": "80/tcp",
+          "host_ip": "",
+          "host_port": "8090"
+        }
+      ],
+      "read_only_rootfs": false,
+      "restart_policy": {
+        "MaximumRetryCount": 0,
+        "Name": "always"
+      },
+      "running": true,
+      "security_opt": [],
+      "started_at": "2026-06-17T12:02:44.430849911Z",
+      "state": "running"
+    },
+    "wix-agent": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "compose_labels": {},
+      "container_id": "f0319cf37704efcd92de809994673620c77e3850ec0106551340f3ad2e2859b5",
+      "created": "2026-07-20T22:48:02.133619662Z",
+      "exists": true,
+      "health": "healthy",
+      "image_id": "sha256:a5a7deff7623eac93fe40adf1c96a65e802e1c50a92bfe67e1f284a960efb0fd",
+      "image_reference": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "inspect_returncode": 0,
+      "memory_bytes": 536870912,
+      "mounts": [
+        {
+          "destination": "/app/logs",
+          "name": "wix_agent_logs_a33ce2044d95-29785123140-1",
+          "propagation": "",
+          "rw": true,
+          "source": "/var/lib/docker/volumes/wix_agent_logs_a33ce2044d95-29785123140-1/_data",
+          "type": "volume"
+        },
+        {
+          "destination": "/data",
+          "name": "wix_agent_data_a33ce2044d95-29785123140-1",
+          "propagation": "",
+          "rw": true,
+          "source": "/var/lib/docker/volumes/wix_agent_data_a33ce2044d95-29785123140-1/_data",
+          "type": "volume"
+        }
+      ],
+      "name": "wix-agent",
+      "nano_cpus": 1000000000,
+      "networks": [
+        {
+          "aliases": [],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "pids_limit": 256,
+      "ports": [
+        {
+          "container_port": "8000/tcp",
+          "host_ip": "127.0.0.1",
+          "host_port": "8082"
+        }
+      ],
+      "read_only_rootfs": true,
+      "restart_policy": {
+        "MaximumRetryCount": 0,
+        "Name": "unless-stopped"
+      },
+      "running": true,
+      "security_opt": [
+        "no-new-privileges"
+      ],
+      "started_at": "2026-07-20T22:48:02.180627963Z",
+      "state": "running"
+    }
+  },
+  "containers_unchanged": true,
+  "errors": [],
+  "generated_at": "2026-07-22T00:31:15.865024+00:00",
+  "networks": {
+    "desktop-tutorial_default": {
+      "attachable": false,
+      "attached_targets": [
+        {
+          "container_id": "601c5388480132a0a5ef4584fcfff0dacb575db5f7001ad4f677d48a17a7d38a",
+          "name": "baby-api"
+        },
+        {
+          "container_id": "c3d390494b902672bd7ef1aabc0fcc4a0fe770368439933fd1a47c5b70813161",
+          "name": "baby-logger"
+        },
+        {
+          "container_id": "cf8294541b1ab3c7ea29896950f6e87e38683ac32b400afb8a1850a0be6f61c5",
+          "name": "dominion-web"
+        },
+        {
+          "container_id": "f0319cf37704efcd92de809994673620c77e3850ec0106551340f3ad2e2859b5",
+          "name": "wix-agent"
+        }
+      ],
+      "compose_labels": {
+        "com.docker.compose.config-hash": "cae08aef08111a34cee2b86df93f64b4cadbfd0c431e61e888c22f3c89303728",
+        "com.docker.compose.network": "default",
+        "com.docker.compose.project": "desktop-tutorial",
+        "com.docker.compose.version": "5.1.1"
+      },
+      "driver": "bridge",
+      "exists": true,
+      "internal": false,
+      "name": "desktop-tutorial_default",
+      "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3",
+      "scope": "local"
+    }
+  },
+  "port_owners": {
+    "127.0.0.1:8082": [
+      "wix-agent"
+    ],
+    ":8080": [
+      "baby-api"
+    ],
+    ":8090": [
+      "dominion-web"
+    ]
+  },
+  "release_compose_sha256": "42e2e90c41e9c154bf96f3ba2dc277811f873626af41b747474fcea6a494c8eb",
+  "release_root": "/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a",
+  "risks": [
+    "one_or_more_target_containers_unmanaged"
+  ],
+  "rollback_manifest": {
+    "baby-api": {
+      "compose_labels": {
+        "com.docker.compose.config-hash": "5843a9545e243975c4b876fbf5a0b8a9de1be2c5982de399cb2f75dfe0614dd8",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:a319b3721a52e31c166c5a311301f656affef7f4acaeb4ff047c2cc971af000d",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "desktop-tutorial",
+        "com.docker.compose.project.config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+        "com.docker.compose.project.working_dir": "/home/malachisingleton8/desktop-tutorial",
+        "com.docker.compose.replace": "baby-api",
+        "com.docker.compose.service": "baby-api",
+        "com.docker.compose.version": "5.1.1"
+      },
+      "container_id": "601c5388480132a0a5ef4584fcfff0dacb575db5f7001ad4f677d48a17a7d38a",
+      "image_id": "sha256:a319b3721a52e31c166c5a311301f656affef7f4acaeb4ff047c2cc971af000d",
+      "image_reference": "desktop-tutorial-baby-api",
+      "mounts": [
+        {
+          "destination": "/app",
+          "name": null,
+          "propagation": "rprivate",
+          "rw": true,
+          "source": "/home/malachisingleton8/desktop-tutorial/api",
+          "type": "bind"
+        },
+        {
+          "destination": "/vault",
+          "name": null,
+          "propagation": "rprivate",
+          "rw": true,
+          "source": "/home/malachisingleton8/vault",
+          "type": "bind"
+        }
+      ],
+      "networks": [
+        {
+          "aliases": [
+            "baby-api"
+          ],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "ports": [
+        {
+          "container_port": "8080/tcp",
+          "host_ip": "",
+          "host_port": "8080"
+        }
+      ],
+      "restart_policy": {
+        "MaximumRetryCount": 0,
+        "Name": "always"
+      }
+    },
+    "baby-logger": {
+      "compose_labels": {
+        "com.docker.compose.config-hash": "264fb88def4cacd13ea0b4bf30bf292508a214bff9c007ad8ad09168ef109804",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "desktop-tutorial",
+        "com.docker.compose.project.config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+        "com.docker.compose.project.working_dir": "/home/malachisingleton8/desktop-tutorial",
+        "com.docker.compose.replace": "baby-logger",
+        "com.docker.compose.service": "baby-logger",
+        "com.docker.compose.version": "5.1.1"
+      },
+      "container_id": "c3d390494b902672bd7ef1aabc0fcc4a0fe770368439933fd1a47c5b70813161",
+      "image_id": "sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4",
+      "image_reference": "alpine:latest",
+      "mounts": [],
+      "networks": [
+        {
+          "aliases": [
+            "baby-logger"
+          ],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "ports": [],
+      "restart_policy": {
+        "MaximumRetryCount": 0,
+        "Name": "always"
+      }
+    },
+    "dominion-web": {
+      "compose_labels": {
+        "com.docker.compose.config-hash": "e96306434dd6e72d58d6c36caa59d85c3e1ef667c76bcaeecfd60554ffb0725a",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:3224bfc43c02ab75c9a651cd3b8988e8778cae57006a96da16a03d9b730d9810",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "desktop-tutorial",
+        "com.docker.compose.project.config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+        "com.docker.compose.project.working_dir": "/home/malachisingleton8/desktop-tutorial",
+        "com.docker.compose.replace": "dominion-web",
+        "com.docker.compose.service": "dominion-web",
+        "com.docker.compose.version": "5.1.1"
+      },
+      "container_id": "cf8294541b1ab3c7ea29896950f6e87e38683ac32b400afb8a1850a0be6f61c5",
+      "image_id": "sha256:3224bfc43c02ab75c9a651cd3b8988e8778cae57006a96da16a03d9b730d9810",
+      "image_reference": "desktop-tutorial-dominion-web",
+      "mounts": [],
+      "networks": [
+        {
+          "aliases": [
+            "dominion-web"
+          ],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "ports": [
+        {
+          "container_port": "80/tcp",
+          "host_ip": "",
+          "host_port": "8090"
+        }
+      ],
+      "restart_policy": {
+        "MaximumRetryCount": 0,
+        "Name": "always"
+      }
+    },
+    "wix-agent": {
+      "compose_labels": {},
+      "container_id": "f0319cf37704efcd92de809994673620c77e3850ec0106551340f3ad2e2859b5",
+      "image_id": "sha256:a5a7deff7623eac93fe40adf1c96a65e802e1c50a92bfe67e1f284a960efb0fd",
+      "image_reference": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "mounts": [
+        {
+          "destination": "/app/logs",
+          "name": "wix_agent_logs_a33ce2044d95-29785123140-1",
+          "propagation": "",
+          "rw": true,
+          "source": "/var/lib/docker/volumes/wix_agent_logs_a33ce2044d95-29785123140-1/_data",
+          "type": "volume"
+        },
+        {
+          "destination": "/data",
+          "name": "wix_agent_data_a33ce2044d95-29785123140-1",
+          "propagation": "",
+          "rw": true,
+          "source": "/var/lib/docker/volumes/wix_agent_data_a33ce2044d95-29785123140-1/_data",
+          "type": "volume"
+        }
+      ],
+      "networks": [
+        {
+          "aliases": [],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "ports": [
+        {
+          "container_port": "8000/tcp",
+          "host_ip": "127.0.0.1",
+          "host_port": "8082"
+        }
+      ],
+      "restart_policy": {
+        "MaximumRetryCount": 0,
+        "Name": "unless-stopped"
+      }
+    }
+  },
+  "safety": {
+    "commands_collected": false,
+    "containers_recreated": false,
+    "containers_started": false,
+    "containers_stopped": false,
+    "customer_data_collected": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "environment_values_collected": false,
+    "images_built": false,
+    "logs_collected": false,
+    "networks_changed": false,
+    "repositories_changed": false,
+    "secret_values_collected": false,
+    "volumes_changed": false
+  },
+  "status": "success",
+  "success": true,
+  "volumes": {
+    "wix_agent_data_a33ce2044d95-29785123140-1": {
+      "compose_labels": {},
+      "driver": "local",
+      "exists": true,
+      "mountpoint": "/var/lib/docker/volumes/wix_agent_data_a33ce2044d95-29785123140-1/_data",
+      "name": "wix_agent_data_a33ce2044d95-29785123140-1",
+      "scope": "local"
+    },
+    "wix_agent_logs_a33ce2044d95-29785123140-1": {
+      "compose_labels": {},
+      "driver": "local",
+      "exists": true,
+      "mountpoint": "/var/lib/docker/volumes/wix_agent_logs_a33ce2044d95-29785123140-1/_data",
+      "name": "wix_agent_logs_a33ce2044d95-29785123140-1",
+      "scope": "local"
+    }
+  },
   "workflow": {
     "run_id": 29880455592,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29880455592",
     "source_sha": "085dd919b4ac7e1823f1648a445ed184fa04e38d",
-    "artifact_name": "dominion-alignment-stage2e-map"
+    "artifact_name": "dominion-alignment-stage2e-map",
+    "job_status": "success"
   }
 }

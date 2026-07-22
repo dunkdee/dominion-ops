@@ -105,39 +105,52 @@ Evidence: workflow run `29883264403`.
 - New Wix Agent failed its `/ready` health gate.
 - The workflow removed all three new containers and restored Wix data from the quiescent local snapshot.
 - Wix Agent, Dominion Web, n8n, Alpha Engine, and Conductor returned HTTP 200 after rollback.
-- The restored original Baby API failed to recover, entered a restart loop, and left port 8080 unavailable.
+- The restored original Baby API failed because its `/app` bind source pointed to the vanished `desktop-tutorial/api` path.
 - All canonical systemd restart deltas remained zero.
 - Retired APIs remained masked and publishing timers remained disabled.
 - No database, DNS, network definition, volume definition, repository checkout, or secret was changed.
 - The failed full-cutover workflow was removed from `main` to prevent accidental rerun.
 
+### Stage 2F-R1 — Baby API emergency recovery — COMPLETE
+
+Evidence: workflow run `29885228305`.
+
+- The failing original Baby API was preserved as `baby-api-failed-stage2f-29885228305-1`; it was not deleted.
+- Canonical Baby API image `sha256:089445475d96ca3630fd4821af3c0304d38de5ece89a529b3782a398e38c3c82` is running under Compose project `dominion-ops`.
+- Port 8080, HTTP health, canonical release `/app` mount, vault mount, production network, and 60-second stability passed.
+- Restart count is zero and the container reports healthy.
+- Wix, Dominion Web, n8n, Alpha Engine, and Conductor remained HTTP 200.
+- Unaffected container identities were unchanged.
+- Retired units remained masked and publishing timers remained disabled.
+- The one-time Baby recovery workflow was removed from `main` after verification.
+
 ## Current production condition
 
-- **Baby API — port 8080 unavailable; emergency recovery required.**
-- Wix Agent — port 8082 healthy, record-only mode.
-- Dominion Web — port 8090 healthy.
-- n8n — port 5678 healthy, approved automation only.
-- Alpha Engine — port 8787 healthy, paper-only.
+- Baby API — port 8080 healthy; canonical `dominion-ops` ownership.
+- Wix Agent — port 8082 healthy on the original manually managed image; record-only mode.
+- Dominion Web — port 8090 healthy on original `desktop-tutorial` ownership.
+- n8n — port 5678 healthy; approved automation only.
+- Alpha Engine — port 8787 healthy; paper-only.
 - Caddy, Gatekeeper, Store, Conductor, Guardian, Sentinel, Juris, Alchemist, and Gemini remain active under existing controls.
 
 ## Current active work
 
-### Stage 2F-R1 — Baby API emergency recovery
+### Stage 2F-W1 — Isolated Wix failure diagnosis
 
-**Goal:** Restore port 8080 using only the already-tested canonical Baby API image while preserving the failing original container for diagnosis.
+**Goal:** Reproduce and classify the canonical Wix image's `/ready` failure without stopping or modifying the healthy production Wix container or its live volumes.
 
 Required behavior:
 
-1. Require exact human authorization `RECOVER_BABY_STAGE_2F`.
-2. Refuse drift in the original container ID, old/new image IDs, release hashes, network ID, or governance state.
-3. Classify recent Baby API error signals without publishing raw logs.
-4. Preserve the failing original container under a unique stopped name; do not delete it.
-5. Start only canonical Baby API through Compose project `dominion-ops`.
-6. Reuse the existing production network and vault mount.
-7. Verify exact image, ownership, network, mounts, port 8080, HTTP 200, and 60-second stability.
-8. Leave Wix, Dominion Web, n8n, Alpha, Conductor, databases, DNS, volumes, and repositories unchanged.
+1. Use the approved canonical Wix image only.
+2. Start it under an isolated project, loopback test port, and temporary copied data/log volumes.
+3. Never attach the production Wix volumes read/write.
+4. Keep secret values and raw logs out of GitHub reports.
+5. Classify only bounded error signals and health results.
+6. Remove the isolated container, network, and temporary volumes after the test.
+7. Verify production Wix, Baby API, Dominion Web, n8n, Alpha, and Conductor remain HTTP 200.
+8. Do not authorize another full cutover until the canonical Wix image passes isolated `/ready` and stability gates.
 
-## Blocked until Baby API recovery is verified
+## Blocked until Wix diagnosis and correction pass
 
 - Any further full-stack cutover.
 - Deleting failed or rollback containers and local Wix archives.

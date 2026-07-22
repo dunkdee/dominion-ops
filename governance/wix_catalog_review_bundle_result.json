@@ -1,10 +1,143 @@
 {
   "alignment_stage": "wix-catalog-review-bundle",
-  "status": "started",
+  "bundle": {
+    "mode": "0o600",
+    "path": "/tmp/wix_catalog_review_bundle.json",
+    "sha256": "1a1aff2c4aaf7495d133fc0e1aad78cb3c60f7c9eca0fc090da1fcd3e4f5392c",
+    "size_bytes": 160256
+  },
+  "catalog_summary": {
+    "duplicate_description_groups": 24,
+    "duplicate_description_products": 62,
+    "missing_brand": 94,
+    "missing_description": 0,
+    "missing_main_media": 0,
+    "missing_media": 0,
+    "missing_seo_description": 0,
+    "missing_seo_title": 0,
+    "missing_variant_sku": 0,
+    "products_total": 94,
+    "variants_total": 246
+  },
+  "containers_unchanged": true,
+  "errors": [],
+  "generated_at": "2026-07-22T04:14:28.529294+00:00",
+  "next_gate": "Draft a review-only revision-safe change set; no Wix mutation without human approval",
+  "protected_health_after": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "protected_health_before": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "safety": {
+    "containers_changed": false,
+    "customer_data_collected": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "environment_values_collected": false,
+    "inventory_changed": false,
+    "inventory_quantities_collected": false,
+    "networks_changed": false,
+    "order_data_collected": false,
+    "orders_changed": false,
+    "product_content_written_to_private_artifact_only": true,
+    "products_changed": false,
+    "raw_api_responses_collected": false,
+    "raw_logs_collected": false,
+    "secret_values_collected": false,
+    "volumes_changed": false,
+    "wix_mutations_performed": false
+  },
+  "status": "success",
+  "success": true,
   "workflow": {
     "run_id": 29890534356,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29890534356",
     "source_sha": "7cb255471313d75d88300a2b3c47883fe84f4c1a",
-    "artifact_name": "dominion-wix-catalog-review-bundle"
+    "artifact_name": "dominion-wix-catalog-review-bundle",
+    "run_returncode": "0",
+    "job_status": "success"
   }
 }

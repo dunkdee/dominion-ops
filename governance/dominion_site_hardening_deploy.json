@@ -1,10 +1,233 @@
 {
   "alignment_stage": "dominion-site-hardening-deploy",
-  "status": "started",
+  "backup": {
+    "mode": "0o700",
+    "path": "/home/malachisingleton8/.dominion-recovery/site-hardening/29936230606-1"
+  },
+  "containers_unchanged": true,
+  "errors": [],
+  "files": [
+    {
+      "after_sha256": "620f04414a3bd6aa191215d309d5b7e890bdb71f76a743fa5cbaba8e8a546413",
+      "after_size": 9496,
+      "before_sha256": "0ff790d76f6bb526593f2bd094cc4f72dfd2aae42e87e8423efe119809e34dab",
+      "before_size": 12015,
+      "existed_before": true,
+      "name": "index.html"
+    },
+    {
+      "after_sha256": "fcd982bcbf9c1de94cff9867662f6b3d9dee4e709885349610f02f96625c349e",
+      "after_size": 7461,
+      "before_sha256": "cfe74c0e4b05f355a919923b296711776c88594f7aeccff6a769a2092f6b0f01",
+      "before_size": 9446,
+      "existed_before": true,
+      "name": "store.html"
+    },
+    {
+      "after_sha256": "667c014d7854f36ab4286d807a6b442401166b1bca02abe4dad22d36f17f002c",
+      "after_size": 6209,
+      "existed_before": false,
+      "name": "site.css"
+    },
+    {
+      "after_sha256": "88d09786bed78f8e9bd06755d3c794918ab03d75197d12f7a835a8b7a1cb7ab0",
+      "after_size": 1949,
+      "existed_before": false,
+      "name": "shipping.html"
+    },
+    {
+      "after_sha256": "8fb7184eeea01d0c9368860cc9c01feac59c50655a608c2f4ba63bfae22b791b",
+      "after_size": 2304,
+      "existed_before": false,
+      "name": "returns.html"
+    },
+    {
+      "after_sha256": "73fe300206e69d8ab87dc7a505e123f22e953ccdf2233993918344017226896f",
+      "after_size": 2786,
+      "before_sha256": "a6a12d2c15bf93078aab960e42334e7daaf466825b16a0c0e06512eb6fb74716",
+      "before_size": 21385,
+      "existed_before": true,
+      "name": "privacy.html"
+    },
+    {
+      "after_sha256": "9f8271a8bccd5346ccae3103ffe7abcdb00f6dcbc82312f4d58f76703933c1a4",
+      "after_size": 2788,
+      "before_sha256": "83c843cbc92c06fb740bf80c66a6023447dda912ab5f3fa1cab1a1c92ee33cc2",
+      "before_size": 20930,
+      "existed_before": true,
+      "name": "terms.html"
+    }
+  ],
+  "generated_at": "2026-07-22T16:03:18.771063+00:00",
+  "next_gate": "Run public desktop/mobile audit and verify contact-form behavior before activating direct digital checkout links",
+  "protected_health_after": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "protected_health_before": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "public_after": [
+    {
+      "attempt": 1,
+      "marker_present": true,
+      "status": 200,
+      "url": "https://dominionhealing.org/"
+    },
+    {
+      "attempt": 1,
+      "marker_present": true,
+      "status": 200,
+      "url": "https://dominionhealing.org/store.html"
+    },
+    {
+      "attempt": 1,
+      "marker_present": true,
+      "status": 200,
+      "url": "https://dominionhealing.org/site.css"
+    },
+    {
+      "attempt": 1,
+      "marker_present": true,
+      "status": 200,
+      "url": "https://dominionhealing.org/shipping.html"
+    },
+    {
+      "attempt": 1,
+      "marker_present": true,
+      "status": 200,
+      "url": "https://dominionhealing.org/returns.html"
+    },
+    {
+      "attempt": 1,
+      "marker_present": true,
+      "status": 200,
+      "url": "https://dominionhealing.org/privacy.html"
+    },
+    {
+      "attempt": 1,
+      "marker_present": true,
+      "status": 200,
+      "url": "https://dominionhealing.org/terms.html"
+    }
+  ],
+  "rollback": {
+    "errors": [],
+    "performed": false,
+    "restored": [],
+    "success": true
+  },
+  "safety": {
+    "caddy_changed": false,
+    "containers_changed": false,
+    "customer_data_collected": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "environment_values_collected": false,
+    "inventory_changed": false,
+    "networks_changed": false,
+    "only_reviewed_static_files_targeted": true,
+    "order_data_collected": false,
+    "orders_changed": false,
+    "products_changed": false,
+    "raw_logs_collected": false,
+    "secret_values_collected": false,
+    "site_files_changed": true,
+    "site_files_changed_count": 7,
+    "volumes_changed": false,
+    "wix_mutations_performed": false
+  },
+  "status": "success",
+  "success": true,
+  "verified_wix_url": "https://www.voltedgegoods.com/",
+  "webroot": "/home/malachisingleton8/aura-ecosystem/agency-website",
   "workflow": {
     "run_id": 29936230606,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29936230606",
     "source_sha": "3040174a3cf946368063f9f96852c0886888a8ca",
-    "artifact_name": "dominion-site-hardening-deploy"
+    "artifact_name": "dominion-site-hardening-deploy",
+    "run_returncode": "0",
+    "job_status": "success"
   }
 }

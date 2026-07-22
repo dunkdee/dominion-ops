@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Map factual Wix product metadata without mutating the store.
+"""Map factual Wix V3 product, media, and variant metadata without mutations.
 
-The child collector executes inside the existing Wix Agent container so it can use
-its already-configured Wix credentials without exposing them. The report includes
-product/catalog metadata only. It excludes environment values, customer/order data,
-raw API responses, inventory quantities, secret values, and raw logs.
+The collector runs inside the existing Wix Agent container so configured Wix
+credentials never leave the VM. The report contains product-side metadata only:
+counts, identifiers, revisions, field-presence flags, and description hashes. It
+excludes environment values, raw API responses, inventory quantities, order data,
+customer data, secret values, and raw logs.
 """
 
 from __future__ import annotations
@@ -27,22 +28,24 @@ PROTECTED_HTTP = (
 )
 
 CHILD = r'''
+import hashlib
 import json
+import re
+
+import httpx
 import wix_client as wix
+
+VARIANTS_URL = "https://www.wixapis.com/stores/v3/products/query-variants"
 
 
 def first(mapping, *keys):
+    if not isinstance(mapping, dict):
+        return None
     for key in keys:
         value = mapping.get(key)
         if value is not None:
             return value
     return None
-
-
-def length(value):
-    if isinstance(value, (list, tuple, dict, str)):
-        return len(value)
-    return 0
 
 
 def description_text(product):
@@ -53,99 +56,142 @@ def description_text(product):
     return ""
 
 
-def media_count(product):
-    for key in ("mediaItemsInfo", "media", "mediaItems"):
-        value = product.get(key)
-        if isinstance(value, list):
-            return len(value)
-        if isinstance(value, dict):
-            for nested in ("items", "mediaItems"):
-                nested_value = value.get(nested)
-                if isinstance(nested_value, list):
-                    return len(nested_value)
+def normalized_description_hash(text):
+    normalized = re.sub(r"\s+", " ", text).strip().lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest() if normalized else None
+
+
+def media_facts(product):
+    media = product.get("media")
+    if not isinstance(media, dict):
+        return {"items": 0, "main_present": False, "shape": "missing"}
+    items_info = media.get("itemsInfo")
+    if not isinstance(items_info, dict):
+        items_info = media.get("items_info") if isinstance(media.get("items_info"), dict) else {}
+    items = items_info.get("items") if isinstance(items_info, dict) else None
+    if not isinstance(items, list):
+        items = []
+    return {
+        "items": len(items),
+        "main_present": bool(media.get("main")),
+        "shape": "media.itemsInfo.items" if isinstance(items_info, dict) else "media",
+    }
+
+
+def option_count(product):
+    options = product.get("options")
+    if isinstance(options, list):
+        return len(options)
+    if isinstance(options, dict):
+        return len(options)
     return 0
 
 
-def variant_rows(product):
-    direct = product.get("variants")
-    if isinstance(direct, list):
-        return direct
-    info = product.get("variantsInfo")
-    if isinstance(info, dict):
-        rows = info.get("variants")
-        if isinstance(rows, list):
-            return rows
-    return []
+def query_variants():
+    rows = []
+    cursor = None
+    while True:
+        cursor_paging = {"limit": 1000}
+        if cursor:
+            cursor_paging["cursor"] = cursor
+        body = {"fields": [], "query": {"cursorPaging": cursor_paging}}
+        response = httpx.post(
+            VARIANTS_URL,
+            headers={
+                "Authorization": wix.WIX_API_KEY,
+                "wix-site-id": wix.WIX_SITE_ID,
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        page = payload.get("variants") or []
+        if isinstance(page, list):
+            rows.extend(item for item in page if isinstance(item, dict))
+        paging = payload.get("pagingMetadata") or {}
+        cursors = paging.get("cursors") or {}
+        cursor = cursors.get("next")
+        if not paging.get("hasNext") or not cursor:
+            break
+    return rows
 
 
-def option_rows(product):
-    value = product.get("options")
-    if isinstance(value, list):
-        return value
-    if isinstance(value, dict):
-        return list(value.values())
-    return []
+def variant_product_id(variant):
+    product_data = variant.get("productData") or {}
+    return first(product_data, "productId", "product_id")
 
 
-def sku_count(product, variants):
-    count = 0
-    candidates = [product] + list(variants)
-    for item in candidates:
-        if not isinstance(item, dict):
-            continue
-        sku = first(item, "sku", "stockKeepingUnit")
-        if isinstance(sku, str) and sku.strip():
-            count += 1
-        elif sku not in (None, ""):
-            count += 1
-    return count
-
-
-def price_present(product, variants):
-    keys = {
-        "price", "priceData", "actualPrice", "actualPriceRange",
-        "compareAtPrice", "compareAtPriceRange", "basePriceRange"
-    }
-    if any(product.get(key) not in (None, {}, [], "") for key in keys):
-        return True
-    for variant in variants:
-        if isinstance(variant, dict) and any(
-            variant.get(key) not in (None, {}, [], "") for key in keys
-        ):
-            return True
-    return False
+def variant_price_present(variant):
+    price = variant.get("price") or {}
+    actual = price.get("actualPrice") or price.get("actual_price") or {}
+    return actual.get("amount") not in (None, "")
 
 
 version = wix.detect_catalog_version()
 products = wix.get_all_products(version)
+variant_error = None
+variants = []
+try:
+    variants = query_variants() if version == "v3" else []
+except Exception as exc:
+    variant_error = exc.__class__.__name__
+
+variants_by_product = {}
+for variant in variants:
+    product_id = variant_product_id(variant)
+    if product_id:
+        variants_by_product.setdefault(str(product_id), []).append(variant)
+
 records = []
 all_keys = set()
+description_hash_counts = {}
 for product in products:
     if not isinstance(product, dict):
         continue
     all_keys.update(product.keys())
-    variants = variant_rows(product)
-    options = option_rows(product)
+    product_id = first(product, "id", "_id")
+    product_variants = variants_by_product.get(str(product_id), [])
+    description = description_text(product)
+    description_hash = normalized_description_hash(description)
+    if description_hash:
+        description_hash_counts[description_hash] = description_hash_counts.get(description_hash, 0) + 1
+    media = media_facts(product)
     brand = first(product, "brand", "brandName")
     if isinstance(brand, dict):
-        brand = first(brand, "name", "label")
+        brand = first(brand, "name", "label", "id")
+    variant_summary = product.get("variantSummary") or {}
+    summary_count = first(variant_summary, "variantCount", "count", "total")
+    sku_entries = sum(
+        1 for item in product_variants
+        if str(first(item, "sku", "stockKeepingUnit") or "").strip()
+    )
     record = {
-        "id": first(product, "id", "_id"),
+        "id": product_id,
         "revision": first(product, "revision", "_revision"),
         "name": first(product, "name", "title"),
         "slug": first(product, "slug", "urlSlug"),
         "visible": first(product, "visible", "isVisible"),
         "product_type": first(product, "productType", "product_type", "type"),
         "brand": brand,
-        "description_characters": len(description_text(product)),
-        "media_count": media_count(product),
-        "option_count": len(options),
-        "variant_count": len(variants),
-        "sku_entries": sku_count(product, variants),
-        "price_present": price_present(product, variants),
+        "description_characters": len(description),
+        "description_hash": description_hash,
+        "media_count": media["items"],
+        "main_media_present": media["main_present"],
+        "option_count": option_count(product),
+        "variant_summary_count": summary_count,
+        "queried_variant_count": len(product_variants),
+        "sku_entries": sku_entries,
+        "variant_price_entries": sum(1 for item in product_variants if variant_price_present(item)),
+        "visible_variant_count": sum(item.get("visible") is True for item in product_variants),
+        "price_present": product.get("actualPriceRange") not in (None, {}, []),
     }
     records.append(record)
 
+duplicate_groups = sorted(
+    (count for count in description_hash_counts.values() if count > 1), reverse=True
+)
 summary = {
     "total": len(records),
     "missing_revision": sum(not item.get("revision") for item in records),
@@ -154,11 +200,16 @@ summary = {
     "missing_brand": sum(not str(item.get("brand") or "").strip() for item in records),
     "missing_description": sum(item["description_characters"] == 0 for item in records),
     "description_under_150": sum(item["description_characters"] < 150 for item in records),
+    "duplicate_description_groups": len(duplicate_groups),
+    "largest_duplicate_description_group": max(duplicate_groups, default=1),
     "missing_media": sum(item["media_count"] == 0 for item in records),
+    "missing_main_media": sum(not item["main_media_present"] for item in records),
     "missing_sku": sum(item["sku_entries"] == 0 for item in records),
     "missing_price_field": sum(not item["price_present"] for item in records),
     "with_options": sum(item["option_count"] > 0 for item in records),
-    "with_variants": sum(item["variant_count"] > 0 for item in records),
+    "with_queried_variants": sum(item["queried_variant_count"] > 0 for item in records),
+    "queried_variants_total": len(variants),
+    "variant_query_error_type": variant_error,
     "visibility_true": sum(item.get("visible") is True for item in records),
     "visibility_false": sum(item.get("visible") is False for item in records),
     "visibility_unknown": sum(item.get("visible") not in {True, False} for item in records),
@@ -173,7 +224,7 @@ print(json.dumps({
 '''
 
 
-def command(args: list[str], *, input_text: str | None = None, timeout: int = 180) -> dict[str, Any]:
+def command(args: list[str], *, input_text: str | None = None, timeout: int = 300) -> dict[str, Any]:
     try:
         result = subprocess.run(
             args,
@@ -249,7 +300,7 @@ def main() -> int:
     collector = command(
         ["docker", "exec", "-i", WIX_CONTAINER, "python", "-"],
         input_text=CHILD,
-        timeout=240,
+        timeout=360,
     )
     catalog: dict[str, Any] = {}
     if collector["returncode"] != 0:
@@ -270,7 +321,7 @@ def main() -> int:
 
     success = not errors
     report = {
-        "alignment_stage": "wix-catalog-fact-map",
+        "alignment_stage": "wix-catalog-deep-fact-map",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "status": "success" if success else "failed",
         "success": success,
@@ -280,8 +331,8 @@ def main() -> int:
         "containers_unchanged": containers_unchanged,
         "errors": errors,
         "next_gate": (
-            "Draft product descriptions only from verified product/supplier facts; "
-            "do not mutate Wix until revision-safe writes and human approval exist"
+            "Reconcile descriptions, media, SKUs, variants, and supplier facts; "
+            "do not mutate Wix until a revision-safe reviewed change set exists"
         ),
         "safety": {
             "wix_mutations_performed": False,

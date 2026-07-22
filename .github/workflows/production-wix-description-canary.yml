@@ -1,0 +1,241 @@
+name: Production Wix Description Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type exactly APPLY_WIX_DESCRIPTION_CANARY
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-wix-description-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    if: ${{ inputs.confirm == 'APPLY_WIX_DESCRIPTION_CANARY' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      REPORT_DIR: /tmp/dominion-wix-description-canary
+      REPORT_FILE: /tmp/dominion-wix-description-canary/result.json
+      REMOTE_CANARY: /tmp/wix_description_canary_apply.py
+      REMOTE_GENERATOR: /tmp/wix_catalog_description_proposal_v2.py
+      REPORT_BRANCH: audit/wix-description-canary-20260722
+      REPORT_PATH: governance/wix_description_canary_result.json
+      ARTIFACT_NAME: dominion-wix-description-canary
+
+    steps:
+      - name: Publish run pointer
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: context.sha });
+            }
+            const report = {
+              alignment_stage: 'wix-description-canary-apply',
+              status: 'started',
+              workflow: {
+                run_id: context.runId,
+                run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                source_sha: context.sha,
+                artifact_name: process.env.ARTIFACT_NAME,
+              },
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Wix description canary run ${context.runId} started`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Checkout exact canary source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate canary syntax
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/runtime/wix_description_canary_apply.py
+          python3 -m py_compile scripts/runtime/wix_catalog_description_proposal.py
+
+      - name: Configure strict SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Apply guarded three-product Wix canary
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 "$REPORT_DIR"
+          printf '%s\n' '{"alignment_stage":"wix-description-canary-apply","status":"collector_not_completed","success":false}' > "$REPORT_FILE"
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            scripts/runtime/wix_description_canary_apply.py \
+            "$VM_USER@$VM_HOST:$REMOTE_CANARY"
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            scripts/runtime/wix_catalog_description_proposal.py \
+            "$VM_USER@$VM_HOST:$REMOTE_GENERATOR"
+          set +e
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" \
+            "chmod 700 '$REMOTE_CANARY' '$REMOTE_GENERATOR' && sudo -n env WIX_V2_GENERATOR='$REMOTE_GENERATOR' GITHUB_RUN_ID='${{ github.run_id }}' GITHUB_RUN_ATTEMPT='${{ github.run_attempt }}' python3 '$REMOTE_CANARY'; RC=\$?; sudo -n rm -f '$REMOTE_CANARY' '$REMOTE_GENERATOR'; exit \$RC" \
+            > "$REPORT_FILE" 2> "$REPORT_DIR/remote.stderr"
+          RC=$?
+          set -e
+          if ! python3 -m json.tool "$REPORT_FILE" >/dev/null 2>&1; then
+            printf '%s\n' '{"alignment_stage":"wix-description-canary-apply","status":"report_parse_failed","success":false}' > "$REPORT_FILE"
+            RC=99
+          fi
+          chmod 600 "$REPORT_FILE"
+          echo "CANARY_RC=$RC" >> "$GITHUB_ENV"
+
+      - name: Upload private canary result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.REPORT_FILE }}
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 9
+
+      - name: Publish terminal canary result
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          CANARY_RESULT_CODE: ${{ env.CANARY_RC }}
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            const resultCode = process.env.CANARY_RESULT_CODE;
+            const terminalStatus = resultCode === '0' ? 'success' : 'failure';
+            let report;
+            if (fs.existsSync(process.env.REPORT_FILE)) {
+              try {
+                report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, 'utf8'));
+              } catch (error) {
+                report = { alignment_stage: 'wix-description-canary-apply', status: 'report_parse_failed', success: false };
+              }
+            } else {
+              report = { alignment_stage: 'wix-description-canary-apply', status: 'report_missing', success: false };
+            }
+            report.workflow = {
+              run_id: context.runId,
+              run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              source_sha: context.sha,
+              artifact_name: process.env.ARTIFACT_NAME,
+              run_returncode: resultCode || null,
+              job_status: terminalStatus,
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Wix description canary run ${context.runId} ${terminalStatus}`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Enforce canary result
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["REPORT_FILE"])
+          if not path.is_file():
+              raise SystemExit("Wix canary report missing")
+          report = json.loads(path.read_text(encoding="utf-8"))
+          if not report.get("success"):
+              raise SystemExit("Wix description canary did not pass")
+          if report.get("containers_unchanged") is not True:
+              raise SystemExit("container inventory changed during canary")
+          if len(report.get("updated") or []) != 3:
+              raise SystemExit("canary did not update exactly three products")
+          rollback = report.get("rollback") or {}
+          if rollback.get("performed"):
+              raise SystemExit("canary required rollback")
+          safety = report.get("safety") or {}
+          if safety.get("products_changed") is not True or safety.get("products_changed_count") != 3:
+              raise SystemExit("canary product-change contract failed")
+          if safety.get("only_canary_products_targeted") is not True:
+              raise SystemExit("non-canary product scope detected")
+          forbidden = [
+              "inventory_changed", "orders_changed", "customer_data_collected",
+              "order_data_collected", "inventory_quantities_collected",
+              "environment_values_collected", "secret_values_collected",
+              "raw_api_responses_collected", "raw_logs_collected",
+              "containers_changed", "networks_changed", "volumes_changed",
+              "databases_changed", "dns_changed", "full_descriptions_reported",
+          ]
+          if any(safety.get(key) for key in forbidden):
+              raise SystemExit("canary safety contract failed")
+          if any(item.get("status") != 200 for item in report.get("protected_health_after") or []):
+              raise SystemExit("protected health failed after canary")
+          PY
+
+      - name: Remove temporary runner material
+        if: ${{ always() }}
+        run: |
+          set -eu
+          rm -rf "$REPORT_DIR"
+          rm -f ~/.ssh/id_vm ~/.ssh/known_hosts

@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "wix-store-read-only-audit",
+  "status": "started",
+  "workflow": {
+    "run_id": 29887016849,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29887016849",
+    "source_sha": "84f2b7c3d12921e276089a9477ec7e245c37e479",
+    "artifact_name": "dominion-wix-store-readonly-audit"
+  }
+}

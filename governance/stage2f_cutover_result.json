@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "2F-cutover",
+  "status": "started",
+  "workflow": {
+    "run_id": 29883264403,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29883264403",
+    "source_sha": "72c6691e5c8ffb575d94455fcebdd2794eb1fab5",
+    "artifact_name": "dominion-alignment-stage2f-cutover"
+  }
+}

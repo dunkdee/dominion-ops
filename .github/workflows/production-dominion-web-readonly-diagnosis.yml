@@ -1,0 +1,242 @@
+name: Production Dominion Web Read-Only Diagnosis
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type exactly DIAGNOSE_DOMINION_WEB_READ_ONLY
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-dominion-web-readonly-diagnosis
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    if: ${{ inputs.confirm == 'DIAGNOSE_DOMINION_WEB_READ_ONLY' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      REPORT_DIR: /tmp/dominion-web-diagnosis
+      REPORT_FILE: /tmp/dominion-web-diagnosis/result.json
+      REMOTE_SCRIPT: /tmp/dominion_web_readonly_diagnosis.py
+      REPORT_BRANCH: audit/dominion-web-diagnosis-20260722
+      REPORT_PATH: governance/dominion_web_diagnosis.json
+      ARTIFACT_NAME: dominion-web-readonly-diagnosis
+
+    steps:
+      - name: Publish run pointer
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({
+                owner, repo, ref: `refs/heads/${branch}`, sha: context.sha,
+              });
+            }
+            const report = {
+              alignment_stage: 'dominion-web-read-only-diagnosis',
+              status: 'started',
+              workflow: {
+                run_id: context.runId,
+                run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                source_sha: context.sha,
+                artifact_name: process.env.ARTIFACT_NAME,
+              },
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Dominion Web diagnosis run ${context.runId} started`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Checkout exact diagnosis source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate diagnosis syntax
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/runtime/dominion_web_readonly_diagnosis.py
+
+      - name: Configure strict SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Diagnose Dominion Web read-only
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 "$REPORT_DIR"
+          printf '%s\n' '{"alignment_stage":"dominion-web-read-only-diagnosis","status":"collector_not_completed","success":false}' > "$REPORT_FILE"
+          scp \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            scripts/runtime/dominion_web_readonly_diagnosis.py \
+            "$VM_USER@$VM_HOST:$REMOTE_SCRIPT"
+          set +e
+          ssh \
+            -i ~/.ssh/id_vm \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" \
+            "chmod 700 '$REMOTE_SCRIPT' && python3 '$REMOTE_SCRIPT'; RC=\$?; rm -f '$REMOTE_SCRIPT'; exit \$RC" \
+            > "$REPORT_FILE" 2> "$REPORT_DIR/remote.stderr"
+          RC=$?
+          set -e
+          python3 -m json.tool "$REPORT_FILE" >/dev/null
+          chmod 600 "$REPORT_FILE"
+          echo "DIAGNOSIS_RC=$RC" >> "$GITHUB_ENV"
+
+      - name: Upload private diagnosis result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.REPORT_FILE }}
+          if-no-files-found: warn
+          retention-days: 5
+          compression-level: 9
+
+      - name: Publish terminal diagnosis result
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          DIAGNOSIS_RESULT_CODE: ${{ env.DIAGNOSIS_RC }}
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            const resultCode = process.env.DIAGNOSIS_RESULT_CODE;
+            const terminalStatus = resultCode === '0' ? 'success' : 'failure';
+            let report;
+            if (fs.existsSync(process.env.REPORT_FILE)) {
+              try {
+                report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, 'utf8'));
+              } catch (error) {
+                report = { alignment_stage: 'dominion-web-read-only-diagnosis', status: 'report_parse_failed', success: false };
+              }
+            } else {
+              report = { alignment_stage: 'dominion-web-read-only-diagnosis', status: 'report_missing', success: false };
+            }
+            report.workflow = {
+              run_id: context.runId,
+              run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              source_sha: context.sha,
+              artifact_name: process.env.ARTIFACT_NAME,
+              run_returncode: resultCode || null,
+              job_status: terminalStatus,
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: Dominion Web diagnosis run ${context.runId} ${terminalStatus}`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Enforce read-only diagnosis result
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["REPORT_FILE"])
+          if not path.is_file():
+              raise SystemExit("Dominion Web diagnosis report missing")
+          report = json.loads(path.read_text(encoding="utf-8"))
+          if not report.get("success"):
+              raise SystemExit("Dominion Web read-only diagnosis did not complete")
+          if not report.get("containers_unchanged"):
+              raise SystemExit("container inventory changed during diagnosis")
+          safety = report.get("safety") or {}
+          forbidden = [
+              "containers_changed",
+              "containers_started",
+              "containers_stopped",
+              "containers_recreated",
+              "images_built",
+              "networks_changed",
+              "volumes_changed",
+              "databases_changed",
+              "dns_changed",
+              "repositories_changed",
+              "environment_values_collected",
+              "secret_values_collected",
+              "raw_logs_collected",
+              "customer_data_collected",
+          ]
+          if any(safety.get(key) for key in forbidden):
+              raise SystemExit("read-only diagnosis safety contract failed")
+          PY
+
+      - name: Remove temporary runner material
+        if: ${{ always() }}
+        run: |
+          set -eu
+          rm -rf "$REPORT_DIR"
+          rm -f ~/.ssh/id_vm ~/.ssh/known_hosts

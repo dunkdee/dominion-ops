@@ -89,17 +89,30 @@ Evidence: workflow runs `29868756275` and `29869539712`.
 Evidence: workflow run `29874133137`.
 
 - Root-only backups were created under `/var/lib/dominion/unit-retirement/stage2d-r3-29874133137`.
-- Persistent `/dev/null` masks were installed for:
-  - `alchemist-api.service`
-  - `conductor-api.service`
-  - `juris-api.service`
-  - `dominion-port-healer.service`
+- Persistent `/dev/null` masks were installed for `alchemist-api.service`, `conductor-api.service`, `juris-api.service`, and `dominion-port-healer.service`.
 - All four units verified `inactive/dead/masked` after the change.
 - Canonical Caddy, Alchemist, Alpha, Conductor, Gatekeeper, Guardian, Juris, Sentinel, Store, and Gemini services remained `active/running`.
 - Every protected canonical service recorded a zero restart delta over 90 seconds.
 - Baby API, Wix, Dominion Web, n8n, Alpha Engine, and Conductor remained HTTP 200.
 - Production container inventory was unchanged.
-- No rollback was required; the retirement remains locally reversible from the recorded backups.
+- No rollback was required; retirement remains locally reversible from the recorded backups.
+
+### Stage 2D-R4 — Independent gates and isolated builds — COMPLETE
+
+Evidence: workflow run `29879295855`.
+
+- Runtime, secrets, deployment, rollback, governance, agent-runtime, build, and post-build-stability gates all passed.
+- The deterministic Five Council recorded five passes and no veto.
+- Conductor, Guardian, Sentinel, and Juris were verified active/running; Watchmen status returned HTTP 200.
+- The following isolated images were built successfully:
+  - `dominion-stage2d-r4-baby-api:latest`
+  - `dominion-stage2d-r4-dominion-web:latest`
+  - `dominion/wix-agent:stage2d-r4-10646094aa3a`
+- All four retired units remained persistently masked and inactive.
+- All approval-gated publishing timers remained inactive and disabled.
+- Every protected canonical restart delta remained zero after the builds.
+- All six protected HTTP checks remained 200.
+- Production container inventory was unchanged; no cutover occurred.
 
 ## Current protected production core
 
@@ -117,27 +130,25 @@ Evidence: workflow run `29874133137`.
 
 ## Current active work
 
-### Stage 2D-R4 — Independent gate verification and isolated builds
+### Stage 2E — Exact cutover and rollback map
 
-**Goal:** Re-run all prerequisite evidence after durable retirement and build only the protected core images without changing production execution.
+**Goal:** Capture the exact live Docker ownership needed to construct a guarded cutover and byte-accurate rollback without changing production.
 
 Required evidence:
 
-1. Runtime endpoints remain HTTP 200 before and after build.
-2. Release `.env` remains local, regular, mode `0600`, and hash-matched.
-3. Release source marker, Compose hash, and six-service manifest match the approved release.
-4. Recovery `.env`, Compose copies, and R3 unit-file backups remain present.
-5. All four retired units remain persistent `masked` and inactive.
-6. Canonical Conductor, Guardian, Sentinel, and Juris remain active/running; Watchmen status remains reachable.
-7. Only `baby-api`, `dominion-web`, and `wix-agent` images are built under isolated Stage-2D-R4 tags.
-8. Running container inventory remains identical and canonical restart deltas remain zero.
+1. Exact live image references and image IDs for Baby API, Baby Logger, Dominion Web, and Wix Agent.
+2. Compose project/service/config labels for each live container.
+3. Published-port bindings, restart policy, health status, and container state.
+4. Bind mounts, named volumes, read/write mode, and attached Docker networks.
+5. Exact IDs for the three approved isolated R4 images.
+6. Collision analysis for names, ports, volumes, and networks.
+7. A rollback manifest containing metadata only—never environment values, secret contents, logs, or customer data.
 
-## Blocked until Stage 2D-R4 evidence exists
+## Blocked until Stage 2E evidence exists
 
 - Switching the live Compose project to the canonical release.
 - Resetting, deleting, or renaming the old VM checkout.
 - Starting browser-agents or Obsidian.
-- Replacing production images, volumes, networks, or environment variables.
 - Production publishing.
 - Live trading.
 - Surplus claimant contact or filing.

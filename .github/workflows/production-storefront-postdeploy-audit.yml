@@ -1,0 +1,298 @@
+name: Production Storefront Post-Deploy Audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-storefront-postdeploy-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      REPORT_DIR: /tmp/dominion-storefront-postdeploy-audit
+      REPORT_FILE: /tmp/dominion-storefront-postdeploy-audit/result.json
+      REPORT_BRANCH: audit/storefront-postdeploy-20260722
+      REPORT_PATH: governance/storefront_postdeploy_audit.json
+      ARTIFACT_NAME: dominion-storefront-postdeploy-audit
+
+    steps:
+      - name: Publish run pointer
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: context.sha });
+            }
+            const report = {
+              alignment_stage: 'storefront-postdeploy-audit',
+              status: 'started',
+              workflow: {
+                run_id: context.runId,
+                run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                source_sha: context.sha,
+                artifact_name: process.env.ARTIFACT_NAME,
+              },
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: storefront post-deploy ${context.runId} started`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Checkout exact audit source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate audit source
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/runtime/wix_storefront_layout_audit.py
+
+      - name: Prepare verified public routing
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 "$REPORT_DIR"
+          cat > "$REPORT_DIR/dominion.json" <<'JSON'
+          {
+            "published_urls": [{"primary": true, "url": "https://dominionhealing.org/"}],
+            "site_properties": {"businessName": "Dominion Healing"},
+            "sample_products": [],
+            "fallback_candidates": ["https://dominionhealing.org/"],
+            "collection_errors": [],
+            "safety": {"public_metadata_only": true, "wix_mutations_performed": false}
+          }
+          JSON
+          cat > "$REPORT_DIR/voltedge.json" <<'JSON'
+          {
+            "published_urls": [{"primary": true, "url": "https://www.voltedgegoods.com/"}],
+            "site_properties": {
+              "businessName": "VoltEdge Electronics",
+              "siteDisplayName": "VoltEdge Electronics",
+              "language": "en",
+              "paymentCurrency": "USD"
+            },
+            "sample_products": [
+              {"category": "charging", "slug": "esoulk-black-18w-pd-charger-amp-usb-a-3ft-c-to-iphone-cable"},
+              {"category": "case", "slug": "samsung-s10e-triangle-package-case"},
+              {"category": "audio", "slug": "portable-wireless-bluetooth-speaker-with-tws-function-rechargeable-bluetooth-s"}
+            ],
+            "fallback_candidates": ["https://www.voltedgegoods.com/"],
+            "collection_errors": [],
+            "safety": {"public_metadata_only": true, "wix_mutations_performed": false}
+          }
+          JSON
+          chmod 600 "$REPORT_DIR"/*.json
+
+      - name: Install private visual audit browser
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Audit Dominion Healing desktop and mobile
+        run: |
+          set +e
+          python3 scripts/runtime/wix_storefront_layout_audit.py \
+            --metadata "$REPORT_DIR/dominion.json" \
+            --output "$REPORT_DIR/dominion"
+          RC=$?
+          set -e
+          echo "DOMINION_RC=$RC" >> "$GITHUB_ENV"
+
+      - name: Audit VoltEdge Wix storefront desktop and mobile
+        run: |
+          set +e
+          python3 scripts/runtime/wix_storefront_layout_audit.py \
+            --metadata "$REPORT_DIR/voltedge.json" \
+            --output "$REPORT_DIR/voltedge"
+          RC=$?
+          set -e
+          echo "VOLTEDGE_RC=$RC" >> "$GITHUB_ENV"
+
+      - name: Build terminal audit report
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["REPORT_DIR"])
+
+          def read_summary(name):
+              path = root / name / "public_summary.json"
+              if not path.is_file():
+                  return {"audit": "wix-storefront-layout-wording", "success": False, "summary": {}, "safety": {}}
+              return json.loads(path.read_text(encoding="utf-8"))
+
+          dominion = read_summary("dominion")
+          voltedge = read_summary("voltedge")
+          ds = dominion.get("summary") or {}
+          vs = voltedge.get("summary") or {}
+          required = ds.get("required_link_presence") or {}
+          dominion_links_ok = (
+              required.get("about") is True
+              and required.get("contact") is True
+              and required.get("shipping") is True
+              and required.get("privacy") is True
+              and required.get("terms") is True
+              and (required.get("return") is True or required.get("refund") is True)
+          )
+          dominion_ok = (
+              dominion.get("success") is True
+              and os.environ.get("DOMINION_RC") == "0"
+              and dominion_links_ok
+              and (ds.get("issue_counts") or {}).get("http_error", 0) == 0
+          )
+          voltedge_ok = (
+              voltedge.get("success") is True
+              and os.environ.get("VOLTEDGE_RC") == "0"
+              and int(vs.get("sampled_product_pages") or 0) >= 3
+              and (vs.get("issue_counts") or {}).get("http_error", 0) == 0
+          )
+          success = dominion_ok and voltedge_ok
+          report = {
+              "alignment_stage": "storefront-postdeploy-audit",
+              "status": "success" if success else "failed",
+              "success": success,
+              "dominion": dominion,
+              "voltedge": voltedge,
+              "gates": {
+                  "dominion_required_links_present": dominion_links_ok,
+                  "dominion_public_pages_healthy": dominion_ok,
+                  "voltedge_three_product_pages_healthy": voltedge_ok,
+              },
+              "errors": [] if success else ["postdeploy_visual_gate_failed"],
+              "next_gate": "Human review of private screenshots and wording findings; then synthetic contact-form verification before activating direct digital checkout links",
+              "safety": {
+                  "public_pages_only": True,
+                  "forms_submitted": False,
+                  "buttons_clicked": False,
+                  "cart_changed": False,
+                  "checkout_started": False,
+                  "wix_mutations_performed": False,
+                  "products_changed": False,
+                  "inventory_changed": False,
+                  "orders_changed": False,
+                  "customer_data_collected": False,
+                  "order_data_collected": False,
+                  "secret_values_collected": False,
+                  "environment_values_collected": False,
+                  "vm_connected": False,
+                  "screenshots_private_artifact_only": True,
+              },
+          }
+          Path(os.environ["REPORT_FILE"]).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+          chmod 600 "$REPORT_FILE"
+
+      - name: Upload private dual-site screenshots and reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: |
+            ${{ env.REPORT_FILE }}
+            ${{ env.REPORT_DIR }}/dominion/private_report.json
+            ${{ env.REPORT_DIR }}/dominion/screenshots/
+            ${{ env.REPORT_DIR }}/voltedge/private_report.json
+            ${{ env.REPORT_DIR }}/voltedge/screenshots/
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 9
+
+      - name: Publish terminal post-deployment audit
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            let report;
+            try {
+              report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, 'utf8'));
+            } catch (error) {
+              report = { alignment_stage: 'storefront-postdeploy-audit', status: 'report_missing', success: false };
+            }
+            report.workflow = {
+              run_id: context.runId,
+              run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              source_sha: context.sha,
+              artifact_name: process.env.ARTIFACT_NAME,
+              job_status: report.success ? 'success' : 'failure',
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `audit: storefront post-deploy ${context.runId} ${report.status || 'unknown'}`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Enforce public-only post-deployment audit
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path(os.environ["REPORT_FILE"])
+          if not path.is_file():
+              raise SystemExit("post-deployment audit report missing")
+          report = json.loads(path.read_text(encoding="utf-8"))
+          if report.get("success") is not True:
+              raise SystemExit("post-deployment storefront audit failed")
+          safety = report.get("safety") or {}
+          forbidden = (
+              "forms_submitted", "buttons_clicked", "cart_changed", "checkout_started",
+              "wix_mutations_performed", "products_changed", "inventory_changed", "orders_changed",
+              "customer_data_collected", "order_data_collected", "secret_values_collected",
+              "environment_values_collected", "vm_connected",
+          )
+          if any(safety.get(key) for key in forbidden):
+              raise SystemExit("post-deployment audit safety contract failed")
+          PY
+
+      - name: Remove temporary runner material
+        if: ${{ always() }}
+        run: |
+          set -eu
+          rm -rf "$REPORT_DIR"

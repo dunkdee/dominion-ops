@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "dominion-web-read-only-diagnosis",
+  "status": "started",
+  "workflow": {
+    "run_id": 29887587272,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29887587272",
+    "source_sha": "e7f1aed5f95d2dc5bc9553b8b07a05eaaed45836",
+    "artifact_name": "dominion-web-readonly-diagnosis"
+  }
+}

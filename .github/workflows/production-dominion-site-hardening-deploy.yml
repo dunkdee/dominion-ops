@@ -1,0 +1,258 @@
+name: Production Dominion Site Hardening Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type exactly DEPLOY_DOMINION_SITE_HARDENING
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-dominion-site-hardening-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      REPORT_DIR: /tmp/dominion-site-hardening-deploy
+      REPORT_FILE: /tmp/dominion-site-hardening-deploy/result.json
+      REMOTE_BASE: /tmp/dominion-site-hardening-deploy-${{ github.run_id }}-${{ github.run_attempt }}
+      REPORT_BRANCH: audit/dominion-site-hardening-deploy-20260722
+      REPORT_PATH: governance/dominion_site_hardening_deploy.json
+      ARTIFACT_NAME: dominion-site-hardening-deploy
+
+    steps:
+      - name: Validate human authorization
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirm }}" = "DEPLOY_DOMINION_SITE_HARDENING"
+
+      - name: Publish run pointer
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: context.sha });
+            }
+            const report = {
+              alignment_stage: 'dominion-site-hardening-deploy',
+              status: 'started',
+              workflow: {
+                run_id: context.runId,
+                run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                source_sha: context.sha,
+                artifact_name: process.env.ARTIFACT_NAME,
+              },
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `deploy: Dominion site hardening ${context.runId} started`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Checkout exact deployment source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate reviewed source and deployment syntax
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/runtime/deploy_dominion_site_hardening.py
+          for file in index.html store.html site.css shipping.html returns.html privacy.html terms.html; do
+            test -s "apps/site-fixes/$file"
+          done
+          grep -Fq 'https://www.voltedgegoods.com/' apps/site-fixes/index.html
+          grep -Fq 'https://www.voltedgegoods.com/' apps/site-fixes/store.html
+          ! grep -R -E 'STRIPE_(BOOK|PROTOCOL|LEGAL|MEMBERSHIP|BLUEPRINT)_LINK' apps/site-fixes
+
+      - name: Configure strict SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Package reviewed site files
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 "$REPORT_DIR"
+          tar -C apps/site-fixes -cf "$REPORT_DIR/site-hardening.tar" \
+            index.html store.html site.css shipping.html returns.html privacy.html terms.html
+          chmod 600 "$REPORT_DIR/site-hardening.tar"
+
+      - name: Deploy reviewed files with automatic rollback
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            scripts/runtime/deploy_dominion_site_hardening.py \
+            "$VM_USER@$VM_HOST:$REMOTE_BASE.py"
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            "$REPORT_DIR/site-hardening.tar" \
+            "$VM_USER@$VM_HOST:$REMOTE_BASE.tar"
+          set +e
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            "$VM_USER@$VM_HOST" \
+            "set -e; umask 077; mkdir -p '$REMOTE_BASE/source'; chmod 700 '$REMOTE_BASE' '$REMOTE_BASE/source'; tar -xf '$REMOTE_BASE.tar' -C '$REMOTE_BASE/source'; chmod 700 '$REMOTE_BASE.py'; set +e; SITE_SOURCE_DIR='$REMOTE_BASE/source' DOMINION_SITE_WEBROOT=\"\$HOME/aura-ecosystem/agency-website\" GITHUB_RUN_ID='${{ github.run_id }}' GITHUB_RUN_ATTEMPT='${{ github.run_attempt }}' python3 '$REMOTE_BASE.py'; RC=\$?; rm -rf '$REMOTE_BASE' '$REMOTE_BASE.py' '$REMOTE_BASE.tar'; exit \$RC" \
+            > "$REPORT_FILE" 2> "$REPORT_DIR/remote.stderr"
+          RC=$?
+          set -e
+          if ! python3 -m json.tool "$REPORT_FILE" >/dev/null 2>&1; then
+            printf '%s\n' '{"alignment_stage":"dominion-site-hardening-deploy","status":"report_parse_failed","success":false}' > "$REPORT_FILE"
+            RC=99
+          fi
+          chmod 600 "$REPORT_FILE"
+          echo "DEPLOY_RC=$RC" >> "$GITHUB_ENV"
+
+      - name: Upload private deployment report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.REPORT_FILE }}
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
+
+      - name: Publish terminal deployment result
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_RESULT_CODE: ${{ env.DEPLOY_RC }}
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REPORT_BRANCH;
+            const path = process.env.REPORT_PATH;
+            const resultCode = process.env.DEPLOY_RESULT_CODE;
+            const terminalStatus = resultCode === '0' ? 'success' : 'failure';
+            let report;
+            if (fs.existsSync(process.env.REPORT_FILE)) {
+              try {
+                report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, 'utf8'));
+              } catch (error) {
+                report = { alignment_stage: 'dominion-site-hardening-deploy', status: 'report_parse_failed', success: false };
+              }
+            } else {
+              report = { alignment_stage: 'dominion-site-hardening-deploy', status: 'report_missing', success: false };
+            }
+            report.workflow = {
+              run_id: context.runId,
+              run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              source_sha: context.sha,
+              artifact_name: process.env.ARTIFACT_NAME,
+              run_returncode: resultCode || null,
+              job_status: terminalStatus,
+            };
+            const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `deploy: Dominion site hardening ${context.runId} ${terminalStatus}`,
+              content,
+              ...(sha ? { sha } : {}),
+            });
+
+      - name: Enforce guarded deployment result
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["REPORT_FILE"])
+          if not path.is_file():
+              raise SystemExit("deployment report missing")
+          report = json.loads(path.read_text(encoding="utf-8"))
+          if report.get("success") is not True:
+              raise SystemExit("Dominion site hardening deployment failed")
+          if report.get("verified_wix_url") != "https://www.voltedgegoods.com/":
+              raise SystemExit("verified Wix routing contract failed")
+          if report.get("containers_unchanged") is not True:
+              raise SystemExit("container inventory changed")
+          if len(report.get("files") or []) != 7:
+              raise SystemExit("deployment did not target exactly seven reviewed files")
+          rollback = report.get("rollback") or {}
+          if rollback.get("performed"):
+              raise SystemExit("deployment required rollback")
+          if any(row.get("status") != 200 or row.get("marker_present") is not True for row in report.get("public_after") or []):
+              raise SystemExit("public page validation failed")
+          if any(row.get("status") != 200 for row in report.get("protected_health_after") or []):
+              raise SystemExit("protected service health failed")
+          safety = report.get("safety") or {}
+          if safety.get("site_files_changed") is not True or safety.get("site_files_changed_count") != 7:
+              raise SystemExit("static file change contract failed")
+          if safety.get("only_reviewed_static_files_targeted") is not True:
+              raise SystemExit("deployment scope violation")
+          forbidden = (
+              "wix_mutations_performed", "products_changed", "inventory_changed",
+              "orders_changed", "customer_data_collected", "order_data_collected",
+              "secret_values_collected", "environment_values_collected", "raw_logs_collected",
+              "containers_changed", "databases_changed", "networks_changed", "volumes_changed",
+              "dns_changed", "caddy_changed",
+          )
+          if any(safety.get(key) for key in forbidden):
+              raise SystemExit("deployment safety contract failed")
+          PY
+
+      - name: Remove temporary runner material
+        if: ${{ always() }}
+        run: |
+          set -eu
+          rm -rf "$REPORT_DIR"
+          rm -f ~/.ssh/id_vm ~/.ssh/known_hosts

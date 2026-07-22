@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "wix-catalog-description-proposal-v2",
+  "status": "started",
+  "workflow": {
+    "run_id": 29891782530,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29891782530",
+    "source_sha": "0aaafada4b396542f179040edd9bc7a6824ff192",
+    "artifact_name": "dominion-wix-catalog-description-proposal-v2"
+  }
+}

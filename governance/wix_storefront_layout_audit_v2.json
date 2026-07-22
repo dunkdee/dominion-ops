@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "wix-storefront-layout-audit-v2",
+  "status": "started",
+  "workflow": {
+    "run_id": 29929384854,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29929384854",
+    "source_sha": "66a533613e578c27086d87872b66447782919a14",
+    "artifact_name": "dominion-wix-storefront-layout-audit-v2"
+  }
+}

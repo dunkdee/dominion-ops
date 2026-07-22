@@ -1,10 +1,664 @@
 {
   "alignment_stage": "wix-store-read-only-audit",
-  "status": "started",
+  "errors": [
+    "protected_health_failed_before",
+    "protected_health_failed_after"
+  ],
+  "generated_at": "2026-07-22T02:54:07.489707+00:00",
+  "manual_verification_still_required": [
+    "published storefront pages and navigation",
+    "business contact identity shown to customers",
+    "shipping regions, rates, and delivery estimates",
+    "return, refund, warranty, privacy, and terms pages",
+    "enabled payment methods and a Wix owner test order",
+    "exact supplier facts and fulfillment variant mappings"
+  ],
+  "production_wix": {
+    "compose_project": null,
+    "compose_service": null,
+    "container_id": "f0319cf37704efcd92de809994673620c77e3850ec0106551340f3ad2e2859b5",
+    "exists": true,
+    "health": "healthy",
+    "image_id": "sha256:a5a7deff7623eac93fe40adf1c96a65e802e1c50a92bfe67e1f284a960efb0fd",
+    "image_reference": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+    "name": "wix-agent",
+    "restart_count": null,
+    "running": true,
+    "state": "running"
+  },
+  "protected_health_after": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": false,
+      "status": null
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "protected_health_before": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": false,
+      "status": null
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "safety": {
+    "containers_changed": false,
+    "customer_data_collected": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "environment_values_collected": false,
+    "inventory_changed": false,
+    "order_identifiers_collected": false,
+    "orders_changed": false,
+    "products_changed": false,
+    "raw_logs_collected": false,
+    "secret_values_collected": false,
+    "volumes_changed": false,
+    "wix_mutations_performed": false
+  },
+  "status": "failed",
+  "store": {
+    "blockers": [],
+    "catalog": {
+      "status": "ok",
+      "version": "v3"
+    },
+    "catalog_audit": {
+      "catalog_version": "v3",
+      "orders": {
+        "details_collected": false,
+        "unfulfilled_count": 0
+      },
+      "store_audit": {
+        "audited_at": "2026-07-22T02:54:08.697050+00:00",
+        "pages": {
+          "error": "Wix editor page creation is not available through the documented site-level REST API; verify published pages in the Wix editor"
+        },
+        "products": {
+          "need_description_update": 94,
+          "total": 94,
+          "weak_products": [
+            {
+              "desc_chars": 0,
+              "id": "2c484de1-a314-4ba5-9481-7915dd4608c5",
+              "name": "Esoulk Black 18W PD Charger & USB-A 3ft C To iPhone Cable"
+            },
+            {
+              "desc_chars": 0,
+              "id": "56d20892-25ec-4dad-bed0-68c54b5c07dd",
+              "name": "Mini Projector 4K 1080P Support, Portable Projector WiFi6 BT 5.0 Android 11, Sma"
+            },
+            {
+              "desc_chars": 0,
+              "id": "f4d98e9d-ea3d-4b3e-836a-5e469e166177",
+              "name": "iPhone 11 Pro Glitter TPU Bumper Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "09ecaf7f-9054-48d4-a7c6-9071b872cbd1",
+              "name": "Portable Wireless Bluetooth Speaker with TWS Function - Rechargeable Bluetooth S"
+            },
+            {
+              "desc_chars": 0,
+              "id": "e602dd8e-c1a4-4344-82e6-26ebe40cb14b",
+              "name": "Samsung S21/S30 Plus 6.8 inch Vogue Glitter Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "80291854-f000-41d3-a5cc-f9ff87cfeb6c",
+              "name": "WiFi Signal Amplifier 5G WiFi Repeater 2.4G Wi-Fi Range Extender Internet Booste"
+            },
+            {
+              "desc_chars": 0,
+              "id": "dbbcaa33-e143-4660-a238-d3182aa1701e",
+              "name": "Strong Magnetic 360° Rotation Mag Safe Air Vent Car Mount Dashboard Phone Holder"
+            },
+            {
+              "desc_chars": 0,
+              "id": "0951cafe-1669-4e01-a8bf-7ca5cdc0e51c",
+              "name": "Samsung S10E Triangle Package Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "96bda890-ce49-419a-a814-35c77207d965",
+              "name": "Samsung A01 ID Card Holder Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "c0d33454-aa6b-48ec-a46f-f820eed29921",
+              "name": "Esoulk 5ft Faster Speed Charging Cable For IOS"
+            },
+            {
+              "desc_chars": 0,
+              "id": "c17c23a0-704e-43d8-ac23-558447df9507",
+              "name": "Aluminium Motorcycle Bike Cell Phone Holder Bicycle GPS Handlebar Mount"
+            },
+            {
+              "desc_chars": 0,
+              "id": "fb420ee8-03dc-47b0-bef1-97b3c8d55364",
+              "name": "Wireless Security Camera 1080P Night Vision, Motion Detection, Activity Alert, D"
+            },
+            {
+              "desc_chars": 0,
+              "id": "f27d8c4d-9a8e-4052-b687-bb581ef42e22",
+              "name": "New Bluetooth 5.1 Headset Wireless Earbuds Earphones Stereo Headphones Ear Hook"
+            },
+            {
+              "desc_chars": 0,
+              "id": "8e80c6a7-3673-4b99-b3dd-8e9521058a7c",
+              "name": "iPhone 11 PRO Folio Wallet Premium Detachable case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "6ec0d9fd-2062-4515-965f-e6748ad00bf8",
+              "name": "Wood Phone Docking Station Natural Ash Phone Key Holder Wallet Watch Stand Gift"
+            },
+            {
+              "desc_chars": 0,
+              "id": "a3e061ca-6b55-4abe-82dd-5340c5c1de22",
+              "name": "Folding Camera Smart Selfie 4k Professional Mini Rc Drone"
+            },
+            {
+              "desc_chars": 0,
+              "id": "16b42c8c-990f-441b-aa30-cda2bb408bc8",
+              "name": "Portable Outdoor Waterproof Bluetooth Speaker"
+            },
+            {
+              "desc_chars": 0,
+              "id": "97b4835a-005b-49f2-86ee-29fbf443cd7b",
+              "name": "Samsung Galaxy S10 Triangle Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "2a386591-bfe7-41ac-a2c7-266ef30156f3",
+              "name": "5 USB Port Super Fast Car Charger Adapter For iPhone Samsung Android Cell Phone"
+            },
+            {
+              "desc_chars": 0,
+              "id": "4411df07-8ae2-47db-8ac9-0b2c8054ac0b",
+              "name": "External CD DVD Drive USB 3.0 Writer Burner Player for PC Laptop Windows 11 10"
+            },
+            {
+              "desc_chars": 0,
+              "id": "b3c9797b-014c-46ff-a058-852b61b92677",
+              "name": "THUNDERBOLT 3 USB TYPE-C HUB DOCK FOR ANDROID PHONE OR TABLET"
+            },
+            {
+              "desc_chars": 0,
+              "id": "ed8e8fa4-8480-49f1-86e9-1c8d3c8ed9b9",
+              "name": "Sleek Guard iPhone 12 Case – 5.4 Inch Cover"
+            },
+            {
+              "desc_chars": 0,
+              "id": "ee3b2521-ca3b-401a-81ba-66a82a36a968",
+              "name": "iPhone 11 Pro Lux Multi Card Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "9473f443-8fa3-45e6-ad3d-a13fdeb7d85d",
+              "name": "Karaoke Machine for Kids - Bluetooth Speaker with 2 Microphone - Portable Kids K"
+            },
+            {
+              "desc_chars": 0,
+              "id": "1550b360-d391-4107-8e47-8db323515be9",
+              "name": "Smartphone 0.45X Super Wide Angle Lens with Macro Attachment"
+            },
+            {
+              "desc_chars": 0,
+              "id": "51c99f9c-baaf-4821-b89c-2071755382b0",
+              "name": "iPhone 12 5.4\" Diamond Electroplated Hybrid Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "4fe8eb60-e704-4b20-bd0f-65f9e13e5ddb",
+              "name": "WiFi Mini Camera – Wireless Smart Security Cam"
+            },
+            {
+              "desc_chars": 0,
+              "id": "651b5736-6e09-4b3b-a503-dd7e13d39070",
+              "name": "Esoulk 12W 2.4A Dual USB Travel Wall Charger With 5FT Type-C Charging Cable"
+            },
+            {
+              "desc_chars": 0,
+              "id": "a3cd83b7-e96c-4f42-9880-e43b4e96d400",
+              "name": "Galaxy A51 5G / S20 FE Black edged Tempered Glass"
+            },
+            {
+              "desc_chars": 0,
+              "id": "a85540ff-1402-4459-8f40-85d549e697c7",
+              "name": "Emergency  Radio Crank Solar Hand Weather 1000mAh Power Bank Charger Flash Light"
+            },
+            {
+              "desc_chars": 0,
+              "id": "7b0a2696-ed9d-4fa6-8af4-0329935b64f7",
+              "name": "Screen Protector For iPad Pro 11 Tempered"
+            },
+            {
+              "desc_chars": 0,
+              "id": "439a8b35-7f12-41ae-9246-a1212e81edfc",
+              "name": "5-50x LITHIUM BATTERY 3V CR2032 CR 2032 BR2032 DL2032 Remote Button Cell Watch"
+            },
+            {
+              "desc_chars": 0,
+              "id": "85576a1e-9d91-4f05-8224-bff83dfaf7c7",
+              "name": "Waterproof Solar Charging 10000mAh Battery Backup"
+            },
+            {
+              "desc_chars": 0,
+              "id": "be0b8645-b7e9-44ac-9aec-53851174e291",
+              "name": "Esoulk Black 18W PD Fast Charger Wall & 5FT C To 8Pin Cable For iPhone 12/11"
+            },
+            {
+              "desc_chars": 0,
+              "id": "b4b0038b-dedb-422a-946b-f5d6cf3c7ca4",
+              "name": "Wireless Bluetooth 5.0 Headphones Headset Over-Ear FM Radio MIC Foldable TF Card"
+            },
+            {
+              "desc_chars": 0,
+              "id": "b33bd304-27d1-4782-a523-5a2521de9b15",
+              "name": "Esoulk 3M [10ft] Nylon Fabric Tangle-Free Male To Male 3.5mm Auxiliary Cable Bla"
+            },
+            {
+              "desc_chars": 0,
+              "id": "56d392f1-599d-436a-88ba-eacba33ff9fc",
+              "name": "External DVD Drive USB CD DVD 30 Burner Writer Rewriter For MacBook Laptops"
+            },
+            {
+              "desc_chars": 0,
+              "id": "5e96d5e2-e637-4e33-9b3f-2be981044c9a",
+              "name": "Triangle iPhone 12 PRO MAX 6.7 Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "4f6c61d5-a6a7-4046-ab99-7dce88467b7e",
+              "name": "iPhone 11 PRO Glitter Hybrid Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "61178068-8b89-4524-af3f-1f90f6a7efd1",
+              "name": "Esoulk 18W PD Fast Charger Wall & 5FT C To C Cable"
+            },
+            {
+              "desc_chars": 0,
+              "id": "7dd306dc-651e-4b1d-b713-dedbfd621068",
+              "name": "Square Case Cow Design for iPhone 13 Pro Max"
+            },
+            {
+              "desc_chars": 0,
+              "id": "89e6474e-4bac-4392-9571-0d328f77581d",
+              "name": "Esoulk 5ft Faster Speed Charging Cable Type-C"
+            },
+            {
+              "desc_chars": 0,
+              "id": "fae82eb2-9619-4490-b972-5bf11b41321b",
+              "name": "Portable Solar Power Bank with Built-in Cables"
+            },
+            {
+              "desc_chars": 0,
+              "id": "21920e8e-bafe-4967-8f25-9f084a1dc85d",
+              "name": "V9 Micro USBCar Charger Combo"
+            },
+            {
+              "desc_chars": 0,
+              "id": "61e323b1-aa97-4717-95d4-cb6650cd7d12",
+              "name": "Samsung S10 Triangle Package Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "efafda36-30e3-4210-aab0-dcfae561c209",
+              "name": "Galaxy NOTE 10 Plus Triangle Package Color Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "ce534f44-b3b5-49fc-bb3e-ca631862c562",
+              "name": "Quantum Anti Radiation Shield 5G EMF Protection - Phones Laptops - 12 Stickers"
+            },
+            {
+              "desc_chars": 0,
+              "id": "025c70e4-1e3a-4f81-b731-4d1261a0b238",
+              "name": "Adjustable Universal Tablet Stand Desktop Holder Mount Mobile Phone iPad iPhone"
+            },
+            {
+              "desc_chars": 0,
+              "id": "a2e8110d-e18a-40f3-8bcd-5c1f99561ce0",
+              "name": "iPhone 12 5.4 TPU Frame with Soft Texture Button"
+            },
+            {
+              "desc_chars": 0,
+              "id": "598815f5-70f0-44b1-bea4-86a0caf301d9",
+              "name": "Samsung Galaxy Note 20 Plus Luxury Design Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "51ffcbdc-a2cc-4a39-9488-e78f395cb384",
+              "name": "iPhone 11 Pro Dual Hybrid Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "006c87bc-d698-47e5-96e7-d4b5d1f342aa",
+              "name": "Ip65 Waterproof Portable Wireless Solar Power Bank Panel Charger Solar Powerbank"
+            },
+            {
+              "desc_chars": 0,
+              "id": "4f994460-6a21-426d-91d3-98b0686d78f8",
+              "name": "Samsung Note 20 5G Gradient Shimmering Ring Stand Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "6ca9b60f-690e-4c54-b58e-3a62de6f7b02",
+              "name": "Thunderbolt 3FT USB C To C Fast Charging Cable"
+            },
+            {
+              "desc_chars": 0,
+              "id": "bda607cf-f19d-4141-8903-0995f14c57bb",
+              "name": "Lenovo M20 Mini Tiny Wired 3D Optical Mouse"
+            },
+            {
+              "desc_chars": 0,
+              "id": "358fea67-8e10-41c0-89f5-efd68640f753",
+              "name": "2-In-1 Smart Watch & Earbuds Fitness True Wireless Combo"
+            },
+            {
+              "desc_chars": 0,
+              "id": "7921a7bb-8838-4a70-ac2c-f635a0962545",
+              "name": "iPhone 11 Pro Dual Max Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "817abcc0-7386-4573-b5a7-03ec77d3c444",
+              "name": "Esoulk 2A Heavy Duty Braided USB Lightning Cable 2M (6.6f) Black"
+            },
+            {
+              "desc_chars": 0,
+              "id": "1d324383-a825-4a11-b900-b011d0bfab9c",
+              "name": "iPhone 11 Pro High-Quality Carbon/Black Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "2720fac1-8359-4519-a219-16f9bc4f50d1",
+              "name": "Samsung Note 20 Ultra 5G Gradient Shimmering Ring Stand Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "ff7ca81b-c033-455a-bc28-bce3e9720241",
+              "name": "Nylon Braided USB Cable For IPhone"
+            },
+            {
+              "desc_chars": 0,
+              "id": "aac3bbb1-8b9c-48c2-94da-d1aef6c8fa65",
+              "name": "iPhone 12 5.4 Two Tone Diamond Glitter Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "09f8da64-3f8b-4524-ac41-ad347889b68c",
+              "name": "2-Pack For Baofeng UV5R UV-82 144/430MHz Dual Band Antenna NA771 SMA Female 10W"
+            },
+            {
+              "desc_chars": 0,
+              "id": "433b6113-ca4b-4f0c-a862-6a8969318096",
+              "name": "Risebass Portable Karaoke Machine with Microphone - Home Karaoke System with Par"
+            },
+            {
+              "desc_chars": 0,
+              "id": "ee878407-dc1f-455f-b0dd-e50d40e37bee",
+              "name": "Creative Q Light Analog Sunrise Digital Display Alarm Clock Bluetooth Audio Inte"
+            },
+            {
+              "desc_chars": 0,
+              "id": "e799a72f-40aa-45c2-84e7-92192683a4ea",
+              "name": "USB C to IOS PD 18W 2.4A Charging Cable For Lightning adapter"
+            },
+            {
+              "desc_chars": 0,
+              "id": "67fc9e43-2b41-4819-be87-0e4050f8e803",
+              "name": "Electronic Computing Scale LCD Digital Commercial Food Produce Scales 30kg x 1g"
+            },
+            {
+              "desc_chars": 0,
+              "id": "dcaa52da-82df-4f12-9e66-6ff6120a0850",
+              "name": "Glitter Camera Protector for iPhone 15 6.1"
+            },
+            {
+              "desc_chars": 0,
+              "id": "79381e3a-0990-465a-9758-612777d95e23",
+              "name": "20000mAh External Battery Power Bank Dual USB With LED Flashlight"
+            },
+            {
+              "desc_chars": 0,
+              "id": "6d1b833f-5fb4-4689-ae44-706b42c40f02",
+              "name": "Bluetooth Mini GPS Tracking Air Key Tag Child Pet Finder Tracker Location Device"
+            },
+            {
+              "desc_chars": 0,
+              "id": "3e547758-a8b2-4b08-96f8-f935c0e37fe5",
+              "name": "FINOCLAY 2 Slime Pack Clear Crystal Slime & Cloud Slime Kit for Girls Boys Creat"
+            },
+            {
+              "desc_chars": 0,
+              "id": "9867f7ef-913c-4a3f-b1c7-a2e5f9aa6718",
+              "name": "Power Strip Surge Protector - 8 Outlets, 3 USB Ports & 1 USB-C Port"
+            },
+            {
+              "desc_chars": 0,
+              "id": "1f8ba1dc-f817-4d6f-adfc-215abf4c1b85",
+              "name": "WiFi Range Extender Internet Booster Network Router Wireless Signal Repeater"
+            },
+            {
+              "desc_chars": 0,
+              "id": "30005f6c-0970-410a-a89e-2500c2239721",
+              "name": "Wifi 6.5ft Endoscope Camera HD720P 8mm Lens USB Camera Cable Wireless Inspection"
+            },
+            {
+              "desc_chars": 0,
+              "id": "64424e74-af63-48d5-8132-23db9df4f8eb",
+              "name": "Samsung S20 Shimmering Ring Stand Case Cover"
+            },
+            {
+              "desc_chars": 0,
+              "id": "fa918922-c612-45bb-a156-180aec5d6e53",
+              "name": "Triangle iPhone 12 Max Case – 6.1 Inch Cover"
+            },
+            {
+              "desc_chars": 0,
+              "id": "2dd222d5-242f-4f32-86b4-fff15a6c4e5b",
+              "name": "Octopus Tripod Universal Adjustable Stand Phone Holder for iPhone Camera"
+            },
+            {
+              "desc_chars": 0,
+              "id": "11e10725-0657-4405-94e8-7392b44315ad",
+              "name": "Samsung S21/S30 Ultra 7.1 inch Vogue Glitter Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "b535296e-a260-4a99-92c0-40c08b3523ff",
+              "name": "iPhone 12 5.4\" Chrome Glitter Hybrid Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "d4eb8432-073b-48bb-9995-5f6a5c94ff12",
+              "name": "Wireless Gaming Earbuds"
+            },
+            {
+              "desc_chars": 0,
+              "id": "285be1c1-1e5f-432c-9429-c5095e400ed8",
+              "name": "Tempered Glass Screen Protector Lens Hydrogel For Samsung S23 S22 Ultra Plus USA"
+            },
+            {
+              "desc_chars": 0,
+              "id": "7361e125-1efc-4f09-b157-8ce53adca743",
+              "name": "Esoulk QI Certified 10W Wireless Charging Fast Charger Pad"
+            },
+            {
+              "desc_chars": 0,
+              "id": "7cdc87ce-f68a-4e0a-8bc8-cebca66ea12f",
+              "name": "Esoulk 3.3ft Nylon Braided USB Cable For Type-C"
+            },
+            {
+              "desc_chars": 0,
+              "id": "31ab3699-504b-468c-a314-c7e5737b6683",
+              "name": "Esoulk Black 18W PD Fast Charger & 3FT C To 8 Pin Cable"
+            },
+            {
+              "desc_chars": 0,
+              "id": "7a4bcc6f-f8ff-4cd4-8ea6-7931eca8ca6b",
+              "name": "Samsung Galaxy Note 20 Luxury Design Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "6a8303f4-315d-4988-ae35-349a4e5ee2ef",
+              "name": "128G SD Memory Card Ultra SDHC UHS-I 90MB/s, C10, U1, Full HD, SD Card"
+            },
+            {
+              "desc_chars": 0,
+              "id": "10354ce9-38bd-4470-9857-1962e70cc53a",
+              "name": "2024 Version R4 Gold Pro SDHC R4i For DS/3DS/2DS Revolution Cartridge + USB"
+            },
+            {
+              "desc_chars": 0,
+              "id": "458c0e35-0b79-4c4e-a975-50d49246750e",
+              "name": "RISEBASS Water Resistant Bluetooth Shower Speaker, Handsfree Portable Speakerpho"
+            },
+            {
+              "desc_chars": 0,
+              "id": "94cd8b05-10cc-4f88-a8fa-9bcb473a06bc",
+              "name": "Tempered Glass Screen Protector For iPad Pro 12.9 Sensitive Scratch Water Resist"
+            },
+            {
+              "desc_chars": 0,
+              "id": "f89f5af0-6dbc-4e41-9150-50734ce08c47",
+              "name": "Samsung S21/S30 Ultra 7.1\" Trendy Design Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "a335de27-f7d6-4902-8573-1a27ad2ebe97",
+              "name": "Retractable Car Charger 4 in 1 Fast Car Phone Charger 120W With USB Type C Cable"
+            },
+            {
+              "desc_chars": 0,
+              "id": "88b1437b-da0a-468f-91ca-e31becf350f3",
+              "name": "Samsung S21/S30 Plus 6.8\" Trendy Design Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "cd9b4501-d6fe-4d20-bfbb-d88e313f1d15",
+              "name": "Samsung Galaxy S10E Heavy Duty Case"
+            },
+            {
+              "desc_chars": 0,
+              "id": "07e0ad66-89b4-4a1c-8c6d-6e3dbf155751",
+              "name": "iPhone 12 5.4 TPU Bumper Ultra Clear Back Case"
+            }
+          ]
+        },
+        "store_settings": {
+          "error": "Checkout policy settings are not available through the documented Wix Stores REST API; verify them in the Wix dashboard"
+        }
+      },
+      "success": true
+    },
+    "database": {
+      "status": "ok"
+    },
+    "fulfillment": {
+      "mode": "record_only",
+      "variant_mapping": {
+        "entries": 0,
+        "status": "missing"
+      }
+    },
+    "health_status": 200,
+    "integrations_configured": {
+      "n8n_webhook": false,
+      "operator_token": true,
+      "wix_api_key": true,
+      "wix_site_id": true,
+      "zendrop_api_key": false
+    },
+    "readiness_status": 200,
+    "ready": true,
+    "service_status": "ok",
+    "version": "2.1.0"
+  },
+  "success": false,
   "workflow": {
     "run_id": 29887016849,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29887016849",
     "source_sha": "84f2b7c3d12921e276089a9477ec7e245c37e479",
-    "artifact_name": "dominion-wix-store-readonly-audit"
+    "artifact_name": "dominion-wix-store-readonly-audit",
+    "run_returncode": "1",
+    "job_status": "failure"
   }
 }

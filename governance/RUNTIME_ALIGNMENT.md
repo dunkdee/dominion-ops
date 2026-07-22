@@ -10,15 +10,16 @@
 **Stage-2D preflight veto:** run `29867278124`  
 **Stage-2D-R trace:** runs `29868756275`, `29869539712`  
 **Stage-2D-R3 persistent retirement:** run `29874133137`  
+**Stage-2D-R4 final preflight:** run `29879295855`  
 **Operating order:** Cash flow → Systems → Scale
 
 ## Executive determination
 
-The production VM is operational and the protected revenue core is stable. The duplicate restart loops are now durably contained: the retired Alchemist, Conductor, and Juris API units and the obsolete port healer are persistently masked after root-only local backups were created.
+The production VM is operational and the protected revenue core is stable. Duplicate restart loops are durably contained: the retired Alchemist, Conductor, and Juris API units and the obsolete port healer are persistently masked after root-only local backups were created.
 
-A clean immutable release from approved GitHub source exists beside the live system. Its Compose manifest validates, the local secret-bearing `.env` is preserved with mode `0600`, rollback copies exist, and production containers remained unchanged during all preparation, trace, and retirement operations.
+A clean immutable release from approved GitHub source exists beside the live system. Its Compose manifest validates, the local secret-bearing `.env` is preserved with mode `0600`, rollback copies exist, and the three protected core images have been built under isolated release tags.
 
-The ecosystem is **not yet cut over to unified deployment ownership**. One final independent gate-and-build preflight is required before a guarded cutover plan may be presented.
+Stage-2D-R4 passed every prerequisite gate. Production was not cut over and the running container inventory remained unchanged. The next required action is an exact cutover/rollback map of live container images, labels, ports, mounts, volumes, and networks before a guarded migration is authorized.
 
 No vertical may be promoted merely because code or a service exists. Promotion requires the exit gate in `governance/verticals.json`.
 
@@ -52,7 +53,7 @@ No vertical may be promoted merely because code or a service exists. Promotion r
 - The surplus scraper remains quarantined; the dashboard and review queue remain available.
 - Approval-gated publishers and their timers remain inactive.
 - Caddy, canonical Conductor, and Gemini are boot-enabled.
-- All protected canonical units recorded zero restart deltas over the Stage-2D-R3 90-second verification window.
+- All protected canonical units recorded zero restart deltas during R3 and R4 verification.
 - No rollback was required.
 
 ## Stage-2B verified deployment findings
@@ -79,15 +80,24 @@ No vertical may be promoted merely because code or a service exists. Promotion r
 
 The first Stage-2D preflight correctly failed closed because the retired APIs had reactivated. Runtime, secrets, deployment, rollback, Watchmen, and agent-runtime evidence passed, but the governance gate vetoed and isolated builds were skipped.
 
-Read-only traces established that:
-
-- Conductor scheduler and worker references were only `After=` ordering directives.
-- Their commands executed only `scheduler.py` and `worker.py`.
-- The healer's retired-unit names appeared in a stale comment.
-- No matching user cron entry was found.
-- The installed retired units used `Restart=always`, sustaining their own loops after any activation.
+Read-only traces established that scheduler and worker references were only ordering directives, the healer references were stale comments, no matching user cron entry existed, and the installed retired units' `Restart=always` policies sustained the loops after activation.
 
 Stage-2D-R3 replaced weak runtime containment with persistent, backed-up `/dev/null` masks. All protected services and HTTP checks remained healthy, every canonical restart delta was zero, and production containers were unchanged.
+
+## Stage-2D-R4 verified preflight
+
+- Runtime, secrets, deployment, rollback, governance, agent-runtime, build, and post-build-stability gates passed.
+- The deterministic Five Council recorded five passes.
+- Conductor, Guardian, Sentinel, and Juris remained active/running; Watchmen status returned HTTP 200.
+- Isolated images built successfully:
+  - `dominion-stage2d-r4-baby-api:latest`
+  - `dominion-stage2d-r4-dominion-web:latest`
+  - `dominion/wix-agent:stage2d-r4-10646094aa3a`
+- All four retired units remained masked and inactive.
+- All approval-gated publishing timers remained inactive and disabled.
+- Every protected canonical unit recorded a zero restart delta after the build.
+- Baby API, Wix, Dominion Web, n8n, Alpha Engine, and Conductor remained HTTP 200.
+- Production containers, networks, volumes, databases, and DNS were unchanged.
 
 ## Human-approval gates
 
@@ -103,9 +113,9 @@ The surplus vertical remains `research_only`. It may not autonomously contact cl
 
 ## Remaining Stage-2 reconciliation
 
-- Complete Stage-2D-R4 independent gates and isolated builds.
-- Build only Baby API, Dominion Web, and Wix Agent under isolated tags without changing running containers.
-- Define a guarded cutover and automatic rollback plan only after all R4 evidence passes.
+- Complete Stage-2E exact cutover/rollback mapping.
+- Construct a guarded migration using the exact current images, ports, mounts, volumes, networks, and Compose labels.
+- Preserve rollback containers and current image IDs before any production replacement.
 - Reconcile unmanaged n8n, database, SEO, and movie-generator containers into declared ownership without disrupting them.
 - Add resource limits to currently unlimited production containers.
 - Perform a restore test using non-production data.
@@ -129,8 +139,9 @@ The surplus vertical remains `research_only`. It may not autonomously contact cl
 - Deployment reconciliation map — complete.
 - Parallel immutable release preparation — complete.
 - Persistent retirement of legacy APIs and healer — complete.
-- Independent gate and isolated-build preflight — pending.
-- Guarded cutover and rollback verification — blocked pending preflight.
+- Independent gate and isolated-build preflight — complete.
+- Exact cutover and rollback map — active.
+- Guarded cutover and rollback verification — blocked pending Stage 2E map.
 
 ### Stage 3 — Prove vertical duties
 

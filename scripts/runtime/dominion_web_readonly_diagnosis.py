@@ -49,12 +49,14 @@ def command(args: list[str], timeout: int = 60) -> dict[str, Any]:
             "available": False,
             "returncode": None,
             "stdout": "",
+            "stderr": "",
             "stderr_type": type(exc).__name__,
         }
     return {
         "available": True,
         "returncode": result.returncode,
         "stdout": (result.stdout or "").strip(),
+        "stderr": (result.stderr or "").strip(),
         "stderr_type": None if not result.stderr else "present",
     }
 
@@ -155,7 +157,7 @@ def container_fingerprints() -> dict[str, dict[str, Any]]:
 def classify_logs(name: str) -> dict[str, Any]:
     """Return bounded signal booleans; never return raw log text."""
     result = command(["docker", "logs", "--tail", "120", name], timeout=30)
-    text = result.get("stdout", "").lower()
+    text = f"{result.get('stdout', '')}\n{result.get('stderr', '')}".lower()
     patterns = {
         "address_in_use": ("address already in use", "bind() failed", "port is already allocated"),
         "file_not_found": ("no such file or directory", "not found"),
@@ -168,7 +170,7 @@ def classify_logs(name: str) -> dict[str, Any]:
     }
     return {
         "available": result.get("returncode") == 0,
-        "nonempty": bool(text),
+        "nonempty": bool(text.strip()),
         "signals": {
             name_: any(pattern in text for pattern in candidates)
             for name_, candidates in patterns.items()

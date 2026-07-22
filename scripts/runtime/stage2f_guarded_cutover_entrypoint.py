@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Safety entrypoint for the Stage-2F guarded cutover engine.
 
-It adds three controls without duplicating the underlying cutover logic:
-1. stopped rollback containers are disconnected from the production network so
+It adds four controls without duplicating the underlying cutover logic:
+1. a failed old-container rename immediately restarts the original container;
+2. stopped rollback containers are disconnected from the production network so
    their old service aliases cannot compete with the new containers;
-2. rollback reconnects the exact service aliases before originals are started;
-3. target port bindings are treated as a hard container-health contract.
+3. rollback reconnects the exact service aliases before originals are started;
+4. target port bindings are treated as a hard container-health contract.
 """
 
 from __future__ import annotations
@@ -31,8 +32,18 @@ def binding_scope(host_ip):
 
 
 def guarded_command(args, *, cwd=None, timeout=300, env=None):
-    """Disconnect frozen rollback containers after restart is disabled."""
+    """Add rename recovery and rollback-network isolation."""
     result = _ORIGINAL_COMMAND(args, cwd=cwd, timeout=timeout, env=env)
+
+    if (
+        result.get("returncode") != 0
+        and len(args) == 4
+        and args[:2] == ["docker", "rename"]
+        and args[2] in engine.TARGETS
+        and "-rollback-stage2f-" in args[3]
+    ):
+        _ORIGINAL_COMMAND(["docker", "start", args[2]], timeout=90)
+
     if (
         result.get("returncode") == 0
         and len(args) == 4

@@ -4,26 +4,21 @@
 **Audit date:** July 22, 2026  
 **Rule:** No guessed Wix storefront or product URL may be deployed.
 
-## Audit evidence
+## Initial audit evidence
 
 Workflow run `29929384854` completed successfully and produced the private artifact `dominion-wix-storefront-layout-audit-v2`.
 
-The audit reviewed five public pages across desktop and mobile. The audited primary URL was `https://dominionhealing.org/`.
+The audit reviewed the custom Dominion Healing static site and exposed that the initial Wix product URLs had been constructed under the wrong domain.
 
-## Critical distinction
+## Initial live-site findings
 
-The audited domain is the custom Dominion Healing static site, not the Wix-published physical-product storefront. The initial three product URLs were constructed under `dominionhealing.org/product-page/...` and returned HTTP 404 because they were attached to the wrong domain.
-
-## Findings from the live static site
-
-1. `index.html` and `store.html` returned HTTP 200.
-2. Both pages lacked meta descriptions.
-3. The mobile homepage had 72 pixels of horizontal overflow.
-4. Public navigation/footer lacked About, Shipping, Returns/Refunds, Privacy, and Terms links.
-5. Five direct-purchase buttons contained unresolved Stripe placeholder paths.
-6. The static store promised a 30-day, no-questions-asked refund without linking an operational refund policy.
-7. Amazon-controlled book prices were shown as fixed site prices.
-8. The static page label “Store” did not distinguish digital products from the separate Wix physical-product catalog.
+1. The homepage and digital-store page lacked meta descriptions.
+2. The mobile homepage had 72 pixels of horizontal overflow.
+3. Public navigation/footer lacked About, Shipping, Returns/Refunds, Privacy, and Terms links.
+4. Five direct-purchase buttons contained unresolved Stripe placeholder paths.
+5. The static store promised a 30-day, no-questions-asked refund without an operational policy link.
+6. Amazon-controlled book prices were presented as fixed site prices.
+7. The static Store label did not distinguish Dominion digital products from the separate Wix physical-product catalog.
 
 ## Verified Wix routing
 
@@ -46,11 +41,33 @@ Three sampled visible products returned exact public pages on `www.voltedgegoods
 - Samsung S10E Triangle Package Case
 - Portable Wireless Bluetooth Speaker with TWS Function
 
-The mapping run made no Wix, product, inventory, order, database, network, volume, DNS, container, or secret change.
+The routing run made no Wix, product, inventory, order, database, network, volume, DNS, container, or secret change.
 
-## Reviewed source fixes committed
+## Production deployment result
 
-The following changes are committed on `main` but are not yet deployed:
+Guarded deployment run `29936230606` completed successfully. Terminal job `88978408083` concluded `success`.
+
+Exactly seven reviewed files were deployed to `/home/malachisingleton8/aura-ecosystem/agency-website`:
+
+- `index.html`
+- `store.html`
+- `site.css`
+- `shipping.html`
+- `returns.html`
+- `privacy.html`
+- `terms.html`
+
+The previous site state was backed up to:
+
+`/home/malachisingleton8/.dominion-recovery/site-hardening/29936230606-1`
+
+Backup directory mode: `0700`.
+
+All seven public probes returned HTTP 200 with the required live markers on the first attempt. Baby API, Wix Agent, Dominion Web, n8n, Alpha Engine, and Conductor remained HTTP 200 before and after deployment. Container inventory remained unchanged. Rollback was not required.
+
+The deployment changed only the seven reviewed static files. It made no Wix, product, inventory, order, customer-data, Caddy, DNS, database, network, volume, container, environment-secret, or raw-log change.
+
+## Deployed corrections
 
 - Responsive shared stylesheet with mobile overflow protection and keyboard focus states.
 - Homepage meta description, canonical URL, About section, clearer navigation, safer contact wording, and policy links.
@@ -58,47 +75,31 @@ The following changes are committed on `main` but are not yet deployed:
 - Verified VoltEdge Electronics navigation and calls to action using `https://www.voltedgegoods.com/`.
 - Explicit separation of Dominion Healing digital products from VoltEdge physical electronics.
 - Unresolved checkout links replaced with verified-link request paths instead of dead payment URLs.
-- Unsupported “no questions asked” guarantee removed.
+- Unsupported no-questions-asked guarantee removed.
 - Amazon prices replaced with Amazon-controlled pricing language.
 - Credit-dispute wording changed from a legal-compliance claim to FCRA/FDCPA-informed educational wording.
 - Shipping, Returns and Refunds, Privacy, and Terms pages added.
 
-Relevant commits:
-
-- Homepage base correction: `def447362db84043ea92b3191140216080c6e66b`
-- Digital-store base correction: `ea09c6d4d4a96c552967138d313a1845fdadfebd`
-- Responsive stylesheet: `503de3efbe4b89c9a2b6f4cf618bfa061c03f96e`
-- Shipping policy: `2f774221fbacc89422fc50eee9c4a645f0e36bf6`
-- Returns policy: `0f63e61b454adab29a36cc9ea4bb84446e7edeb8`
-- Privacy policy: `4202581b06b38c717e7ec1f7c62709538a23e2a7`
-- Terms: `cebf52263e43dc2f605ca6d61d06d14ac578475a`
-- Verified VoltEdge homepage routing: `35eec7332fc9026eea4761bb3d9d852d0e2db248`
-- Verified VoltEdge digital-store routing: `4150b700d7dae9fe79633dfd04e0dc88f223d2de`
-- Guarded deployment engine hardening: `54cc746313a622afe715f4fe0e11f908b2bb3cbc`
-- Guarded deployment workflow: `0ae1ea7f03e13428f1935f05dec55ee497df75b3`
-
 ## Workflow hardening
 
-The completed routing mapper was retired after success.
+The completed routing mapper and successful one-time deployment workflow were retired after verification.
 
-The older `Deploy Site Compliance Fixes` workflow was retired because it could overwrite public files and alter Caddy without the new source validation, terminal reporting, protected-service checks, and automatic rollback contract.
+The older broad deployment action was retired because it could overwrite public files and alter Caddy without the guarded source validation, terminal reporting, service checks, and automatic rollback contract.
 
-The active deployment path is:
+The obsolete single-domain visual audit was retired because it constructed Wix product routes on the Dominion Healing domain.
 
-- Workflow: `Production Dominion Site Hardening Deploy`
-- Authorization: `DEPLOY_DOMINION_SITE_HARDENING`
-- Scope: exactly seven reviewed static files
-- Backup: private VM recovery directory
-- Validation: source gates, exact VoltEdge URL, live public markers, all protected HTTP services
-- Failure behavior: restore every previous file automatically
-- Excluded: Wix mutation, product changes, inventory, orders, Caddy, DNS, containers, databases, networks, and volumes
+The active next verification path is:
+
+- Workflow: `Production Storefront Post-Deploy Audit`
+- Scope: public desktop/mobile rendering of `dominionhealing.org` and `www.voltedgegoods.com`
+- Wix samples: three exact verified product pages
+- Private artifact: screenshots and detailed visible-text findings
+- Excluded: form submission, button clicks, cart, checkout, Wix management calls, VM access, product/inventory/order changes
 
 ## Current gate
 
-1. Human runs `Production Dominion Site Hardening Deploy`.
-2. Verify terminal workflow status, seven installed hashes, live public markers, backup path, and rollback state.
-3. Re-run the desktop/mobile public audit against Dominion Healing.
-4. Run a separate desktop/mobile visual audit against `https://www.voltedgegoods.com/`.
-5. Verify the Dominion contact-form path without sending sensitive data.
-6. Keep direct Dominion digital checkout links disabled until verified payment links, delivery rules, and refund terms pass controlled checkout testing.
-7. Keep Wix product-description rollout blocked until the description round-trip canonicalization probe passes.
+1. Run `Production Storefront Post-Deploy Audit`.
+2. Review the private desktop/mobile screenshots and wording findings for both sites.
+3. Verify the Dominion contact-form path with clearly synthetic data before activating direct digital checkout links.
+4. Keep direct Dominion digital checkout links disabled until payment links, delivery rules, and refund terms pass controlled checkout testing.
+5. Keep Wix product-description rollout blocked until the description round-trip canonicalization probe passes.

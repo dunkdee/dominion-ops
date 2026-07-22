@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "2E-cutover-map",
+  "status": "started",
+  "workflow": {
+    "run_id": 29880455592,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29880455592",
+    "source_sha": "085dd919b4ac7e1823f1648a445ed184fa04e38d",
+    "artifact_name": "dominion-alignment-stage2e-map"
+  }
+}

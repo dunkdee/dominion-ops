@@ -1,10 +1,150 @@
 {
   "alignment_stage": "wix-catalog-description-proposal",
-  "status": "started",
+  "containers_unchanged": true,
+  "errors": [],
+  "generated_at": "2026-07-22T04:25:21.459409+00:00",
+  "next_gate": "Human review of private proposal; no Wix mutation is authorized",
+  "proposal": {
+    "mode": "0o600",
+    "path": "/tmp/wix_catalog_description_proposal.json",
+    "sha256": "6cdafe4c55623c43da0ff32b059b5dd8e9afba08b597f39c14f9b3f501fa57de",
+    "size_bytes": 79056
+  },
+  "proposal_summary": {
+    "brand_changes_proposed": 0,
+    "duplicate_description_groups": 24,
+    "duplicate_description_products": 62,
+    "products_total": 94,
+    "proposal_count": 62,
+    "seo_changes_proposed": 0
+  },
+  "protected_health_after": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "protected_health_before": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "safety": {
+    "brand_changes_proposed": false,
+    "containers_changed": false,
+    "customer_data_collected": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "environment_values_collected": false,
+    "full_proposal_written_to_private_artifact_only": true,
+    "inventory_changed": false,
+    "inventory_quantities_collected": false,
+    "networks_changed": false,
+    "order_data_collected": false,
+    "orders_changed": false,
+    "products_changed": false,
+    "raw_api_responses_collected": false,
+    "raw_logs_collected": false,
+    "secret_values_collected": false,
+    "seo_changes_proposed": false,
+    "volumes_changed": false,
+    "wix_mutations_performed": false
+  },
+  "status": "success",
+  "success": true,
+  "validation": {
+    "all_current_hashes_present": true,
+    "all_names_present": true,
+    "all_product_ids_present": true,
+    "all_proposals_bounded": true,
+    "all_proposals_changed": true,
+    "all_proposed_hashes_unique": true,
+    "all_revisions_present": true,
+    "proposal_count": 62
+  },
   "workflow": {
     "run_id": 29891005124,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29891005124",
     "source_sha": "bf7670d99cca5503cd69b075c8bd5917eff7125d",
-    "artifact_name": "dominion-wix-catalog-description-proposal"
+    "artifact_name": "dominion-wix-catalog-description-proposal",
+    "run_returncode": "0",
+    "job_status": "success"
   }
 }

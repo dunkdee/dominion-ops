@@ -1,10 +1,749 @@
 {
+  "after_containers": [
+    {
+      "image": "a319b3721a52",
+      "name": "baby-api",
+      "state": "running",
+      "status": "Up 4 weeks (healthy)"
+    },
+    {
+      "image": "alpine:latest",
+      "name": "baby-logger",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "postgres:15",
+      "name": "dominion-db",
+      "state": "running",
+      "status": "Up 5 weeks"
+    },
+    {
+      "image": "n8nio/n8n:latest",
+      "name": "dominion-n8n",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "dominion-seo:latest",
+      "name": "dominion-seo",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "3224bfc43c02",
+      "name": "dominion-web",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "movie-generator",
+      "name": "movie-generator",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "name": "wix-agent",
+      "state": "running",
+      "status": "Up 25 hours (healthy)"
+    },
+    {
+      "image": "desktop-tutorial-wix-agent",
+      "name": "wix-agent-rollback-20260720T224801Z",
+      "state": "exited",
+      "status": "Exited (0) 25 hours ago"
+    }
+  ],
+  "agent_reports": [
+    {
+      "agent": "conductor",
+      "duty": "orchestration and Watchmen interface",
+      "evidence": {
+        "active_state": "active",
+        "fragment_path": "/etc/systemd/system/dominion-conductor.service",
+        "is_enabled": "enabled",
+        "load_state": "loaded",
+        "n_restarts": 10,
+        "sub_state": "running",
+        "unit": "dominion-conductor.service",
+        "unit_file_state": "enabled"
+      },
+      "human_approval_required": true,
+      "next_action": "remain observe-only; no cutover in R4",
+      "result": "verified_running",
+      "risks": []
+    },
+    {
+      "agent": "guardian",
+      "duty": "runtime drift detection",
+      "evidence": {
+        "active_state": "active",
+        "fragment_path": "/etc/systemd/system/dominion-guardian.service",
+        "is_enabled": "enabled",
+        "load_state": "loaded",
+        "n_restarts": 0,
+        "sub_state": "running",
+        "unit": "dominion-guardian.service",
+        "unit_file_state": "enabled"
+      },
+      "human_approval_required": true,
+      "next_action": "remain observe-only; no cutover in R4",
+      "result": "verified_running",
+      "risks": []
+    },
+    {
+      "agent": "sentinel",
+      "duty": "independent runtime verification",
+      "evidence": {
+        "active_state": "active",
+        "fragment_path": "/etc/systemd/system/dominion-sentinel.service",
+        "is_enabled": "enabled",
+        "load_state": "loaded",
+        "n_restarts": 0,
+        "sub_state": "running",
+        "unit": "dominion-sentinel.service",
+        "unit_file_state": "enabled"
+      },
+      "human_approval_required": true,
+      "next_action": "remain observe-only; no cutover in R4",
+      "result": "verified_running",
+      "risks": []
+    },
+    {
+      "agent": "juris",
+      "duty": "governance and legal boundary service",
+      "evidence": {
+        "active_state": "active",
+        "fragment_path": "/etc/systemd/system/dominion-juris.service",
+        "is_enabled": "enabled",
+        "load_state": "loaded",
+        "n_restarts": 15689,
+        "sub_state": "running",
+        "unit": "dominion-juris.service",
+        "unit_file_state": "enabled"
+      },
+      "human_approval_required": true,
+      "next_action": "remain observe-only; no cutover in R4",
+      "result": "verified_running",
+      "risks": []
+    }
+  ],
   "alignment_stage": "2D-R4-preflight",
-  "status": "started",
+  "approved_source_sha": "10646094aa3a5a1e0d4d18dc5508a33d2f5ec2a3",
+  "before_containers": [
+    {
+      "image": "a319b3721a52",
+      "name": "baby-api",
+      "state": "running",
+      "status": "Up 4 weeks (healthy)"
+    },
+    {
+      "image": "alpine:latest",
+      "name": "baby-logger",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "postgres:15",
+      "name": "dominion-db",
+      "state": "running",
+      "status": "Up 5 weeks"
+    },
+    {
+      "image": "n8nio/n8n:latest",
+      "name": "dominion-n8n",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "dominion-seo:latest",
+      "name": "dominion-seo",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "3224bfc43c02",
+      "name": "dominion-web",
+      "state": "running",
+      "status": "Up 4 weeks"
+    },
+    {
+      "image": "movie-generator",
+      "name": "movie-generator",
+      "state": "running",
+      "status": "Up 4 days"
+    },
+    {
+      "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "name": "wix-agent",
+      "state": "running",
+      "status": "Up 25 hours (healthy)"
+    },
+    {
+      "image": "desktop-tutorial-wix-agent",
+      "name": "wix-agent-rollback-20260720T224801Z",
+      "state": "exited",
+      "status": "Exited (0) 25 hours ago"
+    }
+  ],
+  "build": {
+    "attempted": true,
+    "expected_images": {
+      "baby-api": "dominion-stage2d-r4-baby-api:latest",
+      "dominion-web": "dominion-stage2d-r4-dominion-web:latest",
+      "wix-agent": "dominion/wix-agent:stage2d-r4-10646094aa3a"
+    },
+    "images": [
+      {
+        "created": "2026-07-22T00:08:02.082828473Z",
+        "exists": true,
+        "id": "sha256:089445475d96ca3630fd4821af3c0304d38de5ece89a529b3782a398e38c3c82",
+        "reference": "dominion-stage2d-r4-baby-api:latest",
+        "repo_tags": [
+          "dominion-stage2d-r4-baby-api:latest"
+        ],
+        "service": "baby-api",
+        "size_bytes": 62730237
+      },
+      {
+        "created": "2026-07-22T00:07:47.510876997Z",
+        "exists": true,
+        "id": "sha256:77583ed35a7537206aeae97e97fa015f21d9d3b112a3885ca50e6cdd1cc03847",
+        "reference": "dominion-stage2d-r4-dominion-web:latest",
+        "repo_tags": [
+          "dominion-stage2d-r4-dominion-web:latest"
+        ],
+        "service": "dominion-web",
+        "size_bytes": 26079494
+      },
+      {
+        "created": "2026-07-22T00:07:57.029016972Z",
+        "exists": true,
+        "id": "sha256:ef792a2ac99184cd51192becb7ead9d0ef3b5347a57b5f41eba6ce5bd834292e",
+        "reference": "dominion/wix-agent:stage2d-r4-10646094aa3a",
+        "repo_tags": [
+          "dominion/wix-agent:stage2d-r4-10646094aa3a"
+        ],
+        "service": "wix-agent",
+        "size_bytes": 57365385
+      }
+    ],
+    "isolated_project": "dominion-stage2d-r4",
+    "returncode": 0,
+    "services": [
+      "baby-api",
+      "dominion-web",
+      "wix-agent"
+    ],
+    "stderr_type": "present"
+  },
+  "containers_unchanged": true,
+  "deterministic_five_council": [
+    {
+      "result": "pass",
+      "seat": "runtime"
+    },
+    {
+      "result": "pass",
+      "seat": "secrets"
+    },
+    {
+      "result": "pass",
+      "seat": "deployment"
+    },
+    {
+      "result": "pass",
+      "seat": "rollback"
+    },
+    {
+      "result": "pass",
+      "seat": "governance"
+    }
+  ],
+  "disk_after": {
+    "free_bytes": 11897044992,
+    "total_bytes": 52591026176,
+    "used_bytes": 38429204480
+  },
+  "disk_before": {
+    "free_bytes": 12235722752,
+    "total_bytes": 52591026176,
+    "used_bytes": 38090526720
+  },
+  "errors": [],
+  "failed_gates": [],
+  "gates": {
+    "agent_runtime": {
+      "evidence": {
+        "agents": {
+          "conductor": {
+            "active_state": "active",
+            "fragment_path": "/etc/systemd/system/dominion-conductor.service",
+            "is_enabled": "enabled",
+            "load_state": "loaded",
+            "n_restarts": 10,
+            "sub_state": "running",
+            "unit": "dominion-conductor.service",
+            "unit_file_state": "enabled"
+          },
+          "guardian": {
+            "active_state": "active",
+            "fragment_path": "/etc/systemd/system/dominion-guardian.service",
+            "is_enabled": "enabled",
+            "load_state": "loaded",
+            "n_restarts": 0,
+            "sub_state": "running",
+            "unit": "dominion-guardian.service",
+            "unit_file_state": "enabled"
+          },
+          "juris": {
+            "active_state": "active",
+            "fragment_path": "/etc/systemd/system/dominion-juris.service",
+            "is_enabled": "enabled",
+            "load_state": "loaded",
+            "n_restarts": 15689,
+            "sub_state": "running",
+            "unit": "dominion-juris.service",
+            "unit_file_state": "enabled"
+          },
+          "sentinel": {
+            "active_state": "active",
+            "fragment_path": "/etc/systemd/system/dominion-sentinel.service",
+            "is_enabled": "enabled",
+            "load_state": "loaded",
+            "n_restarts": 0,
+            "sub_state": "running",
+            "unit": "dominion-sentinel.service",
+            "unit_file_state": "enabled"
+          }
+        },
+        "watchmen_status": {
+          "json_type": "dict",
+          "name": "conductor-watchmen-status",
+          "path": "/watchmen/status",
+          "port": 5060,
+          "reachable": true,
+          "status": 200,
+          "top_level_keys": [
+            "active",
+            "status",
+            "total",
+            "watchmen"
+          ]
+        }
+      },
+      "pass": true
+    },
+    "build": {
+      "evidence": {
+        "attempted": true,
+        "expected_images": {
+          "baby-api": "dominion-stage2d-r4-baby-api:latest",
+          "dominion-web": "dominion-stage2d-r4-dominion-web:latest",
+          "wix-agent": "dominion/wix-agent:stage2d-r4-10646094aa3a"
+        },
+        "images": [
+          {
+            "created": "2026-07-22T00:08:02.082828473Z",
+            "exists": true,
+            "id": "sha256:089445475d96ca3630fd4821af3c0304d38de5ece89a529b3782a398e38c3c82",
+            "reference": "dominion-stage2d-r4-baby-api:latest",
+            "repo_tags": [
+              "dominion-stage2d-r4-baby-api:latest"
+            ],
+            "service": "baby-api",
+            "size_bytes": 62730237
+          },
+          {
+            "created": "2026-07-22T00:07:47.510876997Z",
+            "exists": true,
+            "id": "sha256:77583ed35a7537206aeae97e97fa015f21d9d3b112a3885ca50e6cdd1cc03847",
+            "reference": "dominion-stage2d-r4-dominion-web:latest",
+            "repo_tags": [
+              "dominion-stage2d-r4-dominion-web:latest"
+            ],
+            "service": "dominion-web",
+            "size_bytes": 26079494
+          },
+          {
+            "created": "2026-07-22T00:07:57.029016972Z",
+            "exists": true,
+            "id": "sha256:ef792a2ac99184cd51192becb7ead9d0ef3b5347a57b5f41eba6ce5bd834292e",
+            "reference": "dominion/wix-agent:stage2d-r4-10646094aa3a",
+            "repo_tags": [
+              "dominion/wix-agent:stage2d-r4-10646094aa3a"
+            ],
+            "service": "wix-agent",
+            "size_bytes": 57365385
+          }
+        ],
+        "isolated_project": "dominion-stage2d-r4",
+        "returncode": 0,
+        "services": [
+          "baby-api",
+          "dominion-web",
+          "wix-agent"
+        ],
+        "stderr_type": "present"
+      },
+      "pass": true
+    },
+    "deployment": {
+      "evidence": {
+        "compose_sha256": "42e2e90c41e9c154bf96f3ba2dc277811f873626af41b747474fcea6a494c8eb",
+        "compose_valid": true,
+        "marker_source_sha": "10646094aa3a5a1e0d4d18dc5508a33d2f5ec2a3",
+        "release_root": "/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a",
+        "services": [
+          "baby-api",
+          "baby-logger",
+          "browser-agents",
+          "dominion-web",
+          "obsidian-remote",
+          "wix-agent"
+        ]
+      },
+      "pass": true
+    },
+    "governance": {
+      "evidence": {
+        "publishing_timers": {
+          "conductor-autonomous.timer": {
+            "active_state": "inactive",
+            "fragment_path": "/etc/systemd/system/conductor-autonomous.timer",
+            "is_enabled": "disabled",
+            "load_state": "loaded",
+            "n_restarts": null,
+            "sub_state": "dead",
+            "unit": "conductor-autonomous.timer",
+            "unit_file_state": "disabled"
+          },
+          "dominion-kdp.timer": {
+            "active_state": "inactive",
+            "fragment_path": "/etc/systemd/system/dominion-kdp.timer",
+            "is_enabled": "disabled",
+            "load_state": "loaded",
+            "n_restarts": null,
+            "sub_state": "dead",
+            "unit": "dominion-kdp.timer",
+            "unit_file_state": "disabled"
+          },
+          "dominion-publish.timer": {
+            "active_state": "inactive",
+            "fragment_path": "/etc/systemd/system/dominion-publish.timer",
+            "is_enabled": "disabled",
+            "load_state": "loaded",
+            "n_restarts": null,
+            "sub_state": "dead",
+            "unit": "dominion-publish.timer",
+            "unit_file_state": "disabled"
+          },
+          "dominion-social-poster.timer": {
+            "active_state": "inactive",
+            "fragment_path": "/etc/systemd/system/dominion-social-poster.timer",
+            "is_enabled": "disabled",
+            "load_state": "loaded",
+            "n_restarts": null,
+            "sub_state": "dead",
+            "unit": "dominion-social-poster.timer",
+            "unit_file_state": "disabled"
+          },
+          "dominion-youtube.timer": {
+            "active_state": "inactive",
+            "fragment_path": "/etc/systemd/system/dominion-youtube.timer",
+            "is_enabled": "disabled",
+            "load_state": "loaded",
+            "n_restarts": null,
+            "sub_state": "dead",
+            "unit": "dominion-youtube.timer",
+            "unit_file_state": "disabled"
+          }
+        },
+        "retired_units": {
+          "alchemist-api.service": {
+            "active_state": "inactive",
+            "fragment_path": "/etc/systemd/system/alchemist-api.service",
+            "is_enabled": "masked",
+            "load_state": "masked",
+            "n_restarts": 0,
+            "sub_state": "dead",
+            "unit": "alchemist-api.service",
+            "unit_file_state": "masked"
+          },
+          "conductor-api.service": {
+            "active_state": "inactive",
+            "fragment_path": "/etc/systemd/system/conductor-api.service",
+            "is_enabled": "masked",
+            "load_state": "masked",
+            "n_restarts": 0,
+            "sub_state": "dead",
+            "unit": "conductor-api.service",
+            "unit_file_state": "masked"
+          },
+          "dominion-port-healer.service": {
+            "active_state": "inactive",
+            "fragment_path": "/etc/systemd/system/dominion-port-healer.service",
+            "is_enabled": "masked",
+            "load_state": "masked",
+            "n_restarts": 0,
+            "sub_state": "dead",
+            "unit": "dominion-port-healer.service",
+            "unit_file_state": "masked"
+          },
+          "juris-api.service": {
+            "active_state": "inactive",
+            "fragment_path": "/etc/systemd/system/juris-api.service",
+            "is_enabled": "masked",
+            "load_state": "masked",
+            "n_restarts": 0,
+            "sub_state": "dead",
+            "unit": "juris-api.service",
+            "unit_file_state": "masked"
+          }
+        }
+      },
+      "pass": true
+    },
+    "post_build_stability": {
+      "evidence": {
+        "containers_unchanged": true,
+        "health_after": [
+          {
+            "name": "baby-api",
+            "path": "/",
+            "port": 8080,
+            "reachable": true,
+            "status": 200
+          },
+          {
+            "name": "wix-agent",
+            "path": "/ready",
+            "port": 8082,
+            "reachable": true,
+            "status": 200
+          },
+          {
+            "name": "dominion-web",
+            "path": "/",
+            "port": 8090,
+            "reachable": true,
+            "status": 200
+          },
+          {
+            "name": "n8n",
+            "path": "/healthz",
+            "port": 5678,
+            "reachable": true,
+            "status": 200
+          },
+          {
+            "name": "alpha-engine",
+            "path": "/health",
+            "port": 8787,
+            "reachable": true,
+            "status": 200
+          },
+          {
+            "json_type": "dict",
+            "name": "conductor",
+            "path": "/health",
+            "port": 5060,
+            "reachable": true,
+            "status": 200,
+            "top_level_keys": [
+              "status"
+            ]
+          }
+        ],
+        "restart_deltas": {
+          "alchemist": {
+            "delta": 0,
+            "end": 2,
+            "start": 2,
+            "unit": "dominion-alchemist.service"
+          },
+          "alpha": {
+            "delta": 0,
+            "end": 0,
+            "start": 0,
+            "unit": "dominion-alpha.service"
+          },
+          "caddy": {
+            "delta": 0,
+            "end": 0,
+            "start": 0,
+            "unit": "caddy.service"
+          },
+          "conductor": {
+            "delta": 0,
+            "end": 10,
+            "start": 10,
+            "unit": "dominion-conductor.service"
+          },
+          "gatekeeper": {
+            "delta": 0,
+            "end": 0,
+            "start": 0,
+            "unit": "dominion-gatekeeper.service"
+          },
+          "gemini": {
+            "delta": 0,
+            "end": 0,
+            "start": 0,
+            "unit": "gemini-server.service"
+          },
+          "guardian": {
+            "delta": 0,
+            "end": 0,
+            "start": 0,
+            "unit": "dominion-guardian.service"
+          },
+          "juris": {
+            "delta": 0,
+            "end": 15689,
+            "start": 15689,
+            "unit": "dominion-juris.service"
+          },
+          "sentinel": {
+            "delta": 0,
+            "end": 0,
+            "start": 0,
+            "unit": "dominion-sentinel.service"
+          },
+          "store": {
+            "delta": 0,
+            "end": 0,
+            "start": 0,
+            "unit": "dominion-store.service"
+          }
+        }
+      },
+      "pass": true
+    },
+    "rollback": {
+      "evidence": {
+        "compose_backup_sha256": "42e2e90c41e9c154bf96f3ba2dc277811f873626af41b747474fcea6a494c8eb",
+        "env_backup_sha256": "757601b1009add4252902ee3176e5c16fb8fd39b8182b8883b2420a3aa9ad0cd",
+        "recovery_root": "/home/malachisingleton8/.dominion-recovery/stage2c-29866812526",
+        "retirement_backups": {
+          "alchemist-api.service": {
+            "exists": true,
+            "path": "/var/lib/dominion/unit-retirement/stage2d-r3-29874133137/alchemist-api.service",
+            "sha256": "66e5c8477f315d4db346e83bc71bdd6b5d218b999eeb77cbfb844c0aaf1c3bd8",
+            "size_bytes": 349
+          },
+          "conductor-api.service": {
+            "exists": true,
+            "path": "/var/lib/dominion/unit-retirement/stage2d-r3-29874133137/conductor-api.service",
+            "sha256": "2a537325d54f11fff39d081265b3c05db676741afa31e3077b943360996b2672",
+            "size_bytes": 418
+          },
+          "dominion-port-healer.service": {
+            "exists": true,
+            "path": "/var/lib/dominion/unit-retirement/stage2d-r3-29874133137/dominion-port-healer.service",
+            "sha256": "a2b209a4a9f182eb5ecb61a10d08db0aa226f04fe4169f45c35239f389d6c7a5",
+            "size_bytes": 375
+          },
+          "juris-api.service": {
+            "exists": true,
+            "path": "/var/lib/dominion/unit-retirement/stage2d-r3-29874133137/juris-api.service",
+            "sha256": "c470abaf90564ccfd5550bb423f30260d22ef446f88b66870d173ac22adeae60",
+            "size_bytes": 340
+          }
+        },
+        "retirement_root": "/var/lib/dominion/unit-retirement/stage2d-r3-29874133137"
+      },
+      "pass": true
+    },
+    "runtime": {
+      "evidence": [
+        {
+          "name": "baby-api",
+          "path": "/",
+          "port": 8080,
+          "reachable": true,
+          "status": 200
+        },
+        {
+          "name": "wix-agent",
+          "path": "/ready",
+          "port": 8082,
+          "reachable": true,
+          "status": 200
+        },
+        {
+          "name": "dominion-web",
+          "path": "/",
+          "port": 8090,
+          "reachable": true,
+          "status": 200
+        },
+        {
+          "name": "n8n",
+          "path": "/healthz",
+          "port": 5678,
+          "reachable": true,
+          "status": 200
+        },
+        {
+          "name": "alpha-engine",
+          "path": "/health",
+          "port": 8787,
+          "reachable": true,
+          "status": 200
+        },
+        {
+          "json_type": "dict",
+          "name": "conductor",
+          "path": "/health",
+          "port": 5060,
+          "reachable": true,
+          "status": 200,
+          "top_level_keys": [
+            "status"
+          ]
+        }
+      ],
+      "pass": true
+    },
+    "secrets": {
+      "evidence": {
+        "git_metadata_present": false,
+        "mode": "0o600",
+        "path": "/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a/.env",
+        "regular_file": true,
+        "sha256": "757601b1009add4252902ee3176e5c16fb8fd39b8182b8883b2420a3aa9ad0cd"
+      },
+      "pass": true
+    }
+  },
+  "generated_at": "2026-07-22T00:08:36.611694+00:00",
+  "release_root": "/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a",
+  "risks": [],
+  "safety": {
+    "automated_council_is_deterministic_checks": true,
+    "browser_agents_started": false,
+    "cutover_performed": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "isolated_images_built_only": true,
+    "obsidian_started": false,
+    "production_containers_recreated": false,
+    "production_containers_started": false,
+    "production_containers_stopped": false,
+    "production_networks_changed": false,
+    "production_volumes_changed": false,
+    "secret_file_uploaded": false,
+    "secret_values_collected": false
+  },
+  "status": "success",
+  "success": true,
   "workflow": {
     "run_id": 29879295855,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29879295855",
     "source_sha": "55a64918e2166240f29c2a9997ae829d16103300",
-    "artifact_name": "dominion-alignment-stage2d-r4-preflight"
+    "artifact_name": "dominion-alignment-stage2d-r4-preflight",
+    "job_status": "success"
   }
 }

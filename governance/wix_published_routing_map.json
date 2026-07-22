@@ -1,10 +1,175 @@
 {
   "alignment_stage": "wix-published-routing-map",
-  "status": "started",
+  "containers_unchanged": true,
+  "errors": [],
+  "generated_at": "2026-07-22T15:28:00.839639+00:00",
+  "next_gate": "Use returned Wix public URLs for storefront navigation; do not construct Wix product URLs on dominionhealing.org",
+  "primary_url": "https://www.voltedgegoods.com/",
+  "protected_health_after": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "protected_health_before": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "routing": {
+    "errors": [],
+    "products": [
+      {
+        "found": true,
+        "id": "2c484de1-a314-4ba5-9481-7915dd4608c5",
+        "name": "Esoulk Black 18W PD Charger & USB-A 3ft C To iPhone Cable",
+        "public_url": "https://www.voltedgegoods.com/product-page/esoulk-black-18w-pd-charger-amp-usb-a-3ft-c-to-iphone-cable",
+        "requested_slug": "esoulk-black-18w-pd-charger-amp-usb-a-3ft-c-to-iphone-cable",
+        "slug": "esoulk-black-18w-pd-charger-amp-usb-a-3ft-c-to-iphone-cable",
+        "visible": true
+      },
+      {
+        "found": true,
+        "id": "0951cafe-1669-4e01-a8bf-7ca5cdc0e51c",
+        "name": "Samsung S10E Triangle Package Case",
+        "public_url": "https://www.voltedgegoods.com/product-page/samsung-s10e-triangle-package-case",
+        "requested_slug": "samsung-s10e-triangle-package-case",
+        "slug": "samsung-s10e-triangle-package-case",
+        "visible": true
+      },
+      {
+        "found": true,
+        "id": "09ecaf7f-9054-48d4-a7c6-9071b872cbd1",
+        "name": "Portable Wireless Bluetooth Speaker with TWS Function - Rechargeable Bluetooth S",
+        "public_url": "https://www.voltedgegoods.com/product-page/portable-wireless-bluetooth-speaker-with-tws-function-rechargeable-bluetooth-s",
+        "requested_slug": "portable-wireless-bluetooth-speaker-with-tws-function-rechargeable-bluetooth-s",
+        "slug": "portable-wireless-bluetooth-speaker-with-tws-function-rechargeable-bluetooth-s",
+        "visible": true
+      }
+    ],
+    "published_urls": [
+      {
+        "default_language": false,
+        "language_code": null,
+        "primary": true,
+        "url": "https://www.voltedgegoods.com/",
+        "url_type": "PREMIUM"
+      }
+    ],
+    "site": {
+      "business_name": "VoltEdge Electronics",
+      "contact_email_present": true,
+      "contact_phone_present": true,
+      "description_present": true,
+      "language": "en",
+      "payment_currency": "USD",
+      "site_display_name": "VoltEdge Electronics",
+      "time_zone": "America/New_York"
+    }
+  },
+  "safety": {
+    "containers_changed": false,
+    "customer_data_collected": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "environment_values_collected": false,
+    "inventory_changed": false,
+    "inventory_quantities_collected": false,
+    "networks_changed": false,
+    "order_data_collected": false,
+    "orders_changed": false,
+    "products_changed": false,
+    "raw_api_responses_collected": false,
+    "raw_logs_collected": false,
+    "secret_values_collected": false,
+    "volumes_changed": false,
+    "wix_mutations_performed": false
+  },
+  "status": "success",
+  "success": true,
   "workflow": {
     "run_id": 29933469816,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29933469816",
     "source_sha": "47f1d7027dcc387d7abcd021420fee02477ff7ec",
-    "artifact_name": "dominion-wix-published-routing-map"
+    "artifact_name": "dominion-wix-published-routing-map",
+    "run_returncode": "0",
+    "job_status": "success"
   }
 }

@@ -7,7 +7,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -21,9 +20,10 @@ SOURCE_DIR = Path(os.environ.get("SITE_SOURCE_DIR", "/tmp/dominion-site-hardenin
 WEBROOT = Path(os.environ.get("DOMINION_SITE_WEBROOT", str(Path.home() / "aura-ecosystem/agency-website")))
 BACKUP_ROOT = Path.home() / ".dominion-recovery" / "site-hardening" / f"{RUN_ID}-{RUN_ATTEMPT}"
 FILES = ("index.html", "store.html", "site.css", "shipping.html", "returns.html", "privacy.html", "terms.html")
+VERIFIED_WIX_URL = "https://www.voltedgegoods.com/"
 PUBLIC_CHECKS = (
-    ("https://dominionhealing.org/", "About Dominion Healing"),
-    ("https://dominionhealing.org/store.html", "Checkout hardening in progress"),
+    ("https://dominionhealing.org/", "VoltEdge Electronics"),
+    ("https://dominionhealing.org/store.html", "Two separate stores:"),
     ("https://dominionhealing.org/site.css", "@media(max-width:700px)"),
     ("https://dominionhealing.org/shipping.html", "Shipping and Digital Delivery"),
     ("https://dominionhealing.org/returns.html", "Returns and Refunds"),
@@ -82,7 +82,7 @@ def public_probe(url: str, marker: str) -> dict[str, Any]:
     last_error = None
     for attempt in range(1, 7):
         try:
-            request = urllib.request.Request(cache_busted, headers={"User-Agent": "DominionSiteHardening/1.0"})
+            request = urllib.request.Request(cache_busted, headers={"User-Agent": "DominionSiteHardening/1.1"})
             with urllib.request.urlopen(request, timeout=15) as response:
                 body = response.read(2_000_000).decode("utf-8", errors="replace")
                 row.update({"status": response.status, "marker_present": marker in body, "attempt": attempt})
@@ -111,12 +111,15 @@ def validate_source() -> None:
         raise RuntimeError("unresolved_checkout_placeholder")
     if "no questions asked" in combined.lower():
         raise RuntimeError("unsupported_refund_promise")
-    for name in ("index.html", "store.html"):
-        text = (SOURCE_DIR / name).read_text(encoding="utf-8")
-        if '<meta name="description"' not in text or '<link rel="canonical"' not in text:
-            raise RuntimeError(f"metadata_missing:{name}")
     index = (SOURCE_DIR / "index.html").read_text(encoding="utf-8")
     store = (SOURCE_DIR / "store.html").read_text(encoding="utf-8")
+    for name, text in (("index.html", index), ("store.html", store)):
+        if '<meta name="description"' not in text or '<link rel="canonical"' not in text:
+            raise RuntimeError(f"metadata_missing:{name}")
+        if VERIFIED_WIX_URL not in text:
+            raise RuntimeError(f"verified_wix_url_missing:{name}")
+    if "Two separate stores:" not in store:
+        raise RuntimeError("store_separation_wording_missing")
     for required in ("/shipping.html", "/returns.html", "/privacy.html", "/terms.html"):
         if required not in index or required not in store:
             raise RuntimeError(f"policy_link_missing:{required}")
@@ -219,6 +222,7 @@ def main() -> int:
         "status": "success" if success else "failed",
         "success": success,
         "webroot": str(WEBROOT),
+        "verified_wix_url": VERIFIED_WIX_URL,
         "files": rows,
         "backup": {
             "path": str(BACKUP_ROOT) if rows else None,
@@ -230,7 +234,7 @@ def main() -> int:
         "containers_unchanged": containers_unchanged,
         "rollback": rollback,
         "errors": errors,
-        "next_gate": "Run public desktop/mobile storefront audit and verify contact-form behavior before activating direct checkout links",
+        "next_gate": "Run public desktop/mobile audit and verify contact-form behavior before activating direct digital checkout links",
         "safety": {
             "site_files_changed": success,
             "site_files_changed_count": len(FILES) if success else 0,

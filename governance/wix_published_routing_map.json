@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "wix-published-routing-map",
+  "status": "started",
+  "workflow": {
+    "run_id": 29933469816,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29933469816",
+    "source_sha": "47f1d7027dcc387d7abcd021420fee02477ff7ec",
+    "artifact_name": "dominion-wix-published-routing-map"
+  }
+}

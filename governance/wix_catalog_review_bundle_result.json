@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "wix-catalog-review-bundle",
+  "status": "started",
+  "workflow": {
+    "run_id": 29890534356,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29890534356",
+    "source_sha": "7cb255471313d75d88300a2b3c47883fe84f4c1a",
+    "artifact_name": "dominion-wix-catalog-review-bundle"
+  }
+}

@@ -1,10 +1,303 @@
 {
+  "actions": [
+    {
+      "original_renamed": "baby-api-failed-stage2f-29885228305-1"
+    },
+    {
+      "canonical_started": true
+    }
+  ],
+  "after": {
+    "compose_project": "dominion-ops",
+    "compose_service": "baby-api",
+    "container_id": "7ef942392b61f1755edd1336fc4c0c61b83b5443eb121ce47887f73a4c900861",
+    "exists": true,
+    "exit_code": 0,
+    "health": "healthy",
+    "image_id": "sha256:089445475d96ca3630fd4821af3c0304d38de5ece89a529b3782a398e38c3c82",
+    "image_reference": "dominion-stage2d-r4-baby-api:latest",
+    "mounts": [
+      {
+        "destination": "/app",
+        "name": null,
+        "rw": true,
+        "source": "/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a/api",
+        "type": "bind"
+      },
+      {
+        "destination": "/vault",
+        "name": null,
+        "rw": true,
+        "source": "/home/malachisingleton8/vault",
+        "type": "bind"
+      }
+    ],
+    "name": "baby-api",
+    "networks": [
+      {
+        "aliases": [
+          "baby-api",
+          "baby-api"
+        ],
+        "name": "desktop-tutorial_default",
+        "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+      }
+    ],
+    "oom_killed": false,
+    "ports": [
+      {
+        "container_port": "8080/tcp",
+        "host_ip": "0.0.0.0",
+        "host_port": "8080"
+      },
+      {
+        "container_port": "8080/tcp",
+        "host_ip": "::",
+        "host_port": "8080"
+      }
+    ],
+    "restart_count": 0,
+    "restart_policy": "always",
+    "running": true,
+    "state": "running",
+    "state_error_present": false
+  },
   "alignment_stage": "2F-baby-recovery",
-  "status": "started",
+  "approved_source_sha": "10646094aa3a5a1e0d4d18dc5508a33d2f5ec2a3",
+  "before": {
+    "compose_project": "desktop-tutorial",
+    "compose_service": "baby-api",
+    "container_id": "601c5388480132a0a5ef4584fcfff0dacb575db5f7001ad4f677d48a17a7d38a",
+    "exists": true,
+    "exit_code": 2,
+    "health": "unhealthy",
+    "image_id": "sha256:a319b3721a52e31c166c5a311301f656affef7f4acaeb4ff047c2cc971af000d",
+    "image_reference": "desktop-tutorial-baby-api",
+    "mounts": [
+      {
+        "destination": "/app",
+        "name": null,
+        "rw": true,
+        "source": "/home/malachisingleton8/desktop-tutorial/api",
+        "type": "bind"
+      },
+      {
+        "destination": "/vault",
+        "name": null,
+        "rw": true,
+        "source": "/home/malachisingleton8/vault",
+        "type": "bind"
+      }
+    ],
+    "name": "baby-api",
+    "networks": [
+      {
+        "aliases": [
+          "baby-api"
+        ],
+        "name": "desktop-tutorial_default",
+        "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+      }
+    ],
+    "oom_killed": false,
+    "ports": [],
+    "restart_count": 49,
+    "restart_policy": "always",
+    "running": true,
+    "state": "restarting",
+    "state_error_present": false
+  },
+  "errors": [],
+  "failed_original_name": "baby-api-failed-stage2f-29885228305-1",
+  "fallback_result": null,
+  "generated_at": "2026-07-22T02:13:35.923308+00:00",
+  "governance": {
+    "publishing_timers": {
+      "conductor-autonomous.timer": {
+        "active_state": "inactive",
+        "load_state": "loaded",
+        "sub_state": "dead",
+        "unit": "conductor-autonomous.timer",
+        "unit_file_state": "disabled"
+      },
+      "dominion-kdp.timer": {
+        "active_state": "inactive",
+        "load_state": "loaded",
+        "sub_state": "dead",
+        "unit": "dominion-kdp.timer",
+        "unit_file_state": "disabled"
+      },
+      "dominion-publish.timer": {
+        "active_state": "inactive",
+        "load_state": "loaded",
+        "sub_state": "dead",
+        "unit": "dominion-publish.timer",
+        "unit_file_state": "disabled"
+      },
+      "dominion-social-poster.timer": {
+        "active_state": "inactive",
+        "load_state": "loaded",
+        "sub_state": "dead",
+        "unit": "dominion-social-poster.timer",
+        "unit_file_state": "disabled"
+      },
+      "dominion-youtube.timer": {
+        "active_state": "inactive",
+        "load_state": "loaded",
+        "sub_state": "dead",
+        "unit": "dominion-youtube.timer",
+        "unit_file_state": "disabled"
+      }
+    },
+    "retired_units": {
+      "alchemist-api.service": {
+        "active_state": "inactive",
+        "load_state": "masked",
+        "sub_state": "dead",
+        "unit": "alchemist-api.service",
+        "unit_file_state": "masked"
+      },
+      "conductor-api.service": {
+        "active_state": "inactive",
+        "load_state": "masked",
+        "sub_state": "dead",
+        "unit": "conductor-api.service",
+        "unit_file_state": "masked"
+      },
+      "dominion-port-healer.service": {
+        "active_state": "inactive",
+        "load_state": "masked",
+        "sub_state": "dead",
+        "unit": "dominion-port-healer.service",
+        "unit_file_state": "masked"
+      },
+      "juris-api.service": {
+        "active_state": "inactive",
+        "load_state": "masked",
+        "sub_state": "dead",
+        "unit": "juris-api.service",
+        "unit_file_state": "masked"
+      }
+    }
+  },
+  "log_classification": {
+    "available": true,
+    "nonempty": true,
+    "signals": {
+      "address_in_use": false,
+      "connection_refused": false,
+      "database_error": false,
+      "file_not_found": true,
+      "import_error": false,
+      "key_error": false,
+      "missing_environment": false,
+      "module_not_found": false,
+      "permission_denied": false,
+      "syntax_error": false,
+      "traceback": false
+    }
+  },
+  "other_health_after": [
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "other_health_before": [
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "recovery_root": "/var/lib/dominion/cutovers/stage2f-baby-recovery-29885228305-1",
+  "release_root": "/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a",
+  "risks": [],
+  "safety": {
+    "databases_changed": false,
+    "dns_changed": false,
+    "existing_network_reused": true,
+    "failing_original_deleted": false,
+    "failing_original_preserved_locally": true,
+    "full_inspect_saved_locally_only": true,
+    "network_definition_changed": false,
+    "only_baby_api_changed": true,
+    "raw_logs_collected_in_report": false,
+    "repository_checkout_changed": false,
+    "secret_file_uploaded": false,
+    "secret_values_collected": false,
+    "volumes_changed": false
+  },
+  "status": "success",
+  "success": true,
+  "unaffected_containers_unchanged": true,
   "workflow": {
     "run_id": 29885228305,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29885228305",
     "source_sha": "beea932ae302dcadbda7af19097d23db60a29b07",
-    "artifact_name": "dominion-alignment-stage2f-baby-recovery"
+    "artifact_name": "dominion-alignment-stage2f-baby-recovery",
+    "run_returncode": "0",
+    "job_status": "success"
   }
 }

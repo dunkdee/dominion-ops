@@ -1,10 +1,10 @@
-name: Production Wix Catalog Description Proposal
+name: Production Wix Catalog Description Proposal V2
 
 on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: Type exactly CREATE_WIX_DESCRIPTION_PROPOSAL
+        description: Type exactly CREATE_WIX_DESCRIPTION_PROPOSAL_V2
         required: true
         type: string
 
@@ -12,23 +12,23 @@ permissions:
   contents: write
 
 concurrency:
-  group: production-wix-catalog-description-proposal
+  group: production-wix-catalog-description-proposal-v2
   cancel-in-progress: false
 
 jobs:
   propose:
-    if: ${{ inputs.confirm == 'CREATE_WIX_DESCRIPTION_PROPOSAL' }}
+    if: ${{ inputs.confirm == 'CREATE_WIX_DESCRIPTION_PROPOSAL_V2' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
-      REPORT_DIR: /tmp/dominion-wix-description-proposal
-      REPORT_FILE: /tmp/dominion-wix-description-proposal/result.json
-      PROPOSAL_FILE: /tmp/dominion-wix-description-proposal/wix_catalog_description_proposal.json
-      REMOTE_SCRIPT: /tmp/wix_catalog_description_proposal.py
-      REMOTE_PROPOSAL: /tmp/wix_catalog_description_proposal.json
-      REPORT_BRANCH: audit/wix-catalog-description-proposal-20260722
-      REPORT_PATH: governance/wix_catalog_description_proposal_result.json
-      ARTIFACT_NAME: dominion-wix-catalog-description-proposal
+      REPORT_DIR: /tmp/dominion-wix-description-proposal-v2
+      REPORT_FILE: /tmp/dominion-wix-description-proposal-v2/result.json
+      PROPOSAL_FILE: /tmp/dominion-wix-description-proposal-v2/wix_catalog_description_proposal_v2.json
+      REMOTE_SCRIPT: /tmp/wix_catalog_description_proposal_v2.py
+      REMOTE_PROPOSAL: /tmp/wix_catalog_description_proposal_v2.json
+      REPORT_BRANCH: audit/wix-catalog-description-proposal-v2-20260722
+      REPORT_PATH: governance/wix_catalog_description_proposal_v2_result.json
+      ARTIFACT_NAME: dominion-wix-catalog-description-proposal-v2
 
     steps:
       - name: Publish run pointer
@@ -43,10 +43,12 @@ jobs:
               await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
             } catch (error) {
               if (error.status !== 404) throw error;
-              await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: context.sha });
+              await github.rest.git.createRef({
+                owner, repo, ref: `refs/heads/${branch}`, sha: context.sha,
+              });
             }
             const report = {
-              alignment_stage: 'wix-catalog-description-proposal',
+              alignment_stage: 'wix-catalog-description-proposal-v2',
               status: 'started',
               workflow: {
                 run_id: context.runId,
@@ -65,7 +67,7 @@ jobs:
             }
             await github.rest.repos.createOrUpdateFileContents({
               owner, repo, path, branch,
-              message: `audit: Wix description proposal run ${context.runId} started`,
+              message: `audit: Wix description proposal V2 run ${context.runId} started`,
               content,
               ...(sha ? { sha } : {}),
             });
@@ -106,7 +108,7 @@ jobs:
           test -s ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Create private description proposal read-only
+      - name: Create private product-specific proposal V2
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -114,7 +116,7 @@ jobs:
           set -euo pipefail
           umask 077
           install -d -m 700 "$REPORT_DIR"
-          printf '%s\n' '{"alignment_stage":"wix-catalog-description-proposal","status":"collector_not_completed","success":false}' > "$REPORT_FILE"
+          printf '%s\n' '{"alignment_stage":"wix-catalog-description-proposal-v2","status":"collector_not_completed","success":false}' > "$REPORT_FILE"
           scp \
             -i ~/.ssh/id_vm \
             -o BatchMode=yes \
@@ -136,7 +138,7 @@ jobs:
           RC=$?
           set -e
           python3 -m json.tool "$REPORT_FILE" >/dev/null
-          if [ -f "$REPORT_FILE" ]; then chmod 600 "$REPORT_FILE"; fi
+          chmod 600 "$REPORT_FILE"
           if [ "$RC" -eq 0 ]; then
             scp \
               -i ~/.ssh/id_vm \
@@ -158,7 +160,7 @@ jobs:
           fi
           echo "PROPOSAL_RC=$RC" >> "$GITHUB_ENV"
 
-      - name: Upload private proposal
+      - name: Upload private proposal V2
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
@@ -170,7 +172,7 @@ jobs:
           retention-days: 7
           compression-level: 9
 
-      - name: Publish terminal proposal result
+      - name: Publish terminal proposal V2 result
         if: ${{ always() }}
         uses: actions/github-script@v7
         env:
@@ -189,10 +191,10 @@ jobs:
               try {
                 report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, 'utf8'));
               } catch (error) {
-                report = { alignment_stage: 'wix-catalog-description-proposal', status: 'report_parse_failed', success: false };
+                report = { alignment_stage: 'wix-catalog-description-proposal-v2', status: 'report_parse_failed', success: false };
               }
             } else {
-              report = { alignment_stage: 'wix-catalog-description-proposal', status: 'report_missing', success: false };
+              report = { alignment_stage: 'wix-catalog-description-proposal-v2', status: 'report_missing', success: false };
             }
             report.workflow = {
               run_id: context.runId,
@@ -212,12 +214,12 @@ jobs:
             }
             await github.rest.repos.createOrUpdateFileContents({
               owner, repo, path, branch,
-              message: `audit: Wix description proposal run ${context.runId} ${terminalStatus}`,
+              message: `audit: Wix description proposal V2 run ${context.runId} ${terminalStatus}`,
               content,
               ...(sha ? { sha } : {}),
             });
 
-      - name: Enforce proposal result
+      - name: Enforce proposal V2 result
         if: ${{ always() }}
         run: |
           set -euo pipefail
@@ -228,10 +230,10 @@ jobs:
 
           path = Path(os.environ["REPORT_FILE"])
           if not path.is_file():
-              raise SystemExit("Wix description proposal report missing")
+              raise SystemExit("Wix description proposal V2 report missing")
           report = json.loads(path.read_text(encoding="utf-8"))
           if not report.get("success"):
-              raise SystemExit("Wix description proposal did not complete")
+              raise SystemExit("Wix description proposal V2 did not complete")
           if not report.get("containers_unchanged"):
               raise SystemExit("container inventory changed during proposal generation")
           validation = report.get("validation") or {}
@@ -243,9 +245,15 @@ jobs:
               "all_proposed_hashes_unique",
               "all_proposals_changed",
               "all_proposals_bounded",
+              "all_titles_embedded",
+              "all_variant_counts_positive",
+              "all_variant_skus_present",
+              "unsupported_generated_phrases_absent",
           )
+          if validation.get("quality_version") != 2:
+              raise SystemExit("proposal V2 quality version missing")
           if not all(validation.get(key) is True for key in required):
-              raise SystemExit("proposal validation failed")
+              raise SystemExit("proposal V2 validation failed")
           safety = report.get("safety") or {}
           forbidden = [
               "wix_mutations_performed",
@@ -268,7 +276,7 @@ jobs:
               "seo_changes_proposed",
           ]
           if any(safety.get(key) for key in forbidden):
-              raise SystemExit("proposal safety contract failed")
+              raise SystemExit("proposal V2 safety contract failed")
           PY
 
       - name: Remove temporary runner material

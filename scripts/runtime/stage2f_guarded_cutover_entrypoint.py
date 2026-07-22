@@ -16,11 +16,18 @@ _ORIGINAL_COMMAND = engine.command
 _ORIGINAL_SANITIZED = engine.sanitized_container
 
 PORT_CONTRACTS = {
-    "baby-api": {("", "8080", "8080/tcp")},
-    "dominion-web": {("", "8090", "80/tcp")},
-    "wix-agent": {("127.0.0.1", "8082", "8000/tcp")},
+    "baby-api": {("public", "8080", "8080/tcp")},
+    "dominion-web": {("public", "8090", "80/tcp")},
+    "wix-agent": {("loopback", "8082", "8000/tcp")},
     "baby-logger": set(),
 }
+
+
+def binding_scope(host_ip):
+    """Normalize equivalent Docker host-bind representations."""
+    if host_ip in {"127.0.0.1", "::1"}:
+        return "loopback"
+    return "public"
 
 
 def guarded_command(args, *, cwd=None, timeout=300, env=None):
@@ -53,7 +60,7 @@ def guarded_sanitized(name):
     if name in PORT_CONTRACTS and item.get("exists"):
         actual = {
             (
-                port.get("host_ip") or "",
+                binding_scope(port.get("host_ip")),
                 port.get("host_port") or "",
                 port.get("container_port") or "",
             )
@@ -87,8 +94,10 @@ def guarded_rollback(migrated, rollback_names):
         connect_args.extend([engine.NETWORK_NAME, service])
         connect = _ORIGINAL_COMMAND(connect_args, timeout=30)
         if connect.get("returncode") != 0:
-            errors.append(f"rollback_network_connect_failed:{service}")
-            continue
+            restored = _ORIGINAL_SANITIZED(service)
+            if not any(network.get("network_id") == engine.NETWORK_ID for network in restored.get("networks", [])):
+                errors.append(f"rollback_network_connect_failed:{service}")
+                continue
 
         policy = _ORIGINAL_COMMAND(
             ["docker", "update", f"--restart={engine.TARGETS[service]['restart']}", service],

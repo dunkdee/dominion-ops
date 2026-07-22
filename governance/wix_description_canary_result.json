@@ -1,10 +1,168 @@
 {
   "alignment_stage": "wix-description-canary-apply",
-  "status": "started",
+  "apply_error": {
+    "message": "post_write_hash_mismatch:31ab3699-504b-468c-a314-c7e5737b6683",
+    "type": "RuntimeError"
+  },
+  "canary_product_ids": [
+    "31ab3699-504b-468c-a314-c7e5737b6683",
+    "0951cafe-1669-4e01-a8bf-7ca5cdc0e51c",
+    "09ecaf7f-9054-48d4-a7c6-9071b872cbd1"
+  ],
+  "categories": [
+    "charging",
+    "case",
+    "audio"
+  ],
+  "containers_unchanged": true,
+  "errors": [
+    "canary_apply_failed"
+  ],
+  "generated_at": "2026-07-22T05:43:30.645800+00:00",
+  "next_gate": "Read-only canary rendering and duplicate-hash verification before any larger rollout",
+  "proposal_source": {
+    "generator_success": true,
+    "proposal_sha256": "a8ec5384d06f783381bd2f0b7e532854ac9cdca24a1f362c3b2a91585aaaea15",
+    "quality_version": 2
+  },
+  "protected_health_after": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "protected_health_before": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "rollback": {
+    "errors": [],
+    "performed": true,
+    "restored": [
+      "31ab3699-504b-468c-a314-c7e5737b6683"
+    ],
+    "success": true
+  },
+  "rollback_backup": {
+    "mode": "0o600",
+    "path": "/var/lib/dominion/wix-catalog-canary/29894579230-1/descriptions-before-canary.json",
+    "sha256": "71db317a205913722e7cba27065c932d320a0bc1be142529d14be7f4361b9b3c",
+    "size_bytes": 1515
+  },
+  "safety": {
+    "containers_changed": false,
+    "customer_data_collected": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "environment_values_collected": false,
+    "full_descriptions_reported": false,
+    "inventory_changed": false,
+    "inventory_quantities_collected": false,
+    "networks_changed": false,
+    "only_canary_products_targeted": true,
+    "order_data_collected": false,
+    "orders_changed": false,
+    "products_changed": false,
+    "products_changed_count": 0,
+    "raw_api_responses_collected": false,
+    "raw_logs_collected": false,
+    "secret_values_collected": false,
+    "volumes_changed": false
+  },
+  "status": "failed",
+  "success": false,
+  "updated": [
+    {
+      "after_revision": "7",
+      "before_revision": "6",
+      "id": "31ab3699-504b-468c-a314-c7e5737b6683",
+      "proposed_description_hash": "880cfe6973e305388a4da25e3a56efc7341051a9ac0c41fb145538cebef5e658"
+    }
+  ],
   "workflow": {
     "run_id": 29894579230,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29894579230",
     "source_sha": "fbd1d210e59dcf49f39adfb8c574d29a780a714c",
-    "artifact_name": "dominion-wix-description-canary"
+    "artifact_name": "dominion-wix-description-canary",
+    "run_returncode": "1",
+    "job_status": "failure"
   }
 }

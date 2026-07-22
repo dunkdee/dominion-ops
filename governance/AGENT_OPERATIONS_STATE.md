@@ -41,123 +41,110 @@
 - Legacy `alchemist-api.service`, `conductor-api.service`, and `juris-api.service` were stopped and runtime-contained.
 - Autonomous publishing timers were stopped and disabled.
 - Caddy, canonical Conductor, and Gemini were enabled for boot persistence.
-- Protected HTTP checks remained healthy and canonical restart deltas were zero during verification.
 
 ### Stage 2B — Deployment reconciliation map
 
 - Live Docker Compose project reports the name `desktop-tutorial`.
-- Its recorded manifest path `/home/malachisingleton8/desktop-tutorial/docker-compose.yml` no longer exists.
-- The actual VM repository checkout `/home/malachisingleton8/dominion-ops` is on an orphaned local feature branch.
-- That checkout contains a modified `docker-compose.yml` and an untracked `.env` containing private-key risk indicators.
-- The `.env` remains local and private; it was not uploaded or committed.
+- Its recorded manifest path no longer exists.
+- The VM repository checkout is an orphaned local feature branch with a private local `.env`.
 - The correct Conductor health endpoint is `/health`, not `/healthz`.
 
 ### Stage 2C — Parallel canonical release preparation
 
 Evidence: workflow run `29866812526`.
 
-- Immutable release prepared at `/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a` from source commit `10646094aa3a5a1e0d4d18dc5508a33d2f5ec2a3`.
-- The local `.env` was copied into the release with mode `0600`; its hash matched the protected recovery copy.
-- Compose validation passed for all six declared services.
-- Production containers and the orphaned checkout remained unchanged.
+- Immutable release prepared at `/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a`.
+- The local `.env` was preserved with mode `0600` and matching recovery hash.
+- Compose validation passed and production containers remained unchanged.
 
 ### Stage 2D — Independent preflight — VETOED AS DESIGNED
 
 Evidence: workflow run `29867278124`.
 
 - Runtime, secrets, deployment, rollback, and agent-runtime gates passed.
-- The governance gate vetoed because retired APIs had reactivated.
-- The isolated image build was correctly skipped.
-- No cutover was authorized and production containers were unchanged.
+- Governance vetoed because retired APIs had reactivated.
+- Isolated builds were correctly skipped.
 
 ### Stage 2D-R / R2 — Reactivation tracing
 
 Evidence: workflow runs `29868756275` and `29869539712`.
 
-- Scheduler and worker references to `conductor-api.service` were only `After=` ordering directives.
-- Their commands ran only `scheduler.py` and `worker.py`.
-- The retired names in `buddy_core/port_healer.py` occurred in a stale comment.
+- Scheduler and worker references were only `After=` ordering directives.
 - No matching user cron entry was found.
-- The installed retired unit files' `Restart=always` policies sustained their own loops after activation.
+- Installed retired units' `Restart=always` policies sustained the loops.
 
 ### Stage 2D-R3 — Persistent retirement — COMPLETE
 
 Evidence: workflow run `29874133137`.
 
 - Root-only backups were created under `/var/lib/dominion/unit-retirement/stage2d-r3-29874133137`.
-- Persistent masks were installed for `alchemist-api.service`, `conductor-api.service`, `juris-api.service`, and `dominion-port-healer.service`.
-- All four units verified `inactive/dead/masked`.
-- Canonical Caddy, Alchemist, Alpha, Conductor, Gatekeeper, Guardian, Juris, Sentinel, Store, and Gemini remained `active/running`.
-- Every protected canonical service recorded a zero restart delta over 90 seconds.
-- All six protected HTTP checks remained 200.
-- No rollback was required.
+- Persistent masks were installed for the three retired APIs and obsolete port healer.
+- All protected canonical services remained active, restart deltas were zero, and all protected HTTP checks remained 200.
 
 ### Stage 2D-R4 — Independent gates and isolated builds — COMPLETE
 
 Evidence: workflow run `29879295855`.
 
-- Runtime, secrets, deployment, rollback, governance, agent-runtime, build, and post-build-stability gates all passed.
-- The deterministic Five Council recorded five passes and no veto.
-- Conductor, Guardian, Sentinel, and Juris were active/running; Watchmen status returned HTTP 200.
+- All prerequisite gates passed.
 - Approved images were built for Baby API, Dominion Web, and Wix Agent.
-- Retired units remained masked, publishing timers remained disabled, canonical restart deltas remained zero, and production containers were unchanged.
+- Production remained unchanged.
 
 ### Stage 2E — Exact cutover and rollback map — COMPLETE
 
 Evidence: workflow run `29880455592`.
 
-- Baby API, Baby Logger, and Dominion Web are owned by the orphaned `desktop-tutorial` Compose project.
-- Wix Agent is manually managed outside Compose but shares `desktop-tutorial_default`.
-- Exact current container IDs, image IDs, ports, mounts, restart policies, labels, network ID, and Wix volume names were recorded.
-- Approved R4 image IDs were reconfirmed.
-- Wix is loopback-only on port 8082, reuses two named volumes, and retains its hardening controls.
-- Baby API and Dominion Web are publicly bound on ports 8080 and 8090.
-- The mapping operation was read-only; containers, images, networks, volumes, repositories, databases, DNS, and secrets remained unchanged.
+- Baby API, Baby Logger, and Dominion Web are owned by orphaned Compose project `desktop-tutorial`.
+- Wix Agent is manually managed but shares the same network.
+- Exact image IDs, ports, mounts, network ID, restart policies, and Wix volumes were recorded.
 
-## Current protected production core
+### Stage 2F — Guarded canonical cutover — FAILED CLOSED
 
-- Baby API — port 8080
-- Wix Agent — port 8082, record-only fulfillment mode
-- Dominion Web — port 8090
-- n8n — port 5678, approved automation only
-- Alpha Engine — port 8787, paper-only
-- Caddy — production edge
-- Gatekeeper — revenue rail
-- Store API — payment surface
-- Canonical Conductor — orchestration
-- Canonical Juris — legal intelligence
-- Canonical Alchemist — health intelligence
+Evidence: workflow run `29883264403`.
+
+- Canonical Baby API and Dominion Web replacements passed their service-level migration checks before Wix was attempted.
+- New Wix Agent failed its `/ready` health gate.
+- The workflow removed all three new containers and restored Wix data from the quiescent local snapshot.
+- Wix Agent, Dominion Web, n8n, Alpha Engine, and Conductor returned HTTP 200 after rollback.
+- The restored original Baby API failed to recover, entered a restart loop, and left port 8080 unavailable.
+- All canonical systemd restart deltas remained zero.
+- Retired APIs remained masked and publishing timers remained disabled.
+- No database, DNS, network definition, volume definition, repository checkout, or secret was changed.
+- The failed full-cutover workflow was removed from `main` to prevent accidental rerun.
+
+## Current production condition
+
+- **Baby API — port 8080 unavailable; emergency recovery required.**
+- Wix Agent — port 8082 healthy, record-only mode.
+- Dominion Web — port 8090 healthy.
+- n8n — port 5678 healthy, approved automation only.
+- Alpha Engine — port 8787 healthy, paper-only.
+- Caddy, Gatekeeper, Store, Conductor, Guardian, Sentinel, Juris, Alchemist, and Gemini remain active under existing controls.
 
 ## Current active work
 
-### Stage 2F — Guarded canonical Compose cutover
+### Stage 2F-R1 — Baby API emergency recovery
 
-**Goal:** Move Baby API, Baby Logger, Dominion Web, and Wix Agent into the canonical `dominion-ops` Compose project while preserving the current containers and Wix data as locally recoverable rollback assets.
+**Goal:** Restore port 8080 using only the already-tested canonical Baby API image while preserving the failing original container for diagnosis.
 
 Required behavior:
 
-1. Require the exact human authorization `CUTOVER_STAGE_2F`.
-2. Refuse any drift in current container IDs, image IDs, approved replacement image IDs, release hashes, network ID, or Wix volume names.
-3. Preserve full original container inspections only in a root-only VM cutover directory.
-4. Stop and rename each original container instead of deleting it.
-5. Create quiescent local Wix data and log archives before the new Wix image starts.
-6. Disconnect stopped rollback containers so old aliases cannot compete with new services.
-7. Create replacements through Compose project `dominion-ops` using the existing production network and exact Wix volumes.
-8. Verify image IDs, ownership labels, ports, mounts, security controls, health, systemd restart deltas, retired masks, publishing timers, and unrelated-container stability.
-9. Automatically remove new containers and restore original names, network aliases, restart policies, Wix data, and health if any gate fails.
-10. Preserve successful rollback containers and local archives until separately authorized cleanup.
+1. Require exact human authorization `RECOVER_BABY_STAGE_2F`.
+2. Refuse drift in the original container ID, old/new image IDs, release hashes, network ID, or governance state.
+3. Classify recent Baby API error signals without publishing raw logs.
+4. Preserve the failing original container under a unique stopped name; do not delete it.
+5. Start only canonical Baby API through Compose project `dominion-ops`.
+6. Reuse the existing production network and vault mount.
+7. Verify exact image, ownership, network, mounts, port 8080, HTTP 200, and 60-second stability.
+8. Leave Wix, Dominion Web, n8n, Alpha, Conductor, databases, DNS, volumes, and repositories unchanged.
 
-Formal change record: `governance/STAGE2F_CUTOVER_PLAN.md`.
+## Blocked until Baby API recovery is verified
 
-## Blocked until Stage 2F evidence exists
-
-- Deleting preserved rollback containers or local Wix archives.
-- Resetting, deleting, or renaming the old VM checkout.
+- Any further full-stack cutover.
+- Deleting failed or rollback containers and local Wix archives.
+- Resetting or deleting the old VM checkout.
 - Starting Browser Agents or Obsidian.
 - Migrating n8n, PostgreSQL, SEO, or Movie Generator.
-- Production publishing.
-- Live trading.
-- Surplus claimant contact or filing.
+- Production publishing, live trading, or surplus claimant contact.
 
 ## Agent reporting format
 

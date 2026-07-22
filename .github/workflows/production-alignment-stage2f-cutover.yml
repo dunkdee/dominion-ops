@@ -170,7 +170,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/github-script@v7
         env:
-          JOB_STATUS: ${{ job.status }}
+          CUTOVER_RESULT_CODE: ${{ env.CUTOVER_RC }}
         with:
           script: |
             const fs = require('fs');
@@ -178,6 +178,8 @@ jobs:
             const repo = context.repo.repo;
             const branch = process.env.REPORT_BRANCH;
             const path = process.env.REPORT_PATH;
+            const resultCode = process.env.CUTOVER_RESULT_CODE;
+            const terminalStatus = resultCode === '0' ? 'success' : 'failure';
             let report;
             if (fs.existsSync(process.env.REPORT_FILE)) {
               try {
@@ -194,7 +196,8 @@ jobs:
               run_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
               source_sha: context.sha,
               artifact_name: process.env.ARTIFACT_NAME,
-              job_status: process.env.JOB_STATUS,
+              run_returncode: resultCode || null,
+              job_status: terminalStatus,
             };
             const content = Buffer.from(`${JSON.stringify(report, null, 2)}\n`).toString('base64');
             let sha;
@@ -206,7 +209,7 @@ jobs:
             }
             await github.rest.repos.createOrUpdateFileContents({
               owner, repo, path, branch,
-              message: `audit: Stage-2F cutover run ${context.runId} attempt ${context.runAttempt} ${process.env.JOB_STATUS}`,
+              message: `audit: Stage-2F cutover run ${context.runId} attempt ${context.runAttempt} ${terminalStatus}`,
               content,
               ...(sha ? { sha } : {}),
             });

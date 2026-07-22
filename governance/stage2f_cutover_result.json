@@ -1,10 +1,550 @@
 {
   "alignment_stage": "2F-cutover",
-  "status": "started",
+  "approved_source_sha": "10646094aa3a5a1e0d4d18dc5508a33d2f5ec2a3",
+  "canonical_restart_deltas_60_seconds": {
+    "alchemist": {
+      "delta": 0,
+      "end": 2,
+      "start": 2,
+      "unit": "dominion-alchemist.service"
+    },
+    "alpha": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "unit": "dominion-alpha.service"
+    },
+    "caddy": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "unit": "caddy.service"
+    },
+    "conductor": {
+      "delta": 0,
+      "end": 10,
+      "start": 10,
+      "unit": "dominion-conductor.service"
+    },
+    "gatekeeper": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "unit": "dominion-gatekeeper.service"
+    },
+    "gemini": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "unit": "gemini-server.service"
+    },
+    "guardian": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "unit": "dominion-guardian.service"
+    },
+    "juris": {
+      "delta": 0,
+      "end": 15689,
+      "start": 15689,
+      "unit": "dominion-juris.service"
+    },
+    "sentinel": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "unit": "dominion-sentinel.service"
+    },
+    "store": {
+      "delta": 0,
+      "end": 0,
+      "start": 0,
+      "unit": "dominion-store.service"
+    }
+  },
+  "compose_project": "dominion-ops",
+  "cutover_root": "/var/lib/dominion/cutovers/stage2f-29883264403-1",
+  "errors": [
+    "new_health_failed:wix-agent"
+  ],
+  "final_targets": {
+    "baby-api": {
+      "cap_drop": [],
+      "compose_config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+      "compose_project": "desktop-tutorial",
+      "compose_service": "baby-api",
+      "container_id": "601c5388480132a0a5ef4584fcfff0dacb575db5f7001ad4f677d48a17a7d38a",
+      "exists": true,
+      "health": "unhealthy",
+      "image_id": "sha256:a319b3721a52e31c166c5a311301f656affef7f4acaeb4ff047c2cc971af000d",
+      "image_reference": "desktop-tutorial-baby-api",
+      "memory_bytes": 0,
+      "mounts": [
+        {
+          "destination": "/app",
+          "name": null,
+          "rw": true,
+          "source": "/home/malachisingleton8/desktop-tutorial/api",
+          "type": "bind"
+        },
+        {
+          "destination": "/vault",
+          "name": null,
+          "rw": true,
+          "source": "/home/malachisingleton8/vault",
+          "type": "bind"
+        }
+      ],
+      "name": "baby-api",
+      "nano_cpus": 0,
+      "networks": [
+        {
+          "aliases": [
+            "baby-api"
+          ],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "pids_limit": null,
+      "port_contract_valid": false,
+      "ports": [],
+      "read_only_rootfs": false,
+      "restart_policy": "always",
+      "running": false,
+      "security_opt": [],
+      "state": "restarting"
+    },
+    "baby-logger": {
+      "cap_drop": [],
+      "compose_config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+      "compose_project": "desktop-tutorial",
+      "compose_service": "baby-logger",
+      "container_id": "c3d390494b902672bd7ef1aabc0fcc4a0fe770368439933fd1a47c5b70813161",
+      "exists": true,
+      "health": null,
+      "image_id": "sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4",
+      "image_reference": "alpine:latest",
+      "memory_bytes": 0,
+      "mounts": [],
+      "name": "baby-logger",
+      "nano_cpus": 0,
+      "networks": [
+        {
+          "aliases": [
+            "baby-logger",
+            "baby-logger"
+          ],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "pids_limit": null,
+      "port_contract_valid": true,
+      "ports": [],
+      "read_only_rootfs": false,
+      "restart_policy": "always",
+      "running": true,
+      "security_opt": [],
+      "state": "running"
+    },
+    "dominion-web": {
+      "cap_drop": [],
+      "compose_config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
+      "compose_project": "desktop-tutorial",
+      "compose_service": "dominion-web",
+      "container_id": "cf8294541b1ab3c7ea29896950f6e87e38683ac32b400afb8a1850a0be6f61c5",
+      "exists": true,
+      "health": null,
+      "image_id": "sha256:3224bfc43c02ab75c9a651cd3b8988e8778cae57006a96da16a03d9b730d9810",
+      "image_reference": "desktop-tutorial-dominion-web",
+      "memory_bytes": 0,
+      "mounts": [],
+      "name": "dominion-web",
+      "nano_cpus": 0,
+      "networks": [
+        {
+          "aliases": [
+            "dominion-web"
+          ],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "pids_limit": null,
+      "port_contract_valid": true,
+      "ports": [
+        {
+          "container_port": "80/tcp",
+          "host_ip": "0.0.0.0",
+          "host_port": "8090"
+        },
+        {
+          "container_port": "80/tcp",
+          "host_ip": "::",
+          "host_port": "8090"
+        }
+      ],
+      "read_only_rootfs": false,
+      "restart_policy": "always",
+      "running": true,
+      "security_opt": [],
+      "state": "running"
+    },
+    "wix-agent": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "compose_config_files": null,
+      "compose_project": null,
+      "compose_service": null,
+      "container_id": "f0319cf37704efcd92de809994673620c77e3850ec0106551340f3ad2e2859b5",
+      "exists": true,
+      "health": "healthy",
+      "image_id": "sha256:a5a7deff7623eac93fe40adf1c96a65e802e1c50a92bfe67e1f284a960efb0fd",
+      "image_reference": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
+      "memory_bytes": 536870912,
+      "mounts": [
+        {
+          "destination": "/app/logs",
+          "name": "wix_agent_logs_a33ce2044d95-29785123140-1",
+          "rw": true,
+          "source": "/var/lib/docker/volumes/wix_agent_logs_a33ce2044d95-29785123140-1/_data",
+          "type": "volume"
+        },
+        {
+          "destination": "/data",
+          "name": "wix_agent_data_a33ce2044d95-29785123140-1",
+          "rw": true,
+          "source": "/var/lib/docker/volumes/wix_agent_data_a33ce2044d95-29785123140-1/_data",
+          "type": "volume"
+        }
+      ],
+      "name": "wix-agent",
+      "nano_cpus": 1000000000,
+      "networks": [
+        {
+          "aliases": [],
+          "name": "desktop-tutorial_default",
+          "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+        }
+      ],
+      "pids_limit": 256,
+      "port_contract_valid": true,
+      "ports": [
+        {
+          "container_port": "8000/tcp",
+          "host_ip": "127.0.0.1",
+          "host_port": "8082"
+        }
+      ],
+      "read_only_rootfs": true,
+      "restart_policy": "unless-stopped",
+      "running": true,
+      "security_opt": [
+        "no-new-privileges"
+      ],
+      "state": "running"
+    }
+  },
+  "generated_at": "2026-07-22T01:30:26.044728+00:00",
+  "health_after": [
+    {
+      "error_type": "URLError",
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": false,
+      "status": null
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "health_before": [
+    {
+      "name": "baby-api",
+      "path": "/",
+      "port": 8080,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "wix-agent",
+      "path": "/ready",
+      "port": 8082,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "dominion-web",
+      "path": "/",
+      "port": 8090,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "n8n",
+      "path": "/healthz",
+      "port": 5678,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "alpha-engine",
+      "path": "/health",
+      "port": 8787,
+      "reachable": true,
+      "status": 200
+    },
+    {
+      "name": "conductor",
+      "path": "/health",
+      "port": 5060,
+      "reachable": true,
+      "status": 200
+    }
+  ],
+  "local_volume_backups": {
+    "wix_data": {
+      "mode": "0o600",
+      "path": "/var/lib/dominion/cutovers/stage2f-29883264403-1/wix-data-before-cutover.tar.gz",
+      "sha256": "b205fbd5670d334a2317cf195b4ec9db0d284f229e7753c30ebbcb586b488763",
+      "size_bytes": 720
+    },
+    "wix_logs": {
+      "mode": "0o600",
+      "path": "/var/lib/dominion/cutovers/stage2f-29883264403-1/wix-logs-before-cutover.tar.gz",
+      "sha256": "769eeefaa2d9a4ab266c1b66ea87590ee44566547e1359494a7e92659b65c87c",
+      "size_bytes": 188
+    }
+  },
+  "migrated_services": [
+    "baby-api",
+    "dominion-web",
+    "wix-agent"
+  ],
+  "production_network": {
+    "name": "desktop-tutorial_default",
+    "network_id": "fce28b58ed4477fc2466285a6a80feb013061e63fece83eaaaea7236712f84e3"
+  },
+  "publishing_timers_after": {
+    "conductor-autonomous.timer": {
+      "active_state": "inactive",
+      "load_state": "loaded",
+      "n_restarts": null,
+      "sub_state": "dead",
+      "unit": "conductor-autonomous.timer",
+      "unit_file_state": "disabled"
+    },
+    "dominion-kdp.timer": {
+      "active_state": "inactive",
+      "load_state": "loaded",
+      "n_restarts": null,
+      "sub_state": "dead",
+      "unit": "dominion-kdp.timer",
+      "unit_file_state": "disabled"
+    },
+    "dominion-publish.timer": {
+      "active_state": "inactive",
+      "load_state": "loaded",
+      "n_restarts": null,
+      "sub_state": "dead",
+      "unit": "dominion-publish.timer",
+      "unit_file_state": "disabled"
+    },
+    "dominion-social-poster.timer": {
+      "active_state": "inactive",
+      "load_state": "loaded",
+      "n_restarts": null,
+      "sub_state": "dead",
+      "unit": "dominion-social-poster.timer",
+      "unit_file_state": "disabled"
+    },
+    "dominion-youtube.timer": {
+      "active_state": "inactive",
+      "load_state": "loaded",
+      "n_restarts": null,
+      "sub_state": "dead",
+      "unit": "dominion-youtube.timer",
+      "unit_file_state": "disabled"
+    }
+  },
+  "release_root": "/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a",
+  "retired_after": {
+    "alchemist-api.service": {
+      "active_state": "inactive",
+      "load_state": "masked",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "alchemist-api.service",
+      "unit_file_state": "masked"
+    },
+    "conductor-api.service": {
+      "active_state": "inactive",
+      "load_state": "masked",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "conductor-api.service",
+      "unit_file_state": "masked"
+    },
+    "dominion-port-healer.service": {
+      "active_state": "inactive",
+      "load_state": "masked",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "dominion-port-healer.service",
+      "unit_file_state": "masked"
+    },
+    "juris-api.service": {
+      "active_state": "inactive",
+      "load_state": "masked",
+      "n_restarts": 0,
+      "sub_state": "dead",
+      "unit": "juris-api.service",
+      "unit_file_state": "masked"
+    }
+  },
+  "risks": [],
+  "rollback_names": {
+    "baby-api": "baby-api-rollback-stage2f-29883264403-1",
+    "baby-logger": "baby-logger-rollback-stage2f-29883264403-1",
+    "dominion-web": "dominion-web-rollback-stage2f-29883264403-1",
+    "wix-agent": "wix-agent-rollback-stage2f-29883264403-1"
+  },
+  "rollback_performed": true,
+  "rollback_result": {
+    "actions": [
+      {
+        "new_removed": true,
+        "service": "wix-agent"
+      },
+      {
+        "new_removed": true,
+        "service": "dominion-web"
+      },
+      {
+        "new_removed": true,
+        "service": "baby-api"
+      }
+    ],
+    "errors": [
+      "rollback_health_failed:baby-api",
+      "rollback_protected_http_failed"
+    ],
+    "health": [
+      {
+        "error_type": "URLError",
+        "name": "baby-api",
+        "path": "/",
+        "port": 8080,
+        "reachable": false,
+        "status": null
+      },
+      {
+        "name": "wix-agent",
+        "path": "/ready",
+        "port": 8082,
+        "reachable": true,
+        "status": 200
+      },
+      {
+        "name": "dominion-web",
+        "path": "/",
+        "port": 8090,
+        "reachable": true,
+        "status": 200
+      },
+      {
+        "name": "n8n",
+        "path": "/healthz",
+        "port": 5678,
+        "reachable": true,
+        "status": 200
+      },
+      {
+        "name": "alpha-engine",
+        "path": "/health",
+        "port": 8787,
+        "reachable": true,
+        "status": 200
+      },
+      {
+        "name": "conductor",
+        "path": "/health",
+        "port": 5060,
+        "reachable": true,
+        "status": 200
+      }
+    ],
+    "success": false,
+    "wix_data_restored": true
+  },
+  "safety": {
+    "browser_agents_started": false,
+    "databases_changed": false,
+    "dns_changed": false,
+    "existing_network_reused": true,
+    "existing_wix_volumes_reused": true,
+    "full_container_inspects_saved_locally_only": true,
+    "network_definition_changed": false,
+    "obsidian_started": false,
+    "old_containers_deleted": false,
+    "old_containers_preserved_as_stopped_rollback_units": false,
+    "repository_checkout_changed": false,
+    "secret_file_uploaded": false,
+    "secret_values_collected": false,
+    "volume_contents_collected": false,
+    "volume_definitions_changed": false,
+    "wix_volume_archives_uploaded": false,
+    "wix_volume_contents_collected_in_report": false
+  },
+  "status": "failed",
+  "success": false,
+  "unaffected_containers_unchanged": true,
+  "wix_volumes": {
+    "data": "wix_agent_data_a33ce2044d95-29785123140-1",
+    "logs": "wix_agent_logs_a33ce2044d95-29785123140-1"
+  },
   "workflow": {
     "run_id": 29883264403,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29883264403",
     "source_sha": "72c6691e5c8ffb575d94455fcebdd2794eb1fab5",
-    "artifact_name": "dominion-alignment-stage2f-cutover"
+    "artifact_name": "dominion-alignment-stage2f-cutover",
+    "run_returncode": "1",
+    "job_status": "failure"
   }
 }

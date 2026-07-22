@@ -1,33 +1,55 @@
 # Wix Description Proposal Quality Review
 
 **Human authority:** Dewayne Singleton  
-**Scope:** Review-only product-description correction work  
-**Rule:** No Wix mutation is authorized by this record.
+**Scope:** Product-description correction work  
+**Rule:** No full-catalog Wix mutation is authorized by this record.
 
 ## Proposal V1 — technically valid, content vetoed
 
 Evidence: workflow run `29891005124` and private artifact `dominion-wix-catalog-description-proposal`.
 
-The V1 workflow completed successfully and produced 62 revision-locked proposals for the 62 products in 24 duplicate-description groups. All product IDs, live revisions, current-description hashes, proposal hashes, and bounded-length checks passed. No product, inventory, order, container, database, network, volume, DNS, customer data, or secret was changed.
+The V1 workflow produced 62 revision-locked proposals, but direct quality review found only **8 normalized body templates** across 62 descriptions; the most-used template appeared **23 times**.
 
-A direct quality inspection of the private proposal found only **8 normalized body templates across 62 descriptions**. The most-used template appeared **23 times**. Product names made the final hashes unique, but the underlying copy remained repetitive and too generic for production promotion.
+**Decision:** V1 is rejected and must not be applied to Wix.
 
-**Decision:** V1 is rejected. It must not be applied to Wix.
+## Proposal V2 — passed for limited canary
 
-## Proposal V2 — active review stage
+Evidence: workflow run `29891782530` and private artifact `dominion-wix-catalog-description-proposal-v2`.
 
-The proposal generator and workflow were upgraded on `main`:
+V2 produced 62 revision-locked proposals across ten product categories. Automated gates confirmed:
 
-- Generator commit: `4c70b0d4cd1e7d66e618e7feb517d22d03fa0a04`
-- Workflow commit: `9608b2e13a7f5168167c87ffac1a31b6a2d9b6ad`
-- Workflow: `Production Wix Catalog Description Proposal V2`
-- Authorization: `CREATE_WIX_DESCRIPTION_PROPOSAL_V2`
+- all product IDs, names, current-description hashes, and revisions are present;
+- every title is embedded;
+- all variant counts and SKU coverage are present;
+- all proposed hashes are unique and differ from current descriptions;
+- generated text remains within the bounded length contract;
+- unsupported generated marketing phrases are absent;
+- no brand or SEO change is proposed;
+- no Wix or production mutation occurred during proposal generation.
 
-V2 builds product-specific copy from exact title facts, category, live variant count, SKU coverage, current description hash, and live product revision. It rejects unsupported marketing phrases, requires every title to be embedded, and remains private-artifact-only.
+Direct artifact review found materially improved product-specific copy based on exact title facts, product category, and live variant/SKU counts. Some category-level structure remains repetitive, so V2 is approved only for a controlled three-product canary rather than the full 62-product rollout.
+
+## Three-product canary — prepared, human execution required
+
+- Engine commit: `afbd89cc7f408e20e0f29f7dc5b9800eaaa1a388`
+- Workflow commit: `121ccc73d93c9117a080fbaacf78b573fb697b33`
+- Workflow: `Production Wix Description Canary`
+- Authorization: `APPLY_WIX_DESCRIPTION_CANARY`
+- Scope: exactly three products representing charging, phone-case, and audio categories.
+
+The canary must:
+
+1. Regenerate V2 from current live catalog data.
+2. Fail closed on product revision or current-description hash drift.
+3. Store full prior descriptions in a root-only `0600` rollback file on the VM.
+4. Update only `plainDescription` for the three approved product IDs.
+5. Verify new description hashes and incremented revisions.
+6. Roll back every applied description if any write, verification, container, or protected-health gate fails.
+7. Leave inventory, orders, variants, SKUs, prices, media, brands, SEO, containers, databases, networks, volumes, and DNS unchanged.
 
 ## Current gate
 
-1. Run Proposal V2.
-2. Inspect the private artifact for factuality, readability, repetition, and conversion quality.
-3. Do not create a Wix write workflow unless V2 passes human-quality review.
-4. Any later write must fail closed on revision or current-description hash drift and must preserve a rollback copy.
+1. Human runs the three-product canary.
+2. Verify terminal workflow evidence and rollback state.
+3. Perform a read-only API and storefront rendering check on the three products.
+4. Do not authorize the remaining 59 duplicate-description products until the canary passes review.

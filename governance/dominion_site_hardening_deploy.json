@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "dominion-site-hardening-deploy",
+  "status": "started",
+  "workflow": {
+    "run_id": 29936230606,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29936230606",
+    "source_sha": "3040174a3cf946368063f9f96852c0886888a8ca",
+    "artifact_name": "dominion-site-hardening-deploy"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "2F-baby-recovery",
+  "status": "started",
+  "workflow": {
+    "run_id": 29885228305,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/29885228305",
+    "source_sha": "beea932ae302dcadbda7af19097d23db60a29b07",
+    "artifact_name": "dominion-alignment-stage2f-baby-recovery"
+  }
+}

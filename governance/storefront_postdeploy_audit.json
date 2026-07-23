@@ -1,0 +1,10 @@
+{
+  "alignment_stage": "storefront-postdeploy-audit",
+  "status": "started",
+  "workflow": {
+    "run_id": 30000061401,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/30000061401",
+    "source_sha": "d59c166be845d3a513df0458faa198b238e5b65b",
+    "artifact_name": "dominion-storefront-postdeploy-audit"
+  }
+}

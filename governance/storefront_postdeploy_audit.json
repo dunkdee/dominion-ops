@@ -1,10 +1,118 @@
 {
   "alignment_stage": "storefront-postdeploy-audit",
-  "status": "started",
+  "dominion": {
+    "audit": "wix-storefront-layout-wording",
+    "primary_url": "https://dominionhealing.org/",
+    "safety": {
+      "buttons_clicked": false,
+      "cart_changed": false,
+      "checkout_started": false,
+      "forms_submitted": false,
+      "full_visible_text_private_artifact_only": true,
+      "public_pages_only": true,
+      "wix_management_mutations": false
+    },
+    "success": true,
+    "summary": {
+      "business_name_present_in_public_properties": true,
+      "contact_email_present_in_public_properties": false,
+      "contact_phone_present_in_public_properties": false,
+      "issue_counts": {},
+      "pages_audited": 6,
+      "primary_url": "https://dominionhealing.org/",
+      "recommendations": [],
+      "required_link_presence": {
+        "about": true,
+        "contact": true,
+        "privacy": true,
+        "refund": true,
+        "return": true,
+        "shipping": true,
+        "shop": false,
+        "terms": true
+      },
+      "sampled_product_pages": 0,
+      "viewport_records": 12
+    }
+  },
+  "errors": [],
+  "gates": {
+    "dominion_public_pages_healthy": true,
+    "dominion_required_links_present": true,
+    "voltedge_three_product_pages_healthy": true
+  },
+  "next_gate": "Human review of private screenshots and wording findings; then synthetic contact-form verification before activating direct digital checkout links",
+  "safety": {
+    "buttons_clicked": false,
+    "cart_changed": false,
+    "checkout_started": false,
+    "customer_data_collected": false,
+    "environment_values_collected": false,
+    "forms_submitted": false,
+    "inventory_changed": false,
+    "order_data_collected": false,
+    "orders_changed": false,
+    "products_changed": false,
+    "public_pages_only": true,
+    "screenshots_private_artifact_only": true,
+    "secret_values_collected": false,
+    "vm_connected": false,
+    "wix_mutations_performed": false
+  },
+  "status": "success",
+  "success": true,
+  "voltedge": {
+    "audit": "wix-storefront-layout-wording",
+    "primary_url": "https://www.voltedgegoods.com/",
+    "safety": {
+      "buttons_clicked": false,
+      "cart_changed": false,
+      "checkout_started": false,
+      "forms_submitted": false,
+      "full_visible_text_private_artifact_only": true,
+      "public_pages_only": true,
+      "wix_management_mutations": false
+    },
+    "success": true,
+    "summary": {
+      "business_name_present_in_public_properties": true,
+      "contact_email_present_in_public_properties": false,
+      "contact_phone_present_in_public_properties": false,
+      "issue_counts": {
+        "empty_accessible_links": 36,
+        "images_missing_alt": 36,
+        "missing_meta_description": 20,
+        "mobile_horizontal_overflow": 18,
+        "multiple_h1": 2,
+        "unlabeled_buttons": 14,
+        "vague_call_to_action": 14
+      },
+      "pages_audited": 18,
+      "primary_url": "https://www.voltedgegoods.com/",
+      "recommendations": [
+        "Add a Privacy Policy link in the footer.",
+        "Replace vague buttons such as More or Click Here with action-specific wording.",
+        "Correct horizontal overflow on the affected mobile pages."
+      ],
+      "required_link_presence": {
+        "about": true,
+        "contact": true,
+        "privacy": false,
+        "refund": false,
+        "return": true,
+        "shipping": true,
+        "shop": true,
+        "terms": true
+      },
+      "sampled_product_pages": 7,
+      "viewport_records": 36
+    }
+  },
   "workflow": {
     "run_id": 30000061401,
     "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/30000061401",
     "source_sha": "d59c166be845d3a513df0458faa198b238e5b65b",
-    "artifact_name": "dominion-storefront-postdeploy-audit"
+    "artifact_name": "dominion-storefront-postdeploy-audit",
+    "job_status": "success"
   }
 }

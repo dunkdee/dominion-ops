@@ -1,0 +1,21 @@
+{
+  "conditions": [
+    "reject snapshots containing personal data or secrets",
+    "preserve default-deny source adapters"
+  ],
+  "council_id": "security_risk",
+  "decision": "APPROVE_WITH_CONDITIONS",
+  "errors": [],
+  "evidence": [
+    "adapter is local-file only",
+    "external execution gate remains disabled",
+    "source mutation flag is false"
+  ],
+  "independent": true,
+  "proposal_hash": "cd71721928b1dca5a610fa71279bb5f9898e3e2c9385f2d11341478273245608",
+  "proposal_id": "stage4_fixture_shadow_observation",
+  "rationale": "Security review confirms a bounded read-only fixture path with hash verification and no credential access.",
+  "review_hash": "abc05658600b841997e211bb94dbff0a609875daa8a8ef2f2d3f00e87969b7c1",
+  "reviewer_agent_id": "council_security_risk",
+  "status": "BOUND"
+}

@@ -1,0 +1,6 @@
+{
+  "minimum_visitors": 500,
+  "minimum_gross_margin": 0.4,
+  "minimum_gross_profit_delta": 100,
+  "maximum_fixed_cost": 150
+}

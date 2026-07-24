@@ -64,6 +64,7 @@ def main() -> int:
     for capability in (
         "automated_similarweb_scraping",
         "trial_activation_without_readiness",
+        "trial_activation_without_new_final_five_council_release",
         "trial_data_license_violation",
         "external_distribution_of_unlicensed_market_data",
         "estimated_data_revenue_verification",
@@ -88,7 +89,7 @@ def main() -> int:
 
     plan = load(ROOT / "runtime/plans/similarweb_7_day_capture.json")
     readiness = validate_trial_capture_plan(plan, policy)
-    require(readiness.get("status") == "READY_FOR_HUMAN_TARGET_REVIEW", "committed plan must remain pre-activation pending human target review")
+    require(readiness.get("status") == "READY_TO_ACTIVATE_TRIAL", "approved target manifest must be ready without starting the trial")
     require(readiness.get("target_count") == 15, "committed target manifest must contain 15 targets")
     require(readiness.get("trial_started") is False, "readiness validation may not start a trial")
     require(readiness.get("automated_platform_scraping_authorized") is False, "readiness may not authorize scraping")

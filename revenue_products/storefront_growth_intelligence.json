@@ -1,0 +1,16 @@
+{
+  "version":"1.0.0",
+  "product_id":"storefront_growth_intelligence",
+  "name":"AI Storefront and Growth Intelligence Audit",
+  "status":"DRAFT_ONLY",
+  "operating_pillar":"cash_flow",
+  "objective":"Turn approved public, estimated, and client-owned evidence into a prioritized storefront growth plan without selling raw data.",
+  "delivery_models":["one_time_audit","monthly_optimization_retainer","custom_read_only_micro_build"],
+  "approved_inputs":["public_site_observations","external_estimated_market_signals","client_authorized_first_party_exports"],
+  "deliverables":["competitive_signal_summary","conversion_friction_hypotheses","measurement_gap_analysis","prioritized_30_day_test_backlog","optional_monthly_dashboard_specification"],
+  "prohibited_inputs":["raw_health_sensitive_data","unconsented_personal_data","credentials_or_secret_material"],
+  "prohibited_claims":["guaranteed_revenue","verified_revenue_from_estimated_data","passive_income_guarantee"],
+  "human_approval_required":["set_price","publish_offer","contact_prospect","accept_client_data","deliver_client_report"],
+  "price":null,
+  "external_execution_enabled":false
+}

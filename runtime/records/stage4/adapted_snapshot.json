@@ -1,0 +1,42 @@
+{
+  "adapter_result_hash": "c14591e77cdf2e199bc61eddb20cbf6e2975e800c809775a1d27bc24ccc22bcb",
+  "as_of": "2026-07-24T00:00:00Z",
+  "baseline": {
+    "average_order_value": "100.00",
+    "fixed_cost": "100.00",
+    "lead_to_qualified_rate": "0.50000000",
+    "proposal_to_purchase_rate": "0.20000000",
+    "qualified_to_proposal_rate": "0.50000000",
+    "variable_cost_per_purchase": "10.00",
+    "visitor_to_lead_rate": "0.10000000",
+    "visitors": 1000
+  },
+  "business_data_status": "REPOSITORY_TEST_FIXTURE",
+  "candidate": {
+    "average_order_value": "100.00",
+    "fixed_cost": "100.00",
+    "lead_to_qualified_rate": "0.50000000",
+    "proposal_to_purchase_rate": "0.25000000",
+    "qualified_to_proposal_rate": "0.50000000",
+    "variable_cost_per_purchase": "10.00",
+    "visitor_to_lead_rate": "0.12000000",
+    "visitors": 1200
+  },
+  "content_published": false,
+  "customers_contacted": false,
+  "errors": [],
+  "evidence": [
+    "fixture:runtime/examples/stage4_historical_fixture.json",
+    "purpose:deterministic-test-only"
+  ],
+  "external_actions": [],
+  "mode": "SHADOW_ONLY",
+  "money_moved": false,
+  "production_changes": false,
+  "snapshot_hash": "1e4fc7bf88a8966f9903b40831db859919220bc33473b101a5559bc2ceb9c6af",
+  "snapshot_id": "stage4_repository_fixture_v1",
+  "source_kind": "SYNTHETIC_TEST",
+  "source_system": "REPOSITORY_FIXTURE",
+  "source_system_mutated": false,
+  "status": "TEST_ONLY"
+}

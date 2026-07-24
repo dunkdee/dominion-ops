@@ -1,9 +1,12 @@
 {
-  "version": "5.0.0",
-  "stage": 6,
+  "version": "6.0.0",
+  "stage": 7,
   "mode": "shadow_only",
   "external_execution_enabled": false,
   "registry_mutation_enabled": false,
+  "revenue_vertical_activation_enabled": false,
+  "active_revenue_wave": "wave_1_owned_assets",
+  "maximum_parallel_primary_revenue_verticals": 2,
   "blocked_actions": [
     "merge_to_main",
     "deploy_production",
@@ -29,7 +32,11 @@
     "automated_similarweb_scraping",
     "trial_activation_without_readiness",
     "trial_data_license_violation",
-    "external_distribution_of_unlicensed_market_data"
+    "external_distribution_of_unlicensed_market_data",
+    "unverified_revenue_claim",
+    "kdp_publication_without_rights_review",
+    "wix_go_live_without_checkout_evidence",
+    "activate_revenue_wave_without_human_approval"
   ],
   "promotion_requirements": [
     "existing_wix_isolation_diagnosis_closed",
@@ -50,11 +57,16 @@
     "actual_historical_source_connected",
     "first_non_contact_actual_observation_completed",
     "data_monetization_legal_review_completed",
+    "revenue_manifesto_reviewed",
+    "wave_one_verticals_human_approved",
+    "wix_exit_gate_evidence_recorded",
+    "kdp_rights_and_proof_gate_recorded",
+    "analytics_offer_scope_and_pricing_approved",
     "threat_model_reviewed",
     "rollback_tested",
     "human_overseer_approval_recorded"
   ],
-  "permitted_stage6_outputs": [
+  "permitted_stage7_outputs": [
     "policy_decision_records",
     "proposal_envelopes",
     "bound_council_review_records",
@@ -68,6 +80,13 @@
     "trial_capture_readiness_reports",
     "trial_capture_records",
     "trial_completeness_reports",
+    "revenue_manifestos",
+    "revenue_vertical_activation_plans",
+    "vertical_readiness_records",
+    "kdp_title_inventory_drafts",
+    "kdp_metadata_package_drafts",
+    "wix_store_readiness_reports",
+    "analytics_pilot_drafts",
     "non_contact_shadow_observation_reports",
     "revenue_simulation_reports",
     "shadow_revenue_experiment_reports",

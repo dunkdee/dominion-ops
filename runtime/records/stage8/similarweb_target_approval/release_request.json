@@ -1,0 +1,38 @@
+{
+  "council_review_sequence": 3,
+  "external_effects": false,
+  "human_authorization_hash": "9a0c61e11c29d2b73ed0a3bf4edee0988ea7f1421d4c5ac7cb1e3a59ab414c67",
+  "human_authorization_id": "human_approval_similarweb_target_manifest_20260724",
+  "human_authorization_sequence": 2,
+  "object_blob_sha": "dc3a4326a525bc0451fd651ac98b8df7deecab63",
+  "object_id": "similarweb_trial_capture_v1",
+  "objective": "Approve the fifteen-domain Similarweb target manifest for future trial readiness without starting or accessing the trial.",
+  "release_class": "trial_target_manifest_approval",
+  "release_request_hash": "70407706ba36e22281e11585b9a5506e22d37a8bcf303f78383840ff5c4581ce",
+  "release_request_id": "similarweb_target_manifest_final_release_20260724",
+  "rollback_plan": "Revoke target approval, preserve NOT_STARTED, and replace the manifest through a new protected review.",
+  "scope": "target_manifest_approval_only",
+  "success_criteria": [
+    "all five councils independently bind to this release request",
+    "no veto or hold remains",
+    "release scope remains target_manifest_approval_only",
+    "trial activation remains unauthorized"
+  ],
+  "technical_readiness": {
+    "evidence": [
+      "stage6_capture_controller_merged",
+      "fifteen_domain_manifest_validated",
+      "private_storage_boundary_defined",
+      "duplicate_and_evidence_hash_tests_passed",
+      "no_scrape_route_present"
+    ],
+    "ready": true
+  },
+  "trial_started": false,
+  "unknowns": [
+    "live_trial_capabilities",
+    "actual_export_limits",
+    "actual_api_entitlement",
+    "billing_terms_at_signup"
+  ]
+}

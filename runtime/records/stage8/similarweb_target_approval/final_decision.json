@@ -1,0 +1,43 @@
+{
+  "approvals": [
+    "business_human_impact",
+    "engineering_reliability",
+    "law_governance",
+    "security_risk",
+    "truth_evidence"
+  ],
+  "approved_scope": "target_manifest_approval_only",
+  "conditions": [
+    "confirm live terms and account entitlements before activation",
+    "do not claim revenue or guaranteed outcomes",
+    "do not represent the manifest as collected data",
+    "do not store credentials or raw exports in Git",
+    "maintain private storage and evidence hashes",
+    "no external distribution without license",
+    "preserve daily completeness and closeout checks",
+    "prioritize owned baseline and top category leaders",
+    "retain estimated-data labeling",
+    "run capability discovery before paid queries"
+  ],
+  "council_decision_sequence": 4,
+  "decision": "FINAL_RELEASE_APPROVED",
+  "decision_hash": "addecb1f99f861c5616acb3ebeaa5fea8c38bf5925453ba231b2f78fef63eacc",
+  "decision_id": "final_decision_similarweb_target_manifest_final_release_20260724",
+  "errors": [],
+  "external_execution_authorized": false,
+  "final_affirmative_gate": "five_council",
+  "holds": [],
+  "human_authorization_hash": "9a0c61e11c29d2b73ed0a3bf4edee0988ea7f1421d4c5ac7cb1e3a59ab414c67",
+  "human_authorization_id": "human_approval_similarweb_target_manifest_20260724",
+  "human_authorization_sequence": 2,
+  "missing_councils": [],
+  "reasons": [
+    "technical_readiness_verified",
+    "human_scope_authorization_recorded",
+    "unanimous_final_council_approval"
+  ],
+  "release_request_hash": "70407706ba36e22281e11585b9a5506e22d37a8bcf303f78383840ff5c4581ce",
+  "release_request_id": "similarweb_target_manifest_final_release_20260724",
+  "trial_activation_authorized": false,
+  "vetoes": []
+}

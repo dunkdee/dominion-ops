@@ -1,0 +1,60 @@
+{
+  "approvals": [
+    "business_human_impact",
+    "engineering_reliability",
+    "law_governance",
+    "security_risk",
+    "truth_evidence"
+  ],
+  "bound_proposal_hash": "cd71721928b1dca5a610fa71279bb5f9898e3e2c9385f2d11341478273245608",
+  "decision": "APPROVE",
+  "decision_hash": "c71958c9cd694ce363a07370a64ab5d4c3891ef154090cb418fe6f7ff7f179f4",
+  "external_execution_authorized": false,
+  "holds": [],
+  "human_approval_recorded": false,
+  "missing_councils": [],
+  "proposal_hash": "e2836f143b4366a908cff264cbdeeb25267d1c8aee18501a3a0cb55b01d2ca3f",
+  "reasons": [
+    "council_threshold_met"
+  ],
+  "required_approvals": 2,
+  "reviews": [
+    {
+      "council_id": "business_human_impact",
+      "decision": "APPROVE_WITH_CONDITIONS",
+      "evidence": "fixture result cannot authorize promotion;no customer contact or revenue claim is produced",
+      "proposal_hash": "e2836f143b4366a908cff264cbdeeb25267d1c8aee18501a3a0cb55b01d2ca3f",
+      "rationale": "Business-impact review permits the test because it measures system readiness without affecting customers or presenting simulated revenue as earned revenue."
+    },
+    {
+      "council_id": "engineering_reliability",
+      "decision": "APPROVE",
+      "evidence": "deterministic adapter tests;proposal-bound review hash checks;rollback procedure is explicit",
+      "proposal_hash": "e2836f143b4366a908cff264cbdeeb25267d1c8aee18501a3a0cb55b01d2ca3f",
+      "rationale": "Engineering review confirms deterministic normalization, tamper detection, and fail-closed observation behavior."
+    },
+    {
+      "council_id": "law_governance",
+      "decision": "APPROVE_WITH_CONDITIONS",
+      "evidence": "external_effects:false;personal-data and secret-material flags must be false",
+      "proposal_hash": "e2836f143b4366a908cff264cbdeeb25267d1c8aee18501a3a0cb55b01d2ca3f",
+      "rationale": "Documentary review permits a local test fixture because it performs no filing, representation, contact, or legal conclusion."
+    },
+    {
+      "council_id": "security_risk",
+      "decision": "APPROVE_WITH_CONDITIONS",
+      "evidence": "adapter is local-file only;external execution gate remains disabled;source mutation flag is false",
+      "proposal_hash": "e2836f143b4366a908cff264cbdeeb25267d1c8aee18501a3a0cb55b01d2ca3f",
+      "rationale": "Security review confirms a bounded read-only fixture path with hash verification and no credential access."
+    },
+    {
+      "council_id": "truth_evidence",
+      "decision": "APPROVE_WITH_CONDITIONS",
+      "evidence": "proposal objective explicitly limits output to fixture-only evidence;snapshot adapter requires payload hash and finalized evidence",
+      "proposal_hash": "e2836f143b4366a908cff264cbdeeb25267d1c8aee18501a3a0cb55b01d2ca3f",
+      "rationale": "Deterministic evidence review confirms the fixture cannot be represented as actual business history."
+    }
+  ],
+  "risk": "moderate",
+  "vetoes": []
+}

@@ -1,0 +1,42 @@
+{
+  "as_of": "2026-07-24T00:00:00Z",
+  "confidence": "ESTIMATED_NOT_FIRST_PARTY",
+  "domain": "dominionhealing.org",
+  "errors": [],
+  "external_actions": [],
+  "external_execution_authorized": false,
+  "metrics": {
+    "average_visit_duration_seconds": 78,
+    "bounce_rate": "0.6400",
+    "channel_shares": {
+      "direct": "0.2500",
+      "organic_search": "0.4000",
+      "paid_search": "0.0500",
+      "referrals": "0.1000",
+      "social": "0.2000"
+    },
+    "estimated_visits": 1200,
+    "pages_per_visit": "1.7000"
+  },
+  "period_end": "2026-06-30",
+  "period_start": "2026-04-01",
+  "permitted_use": [
+    "market_benchmark",
+    "competitor_context",
+    "scenario_input"
+  ],
+  "prohibited_use": [
+    "verify_revenue",
+    "identify_individuals",
+    "guarantee_outcomes",
+    "authorize_external_execution"
+  ],
+  "provider": "SIMILARWEB_EXPORT",
+  "result_hash": "68d6efe4f80bde5b17fb8c307ab3036e5383cc6fd5efe435e3c25b872f485184",
+  "revenue_verified": false,
+  "snapshot_hash": "fe8247cb3a9bc88220c076782afe28d5c4286bc6d1bfce45c370f19500d12b48",
+  "snapshot_id": "similarweb_fixture_dominionhealing_2026q2",
+  "source_kind": "EXTERNAL_ESTIMATED",
+  "source_system_mutated": false,
+  "status": "ESTIMATED_MARKET_SIGNAL"
+}

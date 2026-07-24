@@ -1,0 +1,39 @@
+{
+  "as_of": "2026-07-24T00:00:00Z",
+  "business_data_status": "REPOSITORY_TEST_FIXTURE",
+  "contains_personal_data": false,
+  "contains_secret_material": false,
+  "evidence": [
+    "fixture:runtime/examples/stage4_historical_fixture.json",
+    "purpose:deterministic-test-only"
+  ],
+  "payload_hash": "a92170c6db5b9924c57208fe77f0fbfd09b409cf6031ab0989cdd26955be5011",
+  "periods": {
+    "baseline": {
+      "fixed_cost": "100.00",
+      "leads": 100,
+      "period_end": "2026-05-31",
+      "period_start": "2026-05-01",
+      "proposals": 25,
+      "purchases": 5,
+      "qualified_leads": 50,
+      "revenue": "500.00",
+      "variable_cost": "50.00",
+      "visitors": 1000
+    },
+    "candidate": {
+      "fixed_cost": "100.00",
+      "leads": 144,
+      "period_end": "2026-06-30",
+      "period_start": "2026-06-01",
+      "proposals": 36,
+      "purchases": 9,
+      "qualified_leads": 72,
+      "revenue": "900.00",
+      "variable_cost": "90.00",
+      "visitors": 1200
+    }
+  },
+  "snapshot_id": "stage4_repository_fixture_v1",
+  "source_system": "REPOSITORY_FIXTURE"
+}

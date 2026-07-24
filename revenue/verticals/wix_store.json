@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "vertical_id": "commerce_fulfillment",
+  "display_name": "DominionHealing Wix Store",
+  "wave": "wave_1_owned_assets",
+  "sequence": 1,
+  "role": "PRIMARY_REVENUE_VERTICAL",
+  "status": "BLOCKED_PENDING_REPAIR_AND_TRANSACTION_EVIDENCE",
+  "mode": "GUARDED_RECORD_ONLY",
+  "revenue_model": ["product_sales", "repeat_purchase", "bundles_after_verified_margin"],
+  "value_offer": "Sell accurately represented DominionHealing products through a reliable, accessible storefront.",
+  "current_blockers": [
+    "existing_wix_isolation_diagnosis_not_closed",
+    "storefront_accessibility_and_metadata_findings_open",
+    "checkout_test_purchase_not_verified",
+    "supplier_and_fulfillment_configuration_not_verified",
+    "first_party_conversion_and_margin_baseline_missing"
+  ],
+  "launch_gates": [
+    "wix_isolation_diagnosis_closed",
+    "catalog_and_claims_review_completed",
+    "accessibility_mobile_and_privacy_findings_closed_or_formally_accepted",
+    "checkout_succeeds_with_controlled_test_purchase",
+    "exactly_one_order_and_fulfillment_record_created",
+    "refund_delivery_and_customer_service_obligations_documented",
+    "analytics_and_margin_measurement_verified",
+    "human_overseer_approves_publication_prices_and_supplier_submission"
+  ],
+  "evidence_required": [
+    "storefront_health_record",
+    "catalog_fact_map",
+    "checkout_receipt_or_sandbox_record",
+    "fulfillment_record",
+    "margin_calculation",
+    "rollback_plan",
+    "human_approval_record"
+  ],
+  "success_metrics": [
+    "posted_revenue",
+    "gross_profit",
+    "conversion_rate",
+    "refund_rate",
+    "fulfillment_failure_rate",
+    "repeat_purchase_rate"
+  ],
+  "first_cash_event": "One controlled real order posts, is fulfilled correctly, and is reconciled without an unresolved customer or policy failure.",
+  "human_approvals": [
+    "publish_or_unpublish_product",
+    "change_price",
+    "change_health_shipping_or_delivery_claim",
+    "enable_supplier_submission",
+    "issue_nonstandard_refund"
+  ],
+  "prohibited_actions": [
+    "bulk_catalog_mutation_without_approval",
+    "unsupported_health_claim",
+    "autonomous_price_change",
+    "autonomous_customer_contact",
+    "represent_estimated_traffic_as_sales"
+  ],
+  "pricing_status": "EXISTING_PRICES_REQUIRE_REVIEW",
+  "revenue_verified": false,
+  "external_execution_authorized": false
+}

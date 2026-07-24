@@ -1,0 +1,8 @@
+# Human review remains mandatory for control-plane and production governance.
+/governance/ @dunkdee
+/agents/ @dunkdee
+/architecture/CONTROL_PLANE.md @dunkdee
+/operations/INCIDENT_RESPONSE.md @dunkdee
+/.github/workflows/ @dunkdee
+/scripts/validate_control_plane.py @dunkdee
+/SECURITY.md @dunkdee

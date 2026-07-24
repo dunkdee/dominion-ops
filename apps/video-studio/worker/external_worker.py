@@ -1,0 +1,132 @@
+"""Generic detachable GPU worker for Dominion Video Studio.
+
+The worker intentionally does not bundle model code or weights. Configure a legally
+approved clone engine command with VIDEO_CLONE_COMMAND. Placeholders available to
+that command: {portrait}, {voice}, {source_video}, {script_file}, and {output}.
+"""
+
+from __future__ import annotations
+
+import json
+import mimetypes
+import os
+import shlex
+import subprocess
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+BASE_URL = os.environ["VIDEO_STUDIO_URL"].rstrip("/")
+TOKEN = os.environ["VIDEO_STUDIO_WORKER_TOKEN"]
+WORKER_ID = os.getenv("VIDEO_STUDIO_WORKER_ID", "gpu-worker-1")
+COMMAND_TEMPLATE = os.environ["VIDEO_CLONE_COMMAND"]
+POLL_SECONDS = max(float(os.getenv("VIDEO_STUDIO_POLL_SECONDS", "5")), 1.0)
+
+
+def request_json(path: str, *, method: str = "GET", body: dict | None = None) -> dict:
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(
+        f"{BASE_URL}{path}",
+        data=data,
+        method=method,
+        headers={"Content-Type": "application/json", "X-Worker-Token": TOKEN},
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return json.loads(response.read().decode())
+
+
+def download(path: str, destination: Path) -> None:
+    request = urllib.request.Request(f"{BASE_URL}{path}", headers={"X-Worker-Token": TOKEN})
+    with urllib.request.urlopen(request, timeout=300) as response, destination.open("wb") as output:
+        while chunk := response.read(1024 * 1024):
+            output.write(chunk)
+
+
+def multipart_upload(path: str, file_path: Path) -> dict:
+    boundary = "----DominionWorkerBoundary"
+    content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+    prefix = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="{file_path.name}"\r\n'
+        f"Content-Type: {content_type}\r\n\r\n"
+    ).encode()
+    suffix = f"\r\n--{boundary}--\r\n".encode()
+    data = prefix + file_path.read_bytes() + suffix
+    request = urllib.request.Request(
+        f"{BASE_URL}{path}",
+        data=data,
+        method="POST",
+        headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Content-Length": str(len(data)),
+            "X-Worker-Token": TOKEN,
+        },
+    )
+    with urllib.request.urlopen(request, timeout=600) as response:
+        return json.loads(response.read().decode())
+
+
+def fail(job_id: str, message: str) -> None:
+    try:
+        request_json(
+            f"/api/workers/jobs/{job_id}/complete",
+            method="POST",
+            body={"status": "failed", "error": message[-2000:]},
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"Could not report failure for {job_id}: {exc}", flush=True)
+
+
+def process(claim: dict) -> None:
+    job = claim["job"]
+    project = claim["project"]
+    job_id = job["id"]
+    with tempfile.TemporaryDirectory(prefix=f"dominion-{job_id}-") as temporary:
+        workspace = Path(temporary)
+        paths: dict[str, Path] = {}
+        for asset in claim["assets"]:
+            extension = Path(asset["original_name"]).suffix
+            destination = workspace / f"{asset['kind']}{extension}"
+            download(asset["download_url"], destination)
+            paths[asset["kind"]] = destination
+        if "portrait" not in paths or "voice" not in paths:
+            raise RuntimeError("Claimed job is missing portrait or voice media")
+        script_file = workspace / "script.txt"
+        script_file.write_text(project["script"], encoding="utf-8")
+        output = workspace / "output.mp4"
+        values = {
+            "portrait": str(paths["portrait"]),
+            "voice": str(paths["voice"]),
+            "source_video": str(paths.get("source_video", "")),
+            "script_file": str(script_file),
+            "output": str(output),
+        }
+        command = shlex.split(COMMAND_TEMPLATE.format(**values))
+        result = subprocess.run(command, capture_output=True, text=True, timeout=7200)
+        if result.returncode != 0 or not output.exists():
+            raise RuntimeError(result.stderr[-2000:] or "Clone command failed without an output")
+        response = multipart_upload(f"/api/workers/jobs/{job_id}/output", output)
+        print(json.dumps(response), flush=True)
+
+
+def main() -> None:
+    print(f"Dominion worker {WORKER_ID} connected to {BASE_URL}", flush=True)
+    while True:
+        try:
+            claim = request_json("/api/workers/claim", method="POST", body={"worker_id": WORKER_ID})
+            if claim.get("job"):
+                try:
+                    process(claim)
+                except Exception as exc:  # noqa: BLE001
+                    fail(claim["job"]["id"], str(exc))
+            else:
+                time.sleep(POLL_SECONDS)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            print(f"Worker connection error: {exc}", flush=True)
+            time.sleep(POLL_SECONDS)
+
+
+if __name__ == "__main__":
+    main()

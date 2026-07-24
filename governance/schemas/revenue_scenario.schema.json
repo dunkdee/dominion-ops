@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/schemas/revenue_scenario.schema.json",
+  "title": "Dominion Revenue Simulation Scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "visitors", "visitor_to_lead_rate", "lead_to_qualified_rate", "qualified_to_proposal_rate", "proposal_to_purchase_rate", "average_order_value", "variable_cost_per_purchase", "fixed_cost"],
+  "properties": {
+    "name": {"type": "string", "minLength": 1},
+    "visitors": {"type": "integer", "minimum": 0},
+    "visitor_to_lead_rate": {"type": "number", "minimum": 0, "maximum": 1},
+    "lead_to_qualified_rate": {"type": "number", "minimum": 0, "maximum": 1},
+    "qualified_to_proposal_rate": {"type": "number", "minimum": 0, "maximum": 1},
+    "proposal_to_purchase_rate": {"type": "number", "minimum": 0, "maximum": 1},
+    "average_order_value": {"type": "number", "minimum": 0},
+    "variable_cost_per_purchase": {"type": "number", "minimum": 0},
+    "fixed_cost": {"type": "number", "minimum": 0}
+  }
+}

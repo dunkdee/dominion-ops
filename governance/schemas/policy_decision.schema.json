@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/schemas/policy_decision.schema.json",
+  "title": "Dominion Policy Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "request_hash", "actor_id", "action_id", "risk", "reasons", "missing_requirements", "execution_authorized", "decision_hash"],
+  "properties": {
+    "decision": {"enum": ["ALLOW", "HOLD", "DENY"]},
+    "request_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "actor_id": {"type": ["string", "null"]},
+    "action_id": {"type": ["string", "null"]},
+    "risk": {"type": ["string", "null"], "enum": ["low", "moderate", "high", "critical", "prohibited", null]},
+    "reasons": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "missing_requirements": {"type": "array", "items": {"type": "string"}},
+    "execution_authorized": {"type": "boolean"},
+    "decision_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

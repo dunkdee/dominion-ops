@@ -1,0 +1,11 @@
+{
+  "name": "owned-digital-product-baseline",
+  "visitors": 1000,
+  "visitor_to_lead_rate": 0.08,
+  "lead_to_qualified_rate": 0.4,
+  "qualified_to_proposal_rate": 0.75,
+  "proposal_to_purchase_rate": 0.1,
+  "average_order_value": 49.0,
+  "variable_cost_per_purchase": 4.0,
+  "fixed_cost": 125.0
+}

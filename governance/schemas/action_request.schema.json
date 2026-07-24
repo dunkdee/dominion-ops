@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/schemas/action_request.schema.json",
+  "title": "Dominion Action Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["actor_id", "action_id", "evidence", "satisfied_constraints", "legal_status", "council_approvals"],
+  "properties": {
+    "actor_id": {"type": "string", "minLength": 1},
+    "action_id": {"type": "string", "minLength": 1},
+    "evidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "satisfied_constraints": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "legal_status": {"enum": ["RESOLVED", "UNRESOLVED", "CONFLICTED", "REQUIRES_COUNSEL", "NOT_APPLICABLE"]},
+    "data_classification": {"enum": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]},
+    "council_approvals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["council_id", "decision", "evidence"],
+        "properties": {
+          "council_id": {"type": "string"},
+          "decision": {"enum": ["APPROVE", "APPROVE_WITH_CONDITIONS", "VETO", "HOLD", "ABSTAIN"]},
+          "evidence": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "human_approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approved", "approver", "evidence"],
+      "properties": {
+        "approved": {"type": "boolean"},
+        "approver": {"const": "human_overseer"},
+        "evidence": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

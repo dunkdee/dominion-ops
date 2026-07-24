@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/schemas/trial_completeness_report.schema.json",
+  "title": "Dominion Trial Completeness Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["plan_id", "status", "expected_target_count", "accepted_target_count", "accepted_record_count", "missing_domains", "duplicate_domains", "held_capture_ids", "ready_for_trial_activation", "revenue_verified", "automated_platform_scraping_authorized", "external_execution_authorized", "external_distribution_authorized", "external_actions", "summary_hash"],
+  "properties": {
+    "plan_id": {"type": ["string", "null"]},
+    "status": {"enum": ["COMPLETE_FOR_REVIEW", "INCOMPLETE"]},
+    "expected_target_count": {"type": "integer", "minimum": 0},
+    "accepted_target_count": {"type": "integer", "minimum": 0},
+    "accepted_record_count": {"type": "integer", "minimum": 0},
+    "missing_domains": {"type": "array", "items": {"type": "string"}},
+    "duplicate_domains": {"type": "array", "items": {"type": "string"}},
+    "held_capture_ids": {"type": "array", "items": {"type": "string"}},
+    "ready_for_trial_activation": {"type": "boolean"},
+    "revenue_verified": {"const": false},
+    "automated_platform_scraping_authorized": {"const": false},
+    "external_execution_authorized": {"const": false},
+    "external_distribution_authorized": {"const": false},
+    "external_actions": {"type": "array", "maxItems": 0},
+    "summary_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

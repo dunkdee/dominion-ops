@@ -18,18 +18,18 @@ class Stage6Fixture(unittest.TestCase):
 
 
 class ReadinessTests(Stage6Fixture):
-    def test_plan_requires_human_target_review_before_activation(self) -> None:
+    def test_approved_target_plan_is_ready_without_starting_trial(self) -> None:
         result = validate_trial_capture_plan(self.plan, self.policy)
-        self.assertEqual(result["status"], "READY_FOR_HUMAN_TARGET_REVIEW")
+        self.assertEqual(result["status"], "READY_TO_ACTIVATE_TRIAL")
         self.assertEqual(result["target_count"], 15)
         self.assertFalse(result["automated_platform_scraping_authorized"])
         self.assertFalse(result["trial_started"])
 
-    def test_human_reviewed_plan_can_be_ready_without_starting_trial(self) -> None:
+    def test_removing_human_review_returns_to_review_gate(self) -> None:
         plan = copy.deepcopy(self.plan)
-        plan["human_target_review_completed"] = True
+        plan["human_target_review_completed"] = False
         result = validate_trial_capture_plan(plan, self.policy)
-        self.assertEqual(result["status"], "READY_TO_ACTIVATE_TRIAL")
+        self.assertEqual(result["status"], "READY_FOR_HUMAN_TARGET_REVIEW")
         self.assertFalse(result["trial_started"])
         self.assertEqual(result["external_actions"], [])
 

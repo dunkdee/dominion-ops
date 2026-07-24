@@ -1,0 +1,11 @@
+studio.example.com {
+    encode zstd gzip
+
+    # Replace this placeholder with a Caddy-generated password hash.
+    # Generate one on the VM with: caddy hash-password
+    basic_auth {
+        operator REPLACE_WITH_CADDY_HASH
+    }
+
+    reverse_proxy 127.0.0.1:8094
+}

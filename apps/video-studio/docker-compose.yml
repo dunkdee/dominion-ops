@@ -1,0 +1,33 @@
+services:
+  video-studio:
+    build: .
+    container_name: dominion-video-studio
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${VIDEO_STUDIO_PORT:-8094}:8000"
+    volumes:
+      - video_studio_data:/data
+    environment:
+      VIDEO_STUDIO_DATA_DIR: /data
+      VIDEO_STUDIO_MAX_UPLOAD_BYTES: ${VIDEO_STUDIO_MAX_UPLOAD_BYTES:-104857600}
+      VIDEO_STUDIO_WORKER_TOKEN: ${VIDEO_STUDIO_WORKER_TOKEN:-}
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/ready | grep -q '\"status\":\"ready\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  video_studio_data:
+    name: ${VIDEO_STUDIO_DATA_VOLUME:-dominion-video-studio-data}

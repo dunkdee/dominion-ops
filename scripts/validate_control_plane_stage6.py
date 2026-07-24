@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Stage 6 pre-trial capture readiness and fail-closed boundaries."""
+"""Validate Stage 6-or-later pre-trial capture readiness and fail-closed boundaries."""
 from __future__ import annotations
 
 import copy
@@ -56,7 +56,7 @@ def main() -> int:
         require((ROOT / item).is_file(), f"missing required file: {item}")
 
     gates = load(ROOT / "governance/runtime_activation_gates.json")
-    require(gates.get("stage") == 6, "activation stage must be 6")
+    require(isinstance(gates.get("stage"), int) and gates.get("stage") >= 6, "activation stage must be 6 or later")
     require(gates.get("mode") == "shadow_only", "runtime must remain shadow_only")
     require(gates.get("external_execution_enabled") is False, "external execution must remain disabled")
     require(gates.get("registry_mutation_enabled") is False, "registry mutation must remain disabled")
@@ -128,12 +128,12 @@ def main() -> int:
     require("scrape_similarweb" not in browser_routes, "Similarity platform scraping must not be routed through Browser Agents")
 
     if ERRORS:
-        print("Dominion Stage 6 validation FAILED:")
+        print("Dominion Stage 6 compatibility validation FAILED:")
         for error in ERRORS:
             print(f" - {error}")
         return 1
-    print("Dominion Stage 6 validation PASSED")
-    print(f"Validated {len(REQUIRED)} Stage 6 contracts and pre-trial controls.")
+    print("Dominion Stage 6 compatibility validation PASSED")
+    print(f"Validated {len(REQUIRED)} Stage 6 contracts under Stage {gates.get('stage')} gates.")
     return 0
 
 

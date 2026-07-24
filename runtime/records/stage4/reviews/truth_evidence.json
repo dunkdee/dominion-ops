@@ -1,0 +1,20 @@
+{
+  "conditions": [
+    "retain TEST_ONLY labeling",
+    "hold any claim based on unverified data"
+  ],
+  "council_id": "truth_evidence",
+  "decision": "APPROVE_WITH_CONDITIONS",
+  "errors": [],
+  "evidence": [
+    "proposal objective explicitly limits output to fixture-only evidence",
+    "snapshot adapter requires payload hash and finalized evidence"
+  ],
+  "independent": true,
+  "proposal_hash": "cd71721928b1dca5a610fa71279bb5f9898e3e2c9385f2d11341478273245608",
+  "proposal_id": "stage4_fixture_shadow_observation",
+  "rationale": "Deterministic evidence review confirms the fixture cannot be represented as actual business history.",
+  "review_hash": "75bf87d606930697fca97eb7833b8dbac0af48f551d12afb838a37a56a9de19b",
+  "reviewer_agent_id": "council_truth_evidence",
+  "status": "BOUND"
+}

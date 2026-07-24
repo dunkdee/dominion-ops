@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Stage 7 revenue manifesto, wave discipline, and vertical contracts."""
+"""Validate Stage 7-or-later revenue manifesto, wave discipline, and vertical contracts."""
 from __future__ import annotations
 
 import json
@@ -32,6 +32,7 @@ def main() -> int:
         "revenue/verticals/wix_store.json",
         "revenue/verticals/kdp_publishing.json",
         "revenue/verticals/analytics_services.json",
+        "revenue/kdp/title_inventory.json",
         "architecture/STAGE7_REVENUE_VERTICAL_ACTIVATION.md",
         "tests/test_control_plane_stage7.py",
     ]
@@ -61,7 +62,7 @@ def main() -> int:
     require(priorities[:3] == [1, 2, 3], "top revenue priorities must be 1, 2, and 3")
 
     gates = load(ROOT / "governance/runtime_activation_gates.json")
-    require(gates.get("stage") == 7, "activation stage must be 7")
+    require(isinstance(gates.get("stage"), int) and gates.get("stage") >= 7, "activation stage must be 7 or later")
     require(gates.get("mode") == "shadow_only", "runtime must remain shadow_only")
     require(gates.get("external_execution_enabled") is False, "external execution must remain disabled")
     require(gates.get("revenue_vertical_activation_enabled") is False, "revenue activation must remain disabled")
@@ -70,8 +71,11 @@ def main() -> int:
     for capability in (
         "unverified_revenue_claim",
         "kdp_publication_without_rights_review",
+        "kdp_publication_without_final_five_council_release",
         "wix_go_live_without_checkout_evidence",
+        "wix_go_live_without_final_five_council_release",
         "activate_revenue_wave_without_human_approval",
+        "activate_revenue_wave_without_final_five_council_release",
     ):
         require(capability in blocked, f"missing blocked capability: {capability}")
 
@@ -94,9 +98,15 @@ def main() -> int:
     require("checkout_succeeds_with_controlled_test_purchase" in wix.get("launch_gates", []), "Wix checkout evidence gate is missing")
 
     kdp = contracts["kdp_publishing"]
-    require("no_canonical_kdp_title_inventory_in_repository" in kdp.get("current_blockers", []), "KDP inventory unknown must remain explicit")
+    require(kdp.get("title_inventory_path") == "revenue/kdp/title_inventory.json", "KDP inventory path must be canonical")
+    require("title_inventory_is_partial_account_view" in kdp.get("current_blockers", []), "KDP partial inventory limitation must remain explicit")
     require("publish_without_rights_review" in kdp.get("prohibited_actions", []), "KDP rights control is missing")
+    require("publish_without_final_five_council_release" in kdp.get("prohibited_actions", []), "KDP final Council control is missing")
     require("autonomous_kdp_upload_or_publication" in kdp.get("prohibited_actions", []), "KDP autonomous publication must be blocked")
+    inventory = load(ROOT / "revenue/kdp/title_inventory.json")
+    require(inventory.get("inventory_status") == "VISUALLY_VERIFIED_PARTIAL", "KDP inventory must preserve partial evidence status")
+    require(len(inventory.get("titles", [])) == 2, "KDP screenshot inventory must record two observed titles")
+    require(inventory.get("revenue_verified") is False, "KDP screenshots may not verify revenue")
 
     analytics = contracts["analytics_services"]
     require("sell_raw_personal_data" in analytics.get("prohibited_actions", []), "raw personal data sale must be prohibited")
@@ -107,12 +117,12 @@ def main() -> int:
     require(schema.get("additionalProperties") is False, "activation plan schema must reject unknown fields")
 
     if ERRORS:
-        print("Dominion Stage 7 validation FAILED:")
+        print("Dominion Stage 7 compatibility validation FAILED:")
         for error in ERRORS:
             print(f" - {error}")
         return 1
-    print("Dominion Stage 7 validation PASSED")
-    print(f"Validated {len(required)} Stage 7 contracts and documents.")
+    print("Dominion Stage 7 compatibility validation PASSED")
+    print(f"Validated {len(required)} Stage 7 contracts under Stage {gates.get('stage')} gates.")
     return 0
 
 

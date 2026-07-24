@@ -41,7 +41,7 @@ def main() -> int:
     for path in REQUIRED:
         require(path.is_file(), f"missing required file: {path.relative_to(ROOT)}")
     gates = load(ROOT / "governance/runtime_activation_gates.json")
-    require(gates.get("stage") == 5, "activation stage must be 5")
+    require(isinstance(gates.get("stage"), int) and gates.get("stage") >= 5, "activation stage must be 5 or later")
     require(gates.get("mode") == "shadow_only", "mode must remain shadow_only")
     require(gates.get("external_execution_enabled") is False, "external execution must remain disabled")
     blocked = set(gates.get("blocked_capabilities", []))
@@ -62,12 +62,12 @@ def main() -> int:
         schema = load(ROOT / "governance/schemas" / name)
         require(schema.get("additionalProperties") is False, f"{name} must reject unknown fields")
     if ERRORS:
-        print("Dominion Stage 5 validation FAILED:")
+        print("Dominion Stage 5 compatibility validation FAILED:")
         for error in ERRORS:
             print(f" - {error}")
         return 1
-    print("Dominion Stage 5 validation PASSED")
-    print(f"Validated {len(REQUIRED)} Stage 5 contracts and components.")
+    print("Dominion Stage 5 compatibility validation PASSED")
+    print(f"Validated {len(REQUIRED)} Stage 5 contracts under Stage {gates.get('stage')} gates.")
     return 0
 
 if __name__ == "__main__":

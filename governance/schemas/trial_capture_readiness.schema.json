@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/schemas/trial_capture_readiness.schema.json",
+  "title": "Dominion Trial Capture Readiness",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["plan_id", "plan_hash", "status", "errors", "warnings", "target_count", "targets", "approved_acquisition_methods", "automated_platform_scraping_authorized", "trial_started", "external_execution_authorized", "external_distribution_authorized", "external_actions", "readiness_hash"],
+  "properties": {
+    "plan_id": {"type": ["string", "null"]},
+    "plan_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "status": {"enum": ["READY_TO_ACTIVATE_TRIAL", "READY_FOR_HUMAN_TARGET_REVIEW", "HOLD"]},
+    "errors": {"type": "array", "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "target_count": {"type": "integer", "minimum": 0},
+    "targets": {"type": "array", "items": {"type": "object"}},
+    "approved_acquisition_methods": {"type": "array", "items": {"type": "string"}},
+    "automated_platform_scraping_authorized": {"const": false},
+    "trial_started": {"const": false},
+    "external_execution_authorized": {"const": false},
+    "external_distribution_authorized": {"const": false},
+    "external_actions": {"type": "array", "maxItems": 0},
+    "readiness_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

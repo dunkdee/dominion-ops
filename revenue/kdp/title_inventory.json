@@ -1,0 +1,53 @@
+{
+  "author_observed": "Dewayne Singleton",
+  "coverage_status": "PARTIAL_ACCOUNT_VIEW",
+  "external_execution_authorized": false,
+  "inventory_hash": "360c0d61b7ad22e496310c05cf95e585fcf543f2531b9a6e7fe584636e06805a",
+  "inventory_id": "dominion_kdp_inventory_20260724",
+  "inventory_status": "VISUALLY_VERIFIED_PARTIAL",
+  "limitations": [
+    "screenshots_do_not_prove_complete_account_inventory",
+    "screenshots_do_not_verify_account_control_or_rights",
+    "screenshots_do_not_verify_sales_units_royalties_or_profit",
+    "screenshots_do_not_verify_manuscript_cover_or_metadata_quality",
+    "create_ebook_option_only_shows_no_ebook_listing_observed_in_the_view"
+  ],
+  "observed_on": "2026-07-24",
+  "revenue_verified": false,
+  "schema_version": 1,
+  "source": "user_provided_kdp_bookshelf_screenshots",
+  "titles": [
+    {
+      "author": "Dewayne Singleton",
+      "currency": "USD",
+      "ebook_listing_observed": false,
+      "evidence_reference": "conversation_kdp_screenshot_shadow_hearts",
+      "format": "PAPERBACK",
+      "last_modified": "2025-04-17",
+      "listing_status": "LIVE",
+      "price": "14.99",
+      "proof_status": "UNVERIFIED",
+      "rights_status": "UNVERIFIED",
+      "royalties_verified": false,
+      "sales_verified": false,
+      "title": "Shadow Hearts",
+      "title_id": "shadow_hearts"
+    },
+    {
+      "author": "Dewayne Singleton",
+      "currency": "USD",
+      "ebook_listing_observed": false,
+      "evidence_reference": "conversation_kdp_screenshot_rising_above_the_storms",
+      "format": "PAPERBACK",
+      "last_modified": "2025-03-21",
+      "listing_status": "LIVE",
+      "price": "14.99",
+      "proof_status": "UNVERIFIED",
+      "rights_status": "UNVERIFIED",
+      "royalties_verified": false,
+      "sales_verified": false,
+      "title": "Rising Above the Storms: A Road to Mental Wellness",
+      "title_id": "rising_above_the_storms"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://dominion.local/schemas/shadow_observation.schema.json",
+  "title":"Dominion Non-Contact Shadow Observation",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["mode","observation_id","proposal_hash","snapshot_hash","council_decision_hash","status","reasons","errors","revenue_result","external_actions","money_moved","customers_contacted","content_published","production_changes","agents_promoted","runtime_started","external_execution_authorized","observation_hash"],
+  "properties":{
+    "mode":{"const":"SHADOW_ONLY"},
+    "observation_id":{"type":"string"},
+    "proposal_hash":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "snapshot_hash":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "council_decision_hash":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "status":{"enum":["TEST_ONLY","OBSERVED_ELIGIBLE_FOR_NEXT_REVIEW","CONTINUE_SHADOW","HOLD"]},
+    "reasons":{"type":"array","minItems":1,"items":{"type":"string"}},
+    "errors":{"type":"array","items":{"type":"string"}},
+    "revenue_result":{"type":["object","null"]},
+    "external_actions":{"type":"array","maxItems":0},
+    "money_moved":{"const":false},
+    "customers_contacted":{"const":false},
+    "content_published":{"const":false},
+    "production_changes":{"const":false},
+    "agents_promoted":{"const":false},
+    "runtime_started":{"const":false},
+    "external_execution_authorized":{"const":false},
+    "observation_hash":{"type":"string","pattern":"^[a-f0-9]{64}$"}
+  }
+}

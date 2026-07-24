@@ -1,0 +1,29 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://dominion.local/schemas/historical_adapter_result.schema.json",
+  "title":"Dominion Historical Adapter Result",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["mode","snapshot_id","snapshot_hash","status","source_kind","business_data_status","source_system","as_of","evidence","errors","baseline","candidate","external_actions","source_system_mutated","money_moved","customers_contacted","content_published","production_changes","adapter_result_hash"],
+  "properties":{
+    "mode":{"const":"SHADOW_ONLY"},
+    "snapshot_id":{"type":["string","null"]},
+    "snapshot_hash":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "status":{"enum":["VERIFIED","TEST_ONLY","HOLD"]},
+    "source_kind":{"type":["string","null"],"enum":["HISTORICAL_VERIFIED","SYNTHETIC_TEST",null]},
+    "business_data_status":{"type":["string","null"]},
+    "source_system":{"type":["string","null"]},
+    "as_of":{"type":["string","null"]},
+    "evidence":{"type":"array","items":{"type":"string"}},
+    "errors":{"type":"array","items":{"type":"string"}},
+    "baseline":{"type":["object","null"]},
+    "candidate":{"type":["object","null"]},
+    "external_actions":{"type":"array","maxItems":0},
+    "source_system_mutated":{"const":false},
+    "money_moved":{"const":false},
+    "customers_contacted":{"const":false},
+    "content_published":{"const":false},
+    "production_changes":{"const":false},
+    "adapter_result_hash":{"type":"string","pattern":"^[a-f0-9]{64}$"}
+  }
+}

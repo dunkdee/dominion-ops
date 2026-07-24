@@ -1,0 +1,20 @@
+{
+  "approval_hash": "9a0c61e11c29d2b73ed0a3bf4edee0988ea7f1421d4c5ac7cb1e3a59ab414c67",
+  "approval_id": "human_approval_similarweb_target_manifest_20260724",
+  "approved": true,
+  "approver": "human_overseer",
+  "authorization_sequence": 2,
+  "conditions": [
+    "does_not_start_the_trial",
+    "does_not_authorize_spending_or_auto_billing",
+    "only_permitted_exports_manual_recording_data_exporter_or_entitled_api",
+    "automated_similarweb_scraping_remains_prohibited",
+    "trial_activation_requires_a_new_final_five_council_release_decision"
+  ],
+  "external_execution_authorized": false,
+  "object_blob_sha": "dc3a4326a525bc0451fd651ac98b8df7deecab63",
+  "object_commit_sha": "0550c9cd3e725a3e8561728e3071091319bf13f7",
+  "object_id": "similarweb_trial_capture_v1",
+  "recorded_on": "2026-07-24",
+  "scope": "approve_similarweb_target_manifest_only"
+}

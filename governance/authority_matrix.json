@@ -1,0 +1,87 @@
+{
+  "version": "1.0.0",
+  "human_final_authority": "human_overseer",
+  "default_behavior": "deny",
+  "risk_levels": {
+    "low": {"council_approvals_required": 0, "human_approval_required": false},
+    "moderate": {"council_approvals_required": 2, "human_approval_required": false},
+    "high": {"council_approvals_required": 4, "human_approval_required": false},
+    "critical": {"council_approvals_required": 5, "human_approval_required": true},
+    "prohibited": {"council_approvals_required": 5, "human_approval_required": true, "action": "reject"}
+  },
+  "independent_veto_domains": ["law_governance", "security_risk"],
+  "actions": [
+    {
+      "id": "read_public_information",
+      "risk": "low",
+      "allowed_roles": ["research", "truth_evidence", "law_governance", "security_risk", "engineering_reliability", "business_human_impact"],
+      "constraints": ["respect_source_terms", "record_sources"]
+    },
+    {
+      "id": "read_private_operational_data",
+      "risk": "moderate",
+      "allowed_roles": ["coordinator", "conductor", "guardian", "sentinel", "juris", "governor"],
+      "constraints": ["least_privilege", "audit_log", "data_classification"]
+    },
+    {
+      "id": "modify_nonproduction_branch",
+      "risk": "moderate",
+      "allowed_roles": ["engineering", "coordinator"],
+      "constraints": ["protected_branch", "tests_required", "independent_review"]
+    },
+    {
+      "id": "merge_to_main",
+      "risk": "high",
+      "allowed_roles": ["human_overseer"],
+      "constraints": ["required_checks", "reviewed_pull_request", "rollback_plan"]
+    },
+    {
+      "id": "deploy_production",
+      "risk": "critical",
+      "allowed_roles": ["human_overseer"],
+      "constraints": ["unanimous_council", "human_approval", "canary", "rollback_tested", "post_deploy_verification"]
+    },
+    {
+      "id": "publish_external_content",
+      "risk": "high",
+      "allowed_roles": ["human_overseer"],
+      "constraints": ["content_review", "legal_review_when_applicable", "recorded_approval"]
+    },
+    {
+      "id": "contact_customer_or_claimant",
+      "risk": "critical",
+      "allowed_roles": ["human_overseer"],
+      "constraints": ["human_approval", "approved_template", "identity_and_scope_check", "audit_log"]
+    },
+    {
+      "id": "spend_or_move_money",
+      "risk": "critical",
+      "allowed_roles": ["human_overseer"],
+      "constraints": ["human_approval", "transaction_limit", "dual_verification", "audit_log"]
+    },
+    {
+      "id": "sign_file_or_submit_legal_document",
+      "risk": "prohibited",
+      "allowed_roles": ["human_overseer"],
+      "constraints": ["qualified_human_review", "explicit_human_execution"]
+    },
+    {
+      "id": "read_or_export_secret_values",
+      "risk": "prohibited",
+      "allowed_roles": [],
+      "constraints": ["never_export", "use_secret_reference_only"]
+    },
+    {
+      "id": "expand_own_permissions",
+      "risk": "prohibited",
+      "allowed_roles": [],
+      "constraints": ["human_admin_only"]
+    },
+    {
+      "id": "reactivate_suspended_or_retired_agent",
+      "risk": "critical",
+      "allowed_roles": ["human_overseer"],
+      "constraints": ["root_cause_closed", "regression_passed", "council_review", "human_approval"]
+    }
+  ]
+}

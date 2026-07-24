@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "system": "Dominion Ascendant",
+  "plan_id": "dominion_revenue_vertical_activation_v1",
+  "operating_order": ["cash_flow", "systems", "scale"],
+  "status": "READY_FOR_HUMAN_WAVE_APPROVAL",
+  "mode": "SHADOW_PLANNING",
+  "revenue_vertical_activation_enabled": false,
+  "million_dollar_outcome_is_target_not_forecast": true,
+  "doctrine": [
+    "verify_revenue_before_claiming_revenue",
+    "activate_no_more_than_two_primary_verticals_per_wave",
+    "monetize_owned_products_and_governed_analysis",
+    "do_not_sell_raw_personal_or_health_sensitive_data",
+    "human_approval_for_publication_pricing_contracts_and_money"
+  ],
+  "wave_capacity": {
+    "maximum_primary_verticals": 2,
+    "support_verticals_must_remain_shadow_only": true
+  },
+  "current_wave": {
+    "wave_id": "wave_1_owned_assets",
+    "primary_verticals": ["commerce_fulfillment", "kdp_publishing"],
+    "support_verticals": ["analytics_services"],
+    "activation_status": "NOT_ACTIVATED",
+    "completion_rule": "Both primary verticals must produce verified evidence against their exit gates before a new primary revenue wave is approved."
+  },
+  "activation_sequence": [
+    "commerce_fulfillment",
+    "kdp_publishing",
+    "analytics_services",
+    "digital_products",
+    "content_traffic",
+    "services_lead_generation"
+  ],
+  "shared_revenue_flywheel": [
+    "collect_permitted_market_signals",
+    "validate_and_classify_evidence",
+    "improve_owned_products",
+    "execute_only_with_required_approval",
+    "measure_first_party_results",
+    "retain_lessons_and_controls",
+    "package_governed_analytics",
+    "reinvest_verified_profit"
+  ],
+  "portfolio_stop_conditions": [
+    "unresolved_legality",
+    "missing_rights_or_license",
+    "unsupported_health_legal_or_income_claim",
+    "unverified_checkout_or_delivery",
+    "negative_unit_economics_without_approved_experiment",
+    "material_security_or_privacy_failure",
+    "evidence_or_ledger_integrity_failure"
+  ],
+  "external_execution_authorized": false,
+  "pricing_authorized": false,
+  "publication_authorized": false,
+  "money_movement_authorized": false
+}

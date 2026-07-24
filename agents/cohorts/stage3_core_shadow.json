@@ -1,0 +1,93 @@
+{
+  "cohort_id": "stage3_core_shadow",
+  "mode": "SHADOW",
+  "owner": "human_overseer",
+  "objective": "Exercise policy, evidence, council, research, and revenue-analysis duties without external execution or lifecycle promotion.",
+  "entry_evidence": [
+    "PR-32-governance-foundation-merged",
+    "PR-38-stage2-runtime-merged",
+    "control-plane-governance-checks-passed"
+  ],
+  "shared_prohibited_actions": [
+    "merge_to_main",
+    "deploy_production",
+    "publish_external_content",
+    "contact_customer_or_claimant",
+    "spend_or_move_money",
+    "sign_file_or_submit_legal_document",
+    "reactivate_suspended_or_retired_agent"
+  ],
+  "exit_criteria": [
+    "all assignments produce schema-valid evidence records",
+    "no prohibited action is attempted",
+    "all proposal reviews remain independently bound",
+    "shadow revenue inputs are source-verified before business conclusions",
+    "human overseer reviews the cohort report before any promotion request"
+  ],
+  "assignments": [
+    {
+      "agent_id": "governor",
+      "duties": ["evaluate_policy", "deny_action", "request_approval"],
+      "tool_allowlist": ["repository_read", "schema_validation", "evidence_ledger_append"],
+      "data_classification": ["INTERNAL", "CONFIDENTIAL"],
+      "escalates_to": "human_overseer",
+      "lifecycle_change_requested": false
+    },
+    {
+      "agent_id": "council_truth_evidence",
+      "duties": ["review_evidence", "issue_hold", "vote"],
+      "tool_allowlist": ["repository_read", "schema_validation", "public_web_research", "evidence_ledger_append"],
+      "data_classification": ["PUBLIC", "INTERNAL"],
+      "escalates_to": "human_overseer",
+      "lifecycle_change_requested": false
+    },
+    {
+      "agent_id": "council_law_governance",
+      "duties": ["review_legal_governance", "issue_hold", "veto", "vote"],
+      "tool_allowlist": ["repository_read", "schema_validation", "public_web_research", "evidence_ledger_append"],
+      "data_classification": ["PUBLIC", "INTERNAL", "CONFIDENTIAL"],
+      "escalates_to": "human_overseer",
+      "lifecycle_change_requested": false
+    },
+    {
+      "agent_id": "council_security_risk",
+      "duties": ["review_security", "issue_hold", "veto", "vote"],
+      "tool_allowlist": ["repository_read", "schema_validation", "evidence_ledger_append"],
+      "data_classification": ["INTERNAL", "CONFIDENTIAL", "RESTRICTED"],
+      "escalates_to": "human_overseer",
+      "lifecycle_change_requested": false
+    },
+    {
+      "agent_id": "council_engineering_reliability",
+      "duties": ["review_engineering", "issue_hold", "vote"],
+      "tool_allowlist": ["repository_read", "schema_validation", "local_calculation", "evidence_ledger_append"],
+      "data_classification": ["INTERNAL", "CONFIDENTIAL"],
+      "escalates_to": "human_overseer",
+      "lifecycle_change_requested": false
+    },
+    {
+      "agent_id": "council_business_human_impact",
+      "duties": ["review_business_impact", "issue_hold", "vote"],
+      "tool_allowlist": ["repository_read", "schema_validation", "local_calculation", "evidence_ledger_append"],
+      "data_classification": ["PUBLIC", "INTERNAL", "CONFIDENTIAL"],
+      "escalates_to": "human_overseer",
+      "lifecycle_change_requested": false
+    },
+    {
+      "agent_id": "revenue_operations",
+      "duties": ["analyze_funnel", "prepare_experiment", "measure_metrics"],
+      "tool_allowlist": ["repository_read", "schema_validation", "local_calculation", "evidence_ledger_append"],
+      "data_classification": ["INTERNAL", "CONFIDENTIAL"],
+      "escalates_to": "coordinator",
+      "lifecycle_change_requested": false
+    },
+    {
+      "agent_id": "research",
+      "duties": ["read_public_information", "record_sources", "mark_uncertainty"],
+      "tool_allowlist": ["repository_read", "public_web_research", "schema_validation", "evidence_ledger_append"],
+      "data_classification": ["PUBLIC", "INTERNAL"],
+      "escalates_to": "coordinator",
+      "lifecycle_change_requested": false
+    }
+  ]
+}

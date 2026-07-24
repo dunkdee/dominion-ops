@@ -67,7 +67,7 @@ def validate_candidate(candidate: dict[str, Any], registry: dict[str, Any], auth
     unknown = sorted(set(requested) - known_actions)
     errors.extend(f"unknown_action:{action}" for action in unknown)
     forbidden = sorted(set(requested) & FORBIDDEN_REQUESTS)
-    errors.extend(f"stage2_action_forbidden:{action}" for action in forbidden)
+    errors.extend(f"activation_action_forbidden:{action}" for action in forbidden)
 
     tools = candidate.get("tool_allowlist", [])
     if not isinstance(tools, list) or not all(isinstance(item, str) for item in tools):

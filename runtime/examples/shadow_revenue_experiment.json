@@ -1,0 +1,36 @@
+{
+  "experiment_id": "synthetic_shadow_smoke_v1",
+  "owner_id": "revenue_operations",
+  "proposal_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_snapshot": {
+    "kind": "SYNTHETIC_TEST",
+    "as_of": "2026-07-24T00:00:00Z",
+    "evidence": ["repository-synthetic-smoke-fixture"]
+  },
+  "baseline": {
+    "visitors": 1000,
+    "visitor_to_lead_rate": 0.04,
+    "lead_to_qualified_rate": 0.5,
+    "qualified_to_proposal_rate": 0.5,
+    "proposal_to_purchase_rate": 0.2,
+    "average_order_value": 250,
+    "variable_cost_per_purchase": 50,
+    "fixed_cost": 300
+  },
+  "candidate": {
+    "visitors": 1000,
+    "visitor_to_lead_rate": 0.05,
+    "lead_to_qualified_rate": 0.55,
+    "qualified_to_proposal_rate": 0.55,
+    "proposal_to_purchase_rate": 0.22,
+    "average_order_value": 250,
+    "variable_cost_per_purchase": 50,
+    "fixed_cost": 350
+  },
+  "guardrails": {
+    "minimum_visitors": 500,
+    "minimum_gross_margin": 0.4,
+    "minimum_gross_profit_delta": 100,
+    "maximum_fixed_cost": 500
+  }
+}

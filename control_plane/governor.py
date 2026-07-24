@@ -47,8 +47,10 @@ class Governor:
             raise PolicyConfigurationError("authority policy must be default-deny")
         if self.authority.get("human_final_authority") != "human_overseer":
             raise PolicyConfigurationError("human_overseer must remain final authority")
-        if self.activation_gates.get("mode") != "simulation_only":
-            raise PolicyConfigurationError("Stage 2 activation mode must remain simulation_only")
+        if self.activation_gates.get("mode") not in {"simulation_only", "shadow_only"}:
+            raise PolicyConfigurationError("runtime activation mode must be simulation_only or shadow_only")
+        if self.activation_gates.get("mode") == "shadow_only" and self.activation_gates.get("external_execution_enabled") is not False:
+            raise PolicyConfigurationError("shadow_only mode must disable external execution")
 
     def _actor(self, actor_id: str) -> dict[str, Any] | None:
         for agent in self.registry.get("agents", []):
@@ -62,8 +64,8 @@ class Governor:
                 return action
         return None
 
-    @staticmethod
     def _decision(
+        self,
         request: dict[str, Any],
         *,
         decision: str,
@@ -73,6 +75,7 @@ class Governor:
     ) -> dict[str, Any]:
         if decision not in DECISIONS:
             raise ValueError(f"invalid decision: {decision}")
+        external_execution_enabled = self.activation_gates.get("external_execution_enabled") is True
         result = {
             "decision": decision,
             "request_hash": sha256_json(request),
@@ -81,7 +84,7 @@ class Governor:
             "risk": risk,
             "reasons": reasons,
             "missing_requirements": sorted(set(missing_requirements or [])),
-            "execution_authorized": decision == "ALLOW",
+            "execution_authorized": decision == "ALLOW" and external_execution_enabled,
         }
         result["decision_hash"] = sha256_json(result)
         return result
@@ -160,15 +163,15 @@ class Governor:
             if not isinstance(approval, dict):
                 return self._decision(request, decision="DENY", risk=risk, reasons=["invalid_council_approval_record"])
             council_id = approval.get("council_id")
-            decision = approval.get("decision")
+            approval_decision = approval.get("decision")
             evidence_reference = approval.get("evidence")
             if council_id not in known_councils:
                 return self._decision(request, decision="DENY", risk=risk, reasons=["unknown_council_approval"])
             if council_id in approval_by_council:
                 return self._decision(request, decision="DENY", risk=risk, reasons=["duplicate_council_approval"])
-            if decision not in {"APPROVE", "APPROVE_WITH_CONDITIONS", "VETO", "HOLD", "ABSTAIN"} or not isinstance(evidence_reference, str) or not evidence_reference:
+            if approval_decision not in {"APPROVE", "APPROVE_WITH_CONDITIONS", "VETO", "HOLD", "ABSTAIN"} or not evidence_reference:
                 return self._decision(request, decision="DENY", risk=risk, reasons=["invalid_council_approval_record"])
-            approval_by_council[council_id] = decision
+            approval_by_council[council_id] = approval_decision
 
         for veto_domain in self.authority.get("independent_veto_domains", []):
             if approval_by_council.get(veto_domain) in VETO_DECISIONS:

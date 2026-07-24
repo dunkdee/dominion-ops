@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Stage 2 control-plane runtime contracts and fail-closed behavior."""
+"""Validate guarded control-plane runtime contracts and fail-closed behavior."""
 
 from __future__ import annotations
 
@@ -62,7 +62,10 @@ def validate_files() -> None:
 
 
 def validate_activation_gates(gates: dict[str, Any]) -> None:
-    require(gates.get("mode") == "simulation_only", "runtime mode must remain simulation_only")
+    require(gates.get("mode") in {"simulation_only", "shadow_only"}, "runtime mode must be simulation_only or shadow_only")
+    if gates.get("mode") == "shadow_only":
+        require(gates.get("external_execution_enabled") is False, "shadow mode must disable external execution")
+        require(gates.get("registry_mutation_enabled") is False, "shadow mode must disable registry mutation")
     blocked = set(gates.get("blocked_actions", []))
     required = {
         "deploy_production",
@@ -109,6 +112,18 @@ def validate_governor_smoke() -> None:
     require(unknown.get("decision") == "DENY", "unknown actions must be denied")
     require(unknown.get("execution_authorized") is False, "denied action cannot authorize execution")
 
+    low_risk = governor.evaluate({
+        "actor_id": "research",
+        "action_id": "read_public_information",
+        "evidence": ["smoke-test"],
+        "satisfied_constraints": ["respect_source_terms", "record_sources"],
+        "legal_status": "NOT_APPLICABLE",
+        "council_approvals": [],
+    })
+    require(low_risk.get("decision") == "ALLOW", "evidenced low-risk research should pass policy")
+    if load_json(ROOT / "governance" / "runtime_activation_gates.json").get("mode") == "shadow_only":
+        require(low_risk.get("execution_authorized") is False, "shadow ALLOW may not authorize external execution")
+
     blocked = governor.evaluate({
         "actor_id": "human_overseer",
         "action_id": "deploy_production",
@@ -117,7 +132,7 @@ def validate_governor_smoke() -> None:
         "legal_status": "RESOLVED",
         "council_approvals": [],
     })
-    require(blocked.get("decision") == "HOLD", "production deployment must remain held in Stage 2")
+    require(blocked.get("decision") == "HOLD", "production deployment must remain held")
 
 
 def validate_ledger_smoke() -> None:
@@ -132,7 +147,7 @@ def validate_ledger_smoke() -> None:
 def validate_revenue_smoke() -> None:
     scenario = load_json(ROOT / "runtime" / "examples" / "revenue_scenario.json")
     result = simulate_revenue_funnel(scenario)
-    require(result.get("mode") == "SIMULATION_ONLY", "revenue runner must be simulation-only")
+    require(result.get("mode") == "SIMULATION_ONLY", "revenue simulator must remain simulation-only")
     require(result.get("external_actions") == [], "revenue simulation may not create external actions")
     require(result.get("money_moved") is False, "revenue simulation may not move money")
     require(result.get("customers_contacted") is False, "revenue simulation may not contact customers")
@@ -161,12 +176,12 @@ def main() -> int:
     validate_onboarding_boundaries()
 
     if ERRORS:
-        print("Dominion Stage 2 runtime validation FAILED:")
+        print("Dominion runtime validation FAILED:")
         for error in ERRORS:
             print(f" - {error}")
         return 1
 
-    print("Dominion Stage 2 runtime validation PASSED")
+    print("Dominion runtime validation PASSED")
     print(f"Validated {len(REQUIRED_FILES)} required runtime contracts and components.")
     return 0
 

@@ -1,71 +1,70 @@
-# Dominion Control-Plane Runtime — Stage 2
+# Dominion Control-Plane Runtime
 
-## Status
+## Current status
 
-**Mode:** `simulation_only`
+**Current mode:** `shadow_only`  
+**Current stage:** Stage 3 — Controlled Shadow Operations
 
-This stage converts the governance contracts into deterministic runtime primitives without granting production authority. It does not start Obsidian, Browser Agents, publishing, customer contact, live trading, money movement, or production deployment.
+Stage 2 established deterministic runtime primitives. Stage 3 adds controlled cohort validation, canonical proposal envelopes, independently bound Five Council reviews, and verified-input shadow revenue analysis. It still grants no production authority.
+
+The runtime does not start Obsidian or Browser Agents, publish content, contact customers or claimants, trade live, move money, sign or file documents, or deploy production changes.
 
 ## Runtime flow
 
 ```text
-Action request
+Action or proposal
   -> Governor default-deny evaluation
   -> Evidence and constraint checks
   -> Legal fail-closed check
-  -> Independent council records
+  -> Canonical proposal envelope
+  -> Independently bound council reviews
   -> Human gate when required
-  -> ALLOW, HOLD, or DENY decision
+  -> ALLOW, HOLD, DENY, APPROVE, or VETO record
   -> Hash-chained evidence record
 ```
 
-An `ALLOW` result means only that the submitted request satisfies the current policy contract. An executor must still be separately configured and authorized. Stage 2 contains no production executor.
+An `ALLOW` result means the request satisfies the policy contract. In `shadow_only` mode, `execution_authorized` remains false because external execution is disabled.
 
 ## Components
 
 ### Governor
 
-`control_plane/governor.py` reads the canonical authority matrix, agent registry, Five Council policy, and runtime activation gates. Unknown actors and actions are denied. Missing evidence, unresolved law, unsatisfied controls, insufficient approvals, and active rollout blocks produce deterministic holds or denials.
+`control_plane/governor.py` reads the authority matrix, agent registry, Five Council policy, and activation gates. Unknown actors and actions are denied. Missing evidence, unresolved law, unsatisfied controls, insufficient approvals, and active rollout blocks fail closed.
 
 ### Evidence ledger
 
-`control_plane/ledger.py` writes canonical JSONL records linked by SHA-256 hashes. Verification detects content alteration, deletion, reordering, and broken linkage.
+`control_plane/ledger.py` writes canonical JSONL records linked by SHA-256 hashes. Verification detects content alteration, deletion, reordering, and broken linkage. Production adoption still requires storage-level retention, restricted identities, backups, and write-once controls.
 
-The hash chain is an application integrity control, not a claim of filesystem immutability. Production adoption requires restricted service identities, backups, retention, and write-once or object-lock storage where appropriate.
+### Five Council review
 
-### Five Council aggregator
+`control_plane/council.py` provides threshold aggregation. `control_plane/proposals.py` adds canonical proposal envelopes and cryptographically bound independent reviews. The proposer cannot review its own proposal. Reviewer roles must match council domains. Law and Security vetoes remain authoritative.
 
-`control_plane/council.py` requires proposal-bound, independently attributable council records. Duplicate reviews and mismatched proposal hashes fail closed. Law and Security vetoes override approval counts. Critical proposals require all five approvals and recorded Human Overseer approval.
+### Agent onboarding and cohorts
 
-### Agent onboarding
+`control_plane/onboarding.py` validates individual candidate specifications. `control_plane/cohort.py` validates controlled shadow assignments for registered agents. Neither component edits `agents/registry.json`, changes lifecycle states, starts runtimes, or grants production authority.
 
-`control_plane/onboarding.py` validates candidate specifications. It never edits `agents/registry.json`, grants production authority, or promotes candidates. A valid candidate becomes only `ELIGIBLE_FOR_SPEC_REVIEW`.
+### Revenue analysis
 
-### Revenue simulation
-
-`control_plane/revenue_simulation.py` models funnel economics with deterministic decimal arithmetic. It creates no leads, sends no messages, publishes nothing, and moves no money.
+`control_plane/revenue_simulation.py` performs deterministic funnel simulation. `control_plane/shadow_revenue.py` compares baseline and candidate scenarios using source-declared observations. Synthetic inputs can only return `TEST_ONLY`; verified historical inputs can at most become `ELIGIBLE_FOR_COUNCIL_REVIEW`.
 
 ## Canonical CLI
 
-Run from the repository root:
-
 ```bash
-python3 scripts/control_plane.py simulate-revenue \
-  --input runtime/examples/revenue_scenario.json \
-  --ledger runtime/ledger/local.jsonl
+python3 scripts/control_plane.py validate-cohort \
+  --input agents/cohorts/stage3_core_shadow.json
 
-python3 scripts/control_plane.py onboard \
-  --input runtime/examples/agent_candidate.json \
-  --ledger runtime/ledger/local.jsonl
+python3 scripts/control_plane.py prepare-proposal \
+  --input runtime/examples/stage3_proposal.json
+
+python3 scripts/control_plane.py shadow-revenue \
+  --input runtime/examples/shadow_revenue_experiment.json
 
 python3 scripts/control_plane.py verify-ledger \
   --ledger runtime/ledger/local.jsonl
 ```
 
-Action and council commands accept JSON records conforming to the schemas under `governance/schemas/`.
-
 ## Promotion boundary
 
-No Stage 2 component may be promoted into autonomous production execution until all requirements in `governance/runtime_activation_gates.json` are closed with evidence. The existing Wix isolation diagnosis and operational blocks remain authoritative.
+No runtime component may enter autonomous canary or production execution until every requirement in `governance/runtime_activation_gates.json` is closed with evidence. The existing Wix isolation diagnosis and operational blocks remain authoritative.
 
-Promotion requires a separate pull request, passed regression tests, threat-model review, rollback evidence, Five Council review at the applicable risk level, and recorded Human Overseer approval.
+Promotion requires a separate reviewed pull request, passed regressions, threat-model review, rollback evidence, proposal-bound council review at the applicable risk, and recorded Human Overseer approval.

@@ -1,0 +1,41 @@
+{
+  "version": "1.0.0",
+  "default_behavior": "deny",
+  "tools": [
+    {
+      "id": "repository_read",
+      "purpose": "Read approved repository content and metadata.",
+      "external_effect": "read_only",
+      "allowed_modes": ["SIMULATION", "SHADOW"],
+      "data_classifications": ["PUBLIC", "INTERNAL", "CONFIDENTIAL"]
+    },
+    {
+      "id": "schema_validation",
+      "purpose": "Validate records against deterministic contracts.",
+      "external_effect": "none",
+      "allowed_modes": ["SIMULATION", "SHADOW"],
+      "data_classifications": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]
+    },
+    {
+      "id": "local_calculation",
+      "purpose": "Perform deterministic local calculations without network or write effects.",
+      "external_effect": "none",
+      "allowed_modes": ["SIMULATION", "SHADOW"],
+      "data_classifications": ["PUBLIC", "INTERNAL", "CONFIDENTIAL"]
+    },
+    {
+      "id": "evidence_ledger_append",
+      "purpose": "Append a governance result to the local tamper-evident ledger.",
+      "external_effect": "none",
+      "allowed_modes": ["SIMULATION", "SHADOW"],
+      "data_classifications": ["PUBLIC", "INTERNAL", "CONFIDENTIAL"]
+    },
+    {
+      "id": "public_web_research",
+      "purpose": "Retrieve public information for evidence-backed research without submission or contact.",
+      "external_effect": "read_only",
+      "allowed_modes": ["SHADOW"],
+      "data_classifications": ["PUBLIC"]
+    }
+  ]
+}

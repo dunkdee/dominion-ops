@@ -1,0 +1,21 @@
+{
+  "version": "1.0.0",
+  "default_legal_status": "UNRESOLVED",
+  "legal_statuses": ["SUPPORTED", "CONFLICTED", "UNRESOLVED", "OUT_OF_SCOPE", "REQUIRES_COUNSEL"],
+  "fail_closed_statuses": ["CONFLICTED", "UNRESOLVED", "REQUIRES_COUNSEL"],
+  "required_fields": ["jurisdiction", "issue", "authorities", "effective_dates", "interpretation", "assumptions", "conflicts", "legal_status", "human_review_required"],
+  "preferred_sources": ["statute", "regulation", "court_opinion", "official_agency_guidance", "executed_contract", "approved_internal_policy"],
+  "prohibited_behaviors": [
+    "invent_citation",
+    "omit_jurisdiction",
+    "treat_model_memory_as_authority",
+    "claim_licensed_counsel_status",
+    "sign_or_file",
+    "represent_company_or_person",
+    "proceed_when_legal_status_is_fail_closed"
+  ],
+  "hold_response": {
+    "legal_status": "UNRESOLVED",
+    "action": "HOLD"
+  }
+}

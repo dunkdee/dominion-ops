@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/schemas/final_release_policy.schema.json",
+  "title": "Dominion Final Release Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "default_behavior",
+    "purpose",
+    "release_sequence",
+    "final_affirmative_gate",
+    "human_authority",
+    "council_requirements",
+    "consequential_release_classes",
+    "governor_action_ids",
+    "release_states",
+    "external_execution_authorized"
+  ],
+  "properties": {
+    "version": {"type": "string", "minLength": 1},
+    "default_behavior": {"const": "deny"},
+    "purpose": {"type": "string", "minLength": 1},
+    "release_sequence": {
+      "type": "array",
+      "prefixItems": [
+        {"const": "technical_readiness_verified"},
+        {"const": "human_scope_authorization_recorded"},
+        {"const": "five_council_independent_final_review"},
+        {"const": "release_within_approved_scope"}
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "final_affirmative_gate": {"const": "five_council"},
+    "human_authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "preauthorizes_scope_before_council",
+        "may_revoke_or_emergency_stop_at_any_time",
+        "post_council_affirmative_click_required",
+        "may_not_override_law_or_security_veto"
+      ],
+      "properties": {
+        "preauthorizes_scope_before_council": {"const": true},
+        "may_revoke_or_emergency_stop_at_any_time": {"const": true},
+        "post_council_affirmative_click_required": {"const": false},
+        "may_not_override_law_or_security_veto": {"const": true}
+      }
+    },
+    "council_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "all_five_reviews_required",
+        "unanimous_approval_required",
+        "reviews_must_be_independent",
+        "reviews_must_bind_to_release_request_hash",
+        "review_sequence_must_follow_human_authorization",
+        "veto_or_hold_blocks_release",
+        "dissent_and_conditions_preserved"
+      ],
+      "properties": {
+        "all_five_reviews_required": {"const": true},
+        "unanimous_approval_required": {"const": true},
+        "reviews_must_be_independent": {"const": true},
+        "reviews_must_bind_to_release_request_hash": {"const": true},
+        "review_sequence_must_follow_human_authorization": {"const": true},
+        "veto_or_hold_blocks_release": {"const": true},
+        "dissent_and_conditions_preserved": {"const": true}
+      }
+    },
+    "consequential_release_classes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "governor_action_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "release_states": {
+      "type": "array",
+      "contains": {"const": "FINAL_RELEASE_APPROVED"},
+      "minItems": 4,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "external_execution_authorized": {"const": false}
+  }
+}

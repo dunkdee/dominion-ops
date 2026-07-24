@@ -14,15 +14,18 @@ on:
       - "architecture/STAGE3_SHADOW_OPERATIONS.md"
       - "architecture/STAGE4_HISTORICAL_SHADOW.md"
       - "architecture/STAGE5_MARKET_INTELLIGENCE.md"
+      - "architecture/STAGE6_TRIAL_CAPTURE_READINESS.md"
       - "operations/INCIDENT_RESPONSE.md"
       - "scripts/control_plane.py"
       - "scripts/stage4_shadow.py"
       - "scripts/stage5_market_intelligence.py"
+      - "scripts/stage6_trial_capture.py"
       - "scripts/validate_control_plane.py"
       - "scripts/validate_control_plane_runtime.py"
       - "scripts/validate_control_plane_stage3.py"
       - "scripts/validate_control_plane_stage4.py"
       - "scripts/validate_control_plane_stage5.py"
+      - "scripts/validate_control_plane_stage6.py"
       - ".github/workflows/control-plane-governance.yml"
   push:
     branches: [main]
@@ -38,15 +41,18 @@ on:
       - "architecture/STAGE3_SHADOW_OPERATIONS.md"
       - "architecture/STAGE4_HISTORICAL_SHADOW.md"
       - "architecture/STAGE5_MARKET_INTELLIGENCE.md"
+      - "architecture/STAGE6_TRIAL_CAPTURE_READINESS.md"
       - "operations/INCIDENT_RESPONSE.md"
       - "scripts/control_plane.py"
       - "scripts/stage4_shadow.py"
       - "scripts/stage5_market_intelligence.py"
+      - "scripts/stage6_trial_capture.py"
       - "scripts/validate_control_plane.py"
       - "scripts/validate_control_plane_runtime.py"
       - "scripts/validate_control_plane_stage3.py"
       - "scripts/validate_control_plane_stage4.py"
       - "scripts/validate_control_plane_stage5.py"
+      - "scripts/validate_control_plane_stage6.py"
       - ".github/workflows/control-plane-governance.yml"
   workflow_dispatch:
 
@@ -60,7 +66,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 14
+    timeout-minutes: 16
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -72,15 +78,18 @@ jobs:
             scripts/control_plane.py \
             scripts/stage4_shadow.py \
             scripts/stage5_market_intelligence.py \
+            scripts/stage6_trial_capture.py \
             scripts/validate_control_plane.py \
             scripts/validate_control_plane_runtime.py \
             scripts/validate_control_plane_stage3.py \
             scripts/validate_control_plane_stage4.py \
             scripts/validate_control_plane_stage5.py \
+            scripts/validate_control_plane_stage6.py \
             tests/test_control_plane_runtime.py \
             tests/test_control_plane_stage3.py \
             tests/test_control_plane_stage4.py \
-            tests/test_control_plane_stage5.py
+            tests/test_control_plane_stage5.py \
+            tests/test_control_plane_stage6.py
 
       - name: Validate governance contracts
         run: python3 scripts/validate_control_plane.py
@@ -94,8 +103,11 @@ jobs:
       - name: Validate Stage 4 compatibility
         run: python3 scripts/validate_control_plane_stage4.py
 
-      - name: Validate Stage 5 market intelligence contracts
+      - name: Validate Stage 5 compatibility
         run: python3 scripts/validate_control_plane_stage5.py
+
+      - name: Validate Stage 6 trial capture readiness
+        run: python3 scripts/validate_control_plane_stage6.py
 
       - name: Run deterministic control-plane tests
         run: python3 -m unittest discover -s tests -p 'test_control_plane_*.py' -v
@@ -132,3 +144,18 @@ jobs:
             --output /tmp/stage5-growth-audit.json
           python3 -c 'import json; d=json.load(open("/tmp/stage5-growth-audit.json")); assert d["status"] == "MARKET_SIGNAL_ONLY"; assert d["claims_boundary"]["revenue_claim_allowed"] is False; assert d["pricing_status"] == "UNSET_REQUIRES_HUMAN_APPROVAL"; assert d["external_execution_authorized"] is False; assert d["money_moved"] is False'
           python3 -c 'import json; assert json.load(open("/tmp/stage5-growth-audit.json")) == json.load(open("runtime/records/stage5/growth_intelligence_audit.json"))'
+
+      - name: Validate Similarweb pre-trial readiness
+        run: |
+          python3 scripts/stage6_trial_capture.py readiness \
+            --plan runtime/plans/similarweb_7_day_capture.json \
+            --output /tmp/stage6-readiness.json
+          python3 -c 'import json; d=json.load(open("/tmp/stage6-readiness.json")); assert d["status"] == "READY_FOR_HUMAN_TARGET_REVIEW"; assert d["target_count"] == 15; assert d["trial_started"] is False; assert d["automated_platform_scraping_authorized"] is False; assert d["external_actions"] == []'
+
+      - name: Run permitted-export ingestion smoke test
+        run: |
+          python3 scripts/stage6_trial_capture.py ingest \
+            --plan runtime/plans/similarweb_7_day_capture.json \
+            --snapshot runtime/examples/stage6_similarweb_export_fixture.json \
+            --output /tmp/stage6-capture.json
+          python3 -c 'import json; d=json.load(open("/tmp/stage6-capture.json")); assert d["status"] == "TEST_ONLY"; assert d["revenue_verified"] is False; assert d["automated_platform_scraping_used"] is False; assert d["external_distribution_authorized"] is False; assert d["external_actions"] == []'

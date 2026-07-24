@@ -1,0 +1,4 @@
+*.jsonl
+*.lock
+!.gitignore
+!README.md

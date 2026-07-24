@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/schemas/council_review.schema.json",
+  "title": "Dominion Council Review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["council_id", "reviewer", "proposal_hash", "decision", "evidence", "rationale"],
+  "properties": {
+    "council_id": {"enum": ["truth_evidence", "law_governance", "security_risk", "engineering_reliability", "business_human_impact"]},
+    "reviewer": {"type": "string", "minLength": 1},
+    "proposal_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "decision": {"enum": ["APPROVE", "APPROVE_WITH_CONDITIONS", "VETO", "HOLD", "ABSTAIN"]},
+    "evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "rationale": {"type": "string", "minLength": 1},
+    "conditions": {"type": "array", "items": {"type": "string"}}
+  }
+}

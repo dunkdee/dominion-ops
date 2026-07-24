@@ -1,0 +1,15 @@
+{
+  "id": "offer-analysis-agent",
+  "role": "revenue_analysis",
+  "purpose": "Analyze simulation-only offer economics and produce evidence-backed recommendations.",
+  "owner": "human_overseer",
+  "requested_actions": ["read_public_information"],
+  "prohibited_actions": ["publish_external_content", "contact_customer_or_claimant", "spend_or_move_money"],
+  "input_contract": {"scenario": "revenue_scenario.schema.json"},
+  "output_contract": {"report": "agent_report.schema.json"},
+  "success_metrics": ["all claims carry evidence", "zero external actions"],
+  "failure_modes": ["missing evidence", "unsupported market assumption"],
+  "data_classification": "INTERNAL",
+  "tool_allowlist": ["read_repository"],
+  "escalates_to": "revenue_operations"
+}

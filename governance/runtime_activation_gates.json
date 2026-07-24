@@ -1,0 +1,38 @@
+{
+  "version": "1.0.0",
+  "mode": "simulation_only",
+  "blocked_actions": [
+    "merge_to_main",
+    "deploy_production",
+    "publish_external_content",
+    "contact_customer_or_claimant",
+    "spend_or_move_money",
+    "sign_file_or_submit_legal_document",
+    "reactivate_suspended_or_retired_agent"
+  ],
+  "blocked_capabilities": [
+    "start_obsidian_runtime",
+    "start_browser_agents",
+    "live_customer_contact",
+    "live_content_publication",
+    "live_financial_execution",
+    "live_trading",
+    "production_deployment"
+  ],
+  "promotion_requirements": [
+    "existing_wix_isolation_diagnosis_closed",
+    "runtime_governor_tests_pass",
+    "ledger_integrity_tests_pass",
+    "council_decision_tests_pass",
+    "threat_model_reviewed",
+    "rollback_tested",
+    "human_overseer_approval_recorded"
+  ],
+  "permitted_stage2_outputs": [
+    "policy_decision_records",
+    "council_decision_records",
+    "agent_candidate_reports",
+    "revenue_simulation_reports",
+    "append_only_evidence_records"
+  ]
+}

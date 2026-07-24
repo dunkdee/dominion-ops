@@ -15,6 +15,7 @@ ALLOWED_MODES = {
     "assisted",
     "record_only",
     "draft_only",
+    "shadow_only",
     "research_only",
     "paper",
     "observe_and_route",
@@ -49,14 +50,8 @@ def validate_dependency_graph(verticals: list[dict[str, Any]]) -> None:
     by_id = {vertical["id"]: vertical for vertical in verticals}
     for vertical in verticals:
         for dependency in vertical["dependencies"]:
-            require(
-                dependency in by_id,
-                f"{vertical['id']}: unknown dependency {dependency!r}",
-            )
-            require(
-                dependency != vertical["id"],
-                f"{vertical['id']}: cannot depend on itself",
-            )
+            require(dependency in by_id, f"{vertical['id']}: unknown dependency {dependency!r}")
+            require(dependency != vertical["id"], f"{vertical['id']}: cannot depend on itself")
 
     visiting: set[str] = set()
     visited: set[str] = set()
@@ -85,9 +80,11 @@ def validate_required_paths(verticals: list[dict[str, Any]]) -> None:
 
 def validate_registry(registry: dict[str, Any]) -> None:
     """Enforce governance, ordering, safety, and repository invariants."""
-    require(registry.get("schema_version") == 1, "schema_version must be 1")
-    require(registry.get("operating_order") == ["cash_flow", "systems", "scale"],
-            "operating_order must be cash_flow -> systems -> scale")
+    require(registry.get("schema_version") == 2, "schema_version must be 2")
+    require(
+        registry.get("operating_order") == ["cash_flow", "systems", "scale"],
+        "operating_order must be cash_flow -> systems -> scale",
+    )
 
     principles = registry.get("principles")
     require(isinstance(principles, dict), "principles must be an object")
@@ -98,6 +95,8 @@ def validate_registry(registry: dict[str, Any]) -> None:
         "no_unverified_live_execution",
         "paper_before_live_financial_execution",
         "zero_secret_material_in_repository",
+        "maximum_two_primary_revenue_verticals_per_wave",
+        "large_revenue_outcome_is_target_not_forecast",
     ):
         require(principles.get(required_true) is True, f"principle {required_true} must be true")
 
@@ -130,41 +129,40 @@ def validate_registry(registry: dict[str, Any]) -> None:
         ids.add(vertical_id)
 
         priority = vertical["priority"]
-        require(isinstance(priority, int) and priority > 0,
-                f"{vertical_id}: priority must be a positive integer")
+        require(isinstance(priority, int) and priority > 0, f"{vertical_id}: priority must be a positive integer")
         require(priority not in priorities, f"duplicate priority: {priority}")
         priorities.add(priority)
 
-        require(vertical["pillar"] in ALLOWED_PILLARS,
-                f"{vertical_id}: invalid pillar {vertical['pillar']!r}")
-        require(vertical["mode"] in ALLOWED_MODES,
-                f"{vertical_id}: invalid mode {vertical['mode']!r}")
-        require(isinstance(vertical["required_paths"], list) and vertical["required_paths"],
-                f"{vertical_id}: required_paths must be non-empty")
-        require(isinstance(vertical["dependencies"], list),
-                f"{vertical_id}: dependencies must be a list")
+        require(vertical["pillar"] in ALLOWED_PILLARS, f"{vertical_id}: invalid pillar {vertical['pillar']!r}")
+        require(vertical["mode"] in ALLOWED_MODES, f"{vertical_id}: invalid mode {vertical['mode']!r}")
+        require(isinstance(vertical["required_paths"], list) and vertical["required_paths"], f"{vertical_id}: required_paths must be non-empty")
+        require(isinstance(vertical["dependencies"], list), f"{vertical_id}: dependencies must be a list")
         require(
-            isinstance(vertical["human_approval_required"], list)
-            and vertical["human_approval_required"],
+            isinstance(vertical["human_approval_required"], list) and vertical["human_approval_required"],
             f"{vertical_id}: human approval gates must be non-empty",
         )
-        require(isinstance(vertical["exit_gate"], str) and vertical["exit_gate"].strip(),
-                f"{vertical_id}: exit_gate must be non-empty")
+        require(isinstance(vertical["exit_gate"], str) and vertical["exit_gate"].strip(), f"{vertical_id}: exit_gate must be non-empty")
 
-    require(priorities == set(range(1, len(verticals) + 1)),
-            "vertical priorities must be contiguous starting at 1")
+    require(priorities == set(range(1, len(verticals) + 1)), "vertical priorities must be contiguous starting at 1")
     ordered_ids = [item["id"] for item in sorted(verticals, key=lambda item: item["priority"])]
-    require(ordered_ids[0] == "digital_products", "first vertical must be digital_products")
-    require("infrastructure" in ids, "infrastructure vertical is required")
-    require("governance_legal" in ids, "governance_legal vertical is required")
-    require("intelligence_orchestration" in ids,
-            "intelligence_orchestration vertical is required")
+    require(
+        ordered_ids[:3] == ["commerce_fulfillment", "kdp_publishing", "analytics_services"],
+        "first three verticals must be commerce_fulfillment, kdp_publishing, analytics_services",
+    )
+    for required_id in (
+        "digital_products",
+        "infrastructure",
+        "governance_legal",
+        "intelligence_orchestration",
+        "kdp_publishing",
+        "analytics_services",
+    ):
+        require(required_id in ids, f"{required_id} vertical is required")
 
     trading = next(item for item in verticals if item["id"] == "trading")
     require(trading["mode"] == "paper", "trading must remain in paper mode")
     require(trading["status"] == "paper_only", "trading status must remain paper_only")
-    require("enable_live_trading" in trading["human_approval_required"],
-            "trading must require explicit approval before live execution")
+    require("enable_live_trading" in trading["human_approval_required"], "trading must require explicit approval before live execution")
 
     validate_dependency_graph(verticals)
     validate_required_paths(verticals)
@@ -182,10 +180,7 @@ def main() -> int:
     verticals = registry["verticals"]
     print(f"ECOSYSTEM ALIGNMENT: PASS — {len(verticals)} verticals validated")
     for vertical in sorted(verticals, key=lambda item: item["priority"]):
-        print(
-            f"{vertical['priority']:02d} {vertical['id']} "
-            f"[{vertical['pillar']}/{vertical['status']}/{vertical['mode']}]"
-        )
+        print(f"{vertical['priority']:02d} {vertical['id']} [{vertical['pillar']}/{vertical['status']}/{vertical['mode']}]")
     return 0
 
 

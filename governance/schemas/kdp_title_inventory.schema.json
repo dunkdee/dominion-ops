@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/schemas/kdp_title_inventory.schema.json",
+  "title": "Dominion KDP Title Inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "inventory_id",
+    "inventory_status",
+    "coverage_status",
+    "observed_on",
+    "source",
+    "author_observed",
+    "titles",
+    "limitations",
+    "external_execution_authorized",
+    "revenue_verified",
+    "inventory_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "inventory_id": {"type": "string", "minLength": 1},
+    "inventory_status": {"const": "VISUALLY_VERIFIED_PARTIAL"},
+    "coverage_status": {"const": "PARTIAL_ACCOUNT_VIEW"},
+    "observed_on": {"type": "string", "format": "date"},
+    "source": {"const": "user_provided_kdp_bookshelf_screenshots"},
+    "author_observed": {"type": "string", "minLength": 1},
+    "titles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title_id",
+          "title",
+          "author",
+          "format",
+          "listing_status",
+          "price",
+          "currency",
+          "last_modified",
+          "ebook_listing_observed",
+          "rights_status",
+          "proof_status",
+          "sales_verified",
+          "royalties_verified",
+          "evidence_reference"
+        ],
+        "properties": {
+          "title_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{2,95}$"},
+          "title": {"type": "string", "minLength": 1},
+          "author": {"type": "string", "minLength": 1},
+          "format": {"const": "PAPERBACK"},
+          "listing_status": {"const": "LIVE"},
+          "price": {"type": "string", "pattern": "^[0-9]+\\.[0-9]{2}$"},
+          "currency": {"const": "USD"},
+          "last_modified": {"type": "string", "format": "date"},
+          "ebook_listing_observed": {"type": "boolean"},
+          "rights_status": {"const": "UNVERIFIED"},
+          "proof_status": {"const": "UNVERIFIED"},
+          "sales_verified": {"const": false},
+          "royalties_verified": {"const": false},
+          "evidence_reference": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "external_execution_authorized": {"const": false},
+    "revenue_verified": {"const": false},
+    "inventory_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

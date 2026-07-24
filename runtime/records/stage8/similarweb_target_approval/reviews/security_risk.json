@@ -1,0 +1,20 @@
+{
+  "conditions": [
+    "do not store credentials or raw exports in Git",
+    "maintain private storage and evidence hashes"
+  ],
+  "council_id": "security_risk",
+  "decision": "APPROVE_WITH_CONDITIONS",
+  "evidence": [
+    "private storage paths are defined",
+    "credentials and raw exports are excluded from Git"
+  ],
+  "external_execution_authorized": false,
+  "independent": true,
+  "rationale": "The manifest approval creates no credential use or external side effect and retains least-privilege controls.",
+  "release_request_hash": "70407706ba36e22281e11585b9a5506e22d37a8bcf303f78383840ff5c4581ce",
+  "release_request_id": "similarweb_target_manifest_final_release_20260724",
+  "review_hash": "fbef116595b75806903c3f5107ca25044d02915fdb43c6d3d77f1129804fbbb0",
+  "review_sequence": 3,
+  "reviewer_agent_id": "council_security_risk"
+}

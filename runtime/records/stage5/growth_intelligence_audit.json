@@ -1,0 +1,64 @@
+{
+  "claims_boundary": {
+    "guaranteed_outcome_claim_allowed": false,
+    "health_sensitive_targeting_allowed": false,
+    "individual_targeting_allowed": false,
+    "revenue_claim_allowed": false
+  },
+  "content_published": false,
+  "customer_contacted": false,
+  "deliverables": [
+    "market_and_competitor_signal_summary",
+    "storefront_friction_hypotheses",
+    "prioritized_measurement_plan",
+    "thirty_day_test_backlog"
+  ],
+  "errors": [],
+  "external_execution_authorized": false,
+  "findings": [
+    {
+      "evidence": "68d6efe4f80bde5b17fb8c307ab3036e5383cc6fd5efe435e3c25b872f485184",
+      "statement": "The supplied record is a third-party estimate and does not verify revenue.",
+      "truth_state": "VERIFIED"
+    },
+    {
+      "evidence": "68d6efe4f80bde5b17fb8c307ab3036e5383cc6fd5efe435e3c25b872f485184",
+      "statement": "organic_search is the largest estimated acquisition channel in the supplied snapshot.",
+      "truth_state": "INFERRED"
+    }
+  ],
+  "first_party_verified": false,
+  "market_signal_hash": "68d6efe4f80bde5b17fb8c307ab3036e5383cc6fd5efe435e3c25b872f485184",
+  "money_moved": false,
+  "opportunities": [
+    {
+      "basis": "Estimated bounce rate is at or above 0.60.",
+      "priority": "HIGH",
+      "type": "landing_page_friction_review"
+    },
+    {
+      "basis": "Estimated pages per visit is below 2.0.",
+      "priority": "MEDIUM",
+      "type": "internal_navigation_and_merchandising_review"
+    },
+    {
+      "basis": "Estimated average visit duration is below 90 seconds.",
+      "priority": "MEDIUM",
+      "type": "message_match_and_content_depth_review"
+    },
+    {
+      "basis": "Conversion and revenue optimization requires first-party analytics and order evidence.",
+      "priority": "FOUNDATIONAL",
+      "type": "connect_first_party_measurement"
+    },
+    {
+      "basis": "A repeated estimate series is more useful than a single point-in-time estimate.",
+      "priority": "FOUNDATIONAL",
+      "type": "establish_monthly_benchmark_cycle"
+    }
+  ],
+  "pricing_status": "UNSET_REQUIRES_HUMAN_APPROVAL",
+  "product_id": "storefront_growth_intelligence",
+  "report_hash": "f9a3afbaaeda0d022946b4997c3defbe86b2e3ec943cdf3115666850ad5e34cf",
+  "status": "MARKET_SIGNAL_ONLY"
+}

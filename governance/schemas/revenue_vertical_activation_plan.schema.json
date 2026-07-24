@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/governance/schemas/revenue_vertical_activation_plan.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "system",
+    "plan_id",
+    "operating_order",
+    "status",
+    "mode",
+    "revenue_vertical_activation_enabled",
+    "million_dollar_outcome_is_target_not_forecast",
+    "doctrine",
+    "wave_capacity",
+    "current_wave",
+    "activation_sequence",
+    "shared_revenue_flywheel",
+    "portfolio_stop_conditions",
+    "external_execution_authorized",
+    "pricing_authorized",
+    "publication_authorized",
+    "money_movement_authorized"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "system": {"type": "string", "minLength": 1},
+    "plan_id": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+    "operating_order": {
+      "type": "array",
+      "prefixItems": [{"const": "cash_flow"}, {"const": "systems"}, {"const": "scale"}],
+      "items": false
+    },
+    "status": {"const": "READY_FOR_HUMAN_WAVE_APPROVAL"},
+    "mode": {"const": "SHADOW_PLANNING"},
+    "revenue_vertical_activation_enabled": {"const": false},
+    "million_dollar_outcome_is_target_not_forecast": {"const": true},
+    "doctrine": {
+      "type": "array",
+      "minItems": 5,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "wave_capacity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximum_primary_verticals", "support_verticals_must_remain_shadow_only"],
+      "properties": {
+        "maximum_primary_verticals": {"type": "integer", "const": 2},
+        "support_verticals_must_remain_shadow_only": {"const": true}
+      }
+    },
+    "current_wave": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wave_id", "primary_verticals", "support_verticals", "activation_status", "completion_rule"],
+      "properties": {
+        "wave_id": {"const": "wave_1_owned_assets"},
+        "primary_verticals": {
+          "type": "array",
+          "prefixItems": [{"const": "commerce_fulfillment"}, {"const": "kdp_publishing"}],
+          "items": false
+        },
+        "support_verticals": {
+          "type": "array",
+          "prefixItems": [{"const": "analytics_services"}],
+          "items": false
+        },
+        "activation_status": {"const": "NOT_ACTIVATED"},
+        "completion_rule": {"type": "string", "minLength": 1}
+      }
+    },
+    "activation_sequence": {
+      "type": "array",
+      "minItems": 6,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "shared_revenue_flywheel": {
+      "type": "array",
+      "minItems": 6,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "portfolio_stop_conditions": {
+      "type": "array",
+      "minItems": 5,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "external_execution_authorized": {"const": false},
+    "pricing_authorized": {"const": false},
+    "publication_authorized": {"const": false},
+    "money_movement_authorized": {"const": false}
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "review_mode": "independent_before_deliberation",
+  "preserve_dissent": true,
+  "proposer_may_not_be_sole_approver": true,
+  "councils": [
+    {
+      "id": "truth_evidence",
+      "name": "Truth and Evidence",
+      "mandate": ["source_quality", "factual_support", "contradictions", "uncertainty", "hallucination_risk"],
+      "veto": false
+    },
+    {
+      "id": "law_governance",
+      "name": "Law and Governance",
+      "mandate": ["jurisdiction", "legal_authority", "contracts", "privacy", "regulation", "internal_authority"],
+      "veto": true
+    },
+    {
+      "id": "security_risk",
+      "name": "Security and Risk",
+      "mandate": ["least_privilege", "attack_surface", "data_exposure", "fraud", "blast_radius", "reversibility"],
+      "veto": true
+    },
+    {
+      "id": "engineering_reliability",
+      "name": "Engineering and Reliability",
+      "mandate": ["architecture", "tests", "dependencies", "observability", "capacity", "rollback"],
+      "veto": false
+    },
+    {
+      "id": "business_human_impact",
+      "name": "Business Value and Human Impact",
+      "mandate": ["revenue_relevance", "cost", "customer_outcome", "ethics", "reputation", "strategic_alignment"],
+      "veto": false
+    }
+  ],
+  "thresholds": {
+    "low": {"required_approvals": 0, "human_required": false},
+    "moderate": {"required_approvals": 2, "human_required": false},
+    "high": {"required_approvals": 4, "human_required": false},
+    "critical": {"required_approvals": 5, "human_required": true}
+  },
+  "automatic_holds": [
+    "unresolved_legal_status",
+    "missing_evidence",
+    "conflicting_authoritative_sources",
+    "unknown_data_classification",
+    "rollback_not_tested",
+    "security_veto",
+    "law_veto"
+  ],
+  "decision_states": ["APPROVE", "APPROVE_WITH_CONDITIONS", "VETO", "HOLD", "ABSTAIN"]
+}

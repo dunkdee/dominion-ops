@@ -1,0 +1,59 @@
+{
+  "consequential_release_classes": [
+    "trial_target_manifest_approval",
+    "trial_activation",
+    "revenue_wave_activation",
+    "production_deployment",
+    "external_publication",
+    "pricing_change",
+    "customer_or_claimant_contact",
+    "money_movement",
+    "live_trading",
+    "kdp_publication",
+    "wix_go_live",
+    "external_data_distribution",
+    "agent_promotion",
+    "main_branch_merge"
+  ],
+  "council_requirements": {
+    "all_five_reviews_required": true,
+    "dissent_and_conditions_preserved": true,
+    "review_sequence_must_follow_human_authorization": true,
+    "reviews_must_be_independent": true,
+    "reviews_must_bind_to_release_request_hash": true,
+    "unanimous_approval_required": true,
+    "veto_or_hold_blocks_release": true
+  },
+  "default_behavior": "deny",
+  "external_execution_authorized": false,
+  "final_affirmative_gate": "five_council",
+  "governor_action_ids": [
+    "merge_to_main",
+    "deploy_production",
+    "publish_external_content",
+    "contact_customer_or_claimant",
+    "spend_or_move_money",
+    "sign_file_or_submit_legal_document",
+    "reactivate_suspended_or_retired_agent"
+  ],
+  "human_authority": {
+    "may_not_override_law_or_security_veto": true,
+    "may_revoke_or_emergency_stop_at_any_time": true,
+    "post_council_affirmative_click_required": false,
+    "preauthorizes_scope_before_council": true
+  },
+  "purpose": "Make the Five Council the final affirmative release gate for every consequential Dominion action.",
+  "release_sequence": [
+    "technical_readiness_verified",
+    "human_scope_authorization_recorded",
+    "five_council_independent_final_review",
+    "release_within_approved_scope"
+  ],
+  "release_states": [
+    "FINAL_RELEASE_APPROVED",
+    "HOLD",
+    "VETO",
+    "DENY"
+  ],
+  "version": "1.0.0"
+}

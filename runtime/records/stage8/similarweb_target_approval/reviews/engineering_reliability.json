@@ -1,0 +1,20 @@
+{
+  "conditions": [
+    "run capability discovery before paid queries",
+    "preserve daily completeness and closeout checks"
+  ],
+  "council_id": "engineering_reliability",
+  "decision": "APPROVE_WITH_CONDITIONS",
+  "evidence": [
+    "capture controller and deterministic validators exist",
+    "duplicate and completeness controls are defined"
+  ],
+  "external_execution_authorized": false,
+  "independent": true,
+  "rationale": "The technical system is ready to accept permitted exports after a separate activation review.",
+  "release_request_hash": "70407706ba36e22281e11585b9a5506e22d37a8bcf303f78383840ff5c4581ce",
+  "release_request_id": "similarweb_target_manifest_final_release_20260724",
+  "review_hash": "970ac118c034b8bf70c45921a65cc96f16e6663138fc61d62269fe957f11651c",
+  "review_sequence": 3,
+  "reviewer_agent_id": "council_engineering_reliability"
+}

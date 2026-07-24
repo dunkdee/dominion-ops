@@ -1,11 +1,11 @@
 {
-  "version":"3.0.0",
-  "stage":4,
+  "version":"4.0.0",
+  "stage":5,
   "mode":"shadow_only",
   "external_execution_enabled":false,
   "registry_mutation_enabled":false,
   "blocked_actions":["merge_to_main","deploy_production","publish_external_content","contact_customer_or_claimant","spend_or_move_money","sign_file_or_submit_legal_document","reactivate_suspended_or_retired_agent"],
-  "blocked_capabilities":["start_obsidian_runtime","start_browser_agents","live_customer_contact","live_content_publication","live_financial_execution","live_trading","production_deployment","autonomous_agent_promotion","autonomous_registry_mutation","unverified_historical_data_promotion"],
-  "promotion_requirements":["existing_wix_isolation_diagnosis_closed","runtime_governor_tests_pass","ledger_integrity_tests_pass","proposal_bound_council_reviews_pass","first_agent_cohort_reviewed","historical_adapter_validation_pass","actual_historical_source_connected","first_non_contact_actual_observation_completed","threat_model_reviewed","rollback_tested","human_overseer_approval_recorded"],
-  "permitted_stage4_outputs":["policy_decision_records","proposal_envelopes","bound_council_review_records","council_decision_records","agent_cohort_validation_reports","historical_snapshot_adapter_reports","non_contact_shadow_observation_reports","revenue_simulation_reports","shadow_revenue_experiment_reports","append_only_evidence_records"]
+  "blocked_capabilities":["start_obsidian_runtime","start_browser_agents","live_customer_contact","live_content_publication","live_financial_execution","live_trading","production_deployment","autonomous_agent_promotion","autonomous_registry_mutation","unverified_historical_data_promotion","estimated_data_revenue_verification","raw_personal_data_commercialization"],
+  "promotion_requirements":["existing_wix_isolation_diagnosis_closed","runtime_governor_tests_pass","ledger_integrity_tests_pass","proposal_bound_council_reviews_pass","first_agent_cohort_reviewed","historical_adapter_validation_pass","external_estimate_adapter_validation_pass","actual_external_estimate_export_reviewed","actual_historical_source_connected","first_non_contact_actual_observation_completed","data_monetization_legal_review_completed","threat_model_reviewed","rollback_tested","human_overseer_approval_recorded"],
+  "permitted_stage5_outputs":["policy_decision_records","proposal_envelopes","bound_council_review_records","council_decision_records","agent_cohort_validation_reports","historical_snapshot_adapter_reports","external_estimate_adapter_reports","market_intelligence_reports","analytics_product_drafts","non_contact_shadow_observation_reports","revenue_simulation_reports","shadow_revenue_experiment_reports","append_only_evidence_records"]
 }

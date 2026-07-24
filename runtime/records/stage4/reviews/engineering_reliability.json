@@ -1,0 +1,18 @@
+{
+  "conditions": [],
+  "council_id": "engineering_reliability",
+  "decision": "APPROVE",
+  "errors": [],
+  "evidence": [
+    "deterministic adapter tests",
+    "proposal-bound review hash checks",
+    "rollback procedure is explicit"
+  ],
+  "independent": true,
+  "proposal_hash": "cd71721928b1dca5a610fa71279bb5f9898e3e2c9385f2d11341478273245608",
+  "proposal_id": "stage4_fixture_shadow_observation",
+  "rationale": "Engineering review confirms deterministic normalization, tamper detection, and fail-closed observation behavior.",
+  "review_hash": "d324c01c9a84953bf914f5f585eaeee0689b0b656c465df26a886780a7895aac",
+  "reviewer_agent_id": "council_engineering_reliability",
+  "status": "BOUND"
+}

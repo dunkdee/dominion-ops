@@ -1,0 +1,20 @@
+{
+  "conditions": [
+    "retain estimated-data labeling",
+    "do not represent the manifest as collected data"
+  ],
+  "council_id": "truth_evidence",
+  "decision": "APPROVE_WITH_CONDITIONS",
+  "evidence": [
+    "manifest contains fifteen explicit domains and metric scopes",
+    "Stage 6 validator previously passed"
+  ],
+  "external_execution_authorized": false,
+  "independent": true,
+  "rationale": "The evidence supports approval of the target list as a planning artifact, not as proof of market performance.",
+  "release_request_hash": "70407706ba36e22281e11585b9a5506e22d37a8bcf303f78383840ff5c4581ce",
+  "release_request_id": "similarweb_target_manifest_final_release_20260724",
+  "review_hash": "91823e640b3982a4a245fcea96ee743dd284da3cc2ebd0c2015f3c55ca5c9762",
+  "review_sequence": 3,
+  "reviewer_agent_id": "council_truth_evidence"
+}

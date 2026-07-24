@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Stage 4 historical adapters, council records, and shadow observations."""
+"""Validate Stage 4-or-later historical adapters, council records, and shadow observations."""
 from __future__ import annotations
 import copy, json, sys
 from pathlib import Path
@@ -27,7 +27,7 @@ def main()->int:
     ]
     for item in required: require((ROOT/item).is_file(),f'missing required file: {item}')
     gates=load(ROOT/'governance/runtime_activation_gates.json')
-    require(gates.get('stage')==4,'activation stage must be 4')
+    require(isinstance(gates.get('stage'),int) and gates.get('stage')>=4,'activation stage must be 4 or later')
     require(gates.get('mode')=='shadow_only','runtime must remain shadow_only')
     require(gates.get('external_execution_enabled') is False,'external execution must remain disabled')
     require(gates.get('registry_mutation_enabled') is False,'registry mutation must remain disabled')
@@ -60,10 +60,10 @@ def main()->int:
     for path,field in ((ROOT/'runtime/records/stage4/adapted_snapshot.json','adapter_result_hash'),(ROOT/'runtime/records/stage4/shadow_observation.json','observation_hash')):
         record=load(path); require(record.get(field)==sha256_json({k:v for k,v in record.items() if k!=field}),f'{path.name} hash mismatch')
     if ERRORS:
-        print('Dominion Stage 4 validation FAILED:')
+        print('Dominion Stage 4 compatibility validation FAILED:')
         for error in ERRORS: print(f' - {error}')
         return 1
-    print('Dominion Stage 4 validation PASSED')
-    print(f'Validated {len(required)} Stage 4 contracts and records.')
+    print('Dominion Stage 4 compatibility validation PASSED')
+    print(f'Validated {len(required)} Stage 4 contracts under Stage {gates.get("stage")} gates.')
     return 0
 if __name__=='__main__': raise SystemExit(main())

@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "system": "Dominion Ascendant",
   "operating_order": [
     "cash_flow",
@@ -12,13 +12,97 @@
     "shared_infrastructure_separate_vertical_accountability": true,
     "no_unverified_live_execution": true,
     "paper_before_live_financial_execution": true,
-    "zero_secret_material_in_repository": true
+    "zero_secret_material_in_repository": true,
+    "maximum_two_primary_revenue_verticals_per_wave": true,
+    "large_revenue_outcome_is_target_not_forecast": true
   },
   "verticals": [
     {
-      "id": "digital_products",
+      "id": "commerce_fulfillment",
       "pillar": "cash_flow",
       "priority": 1,
+      "operator": "commerce-operator",
+      "status": "guarded_blocked",
+      "mode": "record_only",
+      "duty": "Operate the DominionHealing Wix storefront, catalog, orders, and fulfillment under transaction, claims, and customer-protection controls.",
+      "required_paths": [
+        "apps/wix-agent/main.py",
+        "apps/wix-agent/fulfillment.py",
+        "apps/wix-agent/README.md",
+        "revenue/verticals/wix_store.json"
+      ],
+      "dependencies": [
+        "infrastructure",
+        "intelligence_orchestration",
+        "governance_legal"
+      ],
+      "human_approval_required": [
+        "publish_or_unpublish_product",
+        "change_price",
+        "enable_supplier_submission",
+        "bulk_catalog_change",
+        "publish_health_shipping_or_delivery_claim"
+      ],
+      "exit_gate": "The Wix isolation diagnosis is closed, storefront findings are resolved or accepted, checkout and one controlled order are verified, fulfillment reconciles exactly once, and unit economics are recorded."
+    },
+    {
+      "id": "kdp_publishing",
+      "pillar": "cash_flow",
+      "priority": 2,
+      "operator": "publishing-operator",
+      "status": "foundation_required",
+      "mode": "draft_only",
+      "duty": "Prepare, quality-control, publish, and measure owned books and educational assets through KDP without unapproved publication or rights risk.",
+      "required_paths": [
+        "revenue/verticals/kdp_publishing.json",
+        "governance/DOMINION_REVENUE_MANIFESTO.md"
+      ],
+      "dependencies": [
+        "infrastructure",
+        "intelligence_orchestration",
+        "governance_legal"
+      ],
+      "human_approval_required": [
+        "approve_authorship_and_rights",
+        "approve_metadata_and_cover",
+        "approve_price",
+        "upload_and_publish",
+        "revise_or_unpublish"
+      ],
+      "exit_gate": "One title has complete rights, editorial, cover, metadata, proof, pricing, and human publication records, followed by a verified royalty-bearing sale."
+    },
+    {
+      "id": "analytics_services",
+      "pillar": "cash_flow",
+      "priority": 3,
+      "operator": "revenue-operator",
+      "status": "shadow_ready",
+      "mode": "shadow_only",
+      "duty": "Produce governed growth-intelligence audits, benchmarks, measurement reports, and read-only analytics systems from permitted evidence.",
+      "required_paths": [
+        "control_plane/analytics_audit.py",
+        "revenue_products/storefront_growth_intelligence.json",
+        "revenue/verticals/analytics_services.json"
+      ],
+      "dependencies": [
+        "infrastructure",
+        "intelligence_orchestration",
+        "governance_legal"
+      ],
+      "human_approval_required": [
+        "accept_client_data",
+        "contact_prospect",
+        "approve_scope_and_price",
+        "send_proposal",
+        "deliver_report",
+        "publish_case_study"
+      ],
+      "exit_gate": "A compliant data intake and sample report pass review, and one human-approved paid pilot is delivered without a privacy, claims, or scope failure."
+    },
+    {
+      "id": "digital_products",
+      "pillar": "cash_flow",
+      "priority": 4,
       "operator": "revenue-operator",
       "status": "blocked",
       "mode": "assisted",
@@ -35,36 +119,12 @@
         "change_price",
         "change_customer_delivery"
       ],
-      "exit_gate": "Gumroad product has its file attached, is visibly published, checkout succeeds, and delivery is verified with a test purchase."
-    },
-    {
-      "id": "commerce_fulfillment",
-      "pillar": "cash_flow",
-      "priority": 2,
-      "operator": "commerce-operator",
-      "status": "guarded",
-      "mode": "record_only",
-      "duty": "Audit the Wix catalog, ingest orders, and record fulfillment state without unapproved bulk mutation.",
-      "required_paths": [
-        "apps/wix-agent/main.py",
-        "apps/wix-agent/fulfillment.py",
-        "apps/wix-agent/README.md"
-      ],
-      "dependencies": [
-        "infrastructure",
-        "intelligence_orchestration"
-      ],
-      "human_approval_required": [
-        "enable_supplier_submission",
-        "bulk_catalog_change",
-        "publish_policy_or_shipping_claim"
-      ],
-      "exit_gate": "Readiness endpoint passes, supplier configuration is verified, and one sandbox purchase creates exactly one fulfillment record."
+      "exit_gate": "A product has its file attached, is visibly published, checkout succeeds, and delivery is verified with a test purchase."
     },
     {
       "id": "services_lead_generation",
       "pillar": "cash_flow",
-      "priority": 3,
+      "priority": 5,
       "operator": "services-operator",
       "status": "unverified",
       "mode": "assisted",
@@ -86,7 +146,7 @@
     {
       "id": "content_traffic",
       "pillar": "systems",
-      "priority": 4,
+      "priority": 6,
       "operator": "content-operator",
       "status": "unverified",
       "mode": "draft_only",
@@ -109,7 +169,7 @@
     {
       "id": "surplus",
       "pillar": "systems",
-      "priority": 5,
+      "priority": 7,
       "operator": "surplus-operator",
       "status": "incomplete",
       "mode": "research_only",
@@ -134,7 +194,7 @@
     {
       "id": "trading",
       "pillar": "systems",
-      "priority": 6,
+      "priority": 8,
       "operator": "alpha-governor",
       "status": "paper_only",
       "mode": "paper",
@@ -159,7 +219,7 @@
     {
       "id": "intelligence_orchestration",
       "pillar": "systems",
-      "priority": 7,
+      "priority": 9,
       "operator": "jarvis-governor",
       "status": "incomplete",
       "mode": "observe_and_route",
@@ -182,13 +242,14 @@
     {
       "id": "governance_legal",
       "pillar": "systems",
-      "priority": 8,
+      "priority": 10,
       "operator": "five-council",
       "status": "foundational",
       "mode": "review_and_veto",
       "duty": "Enforce founder authority, auditability, legal boundaries, security rules, and veto conditions across all verticals.",
       "required_paths": [
-        "governance/verticals.json"
+        "governance/verticals.json",
+        "governance/DOMINION_REVENUE_MANIFESTO.md"
       ],
       "dependencies": [
         "infrastructure"
@@ -205,7 +266,7 @@
     {
       "id": "infrastructure",
       "pillar": "systems",
-      "priority": 9,
+      "priority": 11,
       "operator": "platform-operator",
       "status": "partially_verified",
       "mode": "production_support",

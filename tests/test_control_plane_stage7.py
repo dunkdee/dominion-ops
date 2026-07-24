@@ -39,11 +39,14 @@ class Stage7RevenueVerticalTests(unittest.TestCase):
         self.assertFalse(wix["revenue_verified"])
         self.assertFalse(wix["external_execution_authorized"])
 
-    def test_kdp_requires_rights_and_human_publication(self):
+    def test_kdp_requires_rights_human_scope_and_final_council(self):
         kdp = load("revenue/verticals/kdp_publishing.json")
+        self.assertEqual(kdp["title_inventory_path"], "revenue/kdp/title_inventory.json")
         self.assertIn("publish_without_rights_review", kdp["prohibited_actions"])
+        self.assertIn("publish_without_final_five_council_release", kdp["prohibited_actions"])
         self.assertIn("autonomous_kdp_upload_or_publication", kdp["prohibited_actions"])
         self.assertIn("human_overseer_approves_upload_and_publication", kdp["launch_gates"])
+        self.assertIn("five_council_final_release_approves_publication", kdp["launch_gates"])
 
     def test_analytics_monetizes_analysis_not_raw_data(self):
         analytics = load("revenue/verticals/analytics_services.json")
@@ -53,11 +56,12 @@ class Stage7RevenueVerticalTests(unittest.TestCase):
 
     def test_runtime_stays_shadow_only(self):
         gates = load("governance/runtime_activation_gates.json")
-        self.assertEqual(gates["stage"], 7)
+        self.assertGreaterEqual(gates["stage"], 7)
         self.assertEqual(gates["mode"], "shadow_only")
         self.assertFalse(gates["external_execution_enabled"])
         self.assertFalse(gates["revenue_vertical_activation_enabled"])
         self.assertIn("activate_revenue_wave_without_human_approval", gates["blocked_capabilities"])
+        self.assertIn("activate_revenue_wave_without_final_five_council_release", gates["blocked_capabilities"])
 
 
 if __name__ == "__main__":

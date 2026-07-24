@@ -1,0 +1,35 @@
+{
+  "version": "1.0.0",
+  "incident_types": ["mistake", "failure", "near_miss", "policy_violation", "knowledge_defect", "reasoning_defect", "security_event"],
+  "severity_levels": ["SEV0", "SEV1", "SEV2", "SEV3", "SEV4"],
+  "lifecycle": ["DETECTED", "CONTAINED", "EVIDENCE_PRESERVED", "ROOT_CAUSE_IDENTIFIED", "CORRECTIVE_ACTION_APPROVED", "CONTROL_IMPLEMENTED", "REGRESSION_PASSED", "MONITORING_ACTIVE", "CLOSED"],
+  "required_artifacts": [
+    "incident_record",
+    "timeline",
+    "evidence_index",
+    "impact_assessment",
+    "root_cause",
+    "contributing_factors",
+    "corrective_action",
+    "preventive_action",
+    "owner",
+    "regression_test",
+    "verification_result",
+    "recurrence_monitor"
+  ],
+  "closure_gates": {
+    "root_cause_required": true,
+    "control_change_required": true,
+    "regression_test_required": true,
+    "verification_required": true,
+    "recurrence_monitor_required": true,
+    "unresolved_risks_must_be_accepted_by_human": true
+  },
+  "self_modification": {
+    "agent_may_propose": true,
+    "agent_may_activate": false,
+    "requires_version_control": true,
+    "requires_independent_review": true
+  },
+  "recurrence_rule": "reopen_and_raise_severity_or_control_priority"
+}

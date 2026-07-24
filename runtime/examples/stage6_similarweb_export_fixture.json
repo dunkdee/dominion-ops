@@ -1,0 +1,30 @@
+{
+  "snapshot_id": "stage6_fixture_dominionhealing",
+  "source_kind": "EXTERNAL_ESTIMATED",
+  "provider": "SIMILARWEB_EXPORT",
+  "acquisition_method": "LOCAL_EXPORT",
+  "domain": "dominionhealing.org",
+  "period_start": "2026-06-01",
+  "period_end": "2026-06-30",
+  "as_of": "2026-07-24T00:00:00Z",
+  "test_fixture": true,
+  "evidence": [
+    "repository-fixture-only",
+    "not-obtained-from-similarweb",
+    "used-to-validate-ingestion-before-trial-start"
+  ],
+  "metrics": {
+    "estimated_visits": 1000,
+    "bounce_rate": 0.55,
+    "pages_per_visit": 2.2,
+    "average_visit_duration_seconds": 95,
+    "channel_shares": {
+      "direct": 0.25,
+      "organic_search": 0.35,
+      "paid_search": 0.1,
+      "referrals": 0.1,
+      "social": 0.15,
+      "display": 0.05
+    }
+  }
+}

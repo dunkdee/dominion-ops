@@ -5,8 +5,9 @@
   "wave": "wave_1_owned_assets",
   "sequence": 2,
   "role": "PRIMARY_REVENUE_VERTICAL",
-  "status": "FOUNDATION_AND_TITLE_INVENTORY_REQUIRED",
+  "status": "TITLE_INVENTORY_RECORDED_RIGHTS_AND_PROOF_REQUIRED",
   "mode": "DRAFT_ONLY",
+  "title_inventory_path": "revenue/kdp/title_inventory.json",
   "revenue_model": [
     "ebook_royalties",
     "paperback_royalties",
@@ -15,11 +16,11 @@
   ],
   "value_offer": "Publish useful, owned books and educational assets under controlled authorship, rights, quality, and metadata processes.",
   "current_blockers": [
-    "no_canonical_kdp_title_inventory_in_repository",
+    "title_inventory_is_partial_account_view",
     "no_title_level_rights_and_originality_records",
     "no_proof_approval_records",
     "no_verified_kdp_sales_export",
-    "publication_metadata_and_pricing_not_approved"
+    "publication_metadata_and_future_pricing_changes_not_approved"
   ],
   "launch_gates": [
     "title_inventory_recorded",
@@ -31,9 +32,11 @@
     "isbn_imprint_and_edition_decisions_recorded",
     "digital_or_physical_proof_reviewed",
     "pricing_and_royalty_scenario_human_approved",
-    "human_overseer_approves_upload_and_publication"
+    "human_overseer_approves_upload_and_publication",
+    "five_council_final_release_approves_publication"
   ],
   "evidence_required": [
+    "canonical_title_inventory",
     "manuscript_hash",
     "rights_and_originality_record",
     "editorial_quality_record",
@@ -41,7 +44,8 @@
     "metadata_package",
     "proof_approval",
     "pricing_and_royalty_review",
-    "human_publication_approval"
+    "human_publication_approval",
+    "five_council_final_release_decision"
   ],
   "success_metrics": [
     "verified_royalty_revenue",
@@ -52,24 +56,26 @@
     "production_cost_per_title",
     "time_to_publish"
   ],
-  "first_cash_event": "A human-approved title is published, a royalty-bearing sale is recorded in an authorized export, and the title has no unresolved rights or quality incident.",
+  "first_cash_event": "A human-authorized and final-Council-released title is published, a royalty-bearing sale is recorded in an authorized export, and the title has no unresolved rights or quality incident.",
   "human_approvals": [
     "approve_authorship_and_pseudonym",
     "approve_title_subtitle_description_keywords_and_categories",
     "approve_cover_and_interior",
     "approve_price",
-    "upload_and_publish",
-    "revise_or_unpublish"
+    "authorize_upload_and_publication_scope_before_final_council",
+    "revise_or_unpublish",
+    "emergency_stop_or_revoke"
   ],
   "prohibited_actions": [
     "invent_authorship_or_credentials",
     "publish_without_rights_review",
+    "publish_without_final_five_council_release",
     "fabricate_citations_reviews_or_testimonials",
     "autonomous_kdp_upload_or_publication",
     "copyright_or_trademark_infringement",
     "unsupported_health_legal_or_income_claim"
   ],
-  "pricing_status": "UNSET_REQUIRES_HUMAN_APPROVAL",
+  "pricing_status": "CURRENT_PAPERBACK_LISTINGS_OBSERVED_AT_14_99_CHANGE_REQUIRES_HUMAN_APPROVAL",
   "revenue_verified": false,
   "external_execution_authorized": false
 }

@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Annotated
+
+from fastapi import APIRouter, File, Header, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+
+from .models import WorkerClaim, WorkerComplete
+from .state import (
+    ASSET_DIR,
+    EXPORT_DIR,
+    MAX_UPLOAD_BYTES,
+    db,
+    get_project,
+    require_worker_token,
+    update_job,
+    utc_now,
+)
+
+router = APIRouter(prefix="/api/workers")
+
+
+@router.post("/claim")
+def claim_external_job(
+    payload: WorkerClaim,
+    x_worker_token: Annotated[str | None, Header()] = None,
+) -> dict:
+    require_worker_token(x_worker_token)
+    with db() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        job = connection.execute(
+            "SELECT * FROM jobs WHERE status = 'queued' AND engine = 'external_clone' ORDER BY created_at LIMIT 1"
+        ).fetchone()
+        if job is None:
+            return {"job": None}
+        connection.execute(
+            "UPDATE jobs SET status = 'claimed', claimed_by = ?, progress = 1, updated_at = ? WHERE id = ?",
+            (payload.worker_id, utc_now(), job["id"]),
+        )
+        project = get_project(connection, job["project_id"])
+        assets = connection.execute("SELECT * FROM assets WHERE project_id = ?", (job["project_id"],)).fetchall()
+    safe_assets = [
+        {
+            "id": row["id"],
+            "kind": row["kind"],
+            "original_name": row["original_name"],
+            "media_type": row["media_type"],
+            "size_bytes": row["size_bytes"],
+            "download_url": f"/api/workers/assets/{row['id']}",
+        }
+        for row in assets
+    ]
+    return {"job": dict(job), "project": dict(project), "assets": safe_assets}
+
+
+@router.get("/assets/{asset_id}")
+def download_worker_asset(
+    asset_id: str,
+    x_worker_token: Annotated[str | None, Header()] = None,
+) -> FileResponse:
+    require_worker_token(x_worker_token)
+    with db() as connection:
+        asset = connection.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    path = Path(asset["stored_path"]).resolve()
+    if not path.exists() or ASSET_DIR not in path.parents:
+        raise HTTPException(status_code=404, detail="Asset file is missing")
+    return FileResponse(path, media_type=asset["media_type"], filename=asset["original_name"])
+
+
+@router.post("/jobs/{job_id}/output", status_code=201)
+def upload_worker_output(
+    job_id: str,
+    file: UploadFile = File(...),
+    x_worker_token: Annotated[str | None, Header()] = None,
+) -> dict:
+    require_worker_token(x_worker_token)
+    if Path(file.filename or "").suffix.lower() != ".mp4":
+        raise HTTPException(status_code=422, detail="Worker output must be an MP4")
+    with db() as connection:
+        job = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if job["engine"] != "external_clone":
+            raise HTTPException(status_code=409, detail="Job is not assigned to an external worker")
+    output_path = EXPORT_DIR / f"{job_id}.mp4"
+    total = 0
+    try:
+        with output_path.open("wb") as destination:
+            while chunk := file.file.read(1024 * 1024):
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES * 5:
+                    raise HTTPException(status_code=413, detail="Worker output exceeds configured limit")
+                destination.write(chunk)
+    except Exception:
+        output_path.unlink(missing_ok=True)
+        raise
+    finally:
+        file.file.close()
+    update_job(job_id, status="completed", progress=100, output_path=str(output_path))
+    with db() as connection:
+        connection.execute(
+            "UPDATE projects SET status = ?, updated_at = ? WHERE id = ?",
+            ("review_ready", utc_now(), job["project_id"]),
+        )
+    return {"id": job_id, "status": "completed", "size_bytes": total}
+
+
+@router.post("/jobs/{job_id}/complete")
+def complete_external_job(
+    job_id: str,
+    payload: WorkerComplete,
+    x_worker_token: Annotated[str | None, Header()] = None,
+) -> dict:
+    require_worker_token(x_worker_token)
+    with db() as connection:
+        job = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if job["engine"] != "external_clone":
+            raise HTTPException(status_code=409, detail="Job is not assigned to an external worker")
+        output_path = payload.output_path
+        if payload.status == "completed":
+            if not output_path:
+                raise HTTPException(status_code=422, detail="Completed jobs require an output path")
+            resolved = Path(output_path).resolve()
+            if EXPORT_DIR not in resolved.parents or not resolved.exists():
+                raise HTTPException(status_code=422, detail="Output path must be an existing file in the export directory")
+        connection.execute(
+            "UPDATE jobs SET status = ?, progress = 100, error = ?, output_path = ?, updated_at = ? WHERE id = ?",
+            (payload.status, payload.error, output_path, utc_now(), job_id),
+        )
+        connection.execute(
+            "UPDATE projects SET status = ?, updated_at = ? WHERE id = ?",
+            ("review_ready" if payload.status == "completed" else "failed", utc_now(), job["project_id"]),
+        )
+    return {"id": job_id, "status": payload.status}

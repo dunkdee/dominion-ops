@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "vertical_id": "kdp_publishing",
+  "display_name": "Dominion KDP Publishing",
+  "wave": "wave_1_owned_assets",
+  "sequence": 2,
+  "role": "PRIMARY_REVENUE_VERTICAL",
+  "status": "FOUNDATION_AND_TITLE_INVENTORY_REQUIRED",
+  "mode": "DRAFT_ONLY",
+  "revenue_model": [
+    "ebook_royalties",
+    "paperback_royalties",
+    "hardcover_royalties_where_eligible",
+    "catalog_cross_sell"
+  ],
+  "value_offer": "Publish useful, owned books and educational assets under controlled authorship, rights, quality, and metadata processes.",
+  "current_blockers": [
+    "no_canonical_kdp_title_inventory_in_repository",
+    "no_title_level_rights_and_originality_records",
+    "no_proof_approval_records",
+    "no_verified_kdp_sales_export",
+    "publication_metadata_and_pricing_not_approved"
+  ],
+  "launch_gates": [
+    "title_inventory_recorded",
+    "authorship_rights_and_originality_review_passes",
+    "citations_and_factual_claims_verified_when_present",
+    "interior_editing_and_formatting_checks_pass",
+    "cover_and_interior_asset_rights_verified",
+    "metadata_keywords_categories_and_description_reviewed",
+    "isbn_imprint_and_edition_decisions_recorded",
+    "digital_or_physical_proof_reviewed",
+    "pricing_and_royalty_scenario_human_approved",
+    "human_overseer_approves_upload_and_publication"
+  ],
+  "evidence_required": [
+    "manuscript_hash",
+    "rights_and_originality_record",
+    "editorial_quality_record",
+    "cover_rights_record",
+    "metadata_package",
+    "proof_approval",
+    "pricing_and_royalty_review",
+    "human_publication_approval"
+  ],
+  "success_metrics": [
+    "verified_royalty_revenue",
+    "units_sold",
+    "catalog_sell_through",
+    "refund_or_return_rate",
+    "reader_rating_with_sample_size",
+    "production_cost_per_title",
+    "time_to_publish"
+  ],
+  "first_cash_event": "A human-approved title is published, a royalty-bearing sale is recorded in an authorized export, and the title has no unresolved rights or quality incident.",
+  "human_approvals": [
+    "approve_authorship_and_pseudonym",
+    "approve_title_subtitle_description_keywords_and_categories",
+    "approve_cover_and_interior",
+    "approve_price",
+    "upload_and_publish",
+    "revise_or_unpublish"
+  ],
+  "prohibited_actions": [
+    "invent_authorship_or_credentials",
+    "publish_without_rights_review",
+    "fabricate_citations_reviews_or_testimonials",
+    "autonomous_kdp_upload_or_publication",
+    "copyright_or_trademark_infringement",
+    "unsupported_health_legal_or_income_claim"
+  ],
+  "pricing_status": "UNSET_REQUIRES_HUMAN_APPROVAL",
+  "revenue_verified": false,
+  "external_execution_authorized": false
+}

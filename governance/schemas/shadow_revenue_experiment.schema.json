@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Dominion Shadow Revenue Experiment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["experiment_id", "owner_id", "proposal_hash", "source_snapshot", "baseline", "candidate", "guardrails"],
+  "properties": {
+    "experiment_id": {"type": "string", "minLength": 1},
+    "owner_id": {"const": "revenue_operations"},
+    "proposal_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "as_of", "evidence"],
+      "properties": {
+        "kind": {"enum": ["SYNTHETIC_TEST", "HISTORICAL_VERIFIED"]},
+        "as_of": {"type": "string", "minLength": 1},
+        "evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "baseline": {"$ref": "revenue_scenario.schema.json"},
+    "candidate": {"$ref": "revenue_scenario.schema.json"},
+    "guardrails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_visitors", "minimum_gross_margin", "minimum_gross_profit_delta", "maximum_fixed_cost"],
+      "properties": {
+        "minimum_visitors": {"type": "integer", "minimum": 1},
+        "minimum_gross_margin": {"type": "number", "minimum": -1, "maximum": 1},
+        "minimum_gross_profit_delta": {"type": "number"},
+        "maximum_fixed_cost": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}

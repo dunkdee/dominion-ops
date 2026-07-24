@@ -1,6 +1,9 @@
 {
-  "version": "1.0.0",
-  "mode": "simulation_only",
+  "version": "2.0.0",
+  "stage": 3,
+  "mode": "shadow_only",
+  "external_execution_enabled": false,
+  "registry_mutation_enabled": false,
   "blocked_actions": [
     "merge_to_main",
     "deploy_production",
@@ -17,22 +20,30 @@
     "live_content_publication",
     "live_financial_execution",
     "live_trading",
-    "production_deployment"
+    "production_deployment",
+    "autonomous_agent_promotion",
+    "autonomous_registry_mutation"
   ],
   "promotion_requirements": [
     "existing_wix_isolation_diagnosis_closed",
     "runtime_governor_tests_pass",
     "ledger_integrity_tests_pass",
-    "council_decision_tests_pass",
+    "proposal_bound_council_reviews_pass",
+    "first_agent_cohort_reviewed",
+    "shadow_revenue_real_inputs_verified",
     "threat_model_reviewed",
     "rollback_tested",
     "human_overseer_approval_recorded"
   ],
-  "permitted_stage2_outputs": [
+  "permitted_stage3_outputs": [
     "policy_decision_records",
+    "proposal_envelopes",
+    "bound_council_review_records",
     "council_decision_records",
+    "agent_cohort_validation_reports",
     "agent_candidate_reports",
     "revenue_simulation_reports",
+    "shadow_revenue_experiment_reports",
     "append_only_evidence_records"
   ]
 }

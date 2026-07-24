@@ -55,7 +55,13 @@ class FixtureMixin:
                 "critical": {"required_approvals": 5, "human_required": True},
             },
         }
-        self.gates = {"mode": "simulation_only", "blocked_actions": ["deploy_production"], "promotion_requirements": ["human_approval_recorded"]}
+        self.gates = {
+            "mode": "shadow_only",
+            "external_execution_enabled": False,
+            "registry_mutation_enabled": False,
+            "blocked_actions": ["deploy_production"],
+            "promotion_requirements": ["human_approval_recorded"],
+        }
         for name, value in (("authority.json", self.authority), ("registry.json", self.registry), ("council.json", self.council), ("gates.json", self.gates)):
             (self.root / name).write_text(json.dumps(value), encoding="utf-8")
         self.governor = Governor(GovernorPaths(authority=self.root / "authority.json", registry=self.root / "registry.json", council=self.root / "council.json", activation_gates=self.root / "gates.json"))
@@ -65,10 +71,10 @@ class FixtureMixin:
 
 
 class GovernorTests(FixtureMixin, unittest.TestCase):
-    def test_low_risk_action_allows_when_evidenced_and_constrained(self) -> None:
+    def test_low_risk_policy_allows_but_shadow_execution_stays_disabled(self) -> None:
         result = self.governor.evaluate({"actor_id": "research", "action_id": "read_public_information", "evidence": ["source:official"], "satisfied_constraints": ["record_sources"], "legal_status": "NOT_APPLICABLE", "council_approvals": []})
         self.assertEqual(result["decision"], "ALLOW")
-        self.assertTrue(result["execution_authorized"])
+        self.assertFalse(result["execution_authorized"])
 
     def test_unknown_action_is_denied_by_default(self) -> None:
         result = self.governor.evaluate({"actor_id": "research", "action_id": "invented_action", "evidence": ["source"], "satisfied_constraints": [], "legal_status": "NOT_APPLICABLE", "council_approvals": []})
@@ -85,7 +91,7 @@ class GovernorTests(FixtureMixin, unittest.TestCase):
         self.assertEqual(result["decision"], "DENY")
         self.assertIn("security_risk_veto", result["reasons"])
 
-    def test_production_deployment_is_held_by_stage2_gate(self) -> None:
+    def test_production_deployment_is_held_by_activation_gate(self) -> None:
         result = self.governor.evaluate({"actor_id": "human_overseer", "action_id": "deploy_production", "evidence": ["run-1"], "satisfied_constraints": ["unanimous_council", "human_approval"], "legal_status": "RESOLVED", "council_approvals": [], "human_approval": {"approved": True, "approver": "human_overseer", "evidence": "approval-1"}})
         self.assertEqual(result["decision"], "HOLD")
         self.assertIn("runtime_activation_gate", result["reasons"])
@@ -154,7 +160,7 @@ class OnboardingTests(FixtureMixin, unittest.TestCase):
         self.assertEqual(result["status"], "REJECTED")
         self.assertIn("wildcard_action_forbidden", result["errors"])
         self.assertIn("wildcard_tool_forbidden", result["errors"])
-        self.assertIn("stage2_action_forbidden:deploy_production", result["errors"])
+        self.assertIn("activation_action_forbidden:deploy_production", result["errors"])
 
 
 class RevenueSimulationTests(unittest.TestCase):

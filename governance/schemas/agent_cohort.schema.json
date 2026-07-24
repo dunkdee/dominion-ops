@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Dominion Agent Cohort",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cohort_id", "mode", "owner", "objective", "entry_evidence", "shared_prohibited_actions", "exit_criteria", "assignments"],
+  "properties": {
+    "cohort_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{2,63}$"},
+    "mode": {"const": "SHADOW"},
+    "owner": {"const": "human_overseer"},
+    "objective": {"type": "string", "minLength": 1},
+    "entry_evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "shared_prohibited_actions": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "exit_criteria": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "assignments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["agent_id", "duties", "tool_allowlist", "data_classification", "escalates_to", "lifecycle_change_requested"],
+        "properties": {
+          "agent_id": {"type": "string", "minLength": 1},
+          "duties": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "tool_allowlist": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "data_classification": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]}},
+          "escalates_to": {"type": "string", "minLength": 1},
+          "lifecycle_change_requested": {"const": false}
+        }
+      }
+    }
+  }
+}

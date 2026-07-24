@@ -1,0 +1,27 @@
+{
+  "proposal_id": "shadow_revenue_observation_v1",
+  "proposer_id": "coordinator",
+  "objective": "Review a verified historical funnel snapshot in shadow mode and determine whether a controlled experiment is ready for council consideration.",
+  "requested_action": "read_private_operational_data",
+  "risk": "moderate",
+  "evidence": [
+    "PR-38-stage2-runtime-merged",
+    "source-snapshot-required-before-run"
+  ],
+  "assumptions": [
+    "the supplied snapshot contains posted or otherwise finalized observations"
+  ],
+  "unknowns": [
+    "no verified historical revenue dataset is committed to the repository"
+  ],
+  "rollback_plan": {
+    "trigger": "schema failure, evidence conflict, or council hold",
+    "procedure": "discard the shadow output and retain the previous approved policy state"
+  },
+  "success_criteria": [
+    "proposal is hash-bound to all independent council reviews",
+    "no customer contact or money movement occurs",
+    "unverified inputs produce HOLD or TEST_ONLY"
+  ],
+  "external_effects": false
+}

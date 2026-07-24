@@ -1,0 +1,20 @@
+{
+  "conditions": [
+    "prioritize owned baseline and top category leaders",
+    "do not claim revenue or guaranteed outcomes"
+  ],
+  "council_id": "business_human_impact",
+  "decision": "APPROVE_WITH_CONDITIONS",
+  "evidence": [
+    "targets support Wix commerce and analytics benchmarking",
+    "credit reserve and seven-day schedule reduce waste"
+  ],
+  "external_execution_authorized": false,
+  "independent": true,
+  "rationale": "The target set is commercially relevant and appropriately constrained for an early-stage trial.",
+  "release_request_hash": "70407706ba36e22281e11585b9a5506e22d37a8bcf303f78383840ff5c4581ce",
+  "release_request_id": "similarweb_target_manifest_final_release_20260724",
+  "review_hash": "f40c0169f1a2a92bbf48c048cdb814f57ac4ad9d8668058ce339d46c9ca07b75",
+  "review_sequence": 3,
+  "reviewer_agent_id": "council_business_human_impact"
+}

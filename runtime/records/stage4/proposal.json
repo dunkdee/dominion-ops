@@ -1,0 +1,13 @@
+{
+  "proposal_id":"stage4_fixture_shadow_observation",
+  "proposer_id":"coordinator",
+  "objective":"Validate the historical snapshot adapter and execute one repository-fixture, non-contact shadow observation without treating fixture output as actual business evidence.",
+  "requested_action":"read_private_operational_data",
+  "risk":"moderate",
+  "evidence":["PR-39-stage3-shadow-operations-merged","stage4-historical-adapter-source-review","no-verified-historical-revenue-dataset-found-in-repository"],
+  "assumptions":["repository fixture is used only to test deterministic adapter and observation behavior"],
+  "unknowns":["actual historical revenue data is not present in the repository","future conversion performance remains unknown"],
+  "rollback_plan":{"trigger":"schema failure, hash mismatch, council veto, or any external side effect","procedure":"discard generated observation records, preserve shadow_only gates, and open an incident if any boundary was crossed"},
+  "success_criteria":["all five council records are independently bound to one proposal hash","fixture observation returns TEST_ONLY","no customer contact, publication, money movement, deployment, registry mutation, or agent promotion occurs"],
+  "external_effects":false
+}

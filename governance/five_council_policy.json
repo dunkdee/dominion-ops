@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "2.0.0",
   "review_mode": "independent_before_deliberation",
   "preserve_dissent": true,
   "proposer_may_not_be_sole_approver": true,
@@ -41,6 +41,19 @@
     "high": {"required_approvals": 4, "human_required": false},
     "critical": {"required_approvals": 5, "human_required": true}
   },
+  "final_release": {
+    "applies_to_consequential_release_classes": true,
+    "all_five_reviews_required": true,
+    "unanimous_approval_required": true,
+    "human_scope_authorization_must_precede_reviews": true,
+    "final_affirmative_gate": "five_council",
+    "human_may_revoke_or_emergency_stop_after_release": true,
+    "post_council_affirmative_click_required": false,
+    "law_or_security_veto_blocks_release": true,
+    "hold_or_missing_review_blocks_release": true,
+    "proposal_hash_binding_required": true,
+    "independent_reviews_required": true
+  },
   "automatic_holds": [
     "unresolved_legal_status",
     "missing_evidence",
@@ -48,7 +61,9 @@
     "unknown_data_classification",
     "rollback_not_tested",
     "security_veto",
-    "law_veto"
+    "law_veto",
+    "human_scope_authorization_not_recorded_before_final_review",
+    "missing_final_five_council_release"
   ],
-  "decision_states": ["APPROVE", "APPROVE_WITH_CONDITIONS", "VETO", "HOLD", "ABSTAIN"]
+  "decision_states": ["APPROVE", "APPROVE_WITH_CONDITIONS", "VETO", "HOLD", "ABSTAIN", "FINAL_RELEASE_APPROVED"]
 }

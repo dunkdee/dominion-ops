@@ -1,0 +1,94 @@
+{
+  "agents_promoted": false,
+  "content_published": false,
+  "council_decision_hash": "c71958c9cd694ce363a07370a64ab5d4c3891ef154090cb418fe6f7ff7f179f4",
+  "customers_contacted": false,
+  "errors": [],
+  "external_actions": [],
+  "external_execution_authorized": false,
+  "mode": "SHADOW_ONLY",
+  "money_moved": false,
+  "observation_hash": "30079ed0c837921f24650040291eb084f3df83260ff3febe9f610a33eb950743",
+  "observation_id": "stage4_repository_fixture_v1_observation",
+  "production_changes": false,
+  "proposal_hash": "cd71721928b1dca5a610fa71279bb5f9898e3e2c9385f2d11341478273245608",
+  "reasons": [
+    "repository_fixture_observation_completed"
+  ],
+  "revenue_result": {
+    "baseline_result": {
+      "content_published": false,
+      "customers_contacted": false,
+      "economics": {
+        "fixed_cost": "100.00",
+        "gross_margin": "0.7000",
+        "gross_profit": "350.00",
+        "revenue": "500.00",
+        "total_cost": "150.00",
+        "variable_cost": "50.00"
+      },
+      "external_actions": [],
+      "funnel": {
+        "leads": "100.0000",
+        "proposals": "25.0000",
+        "purchases": "5.0000",
+        "qualified_leads": "50.0000",
+        "visitors": 1000
+      },
+      "mode": "SIMULATION_ONLY",
+      "money_moved": false,
+      "result_hash": "98369408b330158ba181bd5a8f14ab46e12857b0f474fc879cd8ebfcdba8afa5",
+      "scenario_hash": "b4fcfdb360c0653e6e101ba0ae508f9b3530c82ab931f9547b3e57f419fe4ff4"
+    },
+    "candidate_result": {
+      "content_published": false,
+      "customers_contacted": false,
+      "economics": {
+        "fixed_cost": "100.00",
+        "gross_margin": "0.7889",
+        "gross_profit": "710.00",
+        "revenue": "900.00",
+        "total_cost": "190.00",
+        "variable_cost": "90.00"
+      },
+      "external_actions": [],
+      "funnel": {
+        "leads": "144.0000",
+        "proposals": "36.0000",
+        "purchases": "9.0000",
+        "qualified_leads": "72.0000",
+        "visitors": 1200
+      },
+      "mode": "SIMULATION_ONLY",
+      "money_moved": false,
+      "result_hash": "68d24e62f4a88e30606be507dd6a51964222304db2f912a167a5ae6bf03a0eb7",
+      "scenario_hash": "295bfccf80c558965d6ee8c2552f739c4620a941a56fd42a792a135298b5a836"
+    },
+    "content_published": false,
+    "customers_contacted": false,
+    "decision": "TEST_ONLY",
+    "errors": [],
+    "experiment_hash": "95e9255fcd9ee1d484fea446be89fb5649848a2d09b1fbcca79b6fdfa2822ac0",
+    "experiment_id": "stage4_repository_fixture_v1_observation",
+    "external_actions": [],
+    "metrics": {
+      "candidate_fixed_cost": "100.00",
+      "candidate_gross_margin": "0.7889",
+      "candidate_visitors": 1200,
+      "gross_profit_delta": "360.00"
+    },
+    "mode": "SHADOW_ONLY",
+    "money_moved": false,
+    "production_changes": false,
+    "promotion_authorized": false,
+    "proposal_hash": "cd71721928b1dca5a610fa71279bb5f9898e3e2c9385f2d11341478273245608",
+    "reasons": [
+      "synthetic_inputs_cannot_support_business_promotion"
+    ],
+    "result_hash": "9f2a017b2c735dad5e89373d2655dbd3182b0b65e8b594b034525b548557beee",
+    "source_kind": "SYNTHETIC_TEST"
+  },
+  "runtime_started": false,
+  "snapshot_hash": "1e4fc7bf88a8966f9903b40831db859919220bc33473b101a5559bc2ceb9c6af",
+  "status": "TEST_ONLY"
+}

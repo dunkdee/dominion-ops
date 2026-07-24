@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/schemas/agent_report.schema.json",
+  "title": "Dominion Agent Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_id",
+    "timestamp",
+    "agent",
+    "duty",
+    "truth_state",
+    "facts",
+    "inferences",
+    "assumptions",
+    "unknowns",
+    "evidence",
+    "result",
+    "risks",
+    "next_action",
+    "human_approval_required"
+  ],
+  "properties": {
+    "report_id": {"type": "string", "minLength": 1},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "agent": {"type": "string", "minLength": 1},
+    "duty": {"type": "string", "minLength": 1},
+    "truth_state": {"enum": ["VERIFIED", "INFERRED", "UNKNOWN", "BLOCKED"]},
+    "facts": {"type": "array", "items": {"type": "string"}},
+    "inferences": {"type": "array", "items": {"type": "string"}},
+    "assumptions": {"type": "array", "items": {"type": "string"}},
+    "unknowns": {"type": "array", "items": {"type": "string"}},
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "reference"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {"type": "string"},
+          "reference": {"type": "string"},
+          "hash": {"type": "string"}
+        }
+      }
+    },
+    "result": {"type": "string"},
+    "risks": {"type": "array", "items": {"type": "string"}},
+    "next_action": {"type": "string"},
+    "human_approval_required": {"type": "boolean"}
+  }
+}

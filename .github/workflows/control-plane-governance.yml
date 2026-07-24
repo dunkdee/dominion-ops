@@ -1,0 +1,42 @@
+name: Control Plane Governance
+
+on:
+  pull_request:
+    paths:
+      - "governance/**"
+      - "agents/**"
+      - "architecture/CONTROL_PLANE.md"
+      - "operations/INCIDENT_RESPONSE.md"
+      - "scripts/validate_control_plane.py"
+      - ".github/workflows/control-plane-governance.yml"
+  push:
+    branches: [main]
+    paths:
+      - "governance/**"
+      - "agents/**"
+      - "architecture/CONTROL_PLANE.md"
+      - "operations/INCIDENT_RESPONSE.md"
+      - "scripts/validate_control_plane.py"
+      - ".github/workflows/control-plane-governance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: control-plane-governance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Compile validator
+        run: python3 -m py_compile scripts/validate_control_plane.py
+
+      - name: Validate control-plane contracts
+        run: python3 scripts/validate_control_plane.py

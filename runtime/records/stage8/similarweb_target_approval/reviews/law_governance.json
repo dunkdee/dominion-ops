@@ -1,0 +1,20 @@
+{
+  "conditions": [
+    "confirm live terms and account entitlements before activation",
+    "no external distribution without license"
+  ],
+  "council_id": "law_governance",
+  "decision": "APPROVE_WITH_CONDITIONS",
+  "evidence": [
+    "permitted acquisition methods are explicitly limited",
+    "automated platform scraping remains prohibited"
+  ],
+  "external_execution_authorized": false,
+  "independent": true,
+  "rationale": "The approval scope is legally and contractually narrower than trial activation and preserves terms-compliance review.",
+  "release_request_hash": "70407706ba36e22281e11585b9a5506e22d37a8bcf303f78383840ff5c4581ce",
+  "release_request_id": "similarweb_target_manifest_final_release_20260724",
+  "review_hash": "ca312e3bb68fb3581a22c2096f719ebfa92235d7d2f2940b2d6d508cc63298b8",
+  "review_sequence": 3,
+  "reviewer_agent_id": "council_law_governance"
+}

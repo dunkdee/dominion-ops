@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dominion Video Studio</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #0c0d10; color: #f5f5f5; }
+    main { width: min(760px, calc(100% - 28px)); margin: 28px auto 80px; }
+    h1 { margin-bottom: 4px; }
+    .muted { color: #a9adb7; }
+    .card { background: #17191f; border: 1px solid #2b2f39; border-radius: 16px; padding: 18px; margin: 14px 0; }
+    label { display: block; font-weight: 650; margin: 12px 0 6px; }
+    input, textarea, select, button { width: 100%; box-sizing: border-box; border-radius: 10px; padding: 12px; border: 1px solid #3a3f4b; background: #0f1116; color: #fff; }
+    textarea { min-height: 150px; resize: vertical; }
+    button { margin-top: 14px; background: #f2c75c; color: #17130a; border: 0; font-weight: 800; cursor: pointer; }
+    button:disabled { opacity: .45; cursor: wait; }
+    .checks label { display: flex; gap: 9px; align-items: flex-start; font-weight: 500; }
+    .checks input { width: auto; margin-top: 3px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #090a0d; padding: 12px; border-radius: 10px; }
+    .ok { color: #9de7ad; }
+    .error { color: #ff9e9e; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Dominion Video Studio</h1>
+  <p class="muted">Controlled first-subject workflow: consent → upload → generate → review.</p>
+
+  <section class="card">
+    <h2>1. Consent</h2>
+    <label for="subject">Subject name</label>
+    <input id="subject" placeholder="Your name">
+    <div class="checks">
+      <label><input id="likeness" type="checkbox"> I authorize this system to use my likeness for this project.</label>
+      <label><input id="voiceConsent" type="checkbox"> I authorize this system to use and synthesize my voice for this project.</label>
+      <label><input id="rights" type="checkbox"> I own or control the uploaded media and have the right to use it.</label>
+    </div>
+    <button onclick="saveConsent()">Confirm consent</button>
+  </section>
+
+  <section class="card">
+    <h2>2. Project</h2>
+    <label for="title">Title</label>
+    <input id="title" placeholder="First clone test">
+    <label for="script">Script</label>
+    <textarea id="script" placeholder="Enter exactly what the video should say."></textarea>
+    <label for="format">Format</label>
+    <select id="format"><option value="vertical">Vertical 9:16</option><option value="landscape">Landscape 16:9</option><option value="square">Square 1:1</option></select>
+    <button onclick="createProject()">Create project</button>
+  </section>
+
+  <section class="card">
+    <h2>3. Upload</h2>
+    <label for="portrait">Clear portrait</label>
+    <input id="portrait" type="file" accept="image/*">
+    <label for="voice">Voice recording</label>
+    <input id="voice" type="file" accept="audio/*">
+    <button onclick="uploadFiles()">Upload media</button>
+  </section>
+
+  <section class="card">
+    <h2>4. Generate</h2>
+    <label for="engine">Engine</label>
+    <select id="engine">
+      <option value="proof_render">Proof render — CPU/GCP VM</option>
+      <option value="external_clone">Neural clone — attached GPU worker</option>
+    </select>
+    <button onclick="generate()">Generate video</button>
+    <button onclick="review('approved')">Approve latest output</button>
+    <button onclick="review('rejected')">Reject and revise</button>
+    <pre id="status">Ready.</pre>
+  </section>
+</main>
+<script>
+let consentId = localStorage.getItem('dvsConsentId');
+let projectId = localStorage.getItem('dvsProjectId');
+let pollTimer;
+const statusBox = document.getElementById('status');
+function setStatus(message, error=false) {
+  statusBox.textContent = message;
+  statusBox.className = error ? 'error' : 'ok';
+}
+async function api(path, options={}) {
+  const response = await fetch(path, options);
+  const data = response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text();
+  if (!response.ok) throw new Error(data.detail || data || `Request failed: ${response.status}`);
+  return data;
+}
+async function saveConsent() {
+  try {
+    const payload = { subject_name: subject.value, likeness_confirmed: likeness.checked, voice_confirmed: voiceConsent.checked, rights_confirmed: rights.checked };
+    const data = await api('/api/consents', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    consentId = data.id; localStorage.setItem('dvsConsentId', consentId); setStatus(`Consent recorded: ${consentId}`);
+  } catch (error) { setStatus(error.message, true); }
+}
+async function createProject() {
+  try {
+    if (!consentId) throw new Error('Confirm consent first.');
+    const payload = { title: title.value, script: script.value, output_format: format.value, consent_id: consentId };
+    const data = await api('/api/projects', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    projectId = data.id; localStorage.setItem('dvsProjectId', projectId); setStatus(`Project created: ${projectId}`);
+  } catch (error) { setStatus(error.message, true); }
+}
+async function uploadOne(kind, input) {
+  if (!input.files[0]) throw new Error(`Select a ${kind} file.`);
+  const form = new FormData(); form.append('kind', kind); form.append('file', input.files[0]);
+  return api(`/api/projects/${projectId}/assets`, {method:'POST', body:form});
+}
+async function uploadFiles() {
+  try {
+    if (!projectId) throw new Error('Create a project first.');
+    setStatus('Uploading media...');
+    await uploadOne('portrait', portrait); await uploadOne('voice', voice);
+    setStatus('Portrait and voice uploaded.');
+  } catch (error) { setStatus(error.message, true); }
+}
+async function generate() {
+  try {
+    if (!projectId) throw new Error('Create a project first.');
+    const data = await api(`/api/projects/${projectId}/jobs`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({engine:engine.value})});
+    setStatus(`Job queued: ${data.id}`); poll(data.id);
+  } catch (error) { setStatus(error.message, true); }
+}
+async function review(decision) {
+  try {
+    if (!projectId) throw new Error('Create a project first.');
+    const data = await api(`/api/projects/${projectId}/approval`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({decision, note: decision === 'approved' ? 'Approved from mobile review.' : 'Rejected for revision.'})});
+    setStatus(`Review recorded: ${data.decision}`);
+  } catch (error) { setStatus(error.message, true); }
+}
+function poll(jobId) {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const job = await api(`/api/jobs/${jobId}`);
+      setStatus(`Status: ${job.status}\nProgress: ${job.progress}%${job.error ? `\nError: ${job.error}` : ''}`);
+      if (job.status === 'completed') {
+        clearInterval(pollTimer);
+        statusBox.innerHTML = `Completed. <a href="${job.download_url}">Download video</a>`;
+      }
+      if (job.status === 'failed') clearInterval(pollTimer);
+    } catch (error) { clearInterval(pollTimer); setStatus(error.message, true); }
+  }, 1500);
+}
+</script>
+</body>
+</html>

@@ -11,11 +11,14 @@ on:
       - "architecture/CONTROL_PLANE.md"
       - "architecture/CONTROL_PLANE_RUNTIME.md"
       - "architecture/STAGE3_SHADOW_OPERATIONS.md"
+      - "architecture/STAGE4_HISTORICAL_SHADOW.md"
       - "operations/INCIDENT_RESPONSE.md"
       - "scripts/control_plane.py"
+      - "scripts/stage4_shadow.py"
       - "scripts/validate_control_plane.py"
       - "scripts/validate_control_plane_runtime.py"
       - "scripts/validate_control_plane_stage3.py"
+      - "scripts/validate_control_plane_stage4.py"
       - ".github/workflows/control-plane-governance.yml"
   push:
     branches: [main]
@@ -28,11 +31,14 @@ on:
       - "architecture/CONTROL_PLANE.md"
       - "architecture/CONTROL_PLANE_RUNTIME.md"
       - "architecture/STAGE3_SHADOW_OPERATIONS.md"
+      - "architecture/STAGE4_HISTORICAL_SHADOW.md"
       - "operations/INCIDENT_RESPONSE.md"
       - "scripts/control_plane.py"
+      - "scripts/stage4_shadow.py"
       - "scripts/validate_control_plane.py"
       - "scripts/validate_control_plane_runtime.py"
       - "scripts/validate_control_plane_stage3.py"
+      - "scripts/validate_control_plane_stage4.py"
       - ".github/workflows/control-plane-governance.yml"
   workflow_dispatch:
 
@@ -46,7 +52,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -56,11 +62,14 @@ jobs:
           python3 -m py_compile \
             control_plane/*.py \
             scripts/control_plane.py \
+            scripts/stage4_shadow.py \
             scripts/validate_control_plane.py \
             scripts/validate_control_plane_runtime.py \
             scripts/validate_control_plane_stage3.py \
+            scripts/validate_control_plane_stage4.py \
             tests/test_control_plane_runtime.py \
-            tests/test_control_plane_stage3.py
+            tests/test_control_plane_stage3.py \
+            tests/test_control_plane_stage4.py
 
       - name: Validate governance contracts
         run: python3 scripts/validate_control_plane.py
@@ -68,29 +77,28 @@ jobs:
       - name: Validate runtime contracts
         run: python3 scripts/validate_control_plane_runtime.py
 
-      - name: Validate Stage 3 shadow contracts
+      - name: Validate Stage 3 compatibility
         run: python3 scripts/validate_control_plane_stage3.py
+
+      - name: Validate Stage 4 historical shadow contracts
+        run: python3 scripts/validate_control_plane_stage4.py
 
       - name: Run deterministic control-plane tests
         run: python3 -m unittest discover -s tests -p 'test_control_plane_*.py' -v
 
-      - name: Validate controlled shadow cohort
+      - name: Adapt repository historical fixture
         run: |
-          python3 scripts/control_plane.py validate-cohort \
-            --input agents/cohorts/stage3_core_shadow.json \
-            --output /tmp/stage3-cohort.json
-          python3 -c 'import json; d=json.load(open("/tmp/stage3-cohort.json")); assert d["status"] == "ELIGIBLE_FOR_SHADOW_ASSIGNMENT_REVIEW"; assert d["registry_mutated"] is False; assert d["agents_promoted"] is False; assert d["runtime_started"] is False'
+          python3 scripts/stage4_shadow.py adapt \
+            --input runtime/examples/stage4_historical_fixture.json \
+            --output /tmp/stage4-adapted.json
+          python3 -c 'import json; d=json.load(open("/tmp/stage4-adapted.json")); assert d["status"] == "TEST_ONLY"; assert d["external_actions"] == []; assert d["source_system_mutated"] is False'
 
-      - name: Validate proposal envelope
+      - name: Run first non-contact shadow observation
         run: |
-          python3 scripts/control_plane.py prepare-proposal \
-            --input runtime/examples/stage3_proposal.json \
-            --output /tmp/stage3-proposal.json
-          python3 -c 'import json; d=json.load(open("/tmp/stage3-proposal.json")); assert d["status"] == "READY_FOR_INDEPENDENT_COUNCIL_REVIEW"; assert d["external_execution_authorized"] is False'
-
-      - name: Run shadow-only revenue smoke test
-        run: |
-          python3 scripts/control_plane.py shadow-revenue \
-            --input runtime/examples/shadow_revenue_experiment.json \
-            --output /tmp/shadow-revenue.json
-          python3 -c 'import json; d=json.load(open("/tmp/shadow-revenue.json")); assert d["mode"] == "SHADOW_ONLY"; assert d["decision"] == "TEST_ONLY"; assert d["external_actions"] == []; assert d["money_moved"] is False; assert d["customers_contacted"] is False; assert d["promotion_authorized"] is False'
+          python3 scripts/stage4_shadow.py observe \
+            --snapshot runtime/examples/stage4_historical_fixture.json \
+            --envelope runtime/records/stage4/proposal_envelope.json \
+            --council-decision runtime/records/stage4/council_decision.json \
+            --guardrails runtime/examples/stage4_guardrails.json \
+            --output /tmp/stage4-observation.json
+          python3 -c 'import json; d=json.load(open("/tmp/stage4-observation.json")); assert d["status"] == "TEST_ONLY"; assert d["external_actions"] == []; assert d["money_moved"] is False; assert d["customers_contacted"] is False; assert d["external_execution_authorized"] is False'

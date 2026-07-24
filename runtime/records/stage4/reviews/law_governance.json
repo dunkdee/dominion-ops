@@ -1,0 +1,20 @@
+{
+  "conditions": [
+    "do not treat this record as legal advice",
+    "hold actual-data use pending applicable privacy and contract review"
+  ],
+  "council_id": "law_governance",
+  "decision": "APPROVE_WITH_CONDITIONS",
+  "errors": [],
+  "evidence": [
+    "external_effects:false",
+    "personal-data and secret-material flags must be false"
+  ],
+  "independent": true,
+  "proposal_hash": "cd71721928b1dca5a610fa71279bb5f9898e3e2c9385f2d11341478273245608",
+  "proposal_id": "stage4_fixture_shadow_observation",
+  "rationale": "Documentary review permits a local test fixture because it performs no filing, representation, contact, or legal conclusion.",
+  "review_hash": "d6a79b3e5cc297a1b25c8e56c1f7d18d32d68b246aadee124fec2db44b2385c5",
+  "reviewer_agent_id": "council_law_governance",
+  "status": "BOUND"
+}

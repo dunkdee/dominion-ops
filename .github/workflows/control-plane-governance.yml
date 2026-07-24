@@ -7,18 +7,22 @@ on:
       - "agents/**"
       - "control_plane/**"
       - "runtime/**"
+      - "revenue_products/**"
       - "tests/test_control_plane_*.py"
       - "architecture/CONTROL_PLANE.md"
       - "architecture/CONTROL_PLANE_RUNTIME.md"
       - "architecture/STAGE3_SHADOW_OPERATIONS.md"
       - "architecture/STAGE4_HISTORICAL_SHADOW.md"
+      - "architecture/STAGE5_MARKET_INTELLIGENCE.md"
       - "operations/INCIDENT_RESPONSE.md"
       - "scripts/control_plane.py"
       - "scripts/stage4_shadow.py"
+      - "scripts/stage5_market_intelligence.py"
       - "scripts/validate_control_plane.py"
       - "scripts/validate_control_plane_runtime.py"
       - "scripts/validate_control_plane_stage3.py"
       - "scripts/validate_control_plane_stage4.py"
+      - "scripts/validate_control_plane_stage5.py"
       - ".github/workflows/control-plane-governance.yml"
   push:
     branches: [main]
@@ -27,18 +31,22 @@ on:
       - "agents/**"
       - "control_plane/**"
       - "runtime/**"
+      - "revenue_products/**"
       - "tests/test_control_plane_*.py"
       - "architecture/CONTROL_PLANE.md"
       - "architecture/CONTROL_PLANE_RUNTIME.md"
       - "architecture/STAGE3_SHADOW_OPERATIONS.md"
       - "architecture/STAGE4_HISTORICAL_SHADOW.md"
+      - "architecture/STAGE5_MARKET_INTELLIGENCE.md"
       - "operations/INCIDENT_RESPONSE.md"
       - "scripts/control_plane.py"
       - "scripts/stage4_shadow.py"
+      - "scripts/stage5_market_intelligence.py"
       - "scripts/validate_control_plane.py"
       - "scripts/validate_control_plane_runtime.py"
       - "scripts/validate_control_plane_stage3.py"
       - "scripts/validate_control_plane_stage4.py"
+      - "scripts/validate_control_plane_stage5.py"
       - ".github/workflows/control-plane-governance.yml"
   workflow_dispatch:
 
@@ -52,7 +60,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 14
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -63,13 +71,16 @@ jobs:
             control_plane/*.py \
             scripts/control_plane.py \
             scripts/stage4_shadow.py \
+            scripts/stage5_market_intelligence.py \
             scripts/validate_control_plane.py \
             scripts/validate_control_plane_runtime.py \
             scripts/validate_control_plane_stage3.py \
             scripts/validate_control_plane_stage4.py \
+            scripts/validate_control_plane_stage5.py \
             tests/test_control_plane_runtime.py \
             tests/test_control_plane_stage3.py \
-            tests/test_control_plane_stage4.py
+            tests/test_control_plane_stage4.py \
+            tests/test_control_plane_stage5.py
 
       - name: Validate governance contracts
         run: python3 scripts/validate_control_plane.py
@@ -80,8 +91,11 @@ jobs:
       - name: Validate Stage 3 compatibility
         run: python3 scripts/validate_control_plane_stage3.py
 
-      - name: Validate Stage 4 historical shadow contracts
+      - name: Validate Stage 4 compatibility
         run: python3 scripts/validate_control_plane_stage4.py
+
+      - name: Validate Stage 5 market intelligence contracts
+        run: python3 scripts/validate_control_plane_stage5.py
 
       - name: Run deterministic control-plane tests
         run: python3 -m unittest discover -s tests -p 'test_control_plane_*.py' -v
@@ -102,3 +116,19 @@ jobs:
             --guardrails runtime/examples/stage4_guardrails.json \
             --output /tmp/stage4-observation.json
           python3 -c 'import json; d=json.load(open("/tmp/stage4-observation.json")); assert d["status"] == "TEST_ONLY"; assert d["external_actions"] == []; assert d["money_moved"] is False; assert d["customers_contacted"] is False; assert d["external_execution_authorized"] is False'
+
+      - name: Adapt external-estimate fixture
+        run: |
+          python3 scripts/stage5_market_intelligence.py adapt \
+            --input runtime/examples/stage5_external_estimate_fixture.json \
+            --output /tmp/stage5-market-signal.json
+          python3 -c 'import json; d=json.load(open("/tmp/stage5-market-signal.json")); assert d["status"] == "ESTIMATED_MARKET_SIGNAL"; assert d["revenue_verified"] is False; assert d["external_execution_authorized"] is False; assert d["external_actions"] == []'
+          python3 -c 'import json; assert json.load(open("/tmp/stage5-market-signal.json")) == json.load(open("runtime/records/stage5/market_signal.json"))'
+
+      - name: Build governed storefront growth audit
+        run: |
+          python3 scripts/stage5_market_intelligence.py audit \
+            --input runtime/examples/stage5_external_estimate_fixture.json \
+            --output /tmp/stage5-growth-audit.json
+          python3 -c 'import json; d=json.load(open("/tmp/stage5-growth-audit.json")); assert d["status"] == "MARKET_SIGNAL_ONLY"; assert d["claims_boundary"]["revenue_claim_allowed"] is False; assert d["pricing_status"] == "UNSET_REQUIRES_HUMAN_APPROVAL"; assert d["external_execution_authorized"] is False; assert d["money_moved"] is False'
+          python3 -c 'import json; assert json.load(open("/tmp/stage5-growth-audit.json")) == json.load(open("runtime/records/stage5/growth_intelligence_audit.json"))'

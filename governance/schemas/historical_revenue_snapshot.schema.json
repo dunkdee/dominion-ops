@@ -1,0 +1,20 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://dominion.local/schemas/historical_revenue_snapshot.schema.json",
+  "title":"Dominion Historical Revenue Snapshot",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["snapshot_id","source_system","business_data_status","as_of","evidence","periods","payload_hash","contains_personal_data","contains_secret_material"],
+  "properties":{
+    "snapshot_id":{"type":"string","pattern":"^[a-z][a-z0-9_-]{2,95}$"},
+    "source_system":{"enum":["REPOSITORY_FIXTURE","WIX_EXPORT","PAYMENT_EXPORT","ANALYTICS_EXPORT","MANUAL_VERIFIED_EXPORT"]},
+    "business_data_status":{"enum":["REPOSITORY_TEST_FIXTURE","ACTUAL_BUSINESS_HISTORY"]},
+    "as_of":{"type":"string","minLength":1},
+    "evidence":{"type":"array","minItems":1,"items":{"type":"string","minLength":1}},
+    "periods":{"type":"object","additionalProperties":false,"required":["baseline","candidate"],"properties":{"baseline":{"$ref":"#/$defs/period"},"candidate":{"$ref":"#/$defs/period"}}},
+    "payload_hash":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "contains_personal_data":{"const":false},
+    "contains_secret_material":{"const":false}
+  },
+  "$defs":{"period":{"type":"object","additionalProperties":false,"required":["period_start","period_end","visitors","leads","qualified_leads","proposals","purchases","revenue","variable_cost","fixed_cost"],"properties":{"period_start":{"type":"string"},"period_end":{"type":"string"},"visitors":{"type":"integer","minimum":0},"leads":{"type":"integer","minimum":0},"qualified_leads":{"type":"integer","minimum":0},"proposals":{"type":"integer","minimum":0},"purchases":{"type":"integer","minimum":0},"revenue":{"type":["string","number"]},"variable_cost":{"type":["string","number"]},"fixed_cost":{"type":["string","number"]}}}}
+}

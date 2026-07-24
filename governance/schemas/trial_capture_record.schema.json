@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/schemas/trial_capture_record.schema.json",
+  "title": "Dominion Trial Capture Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["capture_id", "capture_fingerprint", "plan_id", "plan_hash", "domain", "vertical_id", "priority", "acquisition_method", "status", "errors", "source_record", "fixture_only", "revenue_verified", "automated_platform_scraping_used", "external_execution_authorized", "external_distribution_authorized", "external_actions", "source_system_mutated", "license_status", "record_hash"],
+  "properties": {
+    "capture_id": {"type": ["string", "null"]},
+    "capture_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "plan_id": {"type": ["string", "null"]},
+    "plan_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "domain": {"type": "string"},
+    "vertical_id": {"type": ["string", "null"]},
+    "priority": {"type": ["integer", "null"]},
+    "acquisition_method": {"type": ["string", "null"]},
+    "status": {"enum": ["TEST_ONLY", "ACCEPTED_ESTIMATED_SIGNAL", "HOLD"]},
+    "errors": {"type": "array", "items": {"type": "string"}},
+    "source_record": {"type": "object"},
+    "fixture_only": {"type": "boolean"},
+    "revenue_verified": {"const": false},
+    "automated_platform_scraping_used": {"const": false},
+    "external_execution_authorized": {"const": false},
+    "external_distribution_authorized": {"const": false},
+    "external_actions": {"type": "array", "maxItems": 0},
+    "source_system_mutated": {"const": false},
+    "license_status": {"const": "INTERNAL_USE_ONLY_UNLESS_SEPARATELY_LICENSED"},
+    "record_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

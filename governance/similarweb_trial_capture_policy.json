@@ -1,0 +1,52 @@
+{
+  "version": "1.0.0",
+  "default_behavior": "deny",
+  "provider": "SIMILARWEB",
+  "trial_window_days": 7,
+  "minimum_trial_targets": 10,
+  "maximum_trial_targets": 40,
+  "approved_methods": [
+    "LOCAL_EXPORT",
+    "MANUAL_RECORDED",
+    "SIMILARWEB_DATA_EXPORTER",
+    "SIMILARWEB_API_ENTITLED"
+  ],
+  "prohibited_methods": [
+    "AUTOMATED_PLATFORM_SCRAPE",
+    "BROWSER_BOT_SCRAPE",
+    "CREDENTIAL_SHARING",
+    "RATE_LIMIT_BYPASS",
+    "SECURITY_CONTROL_BYPASS"
+  ],
+  "required_controls": [
+    "capability_discovery_before_paid_queries",
+    "credit_reserve",
+    "source_evidence",
+    "domain_period_validation",
+    "deduplication",
+    "daily_completeness_report",
+    "human_target_review",
+    "human_billing_control",
+    "estimated_data_not_revenue_verified"
+  ],
+  "data_retention": {
+    "raw_exports": "retain_under_subscription_and_license_terms",
+    "normalized_records": "retain_with_provider_attribution_and_provenance",
+    "secrets": "never_commit",
+    "personal_or_health_sensitive_data": "reject"
+  },
+  "external_execution_authorized": false,
+  "permitted_uses": [
+    "internal_market_research",
+    "owned_business_optimization",
+    "internal_agent_context_with_provenance"
+  ],
+  "prohibited_uses": [
+    "republish_raw_similarweb_data",
+    "sell_or_resell_similarweb_data",
+    "share_platform_data_externally_without_permission",
+    "build_competing_market_intelligence_service_from_similarweb_data",
+    "train_external_data_product_without_separate_license"
+  ],
+  "external_distribution_authorized": false
+}

@@ -7,6 +7,7 @@ on:
       - "agents/**"
       - "control_plane/**"
       - "runtime/**"
+      - "revenue/**"
       - "revenue_products/**"
       - "tests/test_control_plane_*.py"
       - "architecture/CONTROL_PLANE.md"
@@ -15,6 +16,7 @@ on:
       - "architecture/STAGE4_HISTORICAL_SHADOW.md"
       - "architecture/STAGE5_MARKET_INTELLIGENCE.md"
       - "architecture/STAGE6_TRIAL_CAPTURE_READINESS.md"
+      - "architecture/STAGE7_REVENUE_VERTICAL_ACTIVATION.md"
       - "operations/INCIDENT_RESPONSE.md"
       - "scripts/control_plane.py"
       - "scripts/stage4_shadow.py"
@@ -26,6 +28,7 @@ on:
       - "scripts/validate_control_plane_stage4.py"
       - "scripts/validate_control_plane_stage5.py"
       - "scripts/validate_control_plane_stage6.py"
+      - "scripts/validate_control_plane_stage7.py"
       - ".github/workflows/control-plane-governance.yml"
   push:
     branches: [main]
@@ -34,6 +37,7 @@ on:
       - "agents/**"
       - "control_plane/**"
       - "runtime/**"
+      - "revenue/**"
       - "revenue_products/**"
       - "tests/test_control_plane_*.py"
       - "architecture/CONTROL_PLANE.md"
@@ -42,6 +46,7 @@ on:
       - "architecture/STAGE4_HISTORICAL_SHADOW.md"
       - "architecture/STAGE5_MARKET_INTELLIGENCE.md"
       - "architecture/STAGE6_TRIAL_CAPTURE_READINESS.md"
+      - "architecture/STAGE7_REVENUE_VERTICAL_ACTIVATION.md"
       - "operations/INCIDENT_RESPONSE.md"
       - "scripts/control_plane.py"
       - "scripts/stage4_shadow.py"
@@ -53,6 +58,7 @@ on:
       - "scripts/validate_control_plane_stage4.py"
       - "scripts/validate_control_plane_stage5.py"
       - "scripts/validate_control_plane_stage6.py"
+      - "scripts/validate_control_plane_stage7.py"
       - ".github/workflows/control-plane-governance.yml"
   workflow_dispatch:
 
@@ -85,11 +91,13 @@ jobs:
             scripts/validate_control_plane_stage4.py \
             scripts/validate_control_plane_stage5.py \
             scripts/validate_control_plane_stage6.py \
+            scripts/validate_control_plane_stage7.py \
             tests/test_control_plane_runtime.py \
             tests/test_control_plane_stage3.py \
             tests/test_control_plane_stage4.py \
             tests/test_control_plane_stage5.py \
-            tests/test_control_plane_stage6.py
+            tests/test_control_plane_stage6.py \
+            tests/test_control_plane_stage7.py
 
       - name: Validate governance contracts
         run: python3 scripts/validate_control_plane.py
@@ -108,6 +116,9 @@ jobs:
 
       - name: Validate Stage 6 trial capture readiness
         run: python3 scripts/validate_control_plane_stage6.py
+
+      - name: Validate Stage 7 revenue vertical structure
+        run: python3 scripts/validate_control_plane_stage7.py
 
       - name: Run deterministic control-plane tests
         run: python3 -m unittest discover -s tests -p 'test_control_plane_*.py' -v
@@ -159,3 +170,8 @@ jobs:
             --snapshot runtime/examples/stage6_similarweb_export_fixture.json \
             --output /tmp/stage6-capture.json
           python3 -c 'import json; d=json.load(open("/tmp/stage6-capture.json")); assert d["status"] == "TEST_ONLY"; assert d["revenue_verified"] is False; assert d["automated_platform_scraping_used"] is False; assert d["external_distribution_authorized"] is False; assert d["external_actions"] == []'
+
+      - name: Verify Wave 1 revenue structure
+        run: |
+          python3 scripts/validate_control_plane_stage7.py
+          python3 -c 'import json; p=json.load(open("governance/revenue_vertical_activation_plan.json")); assert p["current_wave"]["primary_verticals"] == ["commerce_fulfillment", "kdp_publishing"]; assert p["current_wave"]["support_verticals"] == ["analytics_services"]; assert p["revenue_vertical_activation_enabled"] is False; assert p["million_dollar_outcome_is_target_not_forecast"] is True'

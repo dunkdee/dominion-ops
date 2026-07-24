@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "vertical_id": "analytics_services",
+  "display_name": "Dominion Analytics and Growth Intelligence",
+  "wave": "wave_1_owned_assets",
+  "sequence": 3,
+  "role": "SHADOW_SUPPORT_AND_NEXT_CASH_ENGINE",
+  "status": "PRODUCT_DRAFT_READY_DATA_AND_PILOT_REQUIRED",
+  "mode": "SHADOW_ONLY",
+  "revenue_model": [
+    "fixed_scope_audit",
+    "recurring_optimization_retainer",
+    "read_only_dashboard_build",
+    "benchmark_and_measurement_report"
+  ],
+  "value_offer": "Turn permitted market estimates and authorized first-party evidence into prioritized, traceable business decisions.",
+  "current_blockers": [
+    "similarweb_target_manifest_not_human_approved",
+    "actual_permitted_external_estimate_export_not_ingested",
+    "client_data_intake_and_purpose_contract_not_approved",
+    "sample_report_not_human_approved",
+    "offer_pricing_and_pilot_scope_not_approved"
+  ],
+  "launch_gates": [
+    "similarweb_or_other_permitted_export_ingested_with_provenance",
+    "external_estimates_remain_labeled_as_estimates",
+    "sample_growth_intelligence_report_passes_quality_and_claims_review",
+    "client_data_intake_minimization_and_authorization_controls_pass",
+    "data_monetization_legal_review_completed",
+    "pilot_scope_price_delivery_and_support_terms_human_approved",
+    "one_human_approved_pilot_delivered_and_measured"
+  ],
+  "evidence_required": [
+    "source_export_hash",
+    "license_or_entitlement_record",
+    "purpose_and_data_classification",
+    "audit_report_hash",
+    "claims_review",
+    "pricing_approval",
+    "pilot_acceptance_and_outcome_record"
+  ],
+  "success_metrics": [
+    "audit_gross_profit",
+    "lead_to_sale_conversion",
+    "delivery_cycle_time",
+    "client_retention",
+    "recommendation_acceptance_rate",
+    "measured_client_outcome_with_attribution_limits"
+  ],
+  "first_cash_event": "A human-approved pilot client pays for a governed audit or read-only analytics build and receives the contracted deliverable.",
+  "human_approvals": [
+    "accept_client_data",
+    "approve_scope_and_price",
+    "contact_prospect",
+    "send_proposal",
+    "deliver_report",
+    "publish_case_study"
+  ],
+  "prohibited_actions": [
+    "sell_raw_personal_data",
+    "use_health_sensitive_data_for_ad_targeting",
+    "represent_estimates_as_verified_revenue",
+    "guarantee_client_outcomes",
+    "reuse_client_data_outside_approved_purpose",
+    "autonomous_prospect_contact"
+  ],
+  "pricing_status": "UNSET_REQUIRES_HUMAN_APPROVAL",
+  "revenue_verified": false,
+  "external_execution_authorized": false
+}

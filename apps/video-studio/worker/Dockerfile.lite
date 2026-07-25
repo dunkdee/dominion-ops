@@ -21,7 +21,7 @@ COPY worker/requirements-lite.txt ./requirements-lite.txt
 RUN pip install --no-cache-dir -r requirements-lite.txt
 COPY worker/external_worker.py worker/engine_adapter.py \
      worker/dominion_lite_renderer.py worker/dominion_lite_canary_renderer.py \
-     worker/engine-spec-lite.json ./
+     worker/engine-spec-lite.json worker/engine-spec-canary.json ./
 
 RUN useradd --create-home --uid 10002 worker \
     && chown -R worker:worker /worker

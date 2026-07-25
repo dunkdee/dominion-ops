@@ -51,6 +51,7 @@ class EngineSpec:
 
 
 def _placeholders(command: tuple[str, ...]) -> set[str]:
+    """Return every named format placeholder referenced by the command vector."""
     fields: set[str] = set()
     formatter = Formatter()
     for part in command:
@@ -61,6 +62,7 @@ def _placeholders(command: tuple[str, ...]) -> set[str]:
 
 
 def _validate(raw: dict) -> EngineSpec:
+    """Validate an engine-spec mapping and convert it into an immutable EngineSpec."""
     if raw.get("schema_version") != 1:
         raise ValueError("Engine spec schema_version must be 1")
 

@@ -1,12 +1,18 @@
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     VIDEO_STUDIO_DATA_DIR=/data
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \
+      -exec sed -i \
+        -e 's|http://deb.debian.org|https://deb.debian.org|g' \
+        -e 's|http://security.debian.org|https://security.debian.org|g' \
+        {} +; \
+    apt-get -o Acquire::Retries=3 update; \
+    apt-get install -y --no-install-recommends ffmpeg curl; \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY requirements.txt .

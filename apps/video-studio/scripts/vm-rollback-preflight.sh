@@ -119,6 +119,8 @@ good_started=$(date +%s)
   VIDEO_STUDIO_PORT="$port" \
   VIDEO_STUDIO_DATA_VOLUME="$volume" \
   VIDEO_STUDIO_ENV_FILE="$env_file" \
+  VIDEO_STUDIO_HEALTH_ATTEMPTS=20 \
+  VIDEO_STUDIO_HEALTH_INTERVAL_SECONDS=1 \
   ./deploy-gcp-vm.sh
 ) >"$good_log" 2>&1
 good_seconds=$(( $(date +%s) - good_started ))
@@ -167,6 +169,8 @@ set +e
   VIDEO_STUDIO_PORT="$port" \
   VIDEO_STUDIO_DATA_VOLUME="$volume" \
   VIDEO_STUDIO_ENV_FILE="$env_file" \
+  VIDEO_STUDIO_HEALTH_ATTEMPTS=5 \
+  VIDEO_STUDIO_HEALTH_INTERVAL_SECONDS=1 \
   ./deploy-gcp-vm.sh
 ) >"$broken_log" 2>&1
 broken_exit=$?
@@ -182,7 +186,10 @@ test "$restored_id" = "$good_id"
 test "$restored_image" = "$good_image"
 test "$restored_release_sha" = "$RELEASE_SHA"
 test "$(docker inspect "$service" --format '{{.State.Running}}')" = true
-test ! "$(docker inspect "$rollback_name" >/dev/null 2>&1; echo $?)" = 0
+if docker inspect "$rollback_name" >/dev/null 2>&1; then
+  echo "ERROR: rollback container still exists after restoration" >&2
+  false
+fi
 curl -fsS "http://127.0.0.1:${port}/ready" > "$root/restored-ready.json"
 python3 - "$root/restored-ready.json" <<'PY'
 import json
@@ -197,7 +204,6 @@ stage=verify_production_noninterference
 production_after=$(production_identity)
 test "$production_after" = "$production_before"
 
-automatic_restore_seconds=$broken_seconds
 stage=write_success_evidence
 {
   echo "release_sha=$RELEASE_SHA"
@@ -210,7 +216,7 @@ stage=write_success_evidence
   echo "restored_release_sha_match=passed"
   echo "restored_readiness=passed"
   echo "good_deploy_seconds=$good_seconds"
-  echo "failed_replacement_and_restore_seconds=$automatic_restore_seconds"
+  echo "failed_replacement_and_restore_seconds=$broken_seconds"
   echo "localhost_test_binding=127.0.0.1:18096"
   echo "production_container_unchanged=passed"
   echo "personal_media_used=false"

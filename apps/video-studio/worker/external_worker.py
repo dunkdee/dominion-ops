@@ -1,9 +1,9 @@
 """Generic detachable worker for Dominion Video Studio.
 
-The worker intentionally does not bundle a specific model or model weights. Configure a
-legally approved renderer with VIDEO_CLONE_COMMAND. Placeholders available to that
-command: {portrait}, {voice}, {source_video}, {script_file}, {output_format}, and
-{output}.
+The worker does not bundle a specific model or model weights. A governed JSON engine spec
+selects a legally approved renderer and declares its command, required assets, supported
+formats, timeout, and license record. The command is always executed as an argument vector,
+never through a shell.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
-import shlex
 import subprocess
 import tempfile
 import time
@@ -19,10 +18,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from engine_adapter import load_engine_spec
+
 BASE_URL = os.environ["VIDEO_STUDIO_URL"].rstrip("/")
 TOKEN = os.environ["VIDEO_STUDIO_WORKER_TOKEN"]
-WORKER_ID = os.getenv("VIDEO_STUDIO_WORKER_ID", "gpu-worker-1")
-COMMAND_TEMPLATE = os.environ["VIDEO_CLONE_COMMAND"]
+ENGINE = load_engine_spec()
+WORKER_ID = os.getenv("VIDEO_STUDIO_WORKER_ID", f"{ENGINE.engine_id}-worker-1")
 POLL_SECONDS = max(float(os.getenv("VIDEO_STUDIO_POLL_SECONDS", "5")), 1.0)
 
 
@@ -112,21 +113,25 @@ def process(claim: dict) -> None:
             destination = workspace / f"{asset['kind']}{extension}"
             download(asset["download_url"], destination, lease=lease)
             paths[asset["kind"]] = destination
-        if "portrait" not in paths or "voice" not in paths:
-            raise RuntimeError("Claimed job is missing portrait or voice media")
         script_file = workspace / "script.txt"
         script_file.write_text(project["script"], encoding="utf-8")
         output = workspace / "output.mp4"
         values = {
-            "portrait": str(paths["portrait"]),
-            "voice": str(paths["voice"]),
+            "portrait": str(paths.get("portrait", "")),
+            "voice": str(paths.get("voice", "")),
             "source_video": str(paths.get("source_video", "")),
             "script_file": str(script_file),
             "output_format": str(project.get("output_format", "vertical")),
             "output": str(output),
         }
-        command = shlex.split(COMMAND_TEMPLATE.format(**values))
-        result = subprocess.run(command, capture_output=True, text=True, timeout=7200)
+        command = ENGINE.build_command(values)
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=ENGINE.timeout_seconds,
+            check=False,
+        )
         if result.returncode != 0 or not output.exists():
             raise RuntimeError(result.stderr[-2000:] or "Clone command failed without an output")
         response = multipart_upload(f"/api/workers/jobs/{job_id}/output", output, lease=lease)
@@ -134,7 +139,20 @@ def process(claim: dict) -> None:
 
 
 def main() -> None:
-    print(f"Dominion worker {WORKER_ID} connected to {BASE_URL}", flush=True)
+    print(
+        json.dumps(
+            {
+                "event": "worker_connected",
+                "worker_id": WORKER_ID,
+                "base_url": BASE_URL,
+                "engine_id": ENGINE.engine_id,
+                "engine_version": ENGINE.engine_version,
+                "license_status": ENGINE.license_status,
+                "supported_formats": sorted(ENGINE.supported_formats),
+            }
+        ),
+        flush=True,
+    )
     while True:
         try:
             claim = request_json("/api/workers/claim", method="POST", body={"worker_id": WORKER_ID})

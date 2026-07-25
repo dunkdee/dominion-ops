@@ -159,6 +159,7 @@ grep -q 'CMD \["/app/fail-fast.sh"\]' "$broken_dir/Dockerfile"
 
 stage=attempt_broken_replacement
 broken_started=$(date +%s)
+trap - ERR
 set +e
 (
   cd "$broken_dir"
@@ -175,6 +176,7 @@ set +e
 ) >"$broken_log" 2>&1
 broken_exit=$?
 set -e
+trap write_failure ERR
 broken_seconds=$(( $(date +%s) - broken_started ))
 test "$broken_exit" -ne 0
 

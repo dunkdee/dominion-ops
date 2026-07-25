@@ -128,7 +128,7 @@ def _validate(raw: dict) -> EngineSpec:
 
 
 def load_engine_spec() -> EngineSpec:
-    """Load a governed JSON engine spec, with a compatibility path for existing canaries."""
+    """Load one governed engine spec; legacy command mode is test-only and opt-in."""
     spec_path = os.getenv("VIDEO_CLONE_ENGINE_SPEC", "").strip()
     if spec_path:
         path = Path(spec_path).resolve()
@@ -140,7 +140,8 @@ def load_engine_spec() -> EngineSpec:
         return _validate(raw)
 
     legacy = os.getenv("VIDEO_CLONE_COMMAND", "").strip()
-    if not legacy:
+    legacy_allowed = os.getenv("VIDEO_CLONE_ALLOW_LEGACY_COMMAND", "false").lower() == "true"
+    if not legacy or not legacy_allowed:
         raise ValueError("Set VIDEO_CLONE_ENGINE_SPEC to a governed engine spec")
     return _validate(
         {
@@ -148,7 +149,7 @@ def load_engine_spec() -> EngineSpec:
             "engine_id": "legacy-command-adapter",
             "engine_version": "1",
             "license_status": _APPROVED_LICENSE_STATUS,
-            "license_reference": "runtime compatibility adapter; upstream license review remains mandatory",
+            "license_reference": "explicit test-only compatibility adapter",
             "commercial_use_verified": True,
             "command": shlex.split(legacy),
             "required_assets": ["portrait", "voice"],

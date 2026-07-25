@@ -1,0 +1,227 @@
+name: Dominion Video Studio Caddy Preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/video-studio/Caddyfile.example"
+      - ".github/workflows/video-studio-caddy-preflight.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dominion-video-studio-caddy-preflight-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    if: >-
+      github.actor == 'dunkdee' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/video-studio-five-council-release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Resolve candidate identity
+        id: source
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Configure verified SSH access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Inspect Caddy without changing runtime
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "RELEASE_SHA=$RELEASE_SHA bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          report_dir="$HOME/releases/video-studio-caddy-preflight/$RELEASE_SHA"
+          report="$report_dir/caddy-preflight-report.txt"
+          sanitized="$report_dir/caddy-structure.json"
+          raw_config="$report_dir/.Caddyfile.private"
+          mkdir -p "$report_dir"
+          rm -f "$raw_config" "$report" "$sanitized"
+
+          mode=absent
+          config_source=unknown
+          validation=not_run
+          active=false
+          container_name=""
+
+          if command -v caddy >/dev/null 2>&1; then
+            mode=host_binary
+            if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet caddy; then
+              mode=systemd
+              active=true
+            fi
+            if [ -r /etc/caddy/Caddyfile ]; then
+              cp /etc/caddy/Caddyfile "$raw_config"
+              config_source=/etc/caddy/Caddyfile
+            elif command -v sudo >/dev/null 2>&1 && sudo -n test -r /etc/caddy/Caddyfile 2>/dev/null; then
+              sudo -n cat /etc/caddy/Caddyfile > "$raw_config"
+              config_source=/etc/caddy/Caddyfile
+            fi
+            if [ -f "$raw_config" ]; then
+              if caddy validate --config "$raw_config" --adapter caddyfile >/tmp/caddy-validate.out 2>/tmp/caddy-validate.err; then
+                validation=passed
+              else
+                validation=failed
+              fi
+            fi
+          fi
+
+          if [ ! -f "$raw_config" ]; then
+            container_name=$(docker ps --format '{{.Names}}|{{.Image}}' 2>/dev/null \
+              | awk -F'|' 'tolower($1) ~ /caddy/ || tolower($2) ~ /caddy/ {print $1; exit}')
+            if [ -n "$container_name" ]; then
+              mode=docker
+              active=true
+              for path in /etc/caddy/Caddyfile /config/Caddyfile /Caddyfile; do
+                if docker exec "$container_name" test -r "$path" 2>/dev/null; then
+                  docker exec "$container_name" cat "$path" > "$raw_config"
+                  config_source="$path"
+                  if docker exec "$container_name" caddy validate --config "$path" --adapter caddyfile \
+                    >/tmp/caddy-validate.out 2>/tmp/caddy-validate.err; then
+                    validation=passed
+                  else
+                    validation=failed
+                  fi
+                  break
+                fi
+              done
+            fi
+          fi
+
+          test -f "$raw_config"
+          chmod 600 "$raw_config"
+
+          python3 - "$raw_config" "$sanitized" <<'PY'
+          import hashlib
+          import json
+          import re
+          import sys
+          from pathlib import Path
+
+          source = Path(sys.argv[1])
+          text = source.read_text(encoding="utf-8", errors="replace")
+          stripped_lines = []
+          site_labels = []
+          for raw in text.splitlines():
+              line = raw.split("#", 1)[0].strip()
+              if not line:
+                  continue
+              stripped_lines.append(line)
+              if line.endswith("{") and not line.startswith(("handle", "route", "header", "basic_auth", "basicauth", "tls", "log", "encode", "@")):
+                  label = line[:-1].strip()
+                  if label and " " not in label and len(label) <= 200:
+                      site_labels.append(label)
+          directives = {
+              "reverse_proxy": len(re.findall(r"(?m)^\s*reverse_proxy\b", text)),
+              "basic_auth": len(re.findall(r"(?m)^\s*(?:basic_auth|basicauth)\b", text)),
+              "tls": len(re.findall(r"(?m)^\s*tls\b", text)),
+              "handle": len(re.findall(r"(?m)^\s*handle(?:_path)?\b", text)),
+              "route": len(re.findall(r"(?m)^\s*route\b", text)),
+          }
+          result = {
+              "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+              "line_count": len(text.splitlines()),
+              "noncomment_directive_lines": len(stripped_lines),
+              "site_labels": sorted(set(site_labels)),
+              "directives": directives,
+              "video_studio_upstream_present": "127.0.0.1:8094" in text or "localhost:8094" in text,
+              "video_studio_name_present": "video-studio" in text.lower() or "video_studio" in text.lower(),
+              "plaintext_password_pattern_detected": bool(re.search(r"(?m)^\s*(?:basic_auth|basicauth)\s+\S+\s+[^$\s][^\s]*\s*$", text)),
+          }
+          Path(sys.argv[2]).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+          chmod 600 "$sanitized"
+
+          http_listener=false
+          https_listener=false
+          if command -v ss >/dev/null 2>&1; then
+            ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq '(^|:)80$' && http_listener=true || true
+            ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq '(^|:)443$' && https_listener=true || true
+          fi
+          studio_listener=false
+          ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq '127\.0\.0\.1:8094$' && studio_listener=true || true
+
+          structure=$(cat "$sanitized")
+          config_sha=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sha256"])' <<<"$structure")
+          auth_count=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["directives"]["basic_auth"])' <<<"$structure")
+          route_present=$(python3 -c 'import json,sys; print(str(json.load(sys.stdin)["video_studio_upstream_present"]).lower())' <<<"$structure")
+          plaintext=$(python3 -c 'import json,sys; print(str(json.load(sys.stdin)["plaintext_password_pattern_detected"]).lower())' <<<"$structure")
+
+          {
+            echo "release_sha=$RELEASE_SHA"
+            echo "result=passed"
+            echo "inspection_only=true"
+            echo "caddy_mode=$mode"
+            echo "caddy_active=$active"
+            echo "config_source=$config_source"
+            echo "config_sha256=$config_sha"
+            echo "config_validation=$validation"
+            echo "basic_auth_directive_count=$auth_count"
+            echo "video_studio_route_present=$route_present"
+            echo "plaintext_password_pattern_detected=$plaintext"
+            echo "http_listener=$http_listener"
+            echo "https_listener=$https_listener"
+            echo "video_studio_local_listener=$studio_listener"
+            echo "production_modified=false"
+            echo "full_config_exported=false"
+          } > "$report"
+          chmod 600 "$report"
+          cat "$report"
+          rm -f "$raw_config" /tmp/caddy-validate.out /tmp/caddy-validate.err
+          REMOTE
+
+      - name: Retrieve sanitized Caddy evidence
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/caddy-evidence
+          for name in caddy-preflight-report.txt caddy-structure.json; do
+            scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+              "$VM_USER@$VM_HOST:releases/video-studio-caddy-preflight/$RELEASE_SHA/$name" \
+              "/tmp/caddy-evidence/$name"
+          done
+
+      - name: Upload private sanitized evidence
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: video-studio-caddy-preflight-${{ steps.source.outputs.short }}
+          path: /tmp/caddy-evidence
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish result
+        run: cat /tmp/caddy-evidence/caddy-preflight-report.txt >> "$GITHUB_STEP_SUMMARY"

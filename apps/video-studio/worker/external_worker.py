@@ -26,26 +26,44 @@ COMMAND_TEMPLATE = os.environ["VIDEO_CLONE_COMMAND"]
 POLL_SECONDS = max(float(os.getenv("VIDEO_STUDIO_POLL_SECONDS", "5")), 1.0)
 
 
-def request_json(path: str, *, method: str = "GET", body: dict | None = None) -> dict:
+def worker_headers(*, lease: str | None = None, content_type: str | None = None) -> dict[str, str]:
+    headers = {"X-Worker-Token": TOKEN, "X-Worker-ID": WORKER_ID}
+    if lease:
+        headers["X-Worker-Lease"] = lease
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
+
+
+def request_json(
+    path: str,
+    *,
+    method: str = "GET",
+    body: dict | None = None,
+    lease: str | None = None,
+) -> dict:
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(
         f"{BASE_URL}{path}",
         data=data,
         method=method,
-        headers={"Content-Type": "application/json", "X-Worker-Token": TOKEN},
+        headers=worker_headers(lease=lease, content_type="application/json"),
     )
     with urllib.request.urlopen(request, timeout=60) as response:
         return json.loads(response.read().decode())
 
 
-def download(path: str, destination: Path) -> None:
-    request = urllib.request.Request(f"{BASE_URL}{path}", headers={"X-Worker-Token": TOKEN})
+def download(path: str, destination: Path, *, lease: str) -> None:
+    request = urllib.request.Request(
+        f"{BASE_URL}{path}",
+        headers=worker_headers(lease=lease),
+    )
     with urllib.request.urlopen(request, timeout=300) as response, destination.open("wb") as output:
         while chunk := response.read(1024 * 1024):
             output.write(chunk)
 
 
-def multipart_upload(path: str, file_path: Path) -> dict:
+def multipart_upload(path: str, file_path: Path, *, lease: str) -> dict:
     boundary = "----DominionWorkerBoundary"
     content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
     prefix = (
@@ -55,26 +73,25 @@ def multipart_upload(path: str, file_path: Path) -> dict:
     ).encode()
     suffix = f"\r\n--{boundary}--\r\n".encode()
     data = prefix + file_path.read_bytes() + suffix
+    headers = worker_headers(lease=lease, content_type=f"multipart/form-data; boundary={boundary}")
+    headers["Content-Length"] = str(len(data))
     request = urllib.request.Request(
         f"{BASE_URL}{path}",
         data=data,
         method="POST",
-        headers={
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "Content-Length": str(len(data)),
-            "X-Worker-Token": TOKEN,
-        },
+        headers=headers,
     )
     with urllib.request.urlopen(request, timeout=600) as response:
         return json.loads(response.read().decode())
 
 
-def fail(job_id: str, message: str) -> None:
+def fail(job_id: str, lease: str, message: str) -> None:
     try:
         request_json(
             f"/api/workers/jobs/{job_id}/complete",
             method="POST",
             body={"status": "failed", "error": message[-2000:]},
+            lease=lease,
         )
     except Exception as exc:  # noqa: BLE001
         print(f"Could not report failure for {job_id}: {exc}", flush=True)
@@ -83,6 +100,9 @@ def fail(job_id: str, message: str) -> None:
 def process(claim: dict) -> None:
     job = claim["job"]
     project = claim["project"]
+    lease = claim.get("lease_token")
+    if not lease:
+        raise RuntimeError("Claim response did not include a worker lease")
     job_id = job["id"]
     with tempfile.TemporaryDirectory(prefix=f"dominion-{job_id}-") as temporary:
         workspace = Path(temporary)
@@ -90,7 +110,7 @@ def process(claim: dict) -> None:
         for asset in claim["assets"]:
             extension = Path(asset["original_name"]).suffix
             destination = workspace / f"{asset['kind']}{extension}"
-            download(asset["download_url"], destination)
+            download(asset["download_url"], destination, lease=lease)
             paths[asset["kind"]] = destination
         if "portrait" not in paths or "voice" not in paths:
             raise RuntimeError("Claimed job is missing portrait or voice media")
@@ -109,7 +129,7 @@ def process(claim: dict) -> None:
         result = subprocess.run(command, capture_output=True, text=True, timeout=7200)
         if result.returncode != 0 or not output.exists():
             raise RuntimeError(result.stderr[-2000:] or "Clone command failed without an output")
-        response = multipart_upload(f"/api/workers/jobs/{job_id}/output", output)
+        response = multipart_upload(f"/api/workers/jobs/{job_id}/output", output, lease=lease)
         print(json.dumps(response), flush=True)
 
 
@@ -119,10 +139,11 @@ def main() -> None:
         try:
             claim = request_json("/api/workers/claim", method="POST", body={"worker_id": WORKER_ID})
             if claim.get("job"):
+                lease = claim.get("lease_token", "")
                 try:
                     process(claim)
                 except Exception as exc:  # noqa: BLE001
-                    fail(claim["job"]["id"], str(exc))
+                    fail(claim["job"]["id"], lease, str(exc))
             else:
                 time.sleep(POLL_SECONDS)
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:

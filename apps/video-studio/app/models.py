@@ -17,6 +17,11 @@ class ProjectCreate(BaseModel):
     consent_id: str
 
 
+class ProjectRevoke(BaseModel):
+    confirm_project_id: str = Field(min_length=1, max_length=120)
+    reason: str = Field(min_length=3, max_length=1000)
+
+
 class JobCreate(BaseModel):
     engine: Literal["proof_render", "external_clone"] = "proof_render"
 

@@ -19,11 +19,11 @@ jobs:
   audit:
     if: ${{ inputs.confirm == 'AUDIT' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       AUDIT_DIR: /tmp/dominion-ecosystem-audit
       AUDIT_FILE: /tmp/dominion-ecosystem-audit/runtime_inventory.json
-      REPORT_BRANCH: audit/ecosystem-runtime-20260721
+      REPORT_BRANCH: audit/ecosystem-runtime-current
       REPORT_PATH: governance/runtime_inventory.json
       ARTIFACT_NAME: dominion-production-ecosystem-audit
 
@@ -70,6 +70,7 @@ jobs:
           import json
           import os
           import platform
+          import re
           import shutil
           import socket
           import subprocess
@@ -78,7 +79,14 @@ jobs:
           from datetime import datetime, timezone
           from pathlib import Path
 
-          def command(args, timeout=15):
+          MAX_OUTPUT = 30000
+          HOME = Path.home()
+          SECRET_KEY = re.compile(
+              r"(secret|token|password|passwd|private|credential|api[_-]?key|auth)",
+              re.IGNORECASE,
+          )
+
+          def command(args, timeout=20):
               try:
                   result = subprocess.run(
                       args,
@@ -86,6 +94,7 @@ jobs:
                       capture_output=True,
                       text=True,
                       timeout=timeout,
+                      env={"PATH": os.environ.get("PATH", "")},
                   )
               except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
                   return {"available": False, "returncode": None, "output": str(exc)}
@@ -93,18 +102,40 @@ jobs:
               return {
                   "available": True,
                   "returncode": result.returncode,
-                  "output": output[:20000],
+                  "output": output[:MAX_OUTPUT],
               }
+
+          def disk_usage():
+              rows = []
+              result = command(["df", "-PT", "-x", "tmpfs", "-x", "devtmpfs"])
+              for line in result["output"].splitlines()[1:]:
+                  fields = line.split()
+                  if len(fields) >= 7:
+                      rows.append({
+                          "filesystem": fields[0],
+                          "type": fields[1],
+                          "blocks_kb": fields[2],
+                          "used_kb": fields[3],
+                          "available_kb": fields[4],
+                          "use_percent": fields[5],
+                          "mount": fields[6],
+                      })
+              return rows
+
+          def memory_summary():
+              result = command(["free", "-b"])
+              rows = {}
+              for line in result["output"].splitlines():
+                  fields = line.split()
+                  if fields and fields[0].rstrip(":") in {"Mem", "Swap"}:
+                      rows[fields[0].rstrip(":").lower()] = fields[1:]
+              return rows
 
           def docker_containers():
               if not shutil.which("docker"):
                   return []
               result = command([
-                  "docker",
-                  "ps",
-                  "--all",
-                  "--format",
-                  "{{json .}}",
+                  "docker", "ps", "--all", "--no-trunc", "--format", "{{json .}}"
               ])
               containers = []
               for line in result["output"].splitlines():
@@ -113,13 +144,37 @@ jobs:
                   except json.JSONDecodeError:
                       continue
                   containers.append({
+                      "id": (row.get("ID") or "")[:12],
                       "name": row.get("Names"),
                       "image": row.get("Image"),
                       "state": row.get("State"),
                       "status": row.get("Status"),
                       "ports": row.get("Ports"),
+                      "networks": row.get("Networks"),
+                      "mounts": row.get("Mounts"),
                   })
               return containers
+
+          def docker_images():
+              if not shutil.which("docker"):
+                  return []
+              result = command([
+                  "docker", "image", "ls", "--format", "{{json .}}"
+              ])
+              images = []
+              for line in result["output"].splitlines():
+                  try:
+                      row = json.loads(line)
+                  except json.JSONDecodeError:
+                      continue
+                  images.append({
+                      "repository": row.get("Repository"),
+                      "tag": row.get("Tag"),
+                      "id": row.get("ID"),
+                      "created": row.get("CreatedSince"),
+                      "size": row.get("Size"),
+                  })
+              return images
 
           def compose_projects():
               if not shutil.which("docker"):
@@ -132,136 +187,234 @@ jobs:
               except json.JSONDecodeError:
                   return []
               projects = data if isinstance(data, list) else [data]
-              safe = []
-              for item in projects:
-                  if not isinstance(item, dict):
-                      continue
-                  safe.append({
-                      "name": item.get("Name"),
-                      "status": item.get("Status"),
-                      "config_files": item.get("ConfigFiles"),
-                  })
-              return safe
+              return [{
+                  "name": item.get("Name"),
+                  "status": item.get("Status"),
+                  "config_files": item.get("ConfigFiles"),
+              } for item in projects if isinstance(item, dict)]
 
-          def relevant_systemd_units():
+          def systemd_services():
               if not shutil.which("systemctl"):
                   return []
               result = command([
-                  "systemctl",
-                  "list-units",
-                  "--all",
-                  "--type=service",
-                  "--no-legend",
-                  "--no-pager",
+                  "systemctl", "list-units", "--all", "--type=service",
+                  "--no-legend", "--no-pager", "--plain",
               ])
-              keywords = (
-                  "dominion", "jarvis", "n8n", "wix", "alpha", "surplus",
-                  "youtube", "tiktok", "gemini", "conductor", "caddy",
-              )
               units = []
               for line in result["output"].splitlines():
                   normalized = " ".join(line.split())
-                  if any(keyword in normalized.lower() for keyword in keywords):
-                      fields = normalized.split(" ", 4)
+                  fields = normalized.split(" ", 4)
+                  if len(fields) >= 4:
                       units.append({
-                          "unit": fields[0] if fields else None,
-                          "load": fields[1] if len(fields) > 1 else None,
-                          "active": fields[2] if len(fields) > 2 else None,
-                          "sub": fields[3] if len(fields) > 3 else None,
+                          "unit": fields[0],
+                          "load": fields[1],
+                          "active": fields[2],
+                          "sub": fields[3],
                           "description": fields[4] if len(fields) > 4 else None,
                       })
               return units
 
+          def systemd_timers():
+              if not shutil.which("systemctl"):
+                  return []
+              result = command([
+                  "systemctl", "list-timers", "--all", "--no-legend",
+                  "--no-pager", "--plain",
+              ])
+              return [" ".join(line.split()) for line in result["output"].splitlines()]
+
+          def processes():
+              result = command(["ps", "-eo", "pid,ppid,user,stat,etimes,comm", "--sort=pid"])
+              rows = []
+              for line in result["output"].splitlines()[1:]:
+                  fields = line.split(None, 6)
+                  if len(fields) == 7:
+                      rows.append({
+                          "pid": fields[0], "ppid": fields[1], "user": fields[2],
+                          "state": fields[3], "elapsed_seconds": fields[4],
+                          "cpu_time": fields[5], "executable": fields[6],
+                      })
+              return rows
+
           def listening_ports():
               if not shutil.which("ss"):
                   return []
-              result = command(["ss", "-lntH"])
-              ports = []
+              result = command(["ss", "-lntupH"])
+              rows = []
               for line in result["output"].splitlines():
-                  parts = line.split()
-                  if len(parts) < 4:
+                  fields = line.split()
+                  if len(fields) < 5:
                       continue
-                  local = parts[3]
-                  port = local.rsplit(":", 1)[-1]
-                  if port.isdigit():
-                      ports.append(int(port))
-              return sorted(set(ports))
+                  rows.append({
+                      "protocol": fields[0],
+                      "state": fields[1],
+                      "local": fields[4],
+                      "process": " ".join(fields[6:])[:500] if len(fields) > 6 else None,
+                  })
+              return rows
 
-          def health_check(name, port, path):
-              url = f"http://127.0.0.1:{port}{path}"
-              request = urllib.request.Request(url, method="GET")
-              try:
-                  with urllib.request.urlopen(request, timeout=4) as response:
-                      return {
-                          "name": name,
-                          "port": port,
-                          "path": path,
-                          "reachable": True,
-                          "status": response.status,
-                      }
-              except urllib.error.HTTPError as exc:
-                  return {
-                      "name": name,
-                      "port": port,
-                      "path": path,
-                      "reachable": True,
-                      "status": exc.code,
-                  }
-              except Exception as exc:
-                  return {
-                      "name": name,
-                      "port": port,
-                      "path": path,
-                      "reachable": False,
-                      "status": None,
-                      "error_type": type(exc).__name__,
-                  }
+          def env_key_inventory():
+              roots = [HOME, Path("/opt"), Path("/var/www")]
+              rows = []
+              for root in roots:
+                  if not root.exists():
+                      continue
+                  for path in root.rglob("*.env"):
+                      if any(part in {".git", "node_modules", "site-packages", "__pycache__"} for part in path.parts):
+                          continue
+                      try:
+                          if path.stat().st_size > 1_000_000:
+                              continue
+                          keys = []
+                          for line in path.read_text(errors="ignore").splitlines():
+                              match = re.match(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=", line)
+                              if match:
+                                  key = match.group(1)
+                                  keys.append({
+                                      "name": key,
+                                      "sensitive_name": bool(SECRET_KEY.search(key)),
+                                  })
+                          if keys:
+                              rows.append({"path": str(path), "keys": keys})
+                      except (OSError, PermissionError):
+                          continue
+              return rows
 
-          home = Path.home()
-          path_candidates = [
-              home / "dominion",
-              home / "dominion" / "agents",
-              home / "dominion" / "agents" / "juris",
-              home / "dominion-ops",
-              Path("/opt/dominions-ark"),
-              Path("/opt/dominion"),
-              Path("/var/www/dominionhealing"),
-              Path("/var/www/surplus"),
-          ]
+          def discover_git_repositories():
+              roots = [HOME, Path("/opt"), Path("/var/www")]
+              repos = []
+              seen = set()
+              for root in roots:
+                  if not root.exists():
+                      continue
+                  for git_dir in root.rglob(".git"):
+                      repo = git_dir.parent
+                      if str(repo) in seen or len(repo.parts) - len(root.parts) > 5:
+                          continue
+                      seen.add(str(repo))
+                      head = command(["git", "-C", str(repo), "rev-parse", "HEAD"])["output"]
+                      branch = command(["git", "-C", str(repo), "branch", "--show-current"])["output"]
+                      dirty = command(["git", "-C", str(repo), "status", "--porcelain"])["output"]
+                      remote = command(["git", "-C", str(repo), "remote", "get-url", "origin"])["output"]
+                      remote = re.sub(r"https://[^/@]+@", "https://REDACTED@", remote)
+                      repos.append({
+                          "path": str(repo),
+                          "head": head,
+                          "branch": branch or "DETACHED",
+                          "dirty": bool(dirty),
+                          "origin": remote,
+                      })
+              return repos
 
-          checks = [
-              ("baby-api", 8080, "/"),
-              ("browser-agents", 8081, "/health"),
-              ("wix-agent", 8082, "/ready"),
-              ("obsidian-remote", 8083, "/"),
-              ("dominion-web", 8090, "/"),
-              ("conductor", 5060, "/healthz"),
-              ("n8n", 5678, "/healthz"),
-              ("alpha-engine", 8787, "/health"),
-          ]
+          def directory_map():
+              candidates = [
+                  HOME / "dominion", HOME / "dominion-ops", HOME / "ai_agent",
+                  Path("/opt/dominions-ark"), Path("/opt/dominion"),
+                  Path("/var/www/dominionhealing"), Path("/var/www/surplus"),
+                  Path("/etc/caddy"), Path("/etc/systemd/system"),
+              ]
+              rows = []
+              for path in candidates:
+                  row = {"path": str(path), "exists": path.exists(), "is_dir": path.is_dir()}
+                  if path.is_dir():
+                      try:
+                          row["children"] = sorted(
+                              item.name for item in path.iterdir()
+                              if item.name not in {".git", "node_modules", "site-packages", "__pycache__"}
+                          )[:500]
+                      except PermissionError:
+                          row["permission_denied"] = True
+                  rows.append(row)
+              return rows
+
+          def cron_inventory():
+              rows = []
+              system_paths = [Path("/etc/crontab"), Path("/etc/cron.d")]
+              for path in system_paths:
+                  if path.is_file():
+                      rows.append({"path": str(path), "exists": True})
+                  elif path.is_dir():
+                      rows.extend({"path": str(item), "exists": True} for item in sorted(path.iterdir()) if item.is_file())
+              user_cron = command(["crontab", "-l"])
+              rows.append({
+                  "scope": "current_user",
+                  "available": user_cron["available"],
+                  "entry_count": sum(
+                      1 for line in user_cron["output"].splitlines()
+                      if line.strip() and not line.lstrip().startswith("#")
+                  ) if user_cron["returncode"] == 0 else 0,
+              })
+              return rows
+
+          def caddy_inventory():
+              rows = []
+              for path in [Path("/etc/caddy/Caddyfile"), Path("/etc/caddy/sites-enabled"), Path("/etc/caddy/conf.d")]:
+                  if path.is_file():
+                      rows.append({"path": str(path), "type": "file"})
+                  elif path.is_dir():
+                      rows.extend({"path": str(item), "type": "file"} for item in sorted(path.iterdir()) if item.is_file())
+              validate = command(["caddy", "validate", "--config", "/etc/caddy/Caddyfile"])
+              return {"files": rows, "validation_returncode": validate["returncode"], "validation": validate["output"][:2000]}
+
+          def local_health_checks(ports):
+              checks = []
+              for port in sorted(set(ports)):
+                  for path in ("/healthz", "/health", "/ready", "/"):
+                      url = f"http://127.0.0.1:{port}{path}"
+                      request = urllib.request.Request(url, method="GET")
+                      try:
+                          with urllib.request.urlopen(request, timeout=2) as response:
+                              checks.append({"port": port, "path": path, "reachable": True, "status": response.status})
+                              break
+                      except urllib.error.HTTPError as exc:
+                          checks.append({"port": port, "path": path, "reachable": True, "status": exc.code})
+                          break
+                      except Exception:
+                          continue
+              return checks
+
+          port_rows = listening_ports()
+          numeric_ports = []
+          for row in port_rows:
+              match = re.search(r":(\d+)$", row.get("local") or "")
+              if match:
+                  port = int(match.group(1))
+                  if 1024 <= port <= 65535:
+                      numeric_ports.append(port)
 
           payload = {
-              "audit_version": 1,
+              "audit_version": 2,
               "generated_at": datetime.now(timezone.utc).isoformat(),
               "host": {
                   "hostname": socket.gethostname(),
                   "platform": platform.platform(),
                   "python": platform.python_version(),
+                  "uptime": command(["uptime", "-p"])["output"],
+                  "kernel": command(["uname", "-a"])["output"],
               },
-              "docker_containers": docker_containers(),
-              "compose_projects": compose_projects(),
-              "systemd_units": relevant_systemd_units(),
-              "listening_tcp_ports": listening_ports(),
-              "health_checks": [health_check(*item) for item in checks],
-              "paths": [
-                  {"path": str(path), "exists": path.exists(), "is_dir": path.is_dir()}
-                  for path in path_candidates
-              ],
+              "capacity": {"disk": disk_usage(), "memory": memory_summary()},
+              "docker": {
+                  "containers": docker_containers(),
+                  "images": docker_images(),
+                  "compose_projects": compose_projects(),
+              },
+              "systemd": {"services": systemd_services(), "timers": systemd_timers()},
+              "processes": processes(),
+              "listening_ports": port_rows,
+              "local_health_checks": local_health_checks(numeric_ports),
+              "cron": cron_inventory(),
+              "caddy": caddy_inventory(),
+              "directories": directory_map(),
+              "git_repositories": discover_git_repositories(),
+              "environment_key_inventory": env_key_inventory(),
               "safety": {
                   "environment_values_collected": False,
                   "file_contents_collected": False,
                   "logs_collected": False,
                   "customer_data_collected": False,
+                  "process_arguments_collected": False,
+                  "cron_commands_collected": False,
+                  "docker_environment_collected": False,
               },
           }
           print(json.dumps(payload, indent=2, sort_keys=True))

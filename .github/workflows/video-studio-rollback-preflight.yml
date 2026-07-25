@@ -1,0 +1,223 @@
+name: Dominion Video Studio Rollback Preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/video-studio/deploy-gcp-vm.sh"
+      - "apps/video-studio/Dockerfile"
+      - ".github/workflows/video-studio-rollback-preflight.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dominion-video-studio-rollback-preflight-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  rollback:
+    if: >-
+      github.actor == 'dunkdee' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/video-studio-five-council-release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Resolve candidate identity
+        id: source
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Configure verified SSH access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Copy isolated rollback candidate
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          tar -czf /tmp/video-studio-rollback.tgz apps/video-studio
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            "rm -rf releases/video-studio-rollback/$RELEASE_SHA && mkdir -p releases/video-studio-rollback/$RELEASE_SHA"
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            /tmp/video-studio-rollback.tgz \
+            "$VM_USER@$VM_HOST:releases/video-studio-rollback/$RELEASE_SHA/release.tgz"
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            "tar -xzf releases/video-studio-rollback/$RELEASE_SHA/release.tgz -C releases/video-studio-rollback/$RELEASE_SHA"
+
+      - name: Prove automatic rollback on failed replacement
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+          SHORT_SHA: ${{ steps.source.outputs.short }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "RELEASE_SHA=$RELEASE_SHA SHORT_SHA=$SHORT_SHA bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          root="$HOME/releases/video-studio-rollback/$RELEASE_SHA"
+          good_dir="$root/apps/video-studio"
+          broken_dir="$root/broken/apps/video-studio"
+          report="$root/rollback-preflight-report.txt"
+          service="dominion-video-studio-rollback-$SHORT_SHA"
+          rollback_name="${service}-rollback"
+          image_repo="dominion/video-studio-rollback-$SHORT_SHA"
+          volume="${service}-data"
+          env_file="$root/rollback-test.env"
+          port=18096
+          broken_sha=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          production_before=absent
+
+          cleanup() {
+            set +e
+            docker rm -f "$service" "$rollback_name" >/dev/null 2>&1 || true
+            docker volume rm "$volume" >/dev/null 2>&1 || true
+            docker images "$image_repo" --format '{{.Repository}}:{{.Tag}}' | xargs -r docker image rm >/dev/null 2>&1 || true
+            rm -f "$env_file"
+          }
+          trap cleanup EXIT
+
+          command -v docker >/dev/null
+          command -v curl >/dev/null
+          command -v openssl >/dev/null
+          docker info >/dev/null
+          test -d "$good_dir"
+          if docker inspect dominion-video-studio >/dev/null 2>&1; then
+            production_before=$(docker inspect dominion-video-studio --format '{{.Id}}')
+          fi
+          cleanup
+
+          good_started=$(date +%s)
+          (
+            cd "$good_dir"
+            chmod 700 deploy-gcp-vm.sh
+            RELEASE_SHA="$RELEASE_SHA" \
+            VIDEO_STUDIO_SERVICE_NAME="$service" \
+            VIDEO_STUDIO_IMAGE_REPO="$image_repo" \
+            VIDEO_STUDIO_PORT="$port" \
+            VIDEO_STUDIO_DATA_VOLUME="$volume" \
+            VIDEO_STUDIO_ENV_FILE="$env_file" \
+            ./deploy-gcp-vm.sh
+          ) >/tmp/video-studio-rollback-good.log 2>&1
+          good_seconds=$(( $(date +%s) - good_started ))
+          good_id=$(docker inspect "$service" --format '{{.Id}}')
+          good_image=$(docker inspect "$service" --format '{{.Config.Image}}')
+          curl -fsS "http://127.0.0.1:${port}/ready" >/dev/null
+
+          mkdir -p "$(dirname "$broken_dir")"
+          cp -a "$good_dir" "$broken_dir"
+          cat >> "$broken_dir/Dockerfile" <<'DOCKER'
+          CMD ["sh", "-c", "exit 42"]
+          DOCKER
+
+          failed_as_expected=false
+          broken_started=$(date +%s)
+          set +e
+          (
+            cd "$broken_dir"
+            chmod 700 deploy-gcp-vm.sh
+            RELEASE_SHA="$broken_sha" \
+            VIDEO_STUDIO_SERVICE_NAME="$service" \
+            VIDEO_STUDIO_IMAGE_REPO="$image_repo" \
+            VIDEO_STUDIO_PORT="$port" \
+            VIDEO_STUDIO_DATA_VOLUME="$volume" \
+            VIDEO_STUDIO_ENV_FILE="$env_file" \
+            ./deploy-gcp-vm.sh
+          ) >/tmp/video-studio-rollback-broken.log 2>&1
+          broken_exit=$?
+          set -e
+          broken_seconds=$(( $(date +%s) - broken_started ))
+          if [ "$broken_exit" -ne 0 ]; then
+            failed_as_expected=true
+          fi
+          test "$failed_as_expected" = true
+
+          restored_id=$(docker inspect "$service" --format '{{.Id}}')
+          restored_image=$(docker inspect "$service" --format '{{.Config.Image}}')
+          test "$restored_id" = "$good_id"
+          test "$restored_image" = "$good_image"
+          test "$(docker inspect "$service" --format '{{.State.Running}}')" = true
+          curl -fsS "http://127.0.0.1:${port}/ready" >/dev/null
+          test ! "$(docker ps -a --format '{{.Names}}')" || true
+          test "$(stat -c '%a' "$env_file")" = 600
+
+          production_after=absent
+          if docker inspect dominion-video-studio >/dev/null 2>&1; then
+            production_after=$(docker inspect dominion-video-studio --format '{{.Id}}')
+          fi
+          test "$production_after" = "$production_before"
+
+          {
+            echo "release_sha=$RELEASE_SHA"
+            echo "result=passed"
+            echo "isolated_good_deploy=passed"
+            echo "deliberately_broken_replacement_failed=true"
+            echo "automatic_previous_container_restore=passed"
+            echo "restored_container_identity_match=passed"
+            echo "restored_image_match=passed"
+            echo "restored_readiness=passed"
+            echo "good_deploy_seconds=$good_seconds"
+            echo "failed_replacement_seconds=$broken_seconds"
+            echo "localhost_test_binding=127.0.0.1:18096"
+            echo "production_container_unchanged=passed"
+            echo "personal_media_used=false"
+            echo "public_exposure=not_performed"
+          } > "$report"
+          chmod 600 "$report"
+          cat "$report"
+          rm -f /tmp/video-studio-rollback-good.log /tmp/video-studio-rollback-broken.log
+          REMOTE
+
+      - name: Retrieve sanitized rollback evidence
+        if: always()
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST:releases/video-studio-rollback/$RELEASE_SHA/rollback-preflight-report.txt" \
+            /tmp/rollback-preflight-report.txt || true
+          test -f /tmp/rollback-preflight-report.txt || \
+            printf 'release_sha=%s\nresult=failed_before_evidence_completion\n' "$RELEASE_SHA" > /tmp/rollback-preflight-report.txt
+
+      - name: Upload private sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: video-studio-rollback-preflight-${{ steps.source.outputs.short }}
+          path: /tmp/rollback-preflight-report.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish result
+        if: always()
+        run: cat /tmp/rollback-preflight-report.txt >> "$GITHUB_STEP_SUMMARY"

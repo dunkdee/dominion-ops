@@ -1,139 +1,22 @@
-name: Smart Deploy — Read VM Env, Build, Launch
+name: Smart Deploy (RETIRED — use governed foundation VM deployment)
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      acknowledge:
+        description: "Type RETIRED to confirm this legacy workflow remains disabled"
+        required: true
+
+permissions:
+  contents: read
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
+  retired:
+    if: ${{ github.event.inputs.acknowledge == 'RETIRED' }}
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy — merge VM env then rebuild
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          script: |
-            set -e
-            cd ~/dominion-ops
-
-            echo "=============================="
-            echo "  SCANNING VM FOR ENV KEYS"
-            echo "=============================="
-
-            # Collect all candidate env files on VM
-            ENV_SOURCES=(
-              "$HOME/dominion/.env"
-              "$HOME/dominion/alchemist/.env"
-              "$HOME/dominion/conductor/.env"
-              "$HOME/dominion/juris/.env"
-              "$HOME/dominion/buddy/.env"
-              "$HOME/dominion/store/.env"
-              "$HOME/.env"
-              "$HOME/dominion-ops/.env"
-            )
-
-            # Keys we care about
-            KEYS=(
-              ANTHROPIC_API_KEY
-              GUMROAD_TOKEN
-              BREVO_API_KEY
-              YOUTUBE_API_KEY
-              YOUTUBE_CLIENT_ID
-              YOUTUBE_CLIENT_SECRET
-              OANDA_API_KEY
-              OANDA_ACCOUNT_ID
-              BINANCE_API_KEY
-              BINANCE_API_SECRET
-              TIKTOK_CLIENT_ID
-              TIKTOK_CLIENT_SECRET
-              GCP_PROJECT_ID
-              GCP_REGION
-              GOOGLE_SERVICE_ACCOUNT_JSON
-              GA4_MEASUREMENT_ID
-            )
-
-            # Build merged env: first found value wins
-            declare -A MERGED
-
-            for src in "${ENV_SOURCES[@]}"; do
-              if [ -f "$src" ]; then
-                echo "Reading: $src"
-                while IFS='=' read -r key rest; do
-                  [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
-                  key="${key%%[[:space:]]*}"
-                  val="${rest}"
-                  # Only capture if key is in our list and not yet found
-                  for wanted in "${KEYS[@]}"; do
-                    if [ "$key" = "$wanted" ] && [ -z "${MERGED[$key]:-}" ] && [ -n "$val" ]; then
-                      MERGED["$key"]="$val"
-                      echo "  ✅ $key found"
-                      break
-                    fi
-                  done
-                done < "$src"
-              fi
-            done
-
-            echo ""
-            echo "=============================="
-            echo "  WRITING ~/dominion-ops/.env"
-            echo "=============================="
-
-            # Write merged .env
-            : > .env
-            for key in "${KEYS[@]}"; do
-              val="${MERGED[$key]:-}"
-              if [ -n "$val" ]; then
-                printf '%s=%s\n' "$key" "$val" >> .env
-                echo "  ✅ $key"
-              else
-                echo "  ❌ $key — NOT FOUND on VM"
-              fi
-            done
-
-            echo ""
-            echo "=============================="
-            echo "  VAULT DIRECTORIES"
-            echo "=============================="
-            VAULT_DIR="${HOME}/vault"
-            mkdir -p "${VAULT_DIR}/00-inbox" "${VAULT_DIR}/10-research" "${VAULT_DIR}/20-deals" \
-              "${VAULT_DIR}/30-surplus-cases" "${VAULT_DIR}/40-manual" \
-              "${VAULT_DIR}/90-meta/templates" "${VAULT_DIR}/_attachments" "${VAULT_DIR}/_health"
-            echo "✅ vault dirs ready"
-
-            echo ""
-            echo "=============================="
-            echo "  GIT PULL"
-            echo "=============================="
-            git pull origin main
-
-            echo ""
-            echo "=============================="
-            echo "  DOCKER BUILD + LAUNCH"
-            echo "=============================="
-            docker compose up -d --build --force-recreate
-
-            echo ""
-            echo "=============================="
-            echo "  HEALTH CHECK (waiting for startup)"
-            echo "=============================="
-            for i in $(seq 1 12); do
-              sleep 5
-              if curl -sf http://localhost:8080/ > /dev/null 2>&1; then
-                curl -sf http://localhost:8080/ && echo "✅ baby-api OK (attempt $i)"
-                break
-              fi
-              echo "  ... waiting for baby-api (attempt $i/12)"
-              if [ "$i" = "12" ]; then
-                echo "❌ baby-api FAILED to start after 60s"
-                docker logs dominion-ops-baby-api-1 2>&1 | tail -30
-              fi
-            done
-            curl -sf http://localhost:8090/ && echo "✅ dominion-web OK" || echo "❌ dominion-web FAILED"
+      - name: Refuse legacy deployment path
+        run: |
+          echo "This workflow is retired because it automatically deployed every push, rewrote .env, force-recreated containers, and did not fail closed on health-check errors."
+          echo "Use the governed Foundation VM deployment workflow instead."
+          exit 1

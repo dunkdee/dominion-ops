@@ -112,8 +112,26 @@ Every component must satisfy at least one measurable purpose:
 
 The initial revenue objective is recurring, increasingly automated revenue with declining marginal operating effort—not guaranteed or effortless income.
 
-## 9. Enforcement
+## 9. Constitutional amendment rule
+
+The Constitution and its normative policies may change only through `constitutional_amendment_policy.json`.
+
+Every amendment must preserve the prior version, bind all reviews to the exact proposed hash, include impact and rollback analysis, pass deterministic validation, receive all five independent Council reviews, survive Law and Security veto review, and receive recorded Human Overseer authorization before activation.
+
+No agent, administrator, workflow, deployment process, or emergency operator may directly edit or activate a protected constitutional subject outside that procedure.
+
+## 10. Emergency recovery rule
+
+Emergency access exists only to restore lawful operation when the normal governance path is unavailable. It is not authority to suspend, bypass, or rewrite the Constitution.
+
+Break-glass recovery must follow `break_glass_recovery_policy.json`, remain narrowly scoped and time-limited, require reauthenticated human authority plus an independent approver, preserve an append-only incident record, expire automatically, rotate affected credentials, and enter post-containment Council review.
+
+Legal holds, Security vetoes, secret-protection rules, and prohibitions on autonomous authority expansion remain in force during recovery.
+
+## 11. Enforcement
 
 The machine-readable policies in this directory and the agent registry are normative. CI validation must pass before governance changes merge. Runtime enforcement must be added before agents receive production authority.
 
-Where documentation conflicts with machine-readable policy, execution must stop and the conflict must be resolved through a versioned change.
+Every consequential execution path must obtain a policy decision bound to the actor, action, target, evidence, policy version, approvals, proposal hash, expiration, and rollback conditions. Missing, stale, altered, or invalid authorization must fail closed.
+
+Where documentation conflicts with machine-readable policy, execution must stop and the conflict must be resolved through a versioned constitutional amendment.

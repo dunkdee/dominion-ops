@@ -92,6 +92,7 @@ def init_storage() -> None:
                 error TEXT,
                 output_path TEXT,
                 claimed_by TEXT,
+                claim_token_hash TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -110,6 +111,9 @@ def init_storage() -> None:
             CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON jobs(status, created_at);
             """
         )
+        job_columns = {row["name"] for row in connection.execute("PRAGMA table_info(jobs)").fetchall()}
+        if "claim_token_hash" not in job_columns:
+            connection.execute("ALTER TABLE jobs ADD COLUMN claim_token_hash TEXT")
 
 
 def get_project(connection: sqlite3.Connection, project_id: str) -> sqlite3.Row:

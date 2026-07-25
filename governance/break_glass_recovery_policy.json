@@ -1,0 +1,50 @@
+{
+  "version": "1.0.0",
+  "default_behavior": "deny",
+  "purpose": "Recover governance or infrastructure availability without suspending the Constitution.",
+  "allowed_triggers": [
+    "governor_unavailable",
+    "audit_ledger_unavailable",
+    "credential_lockout",
+    "control_plane_corruption",
+    "active_security_containment",
+    "production_recovery_when_normal_approval_path_is_unavailable"
+  ],
+  "prohibited_uses": [
+    "bypass_business_approval",
+    "accelerate_revenue_action",
+    "avoid_council_review",
+    "override_legal_hold",
+    "override_security_veto",
+    "expand_agent_permissions",
+    "disable_audit_logging",
+    "export_secret_values"
+  ],
+  "requirements": {
+    "human_overseer_required": true,
+    "second_independent_approver_required": true,
+    "identity_reauthentication_required": true,
+    "incident_record_required": true,
+    "scope_must_be_explicit": true,
+    "maximum_duration_minutes": 60,
+    "least_privilege_required": true,
+    "commands_or_actions_predeclared": true,
+    "append_only_audit_required": true,
+    "automatic_expiration_required": true,
+    "post_action_verification_required": true,
+    "credential_rotation_after_use_required": true,
+    "council_review_after_containment_required": true,
+    "root_cause_and_regression_test_required": true
+  },
+  "permitted_action_classes": [
+    "restore_governor_service",
+    "restore_audit_ledger",
+    "revoke_compromised_credential",
+    "rotate_recovery_credential",
+    "isolate_compromised_service",
+    "restore_last_verified_configuration",
+    "activate_tested_rollback"
+  ],
+  "execution_state": "DISABLED_UNTIL_RUNTIME_IMPLEMENTED",
+  "fail_closed_on_missing_requirement": true
+}

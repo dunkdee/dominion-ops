@@ -54,12 +54,26 @@ write_failure() {
   exit "$exit_code"
 }
 
+api_curl() {
+  docker run --rm \
+    --network "$network" \
+    --read-only \
+    --tmpfs /tmp:size=64m,noexec,nosuid,nodev \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --pids-limit 64 \
+    --memory 256m \
+    --cpus 0.5 \
+    --volume "$work_dir:/work" \
+    --entrypoint curl \
+    "$worker_image" "$@"
+}
+
 trap cleanup EXIT
 trap write_failure ERR
 
 stage=verify_prerequisites
 command -v docker >/dev/null
-command -v curl >/dev/null
 command -v openssl >/dev/null
 command -v python3 >/dev/null
 docker info >/dev/null
@@ -130,7 +144,7 @@ with wave.open(str(target / "voice.wav"), "wb") as output:
         value = int(32767 * 0.20 * envelope * math.sin(2 * math.pi * 205 * index / sample_rate))
         output.writeframesraw(struct.pack("<h", value))
 PY
-chmod 644 "$work_dir/portrait.png" "$work_dir/voice.wav"
+chmod 666 "$work_dir/portrait.png" "$work_dir/voice.wav"
 
 stage=create_internal_runtime
 docker network create --internal "$network" >/dev/null
@@ -152,7 +166,7 @@ docker run -d --name "$control_container" \
 stage=wait_for_control_plane
 ready=false
 for attempt in $(seq 1 30); do
-  if curl -fsS "http://127.0.0.1:${port}/ready" >/tmp/e2e-ready.json; then
+  if api_curl -fsS http://video-studio:8000/ready >/tmp/e2e-ready.json; then
     ready=true
     break
   fi
@@ -160,25 +174,26 @@ for attempt in $(seq 1 30); do
 done
 [ "$ready" = true ]
 python3 -c 'import json; d=json.load(open("/tmp/e2e-ready.json")); assert d.get("status") == "ready", d; assert d.get("external_worker_configured") is True, d'
+docker port "$control_container" 8000/tcp | grep -Eq '^127\.0\.0\.1:18097$'
 
 stage=create_consent_and_project
-consent=$(curl -fsS -X POST "http://127.0.0.1:${port}/api/consents" \
+consent=$(api_curl -fsS -X POST http://video-studio:8000/api/consents \
   -H 'Content-Type: application/json' \
   --data '{"subject_name":"Synthetic E2E Subject","likeness_confirmed":true,"voice_confirmed":true,"rights_confirmed":true}')
 consent_id=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$consent")
-project=$(curl -fsS -X POST "http://127.0.0.1:${port}/api/projects" \
+project=$(api_curl -fsS -X POST http://video-studio:8000/api/projects \
   -H 'Content-Type: application/json' \
   --data "{\"title\":\"Synthetic E2E\",\"script\":\"Dominion end to end worker canary.\",\"output_format\":\"vertical\",\"consent_id\":\"$consent_id\"}")
 project_id=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$project")
 
 stage=upload_synthetic_assets
-curl -fsS -X POST "http://127.0.0.1:${port}/api/projects/${project_id}/assets" \
-  -F kind=portrait -F "file=@$work_dir/portrait.png;type=image/png" >/dev/null
-curl -fsS -X POST "http://127.0.0.1:${port}/api/projects/${project_id}/assets" \
-  -F kind=voice -F "file=@$work_dir/voice.wav;type=audio/wav" >/dev/null
+api_curl -fsS -X POST "http://video-studio:8000/api/projects/${project_id}/assets" \
+  -F kind=portrait -F 'file=@/work/portrait.png;type=image/png' >/dev/null
+api_curl -fsS -X POST "http://video-studio:8000/api/projects/${project_id}/assets" \
+  -F kind=voice -F 'file=@/work/voice.wav;type=audio/wav' >/dev/null
 
 stage=queue_external_job
-queued=$(curl -fsS -X POST "http://127.0.0.1:${port}/api/projects/${project_id}/jobs" \
+queued=$(api_curl -fsS -X POST "http://video-studio:8000/api/projects/${project_id}/jobs" \
   -H 'Content-Type: application/json' --data '{"engine":"external_clone"}')
 job_id=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$queued")
 
@@ -200,7 +215,7 @@ stage=wait_for_external_job
 status=queued
 job='{}'
 for attempt in $(seq 1 120); do
-  job=$(curl -fsS "http://127.0.0.1:${port}/api/jobs/${job_id}")
+  job=$(api_curl -fsS "http://video-studio:8000/api/jobs/${job_id}")
   status=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<<"$job")
   if [ "$status" = completed ]; then
     break
@@ -215,7 +230,8 @@ render_seconds=$(( $(date +%s) - render_started ))
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert "claim_token_hash" not in d; assert d["download_url"]' <<<"$job"
 
 stage=download_and_validate_output
-curl -fsS "http://127.0.0.1:${port}/api/jobs/${job_id}/download" -o "$work_dir/output.mp4"
+rm -f "$work_dir/output.mp4"
+api_curl -fsS "http://video-studio:8000/api/jobs/${job_id}/download" -o /work/output.mp4
 test -s "$work_dir/output.mp4"
 docker run --rm --network none --read-only \
   --volume "$work_dir:/work:ro" --entrypoint ffprobe "$worker_image" \
@@ -237,7 +253,7 @@ assert 1.0 <= float(payload["format"]["duration"]) <= 2.1, payload
 PY
 
 stage=verify_review_and_isolation
-project_state=$(curl -fsS "http://127.0.0.1:${port}/api/projects/${project_id}")
+project_state=$(api_curl -fsS "http://video-studio:8000/api/projects/${project_id}")
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "review_ready", d' <<<"$project_state"
 test "$(docker inspect "$control_container" --format '{{.HostConfig.ReadonlyRootfs}}')" = true
 test "$(docker inspect "$worker_container" --format '{{.HostConfig.ReadonlyRootfs}}')" = true
@@ -264,6 +280,7 @@ output_sha=$(sha256sum "$work_dir/output.mp4" | awk '{print $1}')
   echo "output_bytes=$output_bytes"
   echo "output_sha256=$output_sha"
   echo "render_seconds=$render_seconds"
+  echo "api_transport=internal_docker_network"
   echo "docker_network_internal=true"
   echo "localhost_binding=127.0.0.1:18097"
   echo "production_container_unchanged=passed"

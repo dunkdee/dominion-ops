@@ -1,0 +1,106 @@
+name: Dominion Video Studio DNS Preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/video-studio-dns-preflight.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dominion-video-studio-dns-preflight-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  inspect:
+    if: >-
+      github.actor == 'dunkdee' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/video-studio-five-council-release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Resolve candidate identity
+        id: source
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Inspect DNS without changing records
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          python3 - "$VM_HOST" "$RELEASE_SHA" /tmp/video-studio-dns-preflight.txt <<'PY'
+          import hashlib
+          import ipaddress
+          import socket
+          import sys
+          from pathlib import Path
+
+          vm_host = sys.argv[1].strip()
+          release_sha = sys.argv[2]
+          destination = Path(sys.argv[3])
+
+          def resolve(host: str) -> set[str]:
+              try:
+                  return {
+                      item[4][0]
+                      for item in socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+                  }
+              except socket.gaierror:
+                  return set()
+
+          try:
+              vm_addresses = {str(ipaddress.ip_address(vm_host))}
+          except ValueError:
+              vm_addresses = resolve(vm_host)
+
+          studio_addresses = resolve("studio.dominionhealing.org")
+          tools_addresses = resolve("tools.dominionhealing.org")
+          root_addresses = resolve("dominionhealing.org")
+
+          studio_match = bool(studio_addresses and vm_addresses and studio_addresses.intersection(vm_addresses))
+          tools_match = bool(tools_addresses and vm_addresses and tools_addresses.intersection(vm_addresses))
+
+          lines = [
+              f"release_sha={release_sha}",
+              "result=passed",
+              "inspection_only=true",
+              f"studio_dns_present={str(bool(studio_addresses)).lower()}",
+              f"studio_resolves_to_vm={str(studio_match).lower()}",
+              f"tools_dns_present={str(bool(tools_addresses)).lower()}",
+              f"tools_resolves_to_vm={str(tools_match).lower()}",
+              f"root_dns_present={str(bool(root_addresses)).lower()}",
+              f"vm_resolution_available={str(bool(vm_addresses)).lower()}",
+              f"studio_address_count={len(studio_addresses)}",
+              f"tools_address_count={len(tools_addresses)}",
+              f"root_address_count={len(root_addresses)}",
+              "raw_addresses_exported=false",
+              "dns_modified=false",
+              f"vm_address_set_sha256={hashlib.sha256(','.join(sorted(vm_addresses)).encode()).hexdigest() if vm_addresses else 'none'}",
+          ]
+          destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          cat /tmp/video-studio-dns-preflight.txt
+
+      - name: Upload sanitized DNS evidence
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: video-studio-dns-preflight-${{ steps.source.outputs.short }}
+          path: /tmp/video-studio-dns-preflight.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish result
+        run: cat /tmp/video-studio-dns-preflight.txt >> "$GITHUB_STEP_SUMMARY"

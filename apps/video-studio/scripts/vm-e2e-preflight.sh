@@ -82,21 +82,42 @@ docker build --progress=plain --pull \
 
 stage=generate_synthetic_inputs
 python3 - "$work_dir" <<'PY'
+import binascii
 import math
 import struct
 import sys
 import wave
+import zlib
 from pathlib import Path
+
+
+def png_chunk(kind: bytes, data: bytes) -> bytes:
+    checksum = binascii.crc32(kind + data) & 0xFFFFFFFF
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", checksum)
+
 
 target = Path(sys.argv[1])
 width, height = 480, 640
-pixels = bytearray()
+rows: list[bytes] = []
 for y in range(height):
+    row = bytearray()
     for x in range(width):
-        pixels.extend((45 + x * 110 // width, 60 + y * 95 // height, 100 + (x + y) * 70 // (width + height)))
-with (target / "portrait.ppm").open("wb") as output:
-    output.write(f"P6\n{width} {height}\n255\n".encode("ascii"))
-    output.write(pixels)
+        row.extend(
+            (
+                45 + x * 110 // width,
+                60 + y * 95 // height,
+                100 + (x + y) * 70 // (width + height),
+            )
+        )
+    rows.append(b"\x00" + bytes(row))
+raw = b"".join(rows)
+png = (
+    b"\x89PNG\r\n\x1a\n"
+    + png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+    + png_chunk(b"IDAT", zlib.compress(raw, 9))
+    + png_chunk(b"IEND", b"")
+)
+(target / "portrait.png").write_bytes(png)
 
 sample_rate = 16_000
 duration = 1.35
@@ -109,12 +130,7 @@ with wave.open(str(target / "voice.wav"), "wb") as output:
         value = int(32767 * 0.20 * envelope * math.sin(2 * math.pi * 205 * index / sample_rate))
         output.writeframesraw(struct.pack("<h", value))
 PY
-chmod 644 "$work_dir/portrait.ppm" "$work_dir/voice.wav"
-docker run --rm --network none --read-only --tmpfs /tmp:size=128m,noexec,nosuid,nodev \
-  --cap-drop ALL --security-opt no-new-privileges \
-  --volume "$work_dir:/work" --entrypoint ffmpeg "$worker_image" \
-  -y -v error -i /work/portrait.ppm /work/portrait.png
-chmod 644 "$work_dir/portrait.png"
+chmod 644 "$work_dir/portrait.png" "$work_dir/voice.wav"
 
 stage=create_internal_runtime
 docker network create --internal "$network" >/dev/null

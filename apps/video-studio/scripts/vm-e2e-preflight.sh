@@ -242,7 +242,7 @@ docker run -d --name "$worker_container" \
   --env "VIDEO_STUDIO_WORKER_TOKEN=$token" \
   --env "VIDEO_STUDIO_WORKER_ID=$worker_id" \
   --env VIDEO_STUDIO_POLL_SECONDS=1 \
-  --env 'VIDEO_CLONE_COMMAND=python /worker/dominion_lite_canary_renderer.py --portrait {portrait} --voice {voice} --script-file {script_file} --output {output} --format {output_format} --fps 24' \
+  --env VIDEO_CLONE_ENGINE_SPEC=/worker/engine-spec-canary.json \
   "$worker_image" >/dev/null
 
 stage=wait_for_external_job

@@ -88,6 +88,14 @@ def test_claim_requires_matching_authenticated_identity() -> None:
         )
         assert mismatch.status_code == 409
 
+        cleanup_claim = claim(client, "worker-cleanup")
+        cleanup = client.post(
+            f"/api/workers/jobs/{cleanup_claim['job']['id']}/complete",
+            headers=lease_headers("worker-cleanup", cleanup_claim["lease_token"]),
+            json={"status": "failed", "error": "test cleanup"},
+        )
+        assert cleanup.status_code == 200
+
 
 def test_job_lease_limits_asset_access_and_expires() -> None:
     with TestClient(app) as client:

@@ -17,7 +17,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Check out requested release
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -32,15 +32,54 @@ jobs:
           test "$GITHUB_REF" = "refs/heads/main"
           test "$CONFIRM" = "DEPLOY_VIDEO_STUDIO"
 
+      - name: Require hash-bound Five Council final release
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          path = Path("runtime/records/video_studio_clone_release/final_decision.json")
+          if not path.is_file():
+              raise SystemExit("Video Studio final Council decision is missing")
+          decision = json.loads(path.read_text(encoding="utf-8"))
+          supplied_hash = decision.get("decision_hash")
+          unsigned = {key: value for key, value in decision.items() if key != "decision_hash"}
+          canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+          expected_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+          assert supplied_hash == expected_hash, "final decision hash mismatch"
+          assert decision.get("decision") == "FINAL_RELEASE_APPROVED", decision
+          assert decision.get("final_affirmative_gate") == "five_council", decision
+          assert decision.get("external_execution_authorized") is True, decision
+          assert decision.get("release_request_id") == "video_studio_private_cpu_release_20260725", decision
+          assert set(decision.get("approvals", [])) == {
+              "truth_evidence",
+              "law_governance",
+              "security_risk",
+              "engineering_reliability",
+              "business_human_impact",
+          }, decision
+          assert not decision.get("vetoes"), decision
+          assert not decision.get("holds"), decision
+          assert not decision.get("missing_councils"), decision
+          approved_scope = decision.get("approved_scope")
+          assert approved_scope == "private_video_studio_cpu_preview_release", approved_scope
+          PY
+
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.11.15"
           cache: pip
-          cache-dependency-path: apps/video-studio/requirements-dev.txt
+          cache-dependency-path: |
+            apps/video-studio/requirements-dev.txt
+            apps/video-studio/worker/requirements-lite.txt
 
       - name: Install test dependencies
-        run: python -m pip install --disable-pip-version-check -r apps/video-studio/requirements-dev.txt
+        run: |
+          python -m pip install --disable-pip-version-check -r apps/video-studio/requirements-dev.txt
+          python -m pip install --disable-pip-version-check -r apps/video-studio/worker/requirements-lite.txt
 
       - name: Compile and test
         run: |
@@ -48,6 +87,8 @@ jobs:
           python -m compileall -q apps/video-studio
           python -m pytest -q apps/video-studio/tests
           docker build --tag dominion/video-studio:validation apps/video-studio
+          docker build --file apps/video-studio/worker/Dockerfile.lite \
+            --tag dominion/video-studio-lite:validation apps/video-studio
           bash -n apps/video-studio/deploy-gcp-vm.sh
 
   deploy:
@@ -65,6 +106,24 @@ jobs:
       - name: Resolve immutable release
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Recheck Five Council final release on deployed source
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          path = Path("runtime/records/video_studio_clone_release/final_decision.json")
+          decision = json.loads(path.read_text(encoding="utf-8"))
+          unsigned = {key: value for key, value in decision.items() if key != "decision_hash"}
+          canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+          assert decision.get("decision_hash") == hashlib.sha256(canonical.encode()).hexdigest()
+          assert decision.get("decision") == "FINAL_RELEASE_APPROVED"
+          assert decision.get("external_execution_authorized") is True
+          assert decision.get("approved_scope") == "private_video_studio_cpu_preview_release"
+          PY
 
       - name: Validate and configure SSH
         env:
@@ -144,9 +203,18 @@ jobs:
           from pathlib import Path
           payload = json.loads(Path('/tmp/video-studio-ready.json').read_text())
           assert payload.get('status') == 'ready', payload
+          assert payload.get('external_worker_configured') is True, payload
           PY
           test "$(docker inspect dominion-video-studio --format '{{index .Config.Labels "dominion.release.sha"}}')" = "$RELEASE_SHA"
-          docker port dominion-video-studio 8000/tcp | grep -Eq '^127\.0\.0\.1:8094$'
+          docker inspect dominion-video-studio >/tmp/video-studio-inspect.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          inspection = json.loads(Path('/tmp/video-studio-inspect.json').read_text())[0]
+          bindings = inspection['HostConfig']['PortBindings']['8000/tcp']
+          assert bindings == [{'HostIp': '127.0.0.1', 'HostPort': '8094'}], bindings
+          PY
+          rm -f /tmp/video-studio-inspect.json
           test "$(stat -c '%a' "$HOME/.config/dominion/video-studio.env")" = "600"
           REMOTE
 
@@ -157,9 +225,10 @@ jobs:
           {
             echo "## Dominion Video Studio deployment"
             echo "- Release: \`$RELEASE_SHA\`"
+            echo "- Five Council final gate: passed"
             echo "- VM service: \`dominion-video-studio\`"
             echo "- Binding: \`127.0.0.1:8094\`"
             echo "- Readiness: passed"
-            echo "- Public exposure: not authorized by this workflow"
-            echo "- Neural clone worker: not installed by this workflow"
+            echo "- Public exposure: not activated by this workflow"
+            echo "- Premium neural worker: not installed by this workflow"
           } >> "$GITHUB_STEP_SUMMARY"

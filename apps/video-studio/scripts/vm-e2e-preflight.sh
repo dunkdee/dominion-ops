@@ -44,6 +44,12 @@ write_failure() {
     echo "production_container_touched=false_or_verified_by_cleanup_boundary"
     echo "personal_media_used=false"
     echo "public_exposure=not_performed"
+    for evidence in ready.json localhost-binding.txt latest-job.json latest-project.json; do
+      if [ -f "$release_root/$evidence" ]; then
+        echo "--- $evidence ---"
+        cat "$release_root/$evidence"
+      fi
+    done
     echo "--- control_plane_logs ---"
     docker logs --tail 60 "$control_container" 2>&1 | sed "s/${token:-__NO_TOKEN__}/[REDACTED]/g" || true
     echo "--- worker_logs ---"
@@ -166,15 +172,30 @@ docker run -d --name "$control_container" \
 stage=wait_for_control_plane
 ready=false
 for attempt in $(seq 1 30); do
-  if api_curl -fsS http://video-studio:8000/ready >/tmp/e2e-ready.json; then
+  if api_curl -fsS http://video-studio:8000/ready > "$release_root/ready.json"; then
     ready=true
     break
   fi
   sleep 2
 done
 [ "$ready" = true ]
-python3 -c 'import json; d=json.load(open("/tmp/e2e-ready.json")); assert d.get("status") == "ready", d; assert d.get("external_worker_configured") is True, d'
-docker port "$control_container" 8000/tcp | grep -Eq '^127\.0\.0\.1:18097$'
+
+stage=validate_readiness_payload
+python3 - "$release_root/ready.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text())
+assert payload.get("status") == "ready", payload
+assert payload.get("external_worker_configured") is True, payload
+checks = payload.get("checks", {})
+assert checks and all(checks.values()), payload
+PY
+
+stage=verify_localhost_binding
+docker port "$control_container" 8000/tcp > "$release_root/localhost-binding.txt"
+grep -Eq '^127\.0\.0\.1:18097$' "$release_root/localhost-binding.txt"
 
 stage=create_consent_and_project
 consent=$(api_curl -fsS -X POST http://video-studio:8000/api/consents \
@@ -216,6 +237,7 @@ status=queued
 job='{}'
 for attempt in $(seq 1 120); do
   job=$(api_curl -fsS "http://video-studio:8000/api/jobs/${job_id}")
+  printf '%s' "$job" > "$release_root/latest-job.json"
   status=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<<"$job")
   if [ "$status" = completed ]; then
     break
@@ -254,6 +276,7 @@ PY
 
 stage=verify_review_and_isolation
 project_state=$(api_curl -fsS "http://video-studio:8000/api/projects/${project_id}")
+printf '%s' "$project_state" > "$release_root/latest-project.json"
 python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "review_ready", d' <<<"$project_state"
 test "$(docker inspect "$control_container" --format '{{.HostConfig.ReadonlyRootfs}}')" = true
 test "$(docker inspect "$worker_container" --format '{{.HostConfig.ReadonlyRootfs}}')" = true

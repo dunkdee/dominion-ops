@@ -192,8 +192,10 @@ if docker inspect "$rollback_name" >/dev/null 2>&1; then
   echo "ERROR: rollback container still exists after restoration" >&2
   false
 fi
-curl -fsS "http://127.0.0.1:${port}/ready" > "$root/restored-ready.json"
-python3 - "$root/restored-ready.json" <<'PY'
+restored_ready=false
+for attempt in $(seq 1 20); do
+  if curl -fsS "http://127.0.0.1:${port}/ready" > "$root/restored-ready.json" 2>/dev/null; then
+    if python3 - "$root/restored-ready.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -201,6 +203,14 @@ from pathlib import Path
 payload = json.loads(Path(sys.argv[1]).read_text())
 assert payload.get("status") == "ready", payload
 PY
+    then
+      restored_ready=true
+      break
+    fi
+  fi
+  sleep 1
+done
+test "$restored_ready" = true
 
 stage=verify_production_noninterference
 production_after=$(production_identity)

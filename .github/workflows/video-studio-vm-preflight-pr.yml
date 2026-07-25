@@ -70,7 +70,7 @@ jobs:
             "$VM_USER@$VM_HOST" \
             "tar -xzf releases/video-studio-preflight-pr/$RELEASE_SHA/release.tgz -C releases/video-studio-preflight-pr/$RELEASE_SHA"
 
-      - name: Build and verify isolated candidate
+      - name: Verify VM prerequisites and capture baseline
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -79,40 +79,62 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
-            "$VM_USER@$VM_HOST" \
-            "RELEASE_SHA=$RELEASE_SHA SHORT_SHA=$SHORT_SHA bash -se" <<'REMOTE'
+            "$VM_USER@$VM_HOST" "RELEASE_SHA=$RELEASE_SHA SHORT_SHA=$SHORT_SHA bash -se" <<'REMOTE'
           set -euo pipefail
           umask 077
-          release_dir="$HOME/releases/video-studio-preflight-pr/$RELEASE_SHA/apps/video-studio"
           report_dir="$HOME/releases/video-studio-preflight-pr/$RELEASE_SHA"
-          image="dominion/video-studio:preflight-pr-$RELEASE_SHA"
           candidate="dominion-video-studio-preflight-pr-$SHORT_SHA"
           volume="${candidate}-data"
-          port=18094
-          production_before=absent
-
           command -v docker >/dev/null
           command -v curl >/dev/null
           command -v openssl >/dev/null
+          command -v python3 >/dev/null
           docker info >/dev/null
-          test -d "$release_dir"
-
+          test -d "$report_dir/apps/video-studio"
+          docker rm -f "$candidate" >/dev/null 2>&1 || true
+          docker volume rm "$volume" >/dev/null 2>&1 || true
+          production_before=absent
           if docker inspect dominion-video-studio >/dev/null 2>&1; then
             production_before=$(docker inspect dominion-video-studio --format '{{.Id}}')
           fi
+          printf '%s\n' "$production_before" > "$report_dir/production-before.txt"
+          df -Pk "$HOME" > "$report_dir/disk-before.txt"
+          chmod 600 "$report_dir/production-before.txt" "$report_dir/disk-before.txt"
+          REMOTE
 
-          cleanup() {
-            docker rm -f "$candidate" >/dev/null 2>&1 || true
-            docker volume rm "$volume" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-          cleanup
+      - name: Build isolated image
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "RELEASE_SHA=$RELEASE_SHA bash -se" <<'REMOTE'
+          set -euo pipefail
+          release_dir="$HOME/releases/video-studio-preflight-pr/$RELEASE_SHA/apps/video-studio"
+          image="dominion/video-studio:preflight-pr-$RELEASE_SHA"
+          docker build --progress=plain --pull --tag "$image" "$release_dir"
+          REMOTE
 
-          docker build --pull --tag "$image" "$release_dir"
+      - name: Launch isolated candidate
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+          SHORT_SHA: ${{ steps.source.outputs.short }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "RELEASE_SHA=$RELEASE_SHA SHORT_SHA=$SHORT_SHA bash -se" <<'REMOTE'
+          set -euo pipefail
+          image="dominion/video-studio:preflight-pr-$RELEASE_SHA"
+          candidate="dominion-video-studio-preflight-pr-$SHORT_SHA"
+          volume="${candidate}-data"
           docker volume create "$volume" >/dev/null
           worker_token=$(openssl rand -hex 32)
           docker run -d --name "$candidate" \
-            --publish "127.0.0.1:${port}:8000" \
+            --publish 127.0.0.1:18094:8000 \
             --read-only \
             --tmpfs /tmp:size=256m,noexec,nosuid,nodev \
             --cap-drop ALL \
@@ -126,29 +148,58 @@ jobs:
             --volume "$volume:/data" \
             --label "dominion.release.sha=$RELEASE_SHA" \
             "$image" >/dev/null
+          REMOTE
 
+      - name: Verify candidate readiness
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          SHORT_SHA: ${{ steps.source.outputs.short }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "SHORT_SHA=$SHORT_SHA bash -se" <<'REMOTE'
+          set -euo pipefail
+          candidate="dominion-video-studio-preflight-pr-$SHORT_SHA"
           for attempt in $(seq 1 30); do
-            curl -fsS "http://127.0.0.1:${port}/ready" >/tmp/video-studio-ready.json && break
-            [ "$attempt" -lt 30 ] || { docker logs --tail 200 "$candidate"; exit 1; }
+            if curl -fsS http://127.0.0.1:18094/ready >/tmp/video-studio-ready.json; then
+              python3 -c 'import json; d=json.load(open("/tmp/video-studio-ready.json")); assert d.get("status") == "ready", d'
+              exit 0
+            fi
             sleep 2
           done
-          python3 -c 'import json; d=json.load(open("/tmp/video-studio-ready.json")); assert d.get("status") == "ready", d'
+          docker inspect "$candidate" || true
+          docker logs --tail 200 "$candidate" || true
+          exit 1
+          REMOTE
+
+      - name: Verify isolation and write evidence
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+          SHORT_SHA: ${{ steps.source.outputs.short }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "RELEASE_SHA=$RELEASE_SHA SHORT_SHA=$SHORT_SHA bash -se" <<'REMOTE'
+          set -euo pipefail
+          report_dir="$HOME/releases/video-studio-preflight-pr/$RELEASE_SHA"
+          candidate="dominion-video-studio-preflight-pr-$SHORT_SHA"
+          production_before=$(cat "$report_dir/production-before.txt")
           docker port "$candidate" 8000/tcp | grep -Eq '^127\.0\.0\.1:18094$'
           test "$(docker inspect "$candidate" --format '{{.HostConfig.ReadonlyRootfs}}')" = true
           test "$(docker inspect "$candidate" --format '{{index .Config.Labels "dominion.release.sha"}}')" = "$RELEASE_SHA"
-
           production_after=absent
           if docker inspect dominion-video-studio >/dev/null 2>&1; then
             production_after=$(docker inspect dominion-video-studio --format '{{.Id}}')
           fi
           test "$production_after" = "$production_before"
-
           gpu_status=not_detected
           if command -v nvidia-smi >/dev/null 2>&1; then
             gpu_status=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | tr '\n' ';' || true)
             test -n "$gpu_status" || gpu_status=nvidia_smi_present_no_gpu_result
           fi
-
           printf 'release_sha=%s\nbinding=127.0.0.1:18094\nready=passed\nread_only_rootfs=passed\nproduction_container_unchanged=passed\ngpu_status=%s\npublic_exposure=not_performed\npersonal_media_used=false\n' \
             "$RELEASE_SHA" "$gpu_status" > "$report_dir/vm-preflight-report.txt"
           chmod 600 "$report_dir/vm-preflight-report.txt"
@@ -156,6 +207,7 @@ jobs:
           REMOTE
 
       - name: Retrieve sanitized evidence
+        if: always()
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -164,9 +216,11 @@ jobs:
           set -euo pipefail
           scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
             "$VM_USER@$VM_HOST:releases/video-studio-preflight-pr/$RELEASE_SHA/vm-preflight-report.txt" \
-            /tmp/vm-preflight-report.txt
+            /tmp/vm-preflight-report.txt || true
+          test -f /tmp/vm-preflight-report.txt || printf 'release_sha=%s\nresult=failed_before_evidence_completion\n' "$RELEASE_SHA" > /tmp/vm-preflight-report.txt
 
       - name: Upload preflight evidence
+        if: always()
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: video-studio-vm-preflight-pr-${{ steps.source.outputs.short }}
@@ -175,7 +229,23 @@ jobs:
           retention-days: 7
 
       - name: Publish result
+        if: always()
         run: |
           cat /tmp/vm-preflight-report.txt >> "$GITHUB_STEP_SUMMARY"
           echo >> "$GITHUB_STEP_SUMMARY"
           echo "Technical-readiness evidence only; production deployment and neural cloning remain blocked." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean isolated candidate
+        if: always()
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          SHORT_SHA: ${{ steps.source.outputs.short }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "SHORT_SHA=$SHORT_SHA bash -se" <<'REMOTE'
+          candidate="dominion-video-studio-preflight-pr-$SHORT_SHA"
+          docker rm -f "$candidate" >/dev/null 2>&1 || true
+          docker volume rm "${candidate}-data" >/dev/null 2>&1 || true
+          REMOTE

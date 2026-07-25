@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "apps/video-studio/Caddyfile.example"
+      - "apps/video-studio/scripts/caddy-candidate-preflight.sh"
       - ".github/workflows/video-studio-caddy-candidate.yml"
 
 permissions:
@@ -51,6 +52,21 @@ jobs:
           ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
+      - name: Copy staged candidate script
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            "rm -rf releases/video-studio-caddy-candidate/$RELEASE_SHA && mkdir -p releases/video-studio-caddy-candidate/$RELEASE_SHA"
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            apps/video-studio/scripts/caddy-candidate-preflight.sh \
+            "$VM_USER@$VM_HOST:releases/video-studio-caddy-candidate/$RELEASE_SHA/preflight.sh"
+
       - name: Validate route insertion and authentication canary
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -60,203 +76,15 @@ jobs:
           set -euo pipefail
           ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
             "$VM_USER@$VM_HOST" "RELEASE_SHA=$RELEASE_SHA bash -se" <<'REMOTE'
-          set -Eeuo pipefail
-          umask 077
-
-          report_dir="$HOME/releases/video-studio-caddy-candidate/$RELEASE_SHA"
-          report="$report_dir/caddy-candidate-report.txt"
-          live_copy="$report_dir/.live-Caddyfile.private"
-          merged_candidate="$report_dir/.merged-Caddyfile.private"
-          canary_config="$report_dir/.canary-Caddyfile.private"
-          marker_dir="$report_dir/upstream"
-          caddy_log="$report_dir/.caddy-canary.log"
-          upstream_log="$report_dir/.upstream-canary.log"
-          caddy_pid=""
-          upstream_pid=""
-          password=""
-
-          cleanup() {
-            set +e
-            [ -z "$caddy_pid" ] || kill "$caddy_pid" >/dev/null 2>&1 || true
-            [ -z "$upstream_pid" ] || kill "$upstream_pid" >/dev/null 2>&1 || true
-            wait "$caddy_pid" >/dev/null 2>&1 || true
-            wait "$upstream_pid" >/dev/null 2>&1 || true
-            rm -f "$live_copy" "$merged_candidate" "$canary_config" "$caddy_log" "$upstream_log"
-            rm -rf "$marker_dir" "$report_dir/caddy-data" "$report_dir/caddy-config"
-            password=""
-          }
-          trap cleanup EXIT
-
-          mkdir -p "$report_dir" "$marker_dir" "$report_dir/caddy-data" "$report_dir/caddy-config"
-          chmod 700 "$report_dir" "$marker_dir" "$report_dir/caddy-data" "$report_dir/caddy-config"
-          command -v caddy >/dev/null
-          command -v curl >/dev/null
-          command -v openssl >/dev/null
-          command -v python3 >/dev/null
-          systemctl is-active --quiet caddy
-
-          if [ -r /etc/caddy/Caddyfile ]; then
-            cp /etc/caddy/Caddyfile "$live_copy"
-          else
-            sudo -n cat /etc/caddy/Caddyfile > "$live_copy"
-          fi
-          chmod 600 "$live_copy"
-          live_before=$(sha256sum "$live_copy" | awk '{print $1}')
-
-          password=$(openssl rand -base64 36 | tr -d '\n/+=' | head -c 32)
-          test "${#password}" -ge 24
-          password_hash=$(caddy hash-password --plaintext "$password")
-          test -n "$password_hash"
-
-          python3 - "$live_copy" "$merged_candidate" "$password_hash" <<'PY'
-          import sys
-          from pathlib import Path
-
-          source = Path(sys.argv[1])
-          destination = Path(sys.argv[2])
-          password_hash = sys.argv[3]
-          lines = source.read_text(encoding="utf-8").splitlines()
-          target = "tools.dominionhealing.org"
-          start = None
-          for index, raw in enumerate(lines):
-              code = raw.split("#", 1)[0].strip()
-              if code == f"{target} {{":
-                  start = index
-                  break
-          if start is None:
-              raise SystemExit("tools_site_block_not_found")
-
-          depth = 0
-          end = None
-          for index in range(start, len(lines)):
-              code = lines[index].split("#", 1)[0]
-              depth += code.count("{")
-              depth -= code.count("}")
-              if index > start and depth == 0:
-                  end = index
-                  break
-          if end is None:
-              raise SystemExit("tools_site_block_unclosed")
-          block = "\n".join(lines[start:end + 1])
-          if "/video-studio" in block or "127.0.0.1:8094" in block:
-              raise SystemExit("video_studio_route_already_present")
-
-          indent = "    "
-          route = [
-              f"{indent}handle_path /video-studio/* {{",
-              f"{indent}{indent}basic_auth {{",
-              f"{indent}{indent}{indent}operator {password_hash}",
-              f"{indent}{indent}}}",
-              f"{indent}{indent}reverse_proxy 127.0.0.1:8094",
-              f"{indent}}}",
-              "",
-          ]
-          updated = lines[: start + 1] + route + lines[start + 1 :]
-          destination.write_text("\n".join(updated) + "\n", encoding="utf-8")
-          PY
-          chmod 600 "$merged_candidate"
-          route_count=$(grep -c 'handle_path /video-studio/\*' "$merged_candidate")
-          test "$route_count" = 1
-          merged_validation=failed
-          if caddy validate --config "$merged_candidate" --adapter caddyfile >/dev/null 2>&1; then
-            merged_validation=passed
-          fi
-          test "$merged_validation" = passed
-
-          cat > "$marker_dir/index.html" <<'HTML'
-          DOMINION_VIDEO_STUDIO_AUTH_CANARY_OK
-          HTML
-          chmod 600 "$marker_dir/index.html"
-          python3 -m http.server 18099 --bind 127.0.0.1 --directory "$marker_dir" \
-            >"$upstream_log" 2>&1 &
-          upstream_pid=$!
-
-          cat > "$canary_config" <<EOF
-          {
-              admin off
-              auto_https off
-          }
-
-          http://127.0.0.1:18098 {
-              handle_path /video-studio/* {
-                  basic_auth {
-                      operator $password_hash
-                  }
-                  reverse_proxy 127.0.0.1:18099
-              }
-              respond 404
-          }
-          EOF
-          sed -i 's/^          //' "$canary_config"
-          chmod 600 "$canary_config"
-          caddy validate --config "$canary_config" --adapter caddyfile >/dev/null
-
-          XDG_DATA_HOME="$report_dir/caddy-data" XDG_CONFIG_HOME="$report_dir/caddy-config" \
-            caddy run --config "$canary_config" --adapter caddyfile >"$caddy_log" 2>&1 &
-          caddy_pid=$!
-
-          ready=false
-          for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:18099/ >/dev/null 2>&1; then
-              ready=true
-              break
-            fi
-            sleep 1
-          done
-          [ "$ready" = true ]
-
-          caddy_ready=false
-          for attempt in $(seq 1 30); do
-            status=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:18098/video-studio/ || true)
-            if [ "$status" = 401 ]; then
-              caddy_ready=true
-              break
-            fi
-            sleep 1
-          done
-          [ "$caddy_ready" = true ]
-
-          unauthorized_status=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:18098/video-studio/)
-          wrong_status=$(curl -sS -o /dev/null -w '%{http_code}' -u 'operator:wrong-password' http://127.0.0.1:18098/video-studio/)
-          authorized_body=$(curl -fsS -u "operator:$password" http://127.0.0.1:18098/video-studio/)
-          authorized_status=$(curl -sS -o /dev/null -w '%{http_code}' -u "operator:$password" http://127.0.0.1:18098/video-studio/)
-          test "$unauthorized_status" = 401
-          test "$wrong_status" = 401
-          test "$authorized_status" = 200
-          grep -q 'DOMINION_VIDEO_STUDIO_AUTH_CANARY_OK' <<<"$authorized_body"
-
-          if [ -r /etc/caddy/Caddyfile ]; then
-            live_after=$(sha256sum /etc/caddy/Caddyfile | awk '{print $1}')
-          else
-            live_after=$(sudo -n sha256sum /etc/caddy/Caddyfile | awk '{print $1}')
-          fi
-          test "$live_after" = "$live_before"
-          systemctl is-active --quiet caddy
-
-          {
-            echo "release_sha=$RELEASE_SHA"
-            echo "result=passed"
-            echo "candidate_only=true"
-            echo "placement=tools.dominionhealing.org/video-studio/"
-            echo "live_config_hash_unchanged=true"
-            echo "route_insertion_count=$route_count"
-            echo "merged_live_config_validation=$merged_validation"
-            echo "isolated_canary_config_validation=passed"
-            echo "unauthorized_status=$unauthorized_status"
-            echo "wrong_password_status=$wrong_status"
-            echo "authorized_status=$authorized_status"
-            echo "authorized_upstream_marker=passed"
-            echo "live_caddy_active_after=true"
-            echo "plaintext_credential_exported=false"
-            echo "password_hash_exported=false"
-            echo "live_config_modified=false"
-            echo "public_route_activated=false"
-          } > "$report"
-          chmod 600 "$report"
-          cat "$report"
+          set -euo pipefail
+          script="$HOME/releases/video-studio-caddy-candidate/$RELEASE_SHA/preflight.sh"
+          test -f "$script"
+          chmod 700 "$script"
+          RELEASE_SHA="$RELEASE_SHA" "$script"
           REMOTE
 
       - name: Retrieve sanitized candidate evidence
+        if: always()
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -265,9 +93,12 @@ jobs:
           set -euo pipefail
           scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
             "$VM_USER@$VM_HOST:releases/video-studio-caddy-candidate/$RELEASE_SHA/caddy-candidate-report.txt" \
-            /tmp/caddy-candidate-report.txt
+            /tmp/caddy-candidate-report.txt || true
+          test -f /tmp/caddy-candidate-report.txt || \
+            printf 'release_sha=%s\nresult=failed_before_evidence_completion\n' "$RELEASE_SHA" > /tmp/caddy-candidate-report.txt
 
       - name: Upload private sanitized evidence
+        if: always()
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: video-studio-caddy-candidate-${{ steps.source.outputs.short }}
@@ -276,4 +107,5 @@ jobs:
           retention-days: 7
 
       - name: Publish result
+        if: always()
         run: cat /tmp/caddy-candidate-report.txt >> "$GITHUB_STEP_SUMMARY"

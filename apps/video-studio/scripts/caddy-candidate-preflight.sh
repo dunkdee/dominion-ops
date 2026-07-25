@@ -8,6 +8,7 @@ umask 077
 report_dir="$HOME/releases/video-studio-caddy-candidate/$RELEASE_SHA"
 report="$report_dir/caddy-candidate-report.txt"
 live_copy="$report_dir/.live-Caddyfile.private"
+merged_template="$report_dir/.merged-Caddyfile.template.private"
 merged_candidate="$report_dir/.merged-Caddyfile.private"
 canary_config="$report_dir/.canary-Caddyfile.private"
 marker_dir="$report_dir/upstream"
@@ -17,6 +18,7 @@ caddy_pid=""
 upstream_pid=""
 password=""
 live_before="unknown"
+auth_directive="unknown"
 stage=initialize
 
 cleanup() {
@@ -25,7 +27,7 @@ cleanup() {
   [ -z "$upstream_pid" ] || kill "$upstream_pid" >/dev/null 2>&1 || true
   [ -z "$caddy_pid" ] || wait "$caddy_pid" >/dev/null 2>&1 || true
   [ -z "$upstream_pid" ] || wait "$upstream_pid" >/dev/null 2>&1 || true
-  rm -f "$live_copy" "$merged_candidate" "$canary_config" "$caddy_log" "$upstream_log"
+  rm -f "$live_copy" "$merged_template" "$merged_candidate" "$canary_config" "$caddy_log" "$upstream_log"
   rm -rf "$marker_dir" "$report_dir/caddy-data" "$report_dir/caddy-config"
   password=""
 }
@@ -36,6 +38,12 @@ current_live_hash() {
   else
     sudo -n sha256sum /etc/caddy/Caddyfile | awk '{print $1}'
   fi
+}
+
+redact_caddy_output() {
+  sed -E \
+    -e 's/\$2[aby]\$[0-9]{2}\$[A-Za-z0-9.\/]+/[REDACTED_HASH]/g' \
+    -e 's/operator[[:space:]]+[^[:space:]]+/operator [REDACTED]/g'
 }
 
 write_failure() {
@@ -52,6 +60,7 @@ write_failure() {
     echo "result=failed"
     echo "failed_stage=$stage"
     echo "exit_code=$exit_code"
+    echo "auth_directive_candidate=$auth_directive"
     echo "live_config_hash_unchanged=$live_unchanged"
     echo "live_caddy_active_after=$(systemctl is-active caddy 2>/dev/null || echo unknown)"
     echo "plaintext_credential_exported=false"
@@ -60,7 +69,7 @@ write_failure() {
     echo "public_route_activated=false"
     if [ -f "$caddy_log" ]; then
       echo "--- caddy_canary_log_tail ---"
-      tail -n 40 "$caddy_log" | sed -E 's/\$2[aby]\$[0-9]{2}\$[A-Za-z0-9.\/]+/[REDACTED_HASH]/g'
+      tail -n 60 "$caddy_log" | redact_caddy_output
     fi
     if [ -f "$upstream_log" ]; then
       echo "--- upstream_canary_log_tail ---"
@@ -100,7 +109,7 @@ password_hash=$(caddy hash-password --plaintext "$password")
 test -n "$password_hash"
 
 stage=insert_candidate_route
-python3 - "$live_copy" "$merged_candidate" "$password_hash" <<'PY'
+python3 - "$live_copy" "$merged_template" "$password_hash" <<'PY'
 import sys
 from pathlib import Path
 
@@ -136,7 +145,7 @@ if "/video-studio" in block or "127.0.0.1:8094" in block:
 indent = "    "
 route = [
     f"{indent}handle_path /video-studio/* {{",
-    f"{indent}{indent}basic_auth {{",
+    f"{indent}{indent}DOMINION_AUTH_DIRECTIVE {{",
     f"{indent}{indent}{indent}operator {password_hash}",
     f"{indent}{indent}}}",
     f"{indent}{indent}reverse_proxy 127.0.0.1:8094",
@@ -146,12 +155,20 @@ route = [
 updated = lines[: start + 1] + route + lines[start + 1 :]
 destination.write_text("\n".join(updated) + "\n", encoding="utf-8")
 PY
-chmod 600 "$merged_candidate"
-route_count=$(grep -c 'handle_path /video-studio/\*' "$merged_candidate")
+chmod 600 "$merged_template"
+route_count=$(grep -c 'handle_path /video-studio/\*' "$merged_template")
 test "$route_count" = 1
 
-stage=validate_merged_live_candidate
-caddy validate --config "$merged_candidate" --adapter caddyfile >/dev/null
+stage=detect_auth_directive
+cp "$merged_template" "$merged_candidate"
+sed -i 's/DOMINION_AUTH_DIRECTIVE/basic_auth/' "$merged_candidate"
+auth_directive=basic_auth
+if ! caddy validate --config "$merged_candidate" --adapter caddyfile >"$caddy_log" 2>&1; then
+  cp "$merged_template" "$merged_candidate"
+  sed -i 's/DOMINION_AUTH_DIRECTIVE/basicauth/' "$merged_candidate"
+  auth_directive=basicauth
+  caddy validate --config "$merged_candidate" --adapter caddyfile >"$caddy_log" 2>&1
+fi
 
 stage=prepare_isolated_canary
 cat > "$marker_dir/index.html" <<'HTML'
@@ -169,7 +186,7 @@ cat > "$canary_config" <<EOF
 
 http://127.0.0.1:18098 {
     handle_path /video-studio/* {
-        basic_auth {
+        $auth_directive {
             operator $password_hash
         }
         reverse_proxy 127.0.0.1:18099
@@ -178,7 +195,7 @@ http://127.0.0.1:18098 {
 }
 EOF
 chmod 600 "$canary_config"
-caddy validate --config "$canary_config" --adapter caddyfile >/dev/null
+caddy validate --config "$canary_config" --adapter caddyfile >"$caddy_log" 2>&1
 
 stage=launch_isolated_canary
 XDG_DATA_HOME="$report_dir/caddy-data" XDG_CONFIG_HOME="$report_dir/caddy-config" \
@@ -228,6 +245,7 @@ stage=write_success_evidence
   echo "result=passed"
   echo "candidate_only=true"
   echo "placement=tools.dominionhealing.org/video-studio/"
+  echo "auth_directive=$auth_directive"
   echo "live_config_hash_unchanged=true"
   echo "route_insertion_count=$route_count"
   echo "merged_live_config_validation=passed"

@@ -5,4 +5,5 @@
 /operations/INCIDENT_RESPONSE.md @dunkdee
 /.github/workflows/ @dunkdee
 /scripts/validate_control_plane.py @dunkdee
+/scripts/validate_constitutional_kernel_v1.py @dunkdee
 /SECURITY.md @dunkdee

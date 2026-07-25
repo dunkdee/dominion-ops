@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "engine_id": "replace-with-approved-engine-id",
+  "engine_version": "replace-with-pinned-version",
+  "license_status": "blocked",
+  "license_reference": "replace-with-governance-license-record",
+  "commercial_use_verified": false,
+  "command": [
+    "/opt/dominion-engine/render.sh",
+    "--portrait",
+    "{portrait}",
+    "--voice",
+    "{voice}",
+    "--script-file",
+    "{script_file}",
+    "--output",
+    "{output}",
+    "--format",
+    "{output_format}"
+  ],
+  "required_assets": ["portrait", "voice"],
+  "supported_formats": ["vertical", "landscape", "square"],
+  "timeout_seconds": 7200
+}

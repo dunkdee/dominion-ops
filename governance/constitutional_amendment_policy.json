@@ -1,0 +1,51 @@
+{
+  "version": "1.0.0",
+  "default_behavior": "deny",
+  "protected_subjects": [
+    "SYSTEM_CONSTITUTION.md",
+    "authority_matrix.json",
+    "five_council_policy.json",
+    "incident_learning_policy.json",
+    "legal_evidence_policy.json",
+    "runtime_activation_gates.json",
+    "agents/registry.json"
+  ],
+  "required_artifacts": [
+    "amendment_proposal",
+    "current_policy_hash",
+    "proposed_policy_hash",
+    "impact_analysis",
+    "migration_plan",
+    "rollback_plan",
+    "independent_council_reviews",
+    "human_scope_authorization",
+    "validation_results",
+    "release_record"
+  ],
+  "required_review_domains": [
+    "truth_evidence",
+    "law_governance",
+    "security_risk",
+    "engineering_reliability",
+    "business_human_impact"
+  ],
+  "unanimous_council_required": true,
+  "law_veto_blocks": true,
+  "security_veto_blocks": true,
+  "human_overseer_authorization_required": true,
+  "proposer_may_not_be_sole_approver": true,
+  "proposal_hash_binding_required": true,
+  "prior_version_must_remain_retrievable": true,
+  "activation_requires_ci_pass": true,
+  "activation_requires_runtime_regression_pass": true,
+  "activation_requires_rollback_test": true,
+  "direct_edit_to_protected_subjects_prohibited": true,
+  "emergency_changes": {
+    "allowed_only_through": "break_glass_recovery_policy.json",
+    "must_be_temporary": true,
+    "must_open_incident": true,
+    "must_enter_standard_amendment_review_after_containment": true
+  },
+  "decision_states": ["APPROVE", "APPROVE_WITH_CONDITIONS", "VETO", "HOLD", "REJECT"],
+  "activation_state": "ACTIVE"
+}

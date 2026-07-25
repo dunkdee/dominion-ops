@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     VIDEO_STUDIO_WORKER_ID=dominion-lite-cpu-1 \
     VIDEO_STUDIO_POLL_SECONDS=5 \
-    VIDEO_CLONE_COMMAND="python /worker/dominion_lite_renderer.py --portrait {portrait} --voice {voice} --script-file {script_file} --output {output} --format {output_format} --fps 24"
+    VIDEO_CLONE_ENGINE_SPEC=/worker/engine-spec-lite.json
 
 RUN set -eux; \
     find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \
@@ -19,7 +19,9 @@ RUN set -eux; \
 WORKDIR /worker
 COPY worker/requirements-lite.txt ./requirements-lite.txt
 RUN pip install --no-cache-dir -r requirements-lite.txt
-COPY worker/external_worker.py worker/dominion_lite_renderer.py worker/dominion_lite_canary_renderer.py ./
+COPY worker/external_worker.py worker/engine_adapter.py \
+     worker/dominion_lite_renderer.py worker/dominion_lite_canary_renderer.py \
+     worker/engine-spec-lite.json ./
 
 RUN useradd --create-home --uid 10002 worker \
     && chown -R worker:worker /worker

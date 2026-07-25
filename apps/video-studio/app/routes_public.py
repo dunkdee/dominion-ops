@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from .models import ApprovalCreate, ConsentCreate, JobCreate, ProjectCreate
+from .models import ApprovalCreate, ConsentCreate, JobCreate, ProjectCreate, ProjectRevoke
 from .state import (
     ALLOWED_ASSET_KINDS,
     ALLOWED_EXTENSIONS,
@@ -21,6 +21,16 @@ from .state import (
 )
 
 router = APIRouter(prefix="/api")
+REVOCATION_BLOCKED_STATES = {"revoking", "revoked", "revocation_failed"}
+
+
+def _media_path(raw_path: str | None, root: Path) -> Path | None:
+    if not raw_path:
+        return None
+    resolved = Path(raw_path).resolve()
+    if root not in resolved.parents:
+        raise HTTPException(status_code=500, detail="Stored media path escaped its approved root")
+    return resolved
 
 
 @router.post("/consents", status_code=201)
@@ -84,9 +94,17 @@ def read_project(project_id: str) -> dict:
             "SELECT id, engine, status, progress, error, created_at, updated_at FROM jobs WHERE project_id = ? ORDER BY created_at DESC",
             (project_id,),
         ).fetchall()
+        revocation = connection.execute(
+            """
+            SELECT id, reason, deleted_asset_count, deleted_output_count, created_at
+            FROM project_revocations WHERE project_id = ?
+            """,
+            (project_id,),
+        ).fetchone()
     result = dict(project)
     result["assets"] = [dict(row) for row in assets]
     result["jobs"] = [dict(row) for row in jobs]
+    result["revocation"] = dict(revocation) if revocation else None
     return result
 
 
@@ -98,7 +116,9 @@ def upload_asset(project_id: str, kind: str = Form(...), file: UploadFile = File
     if suffix not in ALLOWED_EXTENSIONS[kind]:
         raise HTTPException(status_code=422, detail=f"Unsupported file type for {kind}")
     with db() as connection:
-        get_project(connection, project_id)
+        project = get_project(connection, project_id)
+        if project["status"] in REVOCATION_BLOCKED_STATES:
+            raise HTTPException(status_code=409, detail="Revoked projects cannot accept media")
 
     asset_id = new_id("asset")
     project_dir = ASSET_DIR / project_id
@@ -119,6 +139,10 @@ def upload_asset(project_id: str, kind: str = Form(...), file: UploadFile = File
         file.file.close()
 
     with db() as connection:
+        project = get_project(connection, project_id)
+        if project["status"] in REVOCATION_BLOCKED_STATES:
+            stored_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=409, detail="Project was revoked during upload")
         connection.execute(
             "INSERT INTO assets VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
@@ -142,6 +166,8 @@ def queue_job(project_id: str, payload: JobCreate) -> dict:
     now = utc_now()
     with db() as connection:
         project = get_project(connection, project_id)
+        if project["status"] in REVOCATION_BLOCKED_STATES:
+            raise HTTPException(status_code=409, detail="Revoked projects cannot generate new media")
         validate_consent(connection, project["consent_id"])
         if latest_asset(connection, project_id, "portrait") is None:
             raise HTTPException(status_code=409, detail="Upload a portrait before generating")
@@ -180,8 +206,8 @@ def download_job(job_id: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Job not found")
     if job["status"] != "completed" or not job["output_path"]:
         raise HTTPException(status_code=409, detail="Output is not ready")
-    path = Path(job["output_path"]).resolve()
-    if not path.exists() or EXPORT_DIR not in path.parents:
+    path = _media_path(job["output_path"], EXPORT_DIR)
+    if path is None or not path.exists():
         raise HTTPException(status_code=404, detail="Output file is missing")
     return FileResponse(path, media_type="video/mp4", filename=f"{job_id}.mp4")
 
@@ -190,7 +216,9 @@ def download_job(job_id: str) -> FileResponse:
 def record_approval(project_id: str, payload: ApprovalCreate) -> dict:
     approval_id = new_id("approval")
     with db() as connection:
-        get_project(connection, project_id)
+        project = get_project(connection, project_id)
+        if project["status"] in REVOCATION_BLOCKED_STATES:
+            raise HTTPException(status_code=409, detail="Revoked projects cannot be approved")
         job = connection.execute(
             "SELECT * FROM jobs WHERE project_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
             (project_id,),
@@ -203,3 +231,113 @@ def record_approval(project_id: str, payload: ApprovalCreate) -> dict:
         )
         connection.execute("UPDATE projects SET status = ?, updated_at = ? WHERE id = ?", (payload.decision, utc_now(), project_id))
     return {"id": approval_id, "project_id": project_id, "job_id": job["id"], "decision": payload.decision}
+
+
+@router.post("/projects/{project_id}/revoke", status_code=200)
+def revoke_project(project_id: str, payload: ProjectRevoke) -> dict:
+    if payload.confirm_project_id != project_id:
+        raise HTTPException(status_code=422, detail="Project confirmation does not match")
+
+    with db() as connection:
+        project = get_project(connection, project_id)
+        existing = connection.execute(
+            "SELECT * FROM project_revocations WHERE project_id = ?",
+            (project_id,),
+        ).fetchone()
+        if existing is not None:
+            return {
+                "id": existing["id"],
+                "project_id": project_id,
+                "status": "revoked",
+                "deleted_asset_count": existing["deleted_asset_count"],
+                "deleted_output_count": existing["deleted_output_count"],
+                "already_revoked": True,
+            }
+        assets = connection.execute("SELECT stored_path FROM assets WHERE project_id = ?", (project_id,)).fetchall()
+        jobs = connection.execute("SELECT id, output_path FROM jobs WHERE project_id = ?", (project_id,)).fetchall()
+        now = utc_now()
+        connection.execute(
+            """
+            UPDATE jobs
+            SET status = 'canceled', progress = 100, error = 'project_revoked',
+                output_path = NULL, claim_token_hash = NULL, updated_at = ?
+            WHERE project_id = ?
+            """,
+            (now, project_id),
+        )
+        connection.execute(
+            "UPDATE projects SET status = 'revoking', updated_at = ? WHERE id = ?",
+            (now, project_id),
+        )
+
+    asset_paths = [_media_path(row["stored_path"], ASSET_DIR) for row in assets]
+    output_paths = {
+        path
+        for row in jobs
+        if (path := _media_path(row["output_path"], EXPORT_DIR)) is not None
+    }
+    deletion_errors: list[str] = []
+    deleted_asset_count = 0
+    deleted_output_count = 0
+    for path in asset_paths:
+        if path is None:
+            continue
+        try:
+            existed = path.exists()
+            path.unlink(missing_ok=True)
+            deleted_asset_count += int(existed)
+        except OSError as exc:
+            deletion_errors.append(f"asset:{path.name}:{exc.__class__.__name__}")
+    for path in output_paths:
+        try:
+            existed = path.exists()
+            path.unlink(missing_ok=True)
+            deleted_output_count += int(existed)
+        except OSError as exc:
+            deletion_errors.append(f"output:{path.name}:{exc.__class__.__name__}")
+
+    if deletion_errors:
+        with db() as connection:
+            connection.execute(
+                "UPDATE projects SET status = 'revocation_failed', updated_at = ? WHERE id = ?",
+                (utc_now(), project_id),
+            )
+        raise HTTPException(status_code=500, detail="Media deletion failed; project remains blocked")
+
+    revocation_id = new_id("revocation")
+    with db() as connection:
+        connection.execute("DELETE FROM assets WHERE project_id = ?", (project_id,))
+        connection.execute(
+            """
+            INSERT INTO project_revocations (
+                id, project_id, reason, deleted_asset_count, deleted_output_count, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                revocation_id,
+                project_id,
+                payload.reason.strip(),
+                deleted_asset_count,
+                deleted_output_count,
+                utc_now(),
+            ),
+        )
+        connection.execute(
+            "UPDATE projects SET status = 'revoked', updated_at = ? WHERE id = ?",
+            (utc_now(), project_id),
+        )
+
+    project_asset_dir = ASSET_DIR / project_id
+    try:
+        project_asset_dir.rmdir()
+    except OSError:
+        pass
+
+    return {
+        "id": revocation_id,
+        "project_id": project_id,
+        "status": "revoked",
+        "deleted_asset_count": deleted_asset_count,
+        "deleted_output_count": deleted_output_count,
+        "already_revoked": False,
+    }

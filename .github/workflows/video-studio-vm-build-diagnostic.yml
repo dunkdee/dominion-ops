@@ -1,0 +1,124 @@
+name: Dominion Video Studio VM Build Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/video-studio/**"
+      - ".github/workflows/video-studio-vm-build-diagnostic.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dominion-video-studio-vm-build-diagnostic-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    if: >-
+      github.actor == 'dunkdee' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/video-studio-five-council-release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Resolve identity
+        id: source
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Copy candidate and capture build output
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          tar -czf /tmp/video-studio-build-diagnostic.tgz apps/video-studio
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            "rm -rf releases/video-studio-build-diagnostic/$RELEASE_SHA && mkdir -p releases/video-studio-build-diagnostic/$RELEASE_SHA"
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            /tmp/video-studio-build-diagnostic.tgz \
+            "$VM_USER@$VM_HOST:releases/video-studio-build-diagnostic/$RELEASE_SHA/release.tgz"
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "RELEASE_SHA=$RELEASE_SHA bash -se" <<'REMOTE'
+          set -u
+          umask 077
+          report_dir="$HOME/releases/video-studio-build-diagnostic/$RELEASE_SHA"
+          tar -xzf "$report_dir/release.tgz" -C "$report_dir"
+          release_dir="$report_dir/apps/video-studio"
+          image="dominion/video-studio:build-diagnostic-$RELEASE_SHA"
+          set +e
+          docker build --progress=plain --pull --tag "$image" "$release_dir" >"$report_dir/docker-build.log" 2>&1
+          build_exit=$?
+          set -e
+          printf '%s\n' "$build_exit" > "$report_dir/docker-build-exit-code.txt"
+          {
+            echo "release_sha=$RELEASE_SHA"
+            echo "build_exit_code=$build_exit"
+            echo "production_container_touched=false"
+            echo "container_launched=false"
+            echo "personal_media_used=false"
+          } > "$report_dir/build-diagnostic-summary.txt"
+          chmod 600 "$report_dir/docker-build.log" "$report_dir/docker-build-exit-code.txt" "$report_dir/build-diagnostic-summary.txt"
+          tail -n 120 "$report_dir/docker-build.log" || true
+          REMOTE
+
+      - name: Retrieve build evidence
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          for name in docker-build.log docker-build-exit-code.txt build-diagnostic-summary.txt; do
+            scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+              "$VM_USER@$VM_HOST:releases/video-studio-build-diagnostic/$RELEASE_SHA/$name" "/tmp/$name"
+          done
+
+      - name: Upload private diagnostic artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: video-studio-vm-build-diagnostic-${{ steps.source.outputs.short }}
+          path: |
+            /tmp/docker-build.log
+            /tmp/docker-build-exit-code.txt
+            /tmp/build-diagnostic-summary.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish sanitized summary
+        run: |
+          cat /tmp/build-diagnostic-summary.txt >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "Full Docker output is retained only in the private diagnostic artifact." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce successful build
+        run: |
+          set -euo pipefail
+          test "$(cat /tmp/docker-build-exit-code.txt)" = "0"

@@ -1,12 +1,25 @@
-# Dominion Video Studio — Neural Worker License Review
+# Dominion Video Studio — Worker License Review
 
-**Review date:** 2026-07-24  
+**Review date:** 2026-07-25  
 **Release ID:** `video_studio_clone_release_20260724`  
 **Status:** `CANDIDATE REVIEW — NOT FINAL LEGAL APPROVAL`
 
 ## Scope
 
-This record identifies upstream self-hosted neural-video candidates for the first authorized Dominion clone test. It does not install model code or weights, authorize public release, or declare a candidate commercially cleared. Every selected dependency and checkpoint must be recorded by immutable source, version, checksum, and license before production use.
+This record identifies self-hosted video-worker candidates for the first authorized Dominion clone test. It does not authorize public release or declare any neural candidate commercially cleared. Every selected dependency and checkpoint must be recorded by immutable source, version, checksum, and license before production use.
+
+## Owned fallback — Dominion Lite CPU
+
+- Source: first-party code in `apps/video-studio/worker/dominion_lite_renderer.py`.
+- Dependencies pinned for the candidate:
+  - `opencv-python-headless==4.13.0.92` — PyPI metadata identifies Apache-2.0 licensing;
+  - `numpy==2.3.3` — NumPy distributions use the BSD license family;
+  - Debian Bookworm `ffmpeg` package — system multimedia runtime; bundled component notices must remain available in the final image inventory.
+- Intended capability: audio-energy-driven mouth-region motion, subtle camera movement, caption rendering, and MP4 packaging on CPU-only hardware.
+- Claim boundary: this is a controlled 2.5D preview renderer. It is **not** phoneme-accurate neural lip sync, identity synthesis, or full expression/body generation.
+- Media boundary: only explicitly consented portrait and voice assets may be processed. Personal media, outputs, secrets, and worker tokens are prohibited from Git and ordinary CI artifacts.
+
+**Dominion decision:** acceptable for an isolated, non-public first-subject preview after build, render, security, deletion, and quality tests pass. It does not replace the premium neural-worker requirement.
 
 ## Candidate A — EchoMimicV2
 
@@ -44,25 +57,27 @@ This record identifies upstream self-hosted neural-video candidates for the firs
 
 **Dominion decision:** optional repair or post-processing stage only. It is not a full portrait-animation worker.
 
-## Excluded default
+## Excluded or held defaults
 
 - Original Wav2Lip releases are not accepted as the commercial default without a separate current license determination.
+- LivePortrait is held as a commercial default while its standard InsightFace detection dependency remains subject to non-commercial model restrictions; a commercially cleared detector replacement would be required.
+- SadTalker is held pending complete dependency and model provenance review despite its top-level repository license statement.
 - Unofficial forks, repackaged checkpoints, model mirrors, and community containers are excluded unless their complete provenance and licenses are verified against upstream sources.
 - Internet test media from upstream repositories must not be used commercially.
 
 ## Hardware decision gate
 
-1. Run the isolated `foundation-vm` preflight and record whether a supported NVIDIA GPU and CUDA runtime are present.
-2. If compatible owned hardware is present, run a no-personal-media installation smoke test for the preferred candidate.
-3. If `foundation-vm` has no compatible GPU, keep the control plane there and attach a separate approved worker on already-owned hardware.
+1. The isolated `foundation-vm` preflight reported `gpu_status=not_detected`.
+2. Keep the control plane on `foundation-vm` and use Dominion Lite for the controlled CPU preview path.
+3. Preserve the detachable worker contract for a separate approved GPU-capable machine.
 4. Do not enable paid GPU time, credits, or new GCP charges without a new explicit Human Overseer authorization.
 
 ## Required evidence before Law and Governance approval
 
-- immutable upstream commit or release identifier;
+- immutable upstream commit or release identifier for any third-party neural worker;
 - code license text and checksum;
 - each model/checkpoint source, revision, checksum, and license;
-- complete dependency license inventory;
+- complete dependency license inventory and container notice export;
 - commercial-use conclusion with unresolved terms clearly listed;
 - consent, retention, deletion, and access-control rules for likeness and voice media;
 - no external publication or third-party cloning authorization.

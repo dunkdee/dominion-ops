@@ -39,6 +39,7 @@ def db() -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA busy_timeout = 5000")
     try:
         yield connection
         connection.commit()
@@ -107,8 +108,18 @@ def init_storage() -> None:
                 FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
                 FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS project_revocations (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL UNIQUE,
+                reason TEXT NOT NULL,
+                deleted_asset_count INTEGER NOT NULL,
+                deleted_output_count INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            );
             CREATE INDEX IF NOT EXISTS idx_assets_project_kind ON assets(project_id, kind);
             CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON jobs(status, created_at);
+            CREATE INDEX IF NOT EXISTS idx_revocations_project ON project_revocations(project_id);
             """
         )
         job_columns = {row["name"] for row in connection.execute("PRAGMA table_info(jobs)").fetchall()}

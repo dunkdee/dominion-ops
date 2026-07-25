@@ -38,6 +38,7 @@ def _load(tmp_path, monkeypatch, value):
     monkeypatch.setenv("VIDEO_CLONE_ENGINE_SPEC", str(path))
     monkeypatch.delenv("VIDEO_CLONE_COMMAND", raising=False)
     monkeypatch.delenv("VIDEO_CLONE_ALLOW_UNAPPROVED_ENGINE", raising=False)
+    monkeypatch.delenv("VIDEO_CLONE_ALLOW_LEGACY_COMMAND", raising=False)
     return load_engine_spec()
 
 
@@ -112,3 +113,14 @@ def test_worker_rejects_missing_required_asset(tmp_path, monkeypatch):
                 "output": "/work/output.mp4",
             }
         )
+
+
+def test_legacy_command_mode_is_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("VIDEO_CLONE_ENGINE_SPEC", raising=False)
+    monkeypatch.setenv(
+        "VIDEO_CLONE_COMMAND",
+        "renderer --portrait {portrait} --voice {voice} --output {output}",
+    )
+    monkeypatch.delenv("VIDEO_CLONE_ALLOW_LEGACY_COMMAND", raising=False)
+    with pytest.raises(ValueError, match="governed engine spec"):
+        load_engine_spec()

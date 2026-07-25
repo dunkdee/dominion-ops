@@ -148,8 +148,13 @@ def queue_job(project_id: str, payload: JobCreate) -> dict:
         if latest_asset(connection, project_id, "voice") is None:
             raise HTTPException(status_code=409, detail="Upload a voice recording before generating")
         connection.execute(
-            "INSERT INTO jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (job_id, project_id, payload.engine, "queued", 0, None, None, None, now, now),
+            """
+            INSERT INTO jobs (
+                id, project_id, engine, status, progress, error, output_path,
+                claimed_by, claim_token_hash, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (job_id, project_id, payload.engine, "queued", 0, None, None, None, None, now, now),
         )
         connection.execute("UPDATE projects SET status = ?, updated_at = ? WHERE id = ?", ("queued", now, project_id))
     return {"id": job_id, "status": "queued", "engine": payload.engine}
@@ -162,6 +167,7 @@ def read_job(job_id: str) -> dict:
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     result = dict(job)
+    result.pop("claim_token_hash", None)
     result["download_url"] = f"/api/jobs/{job_id}/download" if job["status"] == "completed" else None
     return result
 

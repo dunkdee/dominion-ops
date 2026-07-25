@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 umask 077
 
@@ -17,7 +17,7 @@ ROLLBACK_CONTAINER="${SERVICE_NAME}-rollback"
 
 fail() {
   echo "ERROR: $*" >&2
-  exit 1
+  return 1
 }
 
 [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "RELEASE_SHA must be a full 40-character commit SHA."
@@ -68,11 +68,16 @@ fi
 
 rollback() {
   local exit_code=$?
+  trap - ERR
+  set +e
   echo "Deployment failed; restoring previous container." >&2
   docker rm -f "$SERVICE_NAME" >/dev/null 2>&1 || true
   if docker inspect "$ROLLBACK_CONTAINER" >/dev/null 2>&1; then
-    docker rename "$ROLLBACK_CONTAINER" "$SERVICE_NAME"
-    docker start "$SERVICE_NAME" >/dev/null
+    docker rename "$ROLLBACK_CONTAINER" "$SERVICE_NAME" >/dev/null 2>&1
+    docker start "$SERVICE_NAME" >/dev/null 2>&1
+    if ! docker inspect "$SERVICE_NAME" --format '{{.State.Running}}' 2>/dev/null | grep -qx true; then
+      echo "ERROR: Previous container could not be restarted." >&2
+    fi
   fi
   exit "$exit_code"
 }
@@ -97,6 +102,7 @@ docker run -d \
   --label "dominion.release.service=video-studio" \
   "$IMAGE_TAG" >/dev/null
 
+ready=false
 for attempt in $(seq 1 30); do
   if curl --fail --silent --show-error "$HEALTH_URL" >/tmp/video-studio-ready.json; then
     python3 - <<'PY'
@@ -105,23 +111,23 @@ from pathlib import Path
 payload = json.loads(Path('/tmp/video-studio-ready.json').read_text())
 assert payload.get('status') == 'ready', payload
 PY
+    ready=true
     break
-  fi
-  if [[ "$attempt" -eq 30 ]]; then
-    docker logs --tail 200 "$SERVICE_NAME" >&2 || true
-    fail "Readiness check failed after 60 seconds."
   fi
   sleep 2
 done
-
-trap - ERR
-
-docker rm -f "$ROLLBACK_CONTAINER" >/dev/null 2>&1 || true
+if [[ "$ready" != true ]]; then
+  docker logs --tail 200 "$SERVICE_NAME" >&2 || true
+  fail "Readiness check failed after 60 seconds."
+fi
 
 CURRENT_IMAGE=$(docker inspect "$SERVICE_NAME" --format '{{.Config.Image}}')
 CURRENT_SHA=$(docker inspect "$SERVICE_NAME" --format '{{index .Config.Labels "dominion.release.sha"}}')
 [[ "$CURRENT_IMAGE" == "$IMAGE_TAG" ]] || fail "Running image mismatch."
 [[ "$CURRENT_SHA" == "$RELEASE_SHA" ]] || fail "Running release label mismatch."
+
+trap - ERR
+docker rm -f "$ROLLBACK_CONTAINER" >/dev/null 2>&1 || true
 
 printf 'release_sha=%s\nimage=%s\ncontainer=%s\nhealth_url=%s\nprevious_image=%s\n' \
   "$RELEASE_SHA" "$CURRENT_IMAGE" "$SERVICE_NAME" "$HEALTH_URL" "${PREVIOUS_IMAGE:-none}"

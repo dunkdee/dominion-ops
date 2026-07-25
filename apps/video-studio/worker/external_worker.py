@@ -1,8 +1,9 @@
-"""Generic detachable GPU worker for Dominion Video Studio.
+"""Generic detachable worker for Dominion Video Studio.
 
-The worker intentionally does not bundle model code or weights. Configure a legally
-approved clone engine command with VIDEO_CLONE_COMMAND. Placeholders available to
-that command: {portrait}, {voice}, {source_video}, {script_file}, and {output}.
+The worker intentionally does not bundle a specific model or model weights. Configure a
+legally approved renderer with VIDEO_CLONE_COMMAND. Placeholders available to that
+command: {portrait}, {voice}, {source_video}, {script_file}, {output_format}, and
+{output}.
 """
 
 from __future__ import annotations
@@ -101,6 +102,7 @@ def process(claim: dict) -> None:
             "voice": str(paths["voice"]),
             "source_video": str(paths.get("source_video", "")),
             "script_file": str(script_file),
+            "output_format": str(project.get("output_format", "vertical")),
             "output": str(output),
         }
         command = shlex.split(COMMAND_TEMPLATE.format(**values))

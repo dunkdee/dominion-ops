@@ -1,11 +1,6 @@
-import os
-import tempfile
+from fastapi.testclient import TestClient
 
-os.environ["VIDEO_STUDIO_DATA_DIR"] = tempfile.mkdtemp(prefix="video-studio-test-")
-os.environ["VIDEO_STUDIO_WORKER_TOKEN"] = "test-worker-token"
-
-from fastapi.testclient import TestClient  # noqa: E402
-from app.main import app  # noqa: E402
+from app.main import app
 
 
 def test_consent_project_and_missing_assets_gate() -> None:

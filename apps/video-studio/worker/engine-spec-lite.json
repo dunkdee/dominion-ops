@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "engine_id": "dominion-lite-cpu-preview",
+  "engine_version": "1.0.0",
+  "license_status": "approved_for_intended_use",
+  "license_reference": "runtime/records/video_studio_clone_release/lite_worker_preflight_evidence.md",
+  "commercial_use_verified": true,
+  "command": [
+    "python",
+    "/worker/dominion_lite_renderer.py",
+    "--portrait",
+    "{portrait}",
+    "--voice",
+    "{voice}",
+    "--script-file",
+    "{script_file}",
+    "--output",
+    "{output}",
+    "--format",
+    "{output_format}",
+    "--fps",
+    "24"
+  ],
+  "required_assets": ["portrait", "voice"],
+  "supported_formats": ["vertical", "landscape", "square"],
+  "timeout_seconds": 1800
+}

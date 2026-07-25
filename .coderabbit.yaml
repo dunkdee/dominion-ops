@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+early_access: false
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  review_details: true
+  auto_review:
+    enabled: true
+    drafts: true
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/.cache/**"
+    - "!**/*.lock"
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.jpeg"
+    - "!**/*.gif"
+    - "!**/*.mp3"
+    - "!**/*.mp4"
+  path_instructions:
+    - path: ".github/workflows/**"
+      instructions: |
+        Review for least privilege, secret exposure, unsafe shell expansion, unpinned or risky third-party actions, missing failure propagation, deployment race conditions, rollback gaps, and bypasses of protected-environment approval. Treat production deployment changes as high risk.
+    - path: "governance/**"
+      instructions: |
+        Preserve Human Overseer authority, fail-closed behavior, constitutional amendment controls, separation of duties, immutable auditability, and Five Council review requirements. Flag silent weakening or bypasses of governance.
+    - path: "scripts/**"
+      instructions: |
+        Review for deterministic behavior, explicit error handling, idempotency, safe filesystem and subprocess use, useful exit codes, and tests for failure paths. Do not recommend behavior-changing refactors without a concrete defect.
+    - path: "**/*.py"
+      instructions: |
+        Check correctness, security, type safety, exception handling, resource cleanup, dependency boundaries, and test coverage. Prioritize actionable defects over stylistic preferences.
+    - path: "**/*.{yml,yaml,json,toml}"
+      instructions: |
+        Validate schema assumptions, quoting, interpolation, permissions, environment handling, defaults, and fail-closed behavior. Flag secrets or credentials committed to source.
+    - path: "operations/**"
+      instructions: |
+        Check that runbooks are executable, rollback-safe, precise, and consistent with the actual workflows and service names in the repository.
+
+chat:
+  auto_reply: true

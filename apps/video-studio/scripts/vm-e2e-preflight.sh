@@ -44,7 +44,7 @@ write_failure() {
     echo "production_container_touched=false_or_verified_by_cleanup_boundary"
     echo "personal_media_used=false"
     echo "public_exposure=not_performed"
-    for evidence in ready.json localhost-binding.txt latest-job.json latest-project.json; do
+    for evidence in ready.json localhost-binding.json latest-job.json latest-project.json; do
       if [ -f "$release_root/$evidence" ]; then
         echo "--- $evidence ---"
         cat "$release_root/$evidence"
@@ -194,8 +194,21 @@ assert checks and all(checks.values()), payload
 PY
 
 stage=verify_localhost_binding
-docker port "$control_container" 8000/tcp > "$release_root/localhost-binding.txt"
-grep -Eq '^127\.0\.0\.1:18097$' "$release_root/localhost-binding.txt"
+docker inspect "$control_container" > /tmp/video-studio-e2e-inspect.json
+python3 - /tmp/video-studio-e2e-inspect.json "$release_root/localhost-binding.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+inspection = json.loads(Path(sys.argv[1]).read_text())[0]
+bindings = inspection.get("HostConfig", {}).get("PortBindings", {}).get("8000/tcp")
+assert isinstance(bindings, list) and len(bindings) == 1, bindings
+binding = bindings[0]
+sanitized = {"host_ip": binding.get("HostIp"), "host_port": binding.get("HostPort")}
+assert sanitized == {"host_ip": "127.0.0.1", "host_port": "18097"}, sanitized
+Path(sys.argv[2]).write_text(json.dumps(sanitized, sort_keys=True), encoding="utf-8")
+PY
+rm -f /tmp/video-studio-e2e-inspect.json
 
 stage=create_consent_and_project
 consent=$(api_curl -fsS -X POST http://video-studio:8000/api/consents \

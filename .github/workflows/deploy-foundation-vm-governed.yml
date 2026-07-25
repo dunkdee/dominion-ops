@@ -1,0 +1,149 @@
+name: Deploy Foundation VM — Governed
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "Full commit SHA from main to deploy"
+        required: true
+        type: string
+      confirm:
+        description: "Type DEPLOY FOUNDATION VM"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: ${{ inputs.confirm == 'DEPLOY FOUNDATION VM' }}
+    runs-on: ubuntu-24.04
+    outputs:
+      deploy_sha: ${{ steps.resolve.outputs.deploy_sha }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve and authorize commit
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          requested='${{ inputs.commit_sha }}'
+          [[ "$requested" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "A full 40-character commit SHA is required"; exit 1; }
+          git cat-file -e "${requested}^{commit}"
+          git merge-base --is-ancestor "$requested" origin/main || { echo "Requested commit is not reachable from main"; exit 1; }
+          echo "deploy_sha=$requested" >> "$GITHUB_OUTPUT"
+
+      - name: Validate constitutional kernel
+        run: |
+          python3 scripts/validate_constitutional_kernel_v1.py
+          python3 scripts/validate_control_plane.py
+          python3 scripts/validate_control_plane_runtime.py
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: foundation-vm-production
+    steps:
+      - name: Require deployment secrets
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Deploy with automatic rollback
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          REPO="$HOME/dominion-ops"
+          cd "$REPO"
+
+          test "$(git config --get remote.origin.url)" = "git@github.com:dunkdee/dominion-ops.git" \
+            || test "$(git config --get remote.origin.url)" = "https://github.com/dunkdee/dominion-ops.git"
+          command -v docker >/dev/null
+          docker compose version >/dev/null
+          test "$(df -Pk . | awk 'NR==2 {print $4}')" -gt 1048576
+
+          git fetch --prune origin main
+          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
+
+          PREVIOUS_SHA="$(git rev-parse HEAD)"
+          ROLLBACK_REQUIRED=1
+
+          rollback() {
+            rc=$?
+            if [ "$ROLLBACK_REQUIRED" -eq 1 ]; then
+              echo "Deployment failed; restoring $PREVIOUS_SHA"
+              git checkout --detach "$PREVIOUS_SHA"
+              docker compose up -d --build
+              docker compose ps
+            fi
+            exit "$rc"
+          }
+          trap rollback ERR
+
+          git checkout --detach "$DEPLOY_SHA"
+          python3 scripts/validate_constitutional_kernel_v1.py
+          python3 scripts/validate_control_plane.py
+          python3 scripts/validate_control_plane_runtime.py
+
+          docker compose config --quiet
+          docker compose up -d --build
+
+          for attempt in $(seq 1 18); do
+            if curl --fail --silent --show-error http://127.0.0.1:8080/ >/dev/null \
+              && curl --fail --silent --show-error http://127.0.0.1:8090/ >/dev/null; then
+              break
+            fi
+            [ "$attempt" -lt 18 ] || { docker compose ps; docker compose logs --tail=100; false; }
+            sleep 5
+          done
+
+          docker compose ps
+          ROLLBACK_REQUIRED=0
+          trap - ERR
+          printf 'DEPLOYMENT_SUCCESS requested=%s previous=%s\n' "$DEPLOY_SHA" "$PREVIOUS_SHA"
+          REMOTE
+
+      - name: Remove temporary SSH key
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key"

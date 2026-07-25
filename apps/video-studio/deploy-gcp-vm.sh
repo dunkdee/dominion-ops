@@ -12,6 +12,8 @@ IMAGE_REPO=${VIDEO_STUDIO_IMAGE_REPO:-dominion/video-studio}
 PORT=${VIDEO_STUDIO_PORT:-8094}
 DATA_VOLUME=${VIDEO_STUDIO_DATA_VOLUME:-dominion-video-studio-data}
 ENV_FILE=${VIDEO_STUDIO_ENV_FILE:-$HOME/.config/dominion/video-studio.env}
+HEALTH_ATTEMPTS=${VIDEO_STUDIO_HEALTH_ATTEMPTS:-30}
+HEALTH_INTERVAL_SECONDS=${VIDEO_STUDIO_HEALTH_INTERVAL_SECONDS:-2}
 HEALTH_URL="http://127.0.0.1:${PORT}/ready"
 ROLLBACK_CONTAINER="${SERVICE_NAME}-rollback"
 
@@ -21,6 +23,8 @@ fail() {
 }
 
 [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "RELEASE_SHA must be a full 40-character commit SHA."
+[[ "$HEALTH_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] || fail "VIDEO_STUDIO_HEALTH_ATTEMPTS must be a positive integer."
+[[ "$HEALTH_INTERVAL_SECONDS" =~ ^[1-9][0-9]*$ ]] || fail "VIDEO_STUDIO_HEALTH_INTERVAL_SECONDS must be a positive integer."
 command -v docker >/dev/null 2>&1 || fail "Docker is required on the GCP VM."
 command -v curl >/dev/null 2>&1 || fail "curl is required on the GCP VM."
 command -v openssl >/dev/null 2>&1 || fail "openssl is required on the GCP VM."
@@ -103,7 +107,7 @@ docker run -d \
   "$IMAGE_TAG" >/dev/null
 
 ready=false
-for attempt in $(seq 1 30); do
+for attempt in $(seq 1 "$HEALTH_ATTEMPTS"); do
   if curl --fail --silent --show-error "$HEALTH_URL" >/tmp/video-studio-ready.json; then
     python3 - <<'PY'
 import json
@@ -114,11 +118,11 @@ PY
     ready=true
     break
   fi
-  sleep 2
+  sleep "$HEALTH_INTERVAL_SECONDS"
 done
 if [[ "$ready" != true ]]; then
   docker logs --tail 200 "$SERVICE_NAME" >&2 || true
-  fail "Readiness check failed after 60 seconds."
+  fail "Readiness check failed after ${HEALTH_ATTEMPTS} attempts."
 fi
 
 CURRENT_IMAGE=$(docker inspect "$SERVICE_NAME" --format '{{.Config.Image}}')

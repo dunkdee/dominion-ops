@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     VIDEO_STUDIO_WORKER_ID=dominion-lite-cpu-1 \
     VIDEO_STUDIO_POLL_SECONDS=5 \
-    VIDEO_CLONE_COMMAND="python /worker/dominion_lite_renderer.py --portrait {portrait} --voice {voice} --script-file {script_file} --output {output} --format vertical --fps 24"
+    VIDEO_CLONE_COMMAND="python /worker/dominion_lite_renderer.py --portrait {portrait} --voice {voice} --script-file {script_file} --output {output} --format {output_format} --fps 24"
 
 RUN set -eux; \
     find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \

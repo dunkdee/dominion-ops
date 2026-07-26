@@ -19,26 +19,25 @@ normalize_origin_target() {
   local normalized=""
 
   origin_url="${origin_url%/}"
-  origin_url="${origin_url%.git}"
 
   case "$origin_url" in
-    git@github.com:*)
-      normalized="${origin_url#git@github.com:}"
+    *://*)
+      normalized="${origin_url#*://}"
+      normalized="${normalized#*@}"
+      normalized="${normalized#*/}"
       ;;
-    ssh://git@github.com:22/*)
-      normalized="${origin_url#ssh://git@github.com:22/}"
+    *@*:*|*:*)
+      normalized="${origin_url#*:}"
       ;;
-    ssh://git@github.com/*)
-      normalized="${origin_url#ssh://git@github.com/}"
-      ;;
-    https://github.com/*)
-      normalized="${origin_url#https://github.com/}"
-      ;;
-    https://*@github.com/*)
-      normalized="${origin_url#https://*@github.com/}"
+    *)
+      normalized="$origin_url"
       ;;
   esac
 
+  normalized="${normalized#/}"
+  normalized="${normalized%/}"
+  normalized="${normalized%.git}"
+  normalized="${normalized,,}"
   printf '%s' "$normalized"
 }
 
@@ -112,8 +111,9 @@ cd "$REPO"
 PHASE="repository-origin"
 origin_url="$(git remote get-url origin 2>/dev/null || true)"
 origin_target="$(normalize_origin_target "$origin_url")"
+echo "Repository origin target: ${origin_target:-unrecognized}"
 [ "$origin_target" = "dunkdee/dominion-ops" ] || {
-  echo "Repository origin does not resolve to the governed dunkdee/dominion-ops target"
+  echo "Repository origin path does not resolve to the governed dunkdee/dominion-ops target"
   false
 }
 
@@ -143,6 +143,7 @@ git merge-base --is-ancestor "$DEPLOY_SHA" origin/main || {
   echo "Requested deployment SHA is not reachable from origin/main on the VM"
   false
 }
+printf 'DEPLOY_ORIGIN target=%s authorized_sha=%s\n' "$origin_target" "$DEPLOY_SHA"
 
 PREVIOUS_SHA="$(git rev-parse HEAD)"
 ROLLBACK_REQUIRED=1

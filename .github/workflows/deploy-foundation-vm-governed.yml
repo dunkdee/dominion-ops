@@ -151,6 +151,11 @@ jobs:
           failure_summary="$(grep '^DEPLOY_FAILURE ' "$log_file" | tail -n 1 || true)"
           rollback_summary="$(grep '^DEPLOY_ROLLBACK ' "$log_file" | tail -n 1 || true)"
           success_summary="$(grep '^DEPLOY_SUCCESS ' "$log_file" | tail -n 1 || true)"
+          failure_context="$(python3 scripts/extract_deploy_failure_context.py "$log_file" || true)"
+
+          if [ -n "$failure_summary" ] && [ -n "$failure_context" ]; then
+            failure_summary="${failure_summary} context=${failure_context}"
+          fi
 
           {
             echo "exit_code=$rc"

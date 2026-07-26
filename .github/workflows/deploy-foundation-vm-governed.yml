@@ -56,7 +56,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment: foundation-vm-production
+    outputs:
+      exit_code: ${{ steps.remote.outputs.exit_code }}
+      failure_summary: ${{ steps.remote.outputs.failure_summary }}
+      rollback_summary: ${{ steps.remote.outputs.rollback_summary }}
+      success_summary: ${{ steps.remote.outputs.success_summary }}
     steps:
+      - name: Checkout authorized deployment commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.validate.outputs.deploy_sha }}
+          fetch-depth: 1
+
       - name: Require deployment secrets
         shell: bash
         env:
@@ -83,98 +94,58 @@ jobs:
           chmod 600 "$HOME/.ssh/known_hosts"
 
       - name: Deploy with automatic rollback
+        id: remote
         shell: bash
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
         run: |
-          set -euo pipefail
+          set -u -o pipefail
+          log_file="$RUNNER_TEMP/foundation-vm-deploy.log"
+
+          set +e
           ssh -i "$HOME/.ssh/foundation_vm_key" \
             -o BatchMode=yes \
             -o ConnectTimeout=20 \
             -o IdentitiesOnly=yes \
-            "$VM_USER@$VM_HOST" "DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
-          set -Eeuo pipefail
-          REPO="$HOME/dominion-ops"
-          cd "$REPO"
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=2 \
+            "$VM_USER@$VM_HOST" "DEPLOY_SHA='$DEPLOY_SHA' bash -s" \
+            < scripts/deploy_foundation_vm_remote.sh 2>&1 | tee "$log_file"
+          rc=${PIPESTATUS[0]}
+          set -e
 
-          test "$(git config --get remote.origin.url)" = "git@github.com:dunkdee/dominion-ops.git" \
-            || test "$(git config --get remote.origin.url)" = "https://github.com/dunkdee/dominion-ops.git"
-          command -v docker >/dev/null
-          docker compose version >/dev/null
-          test "$(df -Pk . | awk 'NR==2 {print $4}')" -gt 1048576
+          failure_summary="$(grep '^DEPLOY_FAILURE ' "$log_file" | tail -n 1 || true)"
+          rollback_summary="$(grep '^DEPLOY_ROLLBACK ' "$log_file" | tail -n 1 || true)"
+          success_summary="$(grep '^DEPLOY_SUCCESS ' "$log_file" | tail -n 1 || true)"
 
-          git fetch --prune origin main
-          git cat-file -e "${DEPLOY_SHA}^{commit}"
-          git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
+          {
+            echo "exit_code=$rc"
+            echo "failure_summary=${failure_summary:-none}"
+            echo "rollback_summary=${rollback_summary:-none}"
+            echo "success_summary=${success_summary:-none}"
+          } >> "$GITHUB_OUTPUT"
 
-          PREVIOUS_SHA="$(git rev-parse HEAD)"
-          ROLLBACK_REQUIRED=1
+          {
+            echo "## Foundation VM deployment"
+            echo
+            echo "- Exit code: \`$rc\`"
+            echo "- Failure: \`${failure_summary:-none}\`"
+            echo "- Rollback: \`${rollback_summary:-none}\`"
+            echo "- Success: \`${success_summary:-none}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          diagnostics() {
-            echo "::group::Foundation VM deployment diagnostics"
-            echo "host=$(hostname)"
-            echo "repo=$REPO"
-            echo "requested_sha=$DEPLOY_SHA"
-            echo "previous_sha=$PREVIOUS_SHA"
-            echo "current_sha=$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-            echo "disk_free_kb=$(df -Pk . | awk 'NR==2 {print $4}')"
-            docker compose ps || true
-            echo "health_8080:"
-            curl --max-time 5 --fail --silent --show-error http://127.0.0.1:8080/ >/dev/null && echo ok || echo failed
-            echo "health_8090:"
-            curl --max-time 5 --fail --silent --show-error http://127.0.0.1:8090/ >/dev/null && echo ok || echo failed
-            docker compose logs --tail=100 || true
-            echo "::endgroup::"
-          }
-
-          rollback() {
-            rc=$?
-            failed_line=${BASH_LINENO[0]:-unknown}
-            failed_command=${BASH_COMMAND:-unknown}
-            trap - ERR
-            echo "Deployment failed at line ${failed_line}: ${failed_command} (exit ${rc})"
-            diagnostics
-            if [ "$ROLLBACK_REQUIRED" -eq 1 ]; then
-              echo "Deployment failed; restoring $PREVIOUS_SHA"
-              git checkout --detach "$PREVIOUS_SHA"
-              docker compose up -d --build
-              docker compose ps
-            fi
-            exit "$rc"
-          }
-          trap rollback ERR
-
-          git checkout --detach "$DEPLOY_SHA"
-          python3 scripts/validate_constitutional_kernel_v1.py
-          python3 scripts/validate_control_plane.py
-          python3 scripts/validate_control_plane_runtime.py
-
-          docker compose config --quiet
-          docker compose up -d --build
-
-          healthy=0
-          for attempt in $(seq 1 18); do
-            if curl --max-time 5 --fail --silent --show-error http://127.0.0.1:8080/ >/dev/null \
-              && curl --max-time 5 --fail --silent --show-error http://127.0.0.1:8090/ >/dev/null; then
-              healthy=1
-              break
-            fi
-            echo "Health check attempt ${attempt}/18 failed; retrying in 5 seconds"
-            sleep 5
-          done
-
-          if [ "$healthy" -ne 1 ]; then
-            echo "Deployment health checks failed after 18 attempts"
-            false
-          fi
-
-          docker compose ps
-          ROLLBACK_REQUIRED=0
-          trap - ERR
-          printf 'DEPLOYMENT_SUCCESS requested=%s previous=%s\n' "$DEPLOY_SHA" "$PREVIOUS_SHA"
-          REMOTE
+      - name: Enforce remote deployment result
+        if: ${{ steps.remote.outputs.exit_code != '0' }}
+        shell: bash
+        env:
+          FAILURE_SUMMARY: ${{ steps.remote.outputs.failure_summary }}
+          ROLLBACK_SUMMARY: ${{ steps.remote.outputs.rollback_summary }}
+        run: |
+          echo "${FAILURE_SUMMARY:-Remote deployment failed without a structured failure summary}"
+          echo "${ROLLBACK_SUMMARY:-DEPLOY_ROLLBACK status=not-recorded}"
+          exit 1
 
       - name: Remove temporary SSH key
         if: always()
@@ -196,6 +167,10 @@ jobs:
           VALIDATE_RESULT: ${{ needs.validate.result }}
           DEPLOY_RESULT: ${{ needs.deploy.result }}
           REQUESTED_SHA: ${{ inputs.commit_sha }}
+          REMOTE_EXIT_CODE: ${{ needs.deploy.outputs.exit_code }}
+          FAILURE_SUMMARY: ${{ needs.deploy.outputs.failure_summary }}
+          ROLLBACK_SUMMARY: ${{ needs.deploy.outputs.rollback_summary }}
+          SUCCESS_SUMMARY: ${{ needs.deploy.outputs.success_summary }}
         run: |
           set -euo pipefail
 
@@ -211,6 +186,10 @@ jobs:
 
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           updated_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          remote_exit_code="${REMOTE_EXIT_CODE:-not-recorded}"
+          failure_summary="${FAILURE_SUMMARY:-none}"
+          rollback_summary="${ROLLBACK_SUMMARY:-none}"
+          success_summary="${SUCCESS_SUMMARY:-none}"
 
           cat > /tmp/foundation-vm-deployment-status.md <<EOF
           # Foundation VM Deployment Status
@@ -219,6 +198,10 @@ jobs:
           - Validation: **${VALIDATE_RESULT}**
           - Deployment: **${DEPLOY_RESULT}**
           - Requested SHA: \`${REQUESTED_SHA}\`
+          - Remote exit code: \`${remote_exit_code}\`
+          - Failure summary: \`${failure_summary}\`
+          - Rollback summary: \`${rollback_summary}\`
+          - Success summary: \`${success_summary}\`
           - Run: [${GITHUB_RUN_ID}](${run_url})
           - Attempt: ${GITHUB_RUN_ATTEMPT}
           - Actor: \`${GITHUB_ACTOR}\`

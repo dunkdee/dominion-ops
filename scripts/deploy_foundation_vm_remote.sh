@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 DEPLOY_SHA="${DEPLOY_SHA:-}"
+DEPLOY_BUNDLE_PATH="${DEPLOY_BUNDLE_PATH:-}"
 REPO="${DOMINION_REPO:-$HOME/dominion-ops}"
 PHASE="bootstrap"
 PREVIOUS_SHA=""
@@ -39,6 +40,14 @@ normalize_origin_target() {
   normalized="${normalized%.git}"
   normalized="${normalized,,}"
   printf '%s' "$normalized"
+}
+
+cleanup_bundle() {
+  case "$DEPLOY_BUNDLE_PATH" in
+    /tmp/dominion-deploy-[0-9]*-[0-9]*.bundle)
+      rm -f -- "$DEPLOY_BUNDLE_PATH" || true
+      ;;
+  esac
 }
 
 diagnostics() {
@@ -91,6 +100,7 @@ on_error() {
     printf 'DEPLOY_ROLLBACK status=%s previous_sha=%s\n' "$ROLLBACK_STATUS" "$PREVIOUS_SHA"
   fi
 
+  cleanup_bundle
   exit "$rc"
 }
 trap on_error ERR
@@ -98,6 +108,10 @@ trap on_error ERR
 PHASE="validate-input"
 [[ "$DEPLOY_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || {
   echo "A full 40-character deployment SHA is required"
+  false
+}
+[[ "$DEPLOY_BUNDLE_PATH" =~ ^/tmp/dominion-deploy-[0-9]+-[0-9]+\.bundle$ ]] || {
+  echo "The deployment bundle path is invalid"
   false
 }
 
@@ -134,16 +148,32 @@ free_kb="$(df -Pk . | awk 'NR==2 {print $4}')"
   false
 }
 
-PHASE="git-fetch"
-git fetch --prune origin main
+PHASE="bundle-preflight"
+[ -f "$DEPLOY_BUNDLE_PATH" ] || {
+  echo "Authorized deployment bundle is missing"
+  false
+}
+[ ! -L "$DEPLOY_BUNDLE_PATH" ] || {
+  echo "Authorized deployment bundle must not be a symbolic link"
+  false
+}
+[ "$(stat -c '%U' "$DEPLOY_BUNDLE_PATH")" = "$(id -un)" ] || {
+  echo "Authorized deployment bundle is not owned by the deployment user"
+  false
+}
+git bundle verify "$DEPLOY_BUNDLE_PATH"
+
+PHASE="git-import"
+git fetch --force "$DEPLOY_BUNDLE_PATH" refs/heads/main:refs/remotes/origin/main
 
 PHASE="commit-verification"
 git cat-file -e "${DEPLOY_SHA}^{commit}"
 git merge-base --is-ancestor "$DEPLOY_SHA" origin/main || {
-  echo "Requested deployment SHA is not reachable from origin/main on the VM"
+  echo "Requested deployment SHA is not reachable from bundled main history"
   false
 }
-printf 'DEPLOY_ORIGIN target=%s authorized_sha=%s\n' "$origin_target" "$DEPLOY_SHA"
+printf 'DEPLOY_ORIGIN target=%s source=bundle authorized_sha=%s\n' "$origin_target" "$DEPLOY_SHA"
+cleanup_bundle
 
 PREVIOUS_SHA="$(git rev-parse HEAD)"
 ROLLBACK_REQUIRED=1
@@ -182,4 +212,5 @@ done
 docker compose ps
 ROLLBACK_REQUIRED=0
 trap - ERR
+cleanup_bundle
 printf 'DEPLOY_SUCCESS requested_sha=%s previous_sha=%s\n' "$DEPLOY_SHA" "$PREVIOUS_SHA"

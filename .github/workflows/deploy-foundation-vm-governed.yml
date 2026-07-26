@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: foundation-vm-production
@@ -178,3 +179,67 @@ jobs:
       - name: Remove temporary SSH key
         if: always()
         run: rm -f "$HOME/.ssh/foundation_vm_key"
+
+  report:
+    name: Publish deployment status
+    if: ${{ always() }}
+    needs:
+      - validate
+      - deploy
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Update deployment status issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: "55"
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$DEPLOY_RESULT" = "success" ]; then
+            overall="success"
+          elif [ "$VALIDATE_RESULT" = "failure" ] || [ "$DEPLOY_RESULT" = "failure" ]; then
+            overall="failure"
+          elif [ "$VALIDATE_RESULT" = "cancelled" ] || [ "$DEPLOY_RESULT" = "cancelled" ]; then
+            overall="cancelled"
+          else
+            overall="skipped"
+          fi
+
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          updated_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          cat > /tmp/foundation-vm-deployment-status.md <<EOF
+          # Foundation VM Deployment Status
+
+          - Overall: **${overall}**
+          - Validation: **${VALIDATE_RESULT}**
+          - Deployment: **${DEPLOY_RESULT}**
+          - Requested SHA: \`${REQUESTED_SHA}\`
+          - Run: [${GITHUB_RUN_ID}](${run_url})
+          - Attempt: ${GITHUB_RUN_ATTEMPT}
+          - Actor: \`${GITHUB_ACTOR}\`
+          - Workflow ref: \`${GITHUB_REF}\`
+          - Updated: \`${updated_at}\`
+
+          This issue is updated automatically after every governed Foundation VM deployment run.
+          EOF
+
+          payload="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          print(json.dumps({"body": Path("/tmp/foundation-vm-deployment-status.md").read_text()}))
+          PY
+          )"
+
+          curl --fail-with-body --silent --show-error \
+            --request PATCH \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" \
+            --data "$payload"

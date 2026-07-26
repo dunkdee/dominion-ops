@@ -14,6 +14,34 @@ sanitize_command() {
   printf '%s' "${command_text:0:180}"
 }
 
+normalize_origin_target() {
+  local origin_url="${1:-}"
+  local normalized=""
+
+  origin_url="${origin_url%/}"
+  origin_url="${origin_url%.git}"
+
+  case "$origin_url" in
+    git@github.com:*)
+      normalized="${origin_url#git@github.com:}"
+      ;;
+    ssh://git@github.com:22/*)
+      normalized="${origin_url#ssh://git@github.com:22/}"
+      ;;
+    ssh://git@github.com/*)
+      normalized="${origin_url#ssh://git@github.com/}"
+      ;;
+    https://github.com/*)
+      normalized="${origin_url#https://github.com/}"
+      ;;
+    https://*@github.com/*)
+      normalized="${origin_url#https://*@github.com/}"
+      ;;
+  esac
+
+  printf '%s' "$normalized"
+}
+
 diagnostics() {
   echo "::group::Foundation VM deployment diagnostics"
   echo "phase=$PHASE"
@@ -83,15 +111,11 @@ cd "$REPO"
 
 PHASE="repository-origin"
 origin_url="$(git remote get-url origin 2>/dev/null || true)"
-origin_without_suffix="${origin_url%.git}"
-case "$origin_without_suffix" in
-  git@github.com:dunkdee/dominion-ops|https://github.com/dunkdee/dominion-ops|ssh://git@github.com/dunkdee/dominion-ops)
-    ;;
-  *)
-    echo "Repository origin does not resolve to dunkdee/dominion-ops"
-    false
-    ;;
-esac
+origin_target="$(normalize_origin_target "$origin_url")"
+[ "$origin_target" = "dunkdee/dominion-ops" ] || {
+  echo "Repository origin does not resolve to the governed dunkdee/dominion-ops target"
+  false
+}
 
 PHASE="docker-preflight"
 command -v docker >/dev/null || {

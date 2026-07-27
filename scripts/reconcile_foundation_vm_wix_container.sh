@@ -208,6 +208,74 @@ reconcile_governed_baby_logger_container() {
   printf 'DEPLOY_CONTAINER_RECONCILE name=baby-logger status=removed identity=%s volumes=none\n' "$identity_source"
 }
 
+reconcile_governed_baby_api_container() {
+  local ids container_id container_name image service_label working_dir config_files bind_sources
+  local identity_source=""
+  local count=0
+  local owned=0
+
+  ids="$(command docker container ls --all --quiet --filter 'name=^/baby-api$' 2>/dev/null || true)"
+  [ -n "$ids" ] || return 0
+
+  count="$(printf '%s\n' "$ids" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [ "$count" -ne 1 ]; then
+    FAILURE_DETAIL="baby_api_container_count=${count}"
+    echo "Governed Baby API reconciliation found an ambiguous exact-name match"
+    return 1
+  fi
+
+  container_id="$(printf '%s\n' "$ids" | sed -n '1p')"
+  container_name="$(command docker inspect --format '{{.Name}}' "$container_id" 2>/dev/null || true)"
+  image="$(command docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null || true)"
+  service_label="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$container_id" 2>/dev/null || true)"
+  working_dir="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$container_id" 2>/dev/null || true)"
+  config_files="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$container_id" 2>/dev/null || true)"
+  bind_sources="$(command docker inspect --format '{{range .Mounts}}{{if eq .Type "bind"}}{{println .Source}}{{end}}{{end}}' "$container_id" 2>/dev/null || true)"
+
+  if [ "$container_name" != "/baby-api" ]; then
+    FAILURE_DETAIL="baby_api_container_name=unexpected"
+    echo "Exact-name Baby API reconciliation resolved an unexpected container identity"
+    return 1
+  fi
+
+  if [ "$service_label" = "baby-api" ]; then
+    case "$image" in
+      dominion-ops-baby-api*|baby-api*)
+        owned=1
+        identity_source="compose-service-image"
+        ;;
+    esac
+    case "${working_dir}|${config_files}" in
+      *"/dominion-ops"*)
+        owned=1
+        identity_source="compose-project-path"
+        ;;
+    esac
+  fi
+
+  if [ "$owned" -ne 1 ]; then
+    case "$image" in
+      dominion-ops-baby-api*|baby-api*)
+        case "$bind_sources" in
+          *"/dominion-ops/api"*)
+            owned=1
+            identity_source="governed-image-bind-mount"
+            ;;
+        esac
+        ;;
+    esac
+  fi
+
+  if [ "$owned" -ne 1 ]; then
+    FAILURE_DETAIL="baby_api_container_identity=unverified"
+    echo "Existing /baby-api container is not verified as Dominion-managed; refusing removal"
+    return 1
+  fi
+
+  command docker rm --force "$container_id" >/dev/null
+  printf 'DEPLOY_CONTAINER_RECONCILE name=baby-api status=removed identity=%s bind_data=preserved\n' "$identity_source"
+}
+
 docker() {
   local prior_phase="${PHASE:-compose-up}"
 
@@ -216,6 +284,7 @@ docker() {
     reconcile_governed_wix_container || return $?
     reconcile_governed_dominion_web_container || return $?
     reconcile_governed_baby_logger_container || return $?
+    reconcile_governed_baby_api_container || return $?
     PHASE="$prior_phase"
   fi
 

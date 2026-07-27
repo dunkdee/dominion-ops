@@ -121,23 +121,30 @@ services:
     image: ghcr.io/sytone/obsidian-remote:latest
     container_name: obsidian-remote
     ports:
-      - "8083:8080"
+      - "127.0.0.1:8083:8080"
     volumes:
-      - ${VAULT_PATH:-/home/malachisingleton8/vault}:/config/obsidian/vault
+      - ${VAULT_PATH:-/home/malachisingleton8/vault}:/vaults/Dominion
+      - obsidian_remote_config:/config
     restart: unless-stopped
     environment:
       PUID: 1000
       PGID: 1000
-      OBSIDIAN_PASSWORD: ${OBSIDIAN_PASSWORD:-}
+      TZ: America/New_York
+      CUSTOM_USER: dominion
+      PASSWORD: ${OBSIDIAN_PASSWORD}
+      TITLE: Dominion Brain
+      FM_HOME: /vaults
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8080\").read()' 2>/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS -u \"$${CUSTOM_USER}:$${PASSWORD}\" http://localhost:8080/ >/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
 
 volumes:
   wix_agent_data:
     name: ${WIX_AGENT_DATA_VOLUME:-dominion-ops_wix_agent_data}
   wix_agent_logs:
     name: ${WIX_AGENT_LOGS_VOLUME:-dominion-ops_wix_agent_logs}
+  obsidian_remote_config:
+    name: ${OBSIDIAN_REMOTE_CONFIG_VOLUME:-dominion-ops_obsidian_remote_config}

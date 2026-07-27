@@ -1,12 +1,12 @@
 name: Finish Dominion Production Activation
 # Harmless retrigger marker: 2026-07-28 final governed activation
 
-on:
+"on":
   push:
     branches: [main]
     paths:
       - '.github/workflows/finish-production-activation.yml'
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   actions: write
@@ -129,29 +129,29 @@ jobs:
           dry_run="$(gh run list --workflow run-foundation-vm-dry-run.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
           obsidian_run="$(gh run list --workflow deploy-obsidian.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
           cat > /tmp/issue79.md <<EOF
-# Dominion Production Activation — Verified
+          # Dominion Production Activation — Verified
 
-- [x] Baby API exact ownership hardening merged and issue #76 closed.
-- [x] Strict Foundation VM dry-run passed with failures=0 and exit_code=0.
-- [x] Governed Foundation VM deployment passed for exact SHA \`$TARGET_SHA\`.
-- [x] Validation passed, deployment passed, remote exit code was 0, with no failure and no rollback.
-- [x] Governed Obsidian Remote Access workflow passed on the same SHA.
-- [x] Content engine entrypoint compiled and exposed the campaign command.
+          - [x] Baby API exact ownership hardening merged and issue #76 closed.
+          - [x] Strict Foundation VM dry-run passed with failures=0 and exit_code=0.
+          - [x] Governed Foundation VM deployment passed for exact SHA \`$TARGET_SHA\`.
+          - [x] Validation passed, deployment passed, remote exit code was 0, with no failure and no rollback.
+          - [x] Governed Obsidian Remote Access workflow passed on the same SHA.
+          - [x] Content engine entrypoint compiled and exposed the campaign command.
 
-## Evidence
+          ## Evidence
 
-- Strict dry-run: $dry_run
-- Governed deployment: $deploy_run
-- Obsidian verification: $obsidian_run
-- Deployment status: issue #55
-- Dry-run status: issue #78
+          - Strict dry-run: $dry_run
+          - Governed deployment: $deploy_run
+          - Obsidian verification: $obsidian_run
+          - Deployment status: issue #55
+          - Dry-run status: issue #78
 
-## Production state
+          ## Production state
 
-The governed control plane is deployed on foundation-vm at \`$TARGET_SHA\`. The Docker reconciliation boundary is fail-closed for Baby API identity, the deployment workflow completed without rollback, and Obsidian remote access completed its authenticated runtime checks.
+          The governed control plane is deployed on foundation-vm at \`$TARGET_SHA\`. The Docker reconciliation boundary is fail-closed for Baby API identity, the deployment workflow completed without rollback, and Obsidian remote access completed its authenticated runtime checks.
 
-Paid services were not activated and no secrets were written to GitHub.
-EOF
+          Paid services were not activated and no secrets were written to GitHub.
+          EOF
           gh issue edit 79 --body-file /tmp/issue79.md
           gh issue close 79 --reason completed
           gh issue close 76 --reason completed || true

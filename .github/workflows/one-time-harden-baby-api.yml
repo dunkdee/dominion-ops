@@ -52,10 +52,10 @@ jobs:
   container_id="$(printf '%s\n' "$ids" | sed -n '1p')"
   container_name="$(command docker inspect --format '{{.Name}}' "$container_id" 2>/dev/null || true)"
   image="$(command docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null || true)"
-  service_label="$(command docker inspect --format '{{index .Config.Labels \"com.docker.compose.service\"}}' "$container_id" 2>/dev/null || true)"
-  working_dir="$(command docker inspect --format '{{index .Config.Labels \"com.docker.compose.project.working_dir\"}}' "$container_id" 2>/dev/null || true)"
-  config_files="$(command docker inspect --format '{{index .Config.Labels \"com.docker.compose.project.config_files\"}}' "$container_id" 2>/dev/null || true)"
-  bind_sources="$(command docker inspect --format '{{range .Mounts}}{{if eq .Type \"bind\"}}{{println .Source}}{{end}}{{end}}' "$container_id" 2>/dev/null || true)"
+  service_label="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$container_id" 2>/dev/null || true)"
+  working_dir="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$container_id" 2>/dev/null || true)"
+  config_files="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$container_id" 2>/dev/null || true)"
+  bind_sources="$(command docker inspect --format '{{range .Mounts}}{{if eq .Type "bind"}}{{println .Source}}{{end}}{{end}}' "$container_id" 2>/dev/null || true)"
   bind_count="$(printf '%s\n' "$bind_sources" | sed '/^$/d' | wc -l | tr -d ' ')"
 
   if [ "$container_name" != "/baby-api" ]; then
@@ -92,6 +92,8 @@ jobs:
           path.write_text(text[:start] + replacement + text[end:])
           PY
           bash -n scripts/reconcile_foundation_vm_wix_container.sh
+          grep -Fq 'identity_source="compose-exact-identity"' scripts/reconcile_foundation_vm_wix_container.sh
+          grep -Fq 'identity_source="legacy-exact-image-single-api-bind"' scripts/reconcile_foundation_vm_wix_container.sh
           rm -f .github/workflows/one-time-harden-baby-api.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com

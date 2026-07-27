@@ -128,12 +128,15 @@ jobs:
           trap 'rm -f "$PASSWORD_FILE"' EXIT
 
           repo="$HOME/dominion-ops"
+          obsidian_user="dominion"
           test -d "$repo/.git" || { echo "Governed repository is missing"; exit 1; }
           cd "$repo"
 
           current_sha="$(git rev-parse HEAD)"
           test "$current_sha" = "$DEPLOY_SHA" || {
             echo "Foundation VM is not on the authorized deployed SHA"
+            echo "VM_SHA=$current_sha"
+            echo "REQUESTED_SHA=$DEPLOY_SHA"
             exit 1
           }
 
@@ -152,20 +155,32 @@ jobs:
           printf 'OBSIDIAN_PASSWORD=%s\n' "$password" >> "$env_tmp"
           chmod 600 "$env_tmp"
           mv "$env_tmp" .env
-          unset password
 
+          docker compose config --quiet
           docker compose up -d --no-deps --force-recreate obsidian-remote
 
-          ready=0
-          for _ in $(seq 1 20); do
-            if curl -fsS --max-time 10 http://127.0.0.1:8083 >/dev/null; then
-              ready=1
+          healthy=0
+          for _ in $(seq 1 30); do
+            state="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' obsidian-remote 2>/dev/null || true)"
+            if [ "$state" = "healthy" ] && curl -fsS --max-time 10 \
+              -u "$obsidian_user:$password" http://127.0.0.1:8083/ >/dev/null; then
+              healthy=1
               break
             fi
             sleep 3
           done
-          test "$ready" -eq 1 || { echo "Obsidian Remote did not become healthy on port 8083"; exit 1; }
-          docker compose ps --status running --services | grep -Fx 'obsidian-remote' >/dev/null
+          test "$healthy" -eq 1 || {
+            echo "Obsidian Remote did not become healthy and authenticated on localhost:8083"
+            docker compose ps obsidian-remote
+            exit 1
+          }
+
+          unauth_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8083/ || true)"
+          test "$unauth_status" = "401" || {
+            echo "Obsidian Remote is not enforcing HTTP authentication"
+            echo "UNAUTHENTICATED_HTTP_STATUS=$unauth_status"
+            exit 1
+          }
 
           caddy_file=/etc/caddy/Caddyfile
           test -f "$caddy_file" || { echo "Caddyfile is missing"; exit 1; }
@@ -196,21 +211,30 @@ jobs:
             sudo rm -f "$backup"
           fi
 
+          if ! getent ahostsv4 vault.dominionhealing.org >/dev/null 2>&1; then
+            echo "DNS_NOT_READY host=vault.dominionhealing.org"
+            exit 1
+          fi
+
           public_ready=0
           for _ in $(seq 1 20); do
-            if curl -fsS --max-time 15 https://vault.dominionhealing.org >/dev/null; then
+            if curl -fsS --max-time 15 -u "$obsidian_user:$password" \
+              https://vault.dominionhealing.org >/dev/null; then
               public_ready=1
               break
             fi
             sleep 3
           done
-          test "$public_ready" -eq 1 || { echo "Public Obsidian URL did not become healthy"; exit 1; }
+          test "$public_ready" -eq 1 || { echo "Public authenticated Obsidian URL did not become healthy"; exit 1; }
 
-          printf 'OBSIDIAN_ACCESS_SUCCESS sha=%s local=healthy public=healthy url=https://vault.dominionhealing.org\n' "$DEPLOY_SHA"
+          unset password
+          printf 'OBSIDIAN_ACCESS_SUCCESS sha=%s local=healthy auth=required public=healthy url=https://vault.dominionhealing.org\n' "$DEPLOY_SHA"
           REMOTE
 
       - name: Verify public access from outside the VM
         shell: bash
+        env:
+          OBSIDIAN_PASSWORD: ${{ secrets.OBSIDIAN_PASSWORD }}
         run: |
           set -euo pipefail
           curl -fsS \
@@ -219,7 +243,14 @@ jobs:
             --retry-delay 3 \
             --connect-timeout 15 \
             --max-time 30 \
+            -u "dominion:$OBSIDIAN_PASSWORD" \
             https://vault.dominionhealing.org >/dev/null
+          unauth_status="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 15 --max-time 30 https://vault.dominionhealing.org || true)"
+          test "$unauth_status" = "401" || {
+            echo "Public route is not enforcing authentication"
+            echo "UNAUTHENTICATED_HTTP_STATUS=$unauth_status"
+            exit 1
+          }
           {
             echo "## Obsidian Remote access"
             echo
@@ -227,6 +258,7 @@ jobs:
             echo "- VM-local service: healthy"
             echo "- Public HTTPS route: healthy"
             echo "- URL: https://vault.dominionhealing.org"
+            echo "- Username: \`dominion\`"
             echo "- Password protection: required"
           } >> "$GITHUB_STEP_SUMMARY"
 

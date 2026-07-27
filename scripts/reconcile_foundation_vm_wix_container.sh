@@ -1,5 +1,5 @@
 # Prepended to the governed remote deployment payload.
-# It wraps only `docker compose up` so stale, verified Dominion Wix containers
+# It wraps only `docker compose up` so stale, verified Dominion containers
 # cannot block either deployment or automatic rollback.
 
 reconcile_governed_wix_container() {
@@ -80,12 +80,77 @@ reconcile_governed_wix_container() {
   printf 'DEPLOY_CONTAINER_RECONCILE name=wix-agent status=removed identity=%s volumes=preserved\n' "$identity_source"
 }
 
+reconcile_governed_dominion_web_container() {
+  local ids container_id full_id container_name image service_label working_dir config_files
+  local authorized_legacy_id="cf8294541b1ab3c7ea29896950f6e87e38683ac32b400afb8a1850a0be6f61c5"
+  local identity_source=""
+  local count=0
+  local owned=0
+
+  ids="$(command docker container ls --all --quiet --filter 'name=^/dominion-web$' 2>/dev/null || true)"
+  [ -n "$ids" ] || return 0
+
+  count="$(printf '%s\n' "$ids" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [ "$count" -ne 1 ]; then
+    FAILURE_DETAIL="dominion_web_container_count=${count}"
+    echo "Governed Dominion web reconciliation found an ambiguous exact-name match"
+    return 1
+  fi
+
+  container_id="$(printf '%s\n' "$ids" | sed -n '1p')"
+  full_id="$(command docker inspect --format '{{.Id}}' "$container_id" 2>/dev/null || true)"
+  container_name="$(command docker inspect --format '{{.Name}}' "$container_id" 2>/dev/null || true)"
+  image="$(command docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null || true)"
+  service_label="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$container_id" 2>/dev/null || true)"
+  working_dir="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$container_id" 2>/dev/null || true)"
+  config_files="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$container_id" 2>/dev/null || true)"
+
+  if [ "$container_name" != "/dominion-web" ]; then
+    FAILURE_DETAIL="dominion_web_container_name=unexpected"
+    echo "Exact-name Dominion web reconciliation resolved an unexpected container identity"
+    return 1
+  fi
+
+  # One-time authorization for the exact immutable container observed in
+  # governed workflow run 30228680159. Exact full ID and exact name are both
+  # required; no prefix, short-ID, or name-only authorization is accepted.
+  if [ "$full_id" = "$authorized_legacy_id" ]; then
+    owned=1
+    identity_source="authorized-observed-legacy-id"
+  fi
+
+  if [ "$owned" -ne 1 ] && [ "$service_label" = "dominion-web" ]; then
+    case "$image" in
+      dominion-ops-dominion-web*|dominion-web*)
+        owned=1
+        identity_source="compose-service-image"
+        ;;
+    esac
+    case "${working_dir}|${config_files}" in
+      *"/dominion-ops"*)
+        owned=1
+        identity_source="compose-project-path"
+        ;;
+    esac
+  fi
+
+  if [ "$owned" -ne 1 ]; then
+    FAILURE_DETAIL="dominion_web_container_identity=unverified"
+    echo "Existing /dominion-web container is not verified as Dominion-managed; refusing removal"
+    return 1
+  fi
+
+  command docker rm --force "$container_id" >/dev/null
+  printf 'DEPLOY_CONTAINER_RECONCILE name=dominion-web status=removed identity=%s volumes=preserved\n' "$identity_source"
+}
+
 docker() {
   local prior_phase="${PHASE:-compose-up}"
 
   if [ "$#" -ge 2 ] && [ "$1" = "compose" ] && [ "$2" = "up" ]; then
     PHASE="container-reconcile"
     reconcile_governed_wix_container || return $?
+    reconcile_governed_dominion_web_container || return $?
     PHASE="$prior_phase"
   fi
 

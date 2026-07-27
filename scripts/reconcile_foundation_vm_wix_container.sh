@@ -210,8 +210,16 @@ reconcile_governed_baby_logger_container() {
 
 reconcile_governed_baby_api_container() {
   local ids container_id container_name image service_label working_dir config_files bind_sources
+  local expected_root="$HOME/dominion-ops"
+  local expected_config="$HOME/dominion-ops/docker-compose.yml"
+  local expected_api="$HOME/dominion-ops/api"
   local identity_source=""
   local count=0
+  local bind_count=0
+  local single_bind=""
+  local compose_service_ok=0
+  local image_ok=0
+  local project_ok=0
   local owned=0
 
   ids="$(command docker container ls --all --quiet --filter 'name=^/baby-api$' 2>/dev/null || true)"
@@ -238,32 +246,24 @@ reconcile_governed_baby_api_container() {
     return 1
   fi
 
-  if [ "$service_label" = "baby-api" ]; then
-    case "$image" in
-      dominion-ops-baby-api*|baby-api*)
-        owned=1
-        identity_source="compose-service-image"
-        ;;
-    esac
-    case "${working_dir}|${config_files}" in
-      *"/dominion-ops"*)
-        owned=1
-        identity_source="compose-project-path"
-        ;;
-    esac
+  [ "$service_label" = "baby-api" ] && compose_service_ok=1
+  [ "$image" = "dominion-ops-baby-api" ] && image_ok=1
+  if [ "$working_dir" = "$expected_root" ] && [ "$config_files" = "$expected_config" ]; then
+    project_ok=1
   fi
 
-  if [ "$owned" -ne 1 ]; then
-    case "$image" in
-      dominion-ops-baby-api*|baby-api*)
-        case "$bind_sources" in
-          *"/dominion-ops/api"*)
-            owned=1
-            identity_source="governed-image-bind-mount"
-            ;;
-        esac
-        ;;
-    esac
+  if [ "$compose_service_ok" -eq 1 ] && [ "$image_ok" -eq 1 ] && [ "$project_ok" -eq 1 ]; then
+    owned=1
+    identity_source="compose-exact-identity"
+  fi
+
+  if [ "$owned" -ne 1 ] && [ "$image_ok" -eq 1 ]; then
+    bind_count="$(printf '%s\n' "$bind_sources" | sed '/^$/d' | wc -l | tr -d ' ')"
+    single_bind="$(printf '%s\n' "$bind_sources" | sed '/^$/d' | sed -n '1p')"
+    if [ "$bind_count" -eq 1 ] && [ "$single_bind" = "$expected_api" ]; then
+      owned=1
+      identity_source="governed-image-exact-api-bind"
+    fi
   fi
 
   if [ "$owned" -ne 1 ]; then

@@ -1,0 +1,1 @@
+This file reserves a durable record location for Foundation VM dry-run status reporting.

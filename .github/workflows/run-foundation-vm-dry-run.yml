@@ -100,3 +100,5 @@ jobs:
       - name: Remove SSH material
         if: always()
         run: rm -f "$HOME/.ssh/foundation_vm_key"
+
+# Triggered by Dominion operator to execute the VM dry-run.

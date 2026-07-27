@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: foundation-vm-reconcile-dry-run
@@ -88,17 +89,60 @@ jobs:
             exit "$rc"
           fi
 
+      - name: Publish dry-run status
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXIT_CODE: ${{ steps.remote.outputs.exit_code }}
+        run: |
+          set -euo pipefail
+          output_file="$RUNNER_TEMP/dry-run-reconcile-output.txt"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          updated_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          exit_code="${EXIT_CODE:-not-recorded}"
+          summary="$(tail -n 100 "$output_file" 2>/dev/null || true)"
+          overall="failure"
+          if [ "$exit_code" = "0" ] && grep -q '^DRY RUN complete\. failures=0$' "$output_file"; then
+            overall="success"
+          fi
+
+          python3 - "$overall" "$exit_code" "$run_url" "$updated_at" "$summary" > /tmp/dry-run-status.json <<'PY'
+import json, sys
+overall, exit_code, run_url, updated_at, summary = sys.argv[1:]
+body = f"""# Foundation VM Dry-Run Status
+
+- Overall: **{overall}**
+- Exit code: `{exit_code}`
+- Run: {run_url}
+- Updated: `{updated_at}`
+
+## Output tail
+
+```text
+{summary}
+```
+"""
+print(json.dumps({"body": body}))
+PY
+
+          curl --fail-with-body --silent --show-error \
+            --request PATCH \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/78" \
+            --data @/tmp/dry-run-status.json
+
       - name: Upload dry-run output
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: foundation-vm-dry-run-output
           path: ${{ runner.temp }}/dry-run-reconcile-output.txt
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Remove SSH material
         if: always()
         run: rm -f "$HOME/.ssh/foundation_vm_key"
-
-# Triggered by Dominion operator to execute the VM dry-run.

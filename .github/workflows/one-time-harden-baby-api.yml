@@ -1,0 +1,104 @@
+name: One-time harden Baby API reconciliation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-harden-baby-api.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply exact Baby API identity contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/reconcile_foundation_vm_wix_container.sh')
+          text = path.read_text()
+          start = text.index('reconcile_governed_baby_api_container() {')
+          end = text.index('\n}\n\ndocker() {', start) + 3
+          replacement = r'''reconcile_governed_baby_api_container() {
+  local ids container_id container_name image service_label working_dir config_files bind_sources bind_count
+  local expected_root="$HOME/dominion-ops"
+  local expected_config="$HOME/dominion-ops/docker-compose.yml"
+  local expected_api_bind="$HOME/dominion-ops/api"
+  local identity_source=""
+  local count=0
+  local owned=0
+
+  ids="$(command docker container ls --all --quiet --filter 'name=^/baby-api$' 2>/dev/null || true)"
+  [ -n "$ids" ] || return 0
+
+  count="$(printf '%s\n' "$ids" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [ "$count" -ne 1 ]; then
+    FAILURE_DETAIL="baby_api_container_count=${count}"
+    echo "Governed Baby API reconciliation found an ambiguous exact-name match"
+    return 1
+  fi
+
+  container_id="$(printf '%s\n' "$ids" | sed -n '1p')"
+  container_name="$(command docker inspect --format '{{.Name}}' "$container_id" 2>/dev/null || true)"
+  image="$(command docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null || true)"
+  service_label="$(command docker inspect --format '{{index .Config.Labels \"com.docker.compose.service\"}}' "$container_id" 2>/dev/null || true)"
+  working_dir="$(command docker inspect --format '{{index .Config.Labels \"com.docker.compose.project.working_dir\"}}' "$container_id" 2>/dev/null || true)"
+  config_files="$(command docker inspect --format '{{index .Config.Labels \"com.docker.compose.project.config_files\"}}' "$container_id" 2>/dev/null || true)"
+  bind_sources="$(command docker inspect --format '{{range .Mounts}}{{if eq .Type \"bind\"}}{{println .Source}}{{end}}{{end}}' "$container_id" 2>/dev/null || true)"
+  bind_count="$(printf '%s\n' "$bind_sources" | sed '/^$/d' | wc -l | tr -d ' ')"
+
+  if [ "$container_name" != "/baby-api" ]; then
+    FAILURE_DETAIL="baby_api_container_name=unexpected"
+    echo "Exact-name Baby API reconciliation resolved an unexpected container identity"
+    return 1
+  fi
+
+  if [ "$service_label" = "baby-api" ] \
+    && [ "$image" = "dominion-ops-baby-api" ] \
+    && [ "$working_dir" = "$expected_root" ] \
+    && [ "$config_files" = "$expected_config" ]; then
+    owned=1
+    identity_source="compose-exact-identity"
+  fi
+
+  if [ "$owned" -ne 1 ] \
+    && [ "$image" = "dominion-ops-baby-api" ] \
+    && [ "$bind_count" -eq 1 ] \
+    && [ "$(printf '%s\n' "$bind_sources" | sed '/^$/d')" = "$expected_api_bind" ]; then
+    owned=1
+    identity_source="legacy-exact-image-single-api-bind"
+  fi
+
+  if [ "$owned" -ne 1 ]; then
+    FAILURE_DETAIL="baby_api_container_identity=unverified"
+    echo "Existing /baby-api container is not verified as Dominion-managed; refusing removal"
+    return 1
+  fi
+
+  command docker rm --force "$container_id" >/dev/null
+  printf 'DEPLOY_CONTAINER_RECONCILE name=baby-api status=removed identity=%s bind_data=preserved\n' "$identity_source"
+}'''
+          path.write_text(text[:start] + replacement + text[end:])
+          PY
+          bash -n scripts/reconcile_foundation_vm_wix_container.sh
+          rm -f .github/workflows/one-time-harden-baby-api.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/reconcile_foundation_vm_wix_container.sh .github/workflows/one-time-harden-baby-api.yml
+          git commit -m 'fix: enforce exact Baby API ownership identity'
+          git push origin HEAD:main
+      - name: Close hardening issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue close 76 --repo "$GITHUB_REPOSITORY" --comment "Exact Baby API Compose and legacy fallback identity checks were applied and shell syntax validation passed."

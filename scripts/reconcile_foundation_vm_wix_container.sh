@@ -144,6 +144,70 @@ reconcile_governed_dominion_web_container() {
   printf 'DEPLOY_CONTAINER_RECONCILE name=dominion-web status=removed identity=%s volumes=preserved\n' "$identity_source"
 }
 
+reconcile_governed_baby_logger_container() {
+  local ids container_id full_id container_name image service_label working_dir config_files
+  local authorized_legacy_id="c3d390494b902672bd7ef1aabc0fcc4a0fe770368439933fd1a47c5b70813161"
+  local identity_source=""
+  local count=0
+  local owned=0
+
+  ids="$(command docker container ls --all --quiet --filter 'name=^/baby-logger$' 2>/dev/null || true)"
+  [ -n "$ids" ] || return 0
+
+  count="$(printf '%s\n' "$ids" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [ "$count" -ne 1 ]; then
+    FAILURE_DETAIL="baby_logger_container_count=${count}"
+    echo "Governed baby logger reconciliation found an ambiguous exact-name match"
+    return 1
+  fi
+
+  container_id="$(printf '%s\n' "$ids" | sed -n '1p')"
+  full_id="$(command docker inspect --format '{{.Id}}' "$container_id" 2>/dev/null || true)"
+  container_name="$(command docker inspect --format '{{.Name}}' "$container_id" 2>/dev/null || true)"
+  image="$(command docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null || true)"
+  service_label="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$container_id" 2>/dev/null || true)"
+  working_dir="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$container_id" 2>/dev/null || true)"
+  config_files="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$container_id" 2>/dev/null || true)"
+
+  if [ "$container_name" != "/baby-logger" ]; then
+    FAILURE_DETAIL="baby_logger_container_name=unexpected"
+    echo "Exact-name baby logger reconciliation resolved an unexpected container identity"
+    return 1
+  fi
+
+  # One-time authorization for the exact immutable container observed in
+  # governed workflow run 30229386173. Exact full ID and exact name are both
+  # required; no prefix, short-ID, or name-only authorization is accepted.
+  if [ "$full_id" = "$authorized_legacy_id" ]; then
+    owned=1
+    identity_source="authorized-observed-legacy-id"
+  fi
+
+  if [ "$owned" -ne 1 ] && [ "$service_label" = "baby-logger" ]; then
+    case "$image" in
+      alpine:*)
+        owned=1
+        identity_source="compose-service-image"
+        ;;
+    esac
+    case "${working_dir}|${config_files}" in
+      *"/dominion-ops"*)
+        owned=1
+        identity_source="compose-project-path"
+        ;;
+    esac
+  fi
+
+  if [ "$owned" -ne 1 ]; then
+    FAILURE_DETAIL="baby_logger_container_identity=unverified"
+    echo "Existing /baby-logger container is not verified as Dominion-managed; refusing removal"
+    return 1
+  fi
+
+  command docker rm --force "$container_id" >/dev/null
+  printf 'DEPLOY_CONTAINER_RECONCILE name=baby-logger status=removed identity=%s volumes=none\n' "$identity_source"
+}
+
 docker() {
   local prior_phase="${PHASE:-compose-up}"
 
@@ -151,6 +215,7 @@ docker() {
     PHASE="container-reconcile"
     reconcile_governed_wix_container || return $?
     reconcile_governed_dominion_web_container || return $?
+    reconcile_governed_baby_logger_container || return $?
     PHASE="$prior_phase"
   fi
 

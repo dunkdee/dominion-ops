@@ -3,7 +3,9 @@
 # cannot block either deployment or automatic rollback.
 
 reconcile_governed_wix_container() {
-  local ids container_id image service_label working_dir config_files mount_names
+  local ids container_id full_id container_name image service_label working_dir config_files mount_names
+  local authorized_legacy_id="f0319cf37704efcd92de809994673620c77e3850ec0106551340f3ad2e2859b5"
+  local identity_source=""
   local count=0
   local owned=0
 
@@ -18,18 +20,40 @@ reconcile_governed_wix_container() {
   fi
 
   container_id="$(printf '%s\n' "$ids" | sed -n '1p')"
+  full_id="$(command docker inspect --format '{{.Id}}' "$container_id" 2>/dev/null || true)"
+  container_name="$(command docker inspect --format '{{.Name}}' "$container_id" 2>/dev/null || true)"
   image="$(command docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null || true)"
   service_label="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$container_id" 2>/dev/null || true)"
   working_dir="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$container_id" 2>/dev/null || true)"
   config_files="$(command docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$container_id" 2>/dev/null || true)"
   mount_names="$(command docker inspect --format '{{range .Mounts}}{{println .Name}}{{end}}' "$container_id" 2>/dev/null || true)"
 
-  if [ "$service_label" = "wix-agent" ]; then
+  if [ "$container_name" != "/wix-agent" ]; then
+    FAILURE_DETAIL="wix_agent_container_name=unexpected"
+    echo "Exact-name Wix reconciliation resolved an unexpected container identity"
+    return 1
+  fi
+
+  # One-time authorization for the exact legacy container observed in governed
+  # workflow run 30221186607. The full immutable Docker ID and exact name must
+  # both match; no prefix or image-only match is accepted by this path.
+  if [ "$full_id" = "$authorized_legacy_id" ]; then
+    owned=1
+    identity_source="authorized-observed-legacy-id"
+  fi
+
+  if [ "$owned" -ne 1 ] && [ "$service_label" = "wix-agent" ]; then
     case "$image" in
-      dominion/wix-agent:*) owned=1 ;;
+      dominion/wix-agent:*)
+        owned=1
+        identity_source="compose-service-image"
+        ;;
     esac
     case "${working_dir}|${config_files}" in
-      *"/dominion-ops"*) owned=1 ;;
+      *"/dominion-ops"*)
+        owned=1
+        identity_source="compose-project-path"
+        ;;
     esac
   fi
 
@@ -39,6 +63,7 @@ reconcile_governed_wix_container() {
         case "$mount_names" in
           *"dominion-ops_wix_agent_data"*"dominion-ops_wix_agent_logs"*|*"dominion-ops_wix_agent_logs"*"dominion-ops_wix_agent_data"*)
             owned=1
+            identity_source="governed-image-volumes"
             ;;
         esac
         ;;
@@ -52,7 +77,7 @@ reconcile_governed_wix_container() {
   fi
 
   command docker rm --force "$container_id" >/dev/null
-  printf 'DEPLOY_CONTAINER_RECONCILE name=wix-agent status=removed identity=verified volumes=preserved\n'
+  printf 'DEPLOY_CONTAINER_RECONCILE name=wix-agent status=removed identity=%s volumes=preserved\n' "$identity_source"
 }
 
 docker() {

@@ -1,5 +1,5 @@
 name: Finish Dominion Production Activation
-# Harmless retrigger marker: 2026-07-28 final governed activation
+# Governed production activation orchestrator
 
 "on":
   push:
@@ -43,10 +43,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          started="$(date -u +%s)"
+          previous="$(gh run list --workflow run-foundation-vm-dry-run.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
           gh workflow run run-foundation-vm-dry-run.yml --ref main
-          sleep 8
-          run_id="$(gh run list --workflow run-foundation-vm-dry-run.yml --event workflow_dispatch --limit 10 --json databaseId,createdAt --jq --argjson started "$started" '[.[] | select((.createdAt | fromdateiso8601) >= $started)] | sort_by(.createdAt) | last | .databaseId')"
+          run_id=""
+          for _ in {1..24}; do
+            current="$(gh run list --workflow run-foundation-vm-dry-run.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+            if [[ -n "$current" && "$current" != "$previous" ]]; then
+              run_id="$current"
+              break
+            fi
+            sleep 5
+          done
           test -n "$run_id"
           gh run watch "$run_id" --exit-status
 
@@ -68,12 +75,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          started="$(date -u +%s)"
+          previous="$(gh run list --workflow deploy-foundation-vm-governed.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
           gh workflow run deploy-foundation-vm-governed.yml --ref main \
             -f commit_sha="$TARGET_SHA" \
             -f confirm='DEPLOY FOUNDATION VM'
-          sleep 8
-          run_id="$(gh run list --workflow deploy-foundation-vm-governed.yml --event workflow_dispatch --limit 10 --json databaseId,createdAt --jq --argjson started "$started" '[.[] | select((.createdAt | fromdateiso8601) >= $started)] | sort_by(.createdAt) | last | .databaseId')"
+          run_id=""
+          for _ in {1..24}; do
+            current="$(gh run list --workflow deploy-foundation-vm-governed.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+            if [[ -n "$current" && "$current" != "$previous" ]]; then
+              run_id="$current"
+              break
+            fi
+            sleep 5
+          done
           test -n "$run_id"
           gh run watch "$run_id" --exit-status
 
@@ -100,15 +114,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          started="$(date -u +%s)"
+          previous="$(gh run list --workflow deploy-obsidian.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
           gh workflow run deploy-obsidian.yml --ref main \
             -f commit_sha="$TARGET_SHA" \
             -f confirm='VERIFY OBSIDIAN REMOTE'
-          sleep 8
-          run_id="$(gh run list --workflow deploy-obsidian.yml --event workflow_dispatch --limit 10 --json databaseId,createdAt --jq --argjson started "$started" '[.[] | select((.createdAt | fromdateiso8601) >= $started)] | sort_by(.createdAt) | last | .databaseId')"
+          run_id=""
+          for _ in {1..24}; do
+            current="$(gh run list --workflow deploy-obsidian.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+            if [[ -n "$current" && "$current" != "$previous" ]]; then
+              run_id="$current"
+              break
+            fi
+            sleep 5
+          done
           test -n "$run_id"
           gh run watch "$run_id" --exit-status
-          echo "obsidian_run_id=$run_id" >> "$GITHUB_ENV"
 
       - name: Validate content engine entrypoint
         shell: bash

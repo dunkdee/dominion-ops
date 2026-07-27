@@ -85,9 +85,7 @@ jobs:
           echo "exit_code=$rc" | tee -a "$local_output"
           echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
 
-          if [ "$rc" -ne 0 ]; then
-            exit "$rc"
-          fi
+          exit "$rc"
 
       - name: Publish dry-run status
         if: always()
@@ -107,24 +105,30 @@ jobs:
             overall="success"
           fi
 
-          python3 - "$overall" "$exit_code" "$run_url" "$updated_at" "$summary" > /tmp/dry-run-status.json <<'PY'
-import json, sys
-overall, exit_code, run_url, updated_at, summary = sys.argv[1:]
-body = f"""# Foundation VM Dry-Run Status
+          STATUS_OVERALL="$overall" \
+          STATUS_EXIT_CODE="$exit_code" \
+          STATUS_RUN_URL="$run_url" \
+          STATUS_UPDATED_AT="$updated_at" \
+          STATUS_SUMMARY="$summary" \
+          python3 - <<'PY' > /tmp/dry-run-status.json
+          import json
+          import os
 
-- Overall: **{overall}**
-- Exit code: `{exit_code}`
-- Run: {run_url}
-- Updated: `{updated_at}`
+          body = f"""# Foundation VM Dry-Run Status
 
-## Output tail
+          - Overall: **{os.environ['STATUS_OVERALL']}**
+          - Exit code: `{os.environ['STATUS_EXIT_CODE']}`
+          - Run: {os.environ['STATUS_RUN_URL']}
+          - Updated: `{os.environ['STATUS_UPDATED_AT']}`
 
-```text
-{summary}
-```
-"""
-print(json.dumps({"body": body}))
-PY
+          ## Output tail
+
+          ```text
+          {os.environ['STATUS_SUMMARY']}
+          ```
+          """
+          print(json.dumps({"body": body}))
+          PY
 
           curl --fail-with-body --silent --show-error \
             --request PATCH \

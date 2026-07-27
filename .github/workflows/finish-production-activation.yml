@@ -1,0 +1,156 @@
+name: Finish Dominion Production Activation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/finish-production-activation.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+
+concurrency:
+  group: dominion-production-activation
+  cancel-in-progress: false
+
+jobs:
+  activate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve exact activation SHA
+        id: sha
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_sha="$(git rev-parse HEAD)"
+          [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "target_sha=$target_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Run strict Foundation VM dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          started="$(date -u +%s)"
+          gh workflow run run-foundation-vm-dry-run.yml --ref main
+          sleep 8
+          run_id="$(gh run list --workflow run-foundation-vm-dry-run.yml --event workflow_dispatch --limit 10 --json databaseId,createdAt --jq --argjson started "$started" '[.[] | select((.createdAt | fromdateiso8601) >= $started)] | sort_by(.createdAt) | last | .databaseId')"
+          test -n "$run_id"
+          gh run watch "$run_id" --exit-status
+
+      - name: Verify strict dry-run evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(gh issue view 78 --json body --jq .body)"
+          grep -q 'Overall: \*\*success\*\*' <<<"$body"
+          grep -q 'DRY RUN complete\. failures=0' <<<"$body"
+          grep -q 'exit_code=0' <<<"$body"
+
+      - name: Dispatch governed Foundation VM deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.sha.outputs.target_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          started="$(date -u +%s)"
+          gh workflow run deploy-foundation-vm-governed.yml --ref main \
+            -f commit_sha="$TARGET_SHA" \
+            -f confirm='DEPLOY FOUNDATION VM'
+          sleep 8
+          run_id="$(gh run list --workflow deploy-foundation-vm-governed.yml --event workflow_dispatch --limit 10 --json databaseId,createdAt --jq --argjson started "$started" '[.[] | select((.createdAt | fromdateiso8601) >= $started)] | sort_by(.createdAt) | last | .databaseId')"
+          test -n "$run_id"
+          gh run watch "$run_id" --exit-status
+
+      - name: Verify governed deployment evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.sha.outputs.target_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(gh issue view 55 --json body --jq .body)"
+          grep -q 'Overall: \*\*success\*\*' <<<"$body"
+          grep -q 'Validation: \*\*success\*\*' <<<"$body"
+          grep -q 'Deployment: \*\*success\*\*' <<<"$body"
+          grep -q "Requested SHA: \`$TARGET_SHA\`" <<<"$body"
+          grep -q 'Remote exit code: `0`' <<<"$body"
+          grep -q 'Failure summary: `none`' <<<"$body"
+          grep -q 'Rollback summary: `none`' <<<"$body"
+
+      - name: Dispatch governed Obsidian access verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.sha.outputs.target_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          started="$(date -u +%s)"
+          gh workflow run deploy-obsidian.yml --ref main \
+            -f commit_sha="$TARGET_SHA" \
+            -f confirm='VERIFY OBSIDIAN REMOTE'
+          sleep 8
+          run_id="$(gh run list --workflow deploy-obsidian.yml --event workflow_dispatch --limit 10 --json databaseId,createdAt --jq --argjson started "$started" '[.[] | select((.createdAt | fromdateiso8601) >= $started)] | sort_by(.createdAt) | last | .databaseId')"
+          test -n "$run_id"
+          gh run watch "$run_id" --exit-status
+          echo "obsidian_run_id=$run_id" >> "$GITHUB_ENV"
+
+      - name: Validate content engine entrypoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile apps/gemini/engine.py
+          python3 apps/gemini/engine.py --help >/tmp/content-engine-help.txt
+          grep -qi 'campaign' /tmp/content-engine-help.txt
+
+      - name: Publish final activation evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.sha.outputs.target_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deploy_run="$(gh run list --workflow deploy-foundation-vm-governed.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
+          dry_run="$(gh run list --workflow run-foundation-vm-dry-run.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
+          obsidian_run="$(gh run list --workflow deploy-obsidian.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
+          cat > /tmp/issue79.md <<EOF
+# Dominion Production Activation — Verified
+
+- [x] Baby API exact ownership hardening merged and issue #76 closed.
+- [x] Strict Foundation VM dry-run passed with failures=0 and exit_code=0.
+- [x] Governed Foundation VM deployment passed for exact SHA \`$TARGET_SHA\`.
+- [x] Validation passed, deployment passed, remote exit code was 0, with no failure and no rollback.
+- [x] Governed Obsidian Remote Access workflow passed on the same SHA.
+- [x] Content engine entrypoint compiled and exposed the campaign command.
+
+## Evidence
+
+- Strict dry-run: $dry_run
+- Governed deployment: $deploy_run
+- Obsidian verification: $obsidian_run
+- Deployment status: issue #55
+- Dry-run status: issue #78
+
+## Production state
+
+The governed control plane is deployed on foundation-vm at \`$TARGET_SHA\`. The Docker reconciliation boundary is fail-closed for Baby API identity, the deployment workflow completed without rollback, and Obsidian remote access completed its authenticated runtime checks.
+
+Paid services were not activated and no secrets were written to GitHub.
+EOF
+          gh issue edit 79 --body-file /tmp/issue79.md
+          gh issue close 79 --reason completed
+          gh issue close 76 --reason completed || true

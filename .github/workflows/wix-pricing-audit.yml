@@ -1,0 +1,103 @@
+name: Production Wix Pricing Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/runtime/wix_pricing_audit.py"
+      - ".github/workflows/wix-pricing-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+environment: foundation-vm-production
+
+concurrency:
+  group: wix-pricing-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Copy audit collector to VM
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            scripts/runtime/wix_pricing_audit.py \
+            "$VM_USER@$VM_HOST:/tmp/wix_pricing_audit.py"
+
+      - name: Run read-only pricing audit
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            'python3 /tmp/wix_pricing_audit.py && rm -f /tmp/wix_pricing_audit.py'
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST:/tmp/wix-pricing-audit.json" \
+            ./wix-pricing-audit.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("wix-pricing-audit.json")
+          data = json.loads(path.read_text())
+          assert data["mutations_performed"] is False
+          assert data["secrets_collected"] is False
+          assert data["customer_data_collected"] is False
+          assert data["orders_collected"] is False
+          assert data["container_unchanged"] is True
+          assert data["product_count"] > 0
+          print(f"Products audited: {data['product_count']}")
+          print(f"Variants audited: {data['variant_count']}")
+          PY
+
+      - name: Upload private pricing audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: wix-pricing-audit
+          path: wix-pricing-audit.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          rm -f ~/.ssh/id_vm wix-pricing-audit.json
+          if [ -n "${VM_HOST:-}" ] && [ -n "${VM_USER:-}" ]; then
+            ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+              "$VM_USER@$VM_HOST" 'rm -f /tmp/wix_pricing_audit.py /tmp/wix-pricing-audit.json' || true
+          fi

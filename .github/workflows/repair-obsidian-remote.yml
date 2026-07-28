@@ -1,0 +1,161 @@
+name: Repair Obsidian Remote
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-obsidian-remote.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Require protected secrets
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          OBSIDIAN_PASSWORD: ${{ secrets.OBSIDIAN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          test -n "$OBSIDIAN_PASSWORD"
+          [[ "$OBSIDIAN_PASSWORD" =~ ^[A-Za-z0-9._~!@%+=:,/-]{16,128}$ ]]
+
+      - name: Prepare SSH and password
+        id: stage
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          OBSIDIAN_PASSWORD: ${{ secrets.OBSIDIAN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          local_file="$RUNNER_TEMP/obsidian-password-${GITHUB_RUN_ID}"
+          remote_file="/tmp/obsidian-password-${GITHUB_RUN_ID}"
+          umask 077
+          printf '%s' "$OBSIDIAN_PASSWORD" > "$local_file"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$local_file" "$VM_USER@$VM_HOST:$remote_file"
+          echo "remote_file=$remote_file" >> "$GITHUB_OUTPUT"
+
+      - name: Repair and verify runtime
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          TARGET_SHA: ${{ github.sha }}
+          PASSWORD_FILE: ${{ steps.stage.outputs.remote_file }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" \
+            "TARGET_SHA='$TARGET_SHA' PASSWORD_FILE='$PASSWORD_FILE' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f "$PASSWORD_FILE"' EXIT
+          repo="$HOME/dominion-ops"
+          cd "$repo"
+          git fetch origin main
+          git reset --hard "$TARGET_SHA"
+          password="$(cat "$PASSWORD_FILE")"
+          umask 077
+          touch .env
+          tmp="$(mktemp "$repo/.env.obsidian.XXXXXX")"
+          grep -v '^OBSIDIAN_PASSWORD=' .env > "$tmp" || true
+          printf 'OBSIDIAN_PASSWORD=%s\n' "$password" >> "$tmp"
+          chmod 600 "$tmp"
+          mv "$tmp" .env
+          docker compose config --quiet
+          docker compose pull obsidian-remote
+          docker compose up -d --no-deps --force-recreate obsidian-remote
+
+          ready=0
+          for _ in $(seq 1 120); do
+            state="$(docker inspect --format '{{.State.Status}}' obsidian-remote 2>/dev/null || true)"
+            code="$(curl -sS -u "dominion:$password" -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8083/ || true)"
+            if [ "$state" = running ] && [[ "$code" =~ ^(200|302)$ ]]; then
+              ready=1
+              break
+            fi
+            sleep 3
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo 'OBSIDIAN_LOCAL_FAILURE'
+            docker compose ps obsidian-remote || true
+            docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} error={{.State.Error}}' obsidian-remote || true
+            docker logs --tail 120 obsidian-remote 2>&1 | sed -E 's/(password|passwd|token|secret)=([^ ]+)/\1=REDACTED/Ig' || true
+            ss -ltnp 2>/dev/null | grep ':8083' || true
+            exit 1
+          fi
+
+          unauth="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8083/ || true)"
+          test "$unauth" = 401 || { echo "LOCAL_AUTH_FAILURE status=$unauth"; exit 1; }
+
+          caddy=/etc/caddy/Caddyfile
+          if ! sudo grep -qF 'vault.dominionhealing.org {' "$caddy"; then
+            sudo tee -a "$caddy" >/dev/null <<'CADDY'
+
+          vault.dominionhealing.org {
+              reverse_proxy 127.0.0.1:8083
+          }
+          CADDY
+          fi
+          sudo caddy validate --config "$caddy" --adapter caddyfile
+          sudo systemctl reload caddy
+          getent ahostsv4 vault.dominionhealing.org >/dev/null
+
+          public=0
+          for _ in $(seq 1 40); do
+            code="$(curl -sS -u "dominion:$password" -o /dev/null -w '%{http_code}' --max-time 15 https://vault.dominionhealing.org || true)"
+            if [[ "$code" =~ ^(200|302)$ ]]; then public=1; break; fi
+            sleep 3
+          done
+          test "$public" -eq 1 || { echo 'OBSIDIAN_PUBLIC_FAILURE'; exit 1; }
+          public_unauth="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 https://vault.dominionhealing.org || true)"
+          test "$public_unauth" = 401 || { echo "PUBLIC_AUTH_FAILURE status=$public_unauth"; exit 1; }
+          echo "OBSIDIAN_REPAIR_SUCCESS sha=$TARGET_SHA url=https://vault.dominionhealing.org"
+          REMOTE
+
+      - name: Record success
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 84 --body "Obsidian Remote repair passed on exact SHA \`${GITHUB_SHA}\`. Local runtime, authentication enforcement, Caddy validation, DNS resolution, and public HTTPS authentication all passed. URL: https://vault.dominionhealing.org"
+          gh issue close 84 --reason completed
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          REMOTE_FILE: ${{ steps.stage.outputs.remote_file }}
+        run: |
+          set +e
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" "rm -f '$REMOTE_FILE'" >/dev/null 2>&1
+          rm -f "$HOME/.ssh/foundation_vm_key"

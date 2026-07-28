@@ -1,0 +1,100 @@
+name: Diagnose Obsidian Remote
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-obsidian.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: foundation-vm-production
+    steps:
+      - name: Require VM secrets
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Collect sanitized diagnostics
+        id: diag
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE' > /tmp/obsidian-diagnostics.txt 2>&1
+          set +e
+          cd "$HOME/dominion-ops" || exit 0
+          echo "VM_SHA=$(git rev-parse HEAD 2>/dev/null)"
+          echo "--- compose ps ---"
+          docker compose ps obsidian-remote
+          echo "--- inspect ---"
+          docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} error={{.State.Error}}' obsidian-remote 2>&1
+          echo "--- recent logs ---"
+          docker logs --tail 80 obsidian-remote 2>&1 | sed -E 's/(password|passwd|token|secret)=([^ ]+)/\1=REDACTED/Ig'
+          echo "--- localhost unauth status ---"
+          curl -sS -o /dev/null -w '%{http_code}\n' --max-time 10 http://127.0.0.1:8083/ || true
+          echo "--- listening port ---"
+          ss -ltnp 2>/dev/null | grep ':8083' || true
+          echo "--- caddy validate ---"
+          sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1
+          echo "--- caddy route ---"
+          sudo grep -n -A3 -B1 'vault.dominionhealing.org' /etc/caddy/Caddyfile 2>&1 || true
+          echo "--- dns ---"
+          getent ahostsv4 vault.dominionhealing.org 2>&1 || true
+          echo "--- public unauth status ---"
+          curl -k -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 10 --max-time 20 https://vault.dominionhealing.org || true
+          REMOTE
+          sed -n '1,220p' /tmp/obsidian-diagnostics.txt
+
+      - name: Post sanitized evidence
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          {
+            echo '## Obsidian diagnostic run'
+            echo
+            echo '```text'
+            sed -n '1,220p' /tmp/obsidian-diagnostics.txt 2>/dev/null || echo 'diagnostic output unavailable'
+            echo '```'
+            echo
+            echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > /tmp/issue84.md
+          gh issue comment 84 --body-file /tmp/issue84.md
+
+      - name: Cleanup
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" /tmp/obsidian-diagnostics.txt

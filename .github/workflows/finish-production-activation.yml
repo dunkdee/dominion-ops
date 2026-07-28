@@ -128,7 +128,12 @@ jobs:
             sleep 5
           done
           test -n "$run_id"
-          gh run watch "$run_id" --exit-status
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+          gh issue comment 79 --body "Governed Obsidian verification dispatched for exact SHA \`$TARGET_SHA\`: $run_url"
+          if ! gh run watch "$run_id" --exit-status; then
+            gh issue comment 79 --body "Governed Obsidian verification failed for exact SHA \`$TARGET_SHA\`. Sanitized run evidence: $run_url"
+            exit 1
+          fi
 
       - name: Validate content engine entrypoint
         shell: bash

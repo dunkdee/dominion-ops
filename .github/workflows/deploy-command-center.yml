@@ -1,0 +1,29 @@
+name: Deploy Dominion Command Center
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-command-center.yml'
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - name: Deploy current main through governed workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          target_sha="$(git rev-parse HEAD)"
+          gh workflow run deploy-foundation-vm-governed.yml --ref main \
+            -f commit_sha="$target_sha" \
+            -f confirm='DEPLOY FOUNDATION VM'

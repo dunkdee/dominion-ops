@@ -11,8 +11,6 @@ on:
 permissions:
   contents: read
 
-environment: foundation-vm-production
-
 concurrency:
   group: wix-pricing-audit
   cancel-in-progress: false
@@ -20,6 +18,7 @@ concurrency:
 jobs:
   audit:
     runs-on: ubuntu-24.04
+    environment: foundation-vm-production
     timeout-minutes: 20
     steps:
       - name: Check out main
@@ -96,8 +95,8 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
         run: |
-          rm -f ~/.ssh/id_vm wix-pricing-audit.json
-          if [ -n "${VM_HOST:-}" ] && [ -n "${VM_USER:-}" ]; then
+          if [ -f ~/.ssh/id_vm ] && [ -n "${VM_HOST:-}" ] && [ -n "${VM_USER:-}" ]; then
             ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
               "$VM_USER@$VM_HOST" 'rm -f /tmp/wix_pricing_audit.py /tmp/wix-pricing-audit.json' || true
           fi
+          rm -f ~/.ssh/id_vm wix-pricing-audit.json

@@ -1,6 +1,6 @@
 name: Finish Dominion Production Activation
 # Governed production activation orchestrator
-# Retriggered after Obsidian secret restoration to align deployment and verification on the exact current main SHA.
+# Retriggered after Obsidian runtime verification was hardened to use the real authenticated service response.
 
 "on":
   push:

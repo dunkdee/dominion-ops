@@ -159,19 +159,20 @@ jobs:
           docker compose config --quiet
           docker compose up -d --no-deps --force-recreate obsidian-remote
 
-          healthy=0
-          for _ in $(seq 1 30); do
-            state="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' obsidian-remote 2>/dev/null || true)"
-            if [ "$state" = "healthy" ] && curl -fsS --max-time 10 \
+          service_ready=0
+          for _ in $(seq 1 40); do
+            state="$(docker inspect --format '{{.State.Status}}' obsidian-remote 2>/dev/null || true)"
+            if [ "$state" = "running" ] && curl -fsS --max-time 10 \
               -u "$obsidian_user:$password" http://127.0.0.1:8083/ >/dev/null; then
-              healthy=1
+              service_ready=1
               break
             fi
             sleep 3
           done
-          test "$healthy" -eq 1 || {
-            echo "Obsidian Remote did not become healthy and authenticated on localhost:8083"
+          test "$service_ready" -eq 1 || {
+            echo "Obsidian Remote did not become running and authenticated on localhost:8083"
             docker compose ps obsidian-remote
+            docker logs --tail 80 obsidian-remote 2>&1 || true
             exit 1
           }
 

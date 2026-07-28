@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#070707" />
+  <title>Dominion Command Center</title>
+  <style>
+    :root{--bg:#060606;--panel:#101010;--panel2:#16130d;--gold:#d7ad4a;--gold2:#7c5c1d;--text:#f5f0e6;--muted:#a79e8d;--ok:#56d68b;--warn:#ffcb63;--bad:#ff6b6b;--line:rgba(215,173,74,.22)}
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 15% 10%,rgba(124,92,29,.18),transparent 30%),linear-gradient(180deg,#050505,#0a0907 65%,#050505);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);background-size:32px 32px;mask-image:linear-gradient(to bottom,#000,transparent)}
+    .shell{max-width:1500px;margin:auto;padding:18px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border:1px solid var(--line);background:rgba(10,10,10,.86);backdrop-filter:blur(16px);border-radius:18px;position:sticky;top:8px;z-index:5}.brand{display:flex;align-items:center;gap:12px}.sigil{width:42px;height:42px;border-radius:50%;border:1px solid var(--gold);display:grid;place-items:center;box-shadow:0 0 30px rgba(215,173,74,.2);font-weight:800}.brand h1{font-size:16px;margin:0;letter-spacing:.18em}.brand p{margin:3px 0 0;color:var(--muted);font-size:12px}.status-dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 14px var(--ok)}
+    .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-top:14px}.panel{background:linear-gradient(180deg,rgba(18,18,18,.96),rgba(10,10,10,.96));border:1px solid var(--line);border-radius:20px;padding:16px;box-shadow:0 20px 80px rgba(0,0,0,.3)}.panel h2{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin:0 0 14px}.hero{min-height:430px;display:flex;flex-direction:column}.oracle{display:flex;align-items:center;gap:14px;padding:14px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(90deg,rgba(215,173,74,.08),transparent)}.orb{width:58px;height:58px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff5be,var(--gold) 15%,#4b350c 50%,#050505 72%);box-shadow:0 0 45px rgba(215,173,74,.4);animation:pulse 3s infinite}@keyframes pulse{50%{transform:scale(1.04);box-shadow:0 0 70px rgba(215,173,74,.55)}}.oracle strong{display:block;font-size:18px}.oracle span{color:var(--muted);font-size:13px}.chat{flex:1;overflow:auto;padding:16px 2px;min-height:220px}.msg{max-width:86%;padding:12px 14px;border-radius:16px;margin:10px 0;line-height:1.45;font-size:14px}.msg.ai{background:#15120c;border:1px solid var(--line)}.msg.user{margin-left:auto;background:#24201a;border:1px solid rgba(255,255,255,.08)}.composer{display:grid;grid-template-columns:1fr auto auto;gap:8px}.composer input{width:100%;background:#090909;color:var(--text);border:1px solid var(--line);border-radius:14px;padding:14px;font-size:16px;outline:none}.composer button{border-radius:14px;border:1px solid var(--line);background:#17120a;color:var(--gold);padding:0 16px;font-weight:700}.composer button.primary{background:linear-gradient(180deg,#d7ad4a,#8a661f);color:#080705;border:none}
+    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{padding:14px;border-radius:16px;background:#0d0d0d;border:1px solid var(--line)}.metric span{font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.1em}.metric strong{display:block;font-size:22px;margin-top:7px}.stack{display:grid;gap:14px}.systems{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.system{display:flex;justify-content:space-between;align-items:center;padding:11px;border-radius:13px;background:#0c0c0c;border:1px solid rgba(255,255,255,.06)}.system b{font-size:13px}.pill{font-size:10px;padding:4px 7px;border-radius:999px;background:rgba(86,214,139,.12);color:var(--ok)}.list{display:grid;gap:8px}.item{padding:12px;border-left:2px solid var(--gold2);background:#0c0c0c;border-radius:10px}.item strong{font-size:13px;display:block}.item small{color:var(--muted)}.footer{color:var(--muted);font-size:11px;text-align:center;padding:20px}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.topbar{position:static}.hero{min-height:520px}}@media(max-width:520px){.shell{padding:9px}.brand h1{font-size:13px}.brand p{display:none}.panel{padding:12px;border-radius:16px}.composer{grid-template-columns:1fr auto}.composer button.primary{grid-column:1/-1;height:46px}.metrics{grid-template-columns:1fr 1fr}.msg{max-width:94%}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar"><div class="brand"><div class="sigil">D</div><div><h1>DOMINION COMMAND CENTER</h1><p>Obsidian Brain · Metatron Memory · Human Authority</p></div></div><div style="display:flex;align-items:center;gap:8px"><span class="status-dot"></span><small id="clock">ONLINE</small></div></header>
+    <section class="grid">
+      <div class="panel hero">
+        <h2>Executive Intelligence</h2>
+        <div class="oracle"><div class="orb"></div><div><strong>Dominion is listening.</strong><span>Speak or type a command. Actions remain human-governed.</span></div></div>
+        <div id="chat" class="chat"><div class="msg ai">Command Center interface is online. Ask me what needs attention, what will produce revenue fastest, or what the system learned.</div></div>
+        <form id="form" class="composer"><input id="input" autocomplete="off" placeholder="Ask Dominion anything…" /><button type="button" id="mic">🎙</button><button class="primary" type="submit">EXECUTE QUERY</button></form>
+      </div>
+      <div class="stack">
+        <div class="panel"><h2>30-Day Profit Sprint</h2><div class="metrics"><div class="metric"><span>Revenue</span><strong id="revenue">$0</strong></div><div class="metric"><span>Traffic</span><strong id="traffic">0</strong></div><div class="metric"><span>Published</span><strong id="published">0</strong></div><div class="metric"><span>Approvals</span><strong id="approvals">0</strong></div></div></div>
+        <div class="panel"><h2>System Intelligence</h2><div id="systems" class="systems"></div></div>
+        <div class="panel"><h2>Active Missions</h2><div id="missions" class="list"></div></div>
+        <div class="panel"><h2>Obsidian Memory</h2><div id="notes" class="list"><div class="item"><small>Loading vault notes…</small></div></div></div>
+      </div>
+    </section>
+    <div class="footer">Dominion Ascendant · Zero Drift · Human Final GO</div>
+  </main>
+<script>
+const chat=document.getElementById('chat'), input=document.getElementById('input');
+function add(text,role){const d=document.createElement('div');d.className='msg '+role;d.textContent=text;chat.appendChild(d);chat.scrollTop=chat.scrollHeight}
+function speak(text){if('speechSynthesis' in window){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=.95;u.pitch=.9;speechSynthesis.speak(u)}}
+async function refresh(){try{const r=await fetch('/api/status');const d=await r.json();['revenue','traffic','published','approvals'].forEach(k=>document.getElementById(k).textContent=k==='revenue'?'$'+d.sprint[k]:d.sprint[k]);document.getElementById('systems').innerHTML=Object.entries(d.systems).map(([k,v])=>`<div class="system"><b>${k.replaceAll('_',' ')}</b><span class="pill">${v}</span></div>`).join('');document.getElementById('missions').innerHTML=d.missions.map(x=>`<div class="item"><strong>${x.title}</strong><small>${x.state}</small></div>`).join('');document.getElementById('notes').innerHTML=d.recent_notes.length?d.recent_notes.map(x=>`<div class="item"><strong>${x.name}</strong><small>${x.path}</small></div>`).join(''):'<div class="item"><small>No vault notes found.</small></div>'}catch(e){add('Status service is not reachable yet.','ai')}}
+document.getElementById('form').addEventListener('submit',async e=>{e.preventDefault();const message=input.value.trim();if(!message)return;add(message,'user');input.value='';add('Thinking across Dominion systems…','ai');const pending=chat.lastChild;try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});const d=await r.json();pending.textContent=d.answer;speak(d.answer)}catch(e){pending.textContent='The intelligence router is not connected yet.'}});
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;document.getElementById('mic').onclick=()=>{if(!SR){add('Voice recognition is not supported by this browser. Chrome or Edge is recommended.','ai');return}const rec=new SR();rec.lang='en-US';rec.interimResults=false;rec.onresult=e=>{input.value=e.results[0][0].transcript;document.getElementById('form').requestSubmit()};rec.start()};
+setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),1000);refresh();setInterval(refresh,30000);
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  dominion-command-center:
+    build: ./apps/command-center
+    container_name: dominion-command-center
+    ports:
+      - "127.0.0.1:8091:8000"
+    volumes:
+      - ${VAULT_PATH:-/home/malachisingleton8/vault}:/vault:ro
+    restart: unless-stopped
+    environment:
+      VAULT_PATH: /vault
+      CONDUCTOR_URL: ${CONDUCTOR_URL:-http://host.docker.internal:5060}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\").read()' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

@@ -6,11 +6,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from intelligence import route_intelligence
+from revenue import record_funnel_event, revenue_state
 
 APP_DIR = Path(__file__).resolve().parent
 VAULT_PATH = Path(os.getenv("VAULT_PATH", "/vault"))
@@ -18,11 +19,19 @@ MEMORY_PATH = Path(os.getenv("MEMORY_PATH", "/data/memory"))
 NEMOTRON_BASE_URL = os.getenv("NEMOTRON_BASE_URL", "").rstrip("/")
 NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "nemotron-3")
 
-app = FastAPI(title="Dominion Command Center", version="0.2.0")
+app = FastAPI(title="Dominion Command Center", version="0.3.0")
 
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
+
+
+class FunnelEvent(BaseModel):
+    event_type: str = Field(min_length=1, max_length=40)
+    offer_slug: str = Field(min_length=1, max_length=100)
+    source: str = Field(default="unknown", max_length=120)
+    value_usd: float = Field(default=0, ge=0)
+    external_id: str = Field(default="", max_length=200)
 
 
 def utc_now() -> str:
@@ -56,12 +65,14 @@ def list_recent_notes(limit: int = 8) -> list[dict[str, Any]]:
 def build_context() -> str:
     recent = list_recent_notes(limit=5)
     note_lines = [f"- {item['name']} ({item['path']})" for item in recent]
+    revenue = revenue_state()
     return "\n".join(
         [
             "Mission: Build Dominion into an elite, truthful, scalable, AI-operated business ecosystem.",
             "Operating order: cash flow, systems, scale.",
             "Founder retains final authority.",
-            "Current focus: launch the first revenue vertical and close the traffic-to-revenue loop.",
+            "Current focus: launch Dominion digital products and close the traffic-to-revenue loop.",
+            f"Revenue vertical status: {revenue['vertical_status']} with {revenue['ready_offer_count']} ready offers.",
             "Recent Obsidian notes:",
             *(note_lines or ["- No readable notes available."]),
         ]
@@ -73,12 +84,7 @@ def record_exchange(message: str, answer: str, source: str) -> None:
         MEMORY_PATH.mkdir(parents=True, exist_ok=True)
         day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         path = MEMORY_PATH / f"command-center-{day}.jsonl"
-        entry = {
-            "time": utc_now(),
-            "message": message,
-            "answer": answer,
-            "source": source,
-        }
+        entry = {"time": utc_now(), "message": message, "answer": answer, "source": source}
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except OSError:
@@ -92,6 +98,7 @@ def dashboard() -> FileResponse:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    revenue = revenue_state()
     return {
         "status": "ok",
         "service": "dominion-command-center",
@@ -101,11 +108,28 @@ def health() -> dict[str, Any]:
         "memory_writable": MEMORY_PATH.exists() and os.access(MEMORY_PATH, os.W_OK),
         "nemotron_configured": bool(NEMOTRON_BASE_URL),
         "nemotron_model": NEMOTRON_MODEL,
+        "revenue_vertical_status": revenue["vertical_status"],
+        "ready_offer_count": revenue["ready_offer_count"],
     }
+
+
+@app.get("/api/revenue")
+def revenue() -> dict[str, Any]:
+    return revenue_state()
+
+
+@app.post("/api/revenue/events")
+def revenue_event(body: FunnelEvent) -> dict[str, Any]:
+    try:
+        saved = record_funnel_event(MEMORY_PATH, body.model_dump())
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"accepted": True, "event": saved}
 
 
 @app.get("/api/status")
 def status() -> dict[str, Any]:
+    revenue = revenue_state()
     return {
         "time": utc_now(),
         "systems": {
@@ -115,22 +139,25 @@ def status() -> dict[str, Any]:
             "nemotron": "configured" if NEMOTRON_BASE_URL else "awaiting_worker",
             "conductor": "fallback_ready",
             "memory": "online" if MEMORY_PATH.exists() else "initializing",
+            "revenue_loop": revenue["vertical_status"],
         },
         "sprint": {
             "day": 1,
-            "focus": "First revenue vertical and traffic loop",
+            "focus": "Dominion digital products revenue loop",
             "revenue": 0,
             "traffic": 0,
             "published": 0,
             "approvals": 0,
+            "ready_offers": revenue["ready_offer_count"],
         },
         "recent_notes": list_recent_notes(),
         "missions": [
             {"title": "Connect Nemotron primary worker", "state": "active"},
-            {"title": "Feed Dominion mission and operating memory", "state": "active"},
-            {"title": "Launch first revenue vertical", "state": "queued"},
-            {"title": "Close research-create-publish-measure loop", "state": "queued"},
+            {"title": "Configure verified checkout and delivery", "state": "active"},
+            {"title": "Publish tracked traffic campaigns", "state": "blocked" if not revenue["ready_offer_count"] else "queued"},
+            {"title": "Verify purchase-to-delivery telemetry", "state": "blocked" if not revenue["ready_offer_count"] else "queued"},
         ],
+        "revenue": revenue,
     }
 
 

@@ -55,6 +55,38 @@ jobs:
           ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
+      - name: Provision Wix runtime environment
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: ${{ secrets.WIX_SITE_ID }}
+          WIX_AGENT_OPERATOR_TOKEN: ${{ secrets.WIX_AGENT_OPERATOR_TOKEN }}
+          N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          for name in WIX_API_KEY WIX_SITE_ID WIX_AGENT_OPERATOR_TOKEN; do
+            test -n "${!name}"
+          done
+          umask 077
+          {
+            printf 'WIX_API_KEY=%s\n' "$WIX_API_KEY"
+            printf 'WIX_SITE_ID=%s\n' "$WIX_SITE_ID"
+            printf 'WIX_AGENT_OPERATOR_TOKEN=%s\n' "$WIX_AGENT_OPERATOR_TOKEN"
+            if [ -n "${N8N_WEBHOOK_URL:-}" ]; then
+              printf 'N8N_WEBHOOK_URL=%s\n' "$N8N_WEBHOOK_URL"
+            fi
+          } > /tmp/wix-agent-preflight.env
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'install -d -m 700 ~/.config/dominion'
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            /tmp/wix-agent-preflight.env \
+            "$VM_USER@$VM_HOST:.config/dominion/wix-agent-preflight.env.tmp"
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            'install -m 600 ~/.config/dominion/wix-agent-preflight.env.tmp ~/.config/dominion/wix-agent-preflight.env && rm -f ~/.config/dominion/wix-agent-preflight.env.tmp'
+          rm -f /tmp/wix-agent-preflight.env
+
       - name: Copy immutable Wix candidate to VM
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -87,7 +119,6 @@ jobs:
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
 
           release_dir="$HOME/releases/wix-agent/$RELEASE_SHA/apps/wix-agent"
-          source_env="$HOME/dominion-ops/.env"
           runtime_env="$HOME/.config/dominion/wix-agent-preflight.env"
           image="dominion/wix-agent:preflight-$RELEASE_SHA"
           candidate="wix-agent-preflight-$RELEASE_SHA"
@@ -95,10 +126,7 @@ jobs:
           candidate_logs="${candidate}-logs"
 
           test -d "$release_dir"
-          test -f "$source_env"
-          mkdir -p "$(dirname "$runtime_env")"
-          grep -E '^(WIX_API_KEY|WIX_SITE_ID|WIX_AGENT_OPERATOR_TOKEN|N8N_WEBHOOK_URL)=' \
-            "$source_env" > "$runtime_env"
+          test -s "$runtime_env"
           chmod 600 "$runtime_env"
           for name in WIX_API_KEY WIX_SITE_ID WIX_AGENT_OPERATOR_TOKEN; do
             grep -Eq "^${name}=.+" "$runtime_env"

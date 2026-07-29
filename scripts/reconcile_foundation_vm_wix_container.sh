@@ -210,16 +210,18 @@ reconcile_governed_baby_logger_container() {
 
 reconcile_governed_baby_api_container() {
   local ids container_id container_name image service_label working_dir config_files bind_sources
-  local expected_root="$HOME/dominion-ops"
+  local expected_repo="$HOME/dominion-ops"
   local expected_config="$HOME/dominion-ops/docker-compose.yml"
-  local expected_api="$HOME/dominion-ops/api"
+  local expected_bind="$HOME/dominion-ops/api"
+  local expected_image="dominion-ops-baby-api"
   local identity_source=""
   local count=0
   local bind_count=0
-  local single_bind=""
-  local compose_service_ok=0
+  local service_ok=0
   local image_ok=0
-  local project_ok=0
+  local working_dir_ok=0
+  local config_file_ok=0
+  local bind_source_ok=0
   local owned=0
 
   ids="$(command docker container ls --all --quiet --filter 'name=^/baby-api$' 2>/dev/null || true)"
@@ -246,21 +248,35 @@ reconcile_governed_baby_api_container() {
     return 1
   fi
 
-  [ "$service_label" = "baby-api" ] && compose_service_ok=1
-  [ "$image" = "dominion-ops-baby-api" ] && image_ok=1
-  if [ "$working_dir" = "$expected_root" ] && [ "$config_files" = "$expected_config" ]; then
-    project_ok=1
-  fi
+  # Track checks independently and require exact matches
+  [ "$service_label" = "baby-api" ] && service_ok=1
+  [ "$image" = "$expected_image" ] && image_ok=1
+  [ "$working_dir" = "$expected_repo" ] && working_dir_ok=1
+  [ "$config_files" = "$expected_config" ] && config_file_ok=1
 
-  if [ "$compose_service_ok" -eq 1 ] && [ "$image_ok" -eq 1 ] && [ "$project_ok" -eq 1 ]; then
+  # Compose ownership requires ALL compose-managed checks
+  if [ "$service_ok" -eq 1 ] && [ "$image_ok" -eq 1 ] && [ "$working_dir_ok" -eq 1 ] && [ "$config_file_ok" -eq 1 ]; then
     owned=1
     identity_source="compose-exact-identity"
   fi
 
+  # Fallback: accept bind-managed container only when image matches AND at least one bind source equals expected_bind exactly
   if [ "$owned" -ne 1 ] && [ "$image_ok" -eq 1 ]; then
     bind_count="$(printf '%s\n' "$bind_sources" | sed '/^$/d' | wc -l | tr -d ' ')"
-    single_bind="$(printf '%s\n' "$bind_sources" | sed '/^$/d' | sed -n '1p')"
-    if [ "$bind_count" -eq 1 ] && [ "$single_bind" = "$expected_api" ]; then
+    if [ "$bind_count" -gt 0 ]; then
+      # normalize and check if any bind source matches expected_bind exactly
+      while IFS= read -r src; do
+        [ -z "$src" ] && continue
+        if [ "$src" = "$expected_bind" ]; then
+          bind_source_ok=1
+          break
+        fi
+      done <<EOF
+$(printf '%s\n' "$bind_sources" | sed '/^$/d')
+EOF
+    fi
+
+    if [ "$image_ok" -eq 1 ] && [ "$bind_source_ok" -eq 1 ]; then
       owned=1
       identity_source="governed-image-exact-api-bind"
     fi

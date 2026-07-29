@@ -1,3 +1,4 @@
+import contextlib
 import os
 import sys
 import tempfile
@@ -493,6 +494,245 @@ class ApiSafetyTests(unittest.TestCase):
                 json={"product_ids": ["product"], "dry_run": False},
             )
         self.assertEqual(inventory.status_code, 409)
+
+
+# ---------------------------------------------------------------------------
+# Health probe contract tests
+#
+# These tests enforce the distinction between the Docker runtime health probe
+# (/health — must always return HTTP 200) and the deployment readiness gate
+# (/ready — returns HTTP 503 when required configuration is absent).
+#
+# The candidate fix in docker-compose.yml changes the wix-agent HEALTHCHECK
+# from /ready to /health so that a degraded-but-running container is not
+# restarted by Docker due to missing or unconfigured integrations.
+# /ready remains the gate used by deployment tooling.
+# ---------------------------------------------------------------------------
+
+
+@unittest.skipUnless(importlib.util.find_spec("fastapi"), "FastAPI is not installed")
+class HealthProbeContractTests(unittest.TestCase):
+    """
+    Prove that /health always returns HTTP 200 regardless of configuration
+    state, and that /ready returns HTTP 503 when required credentials are
+    absent and HTTP 200 only when all readiness requirements pass.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from fastapi.testclient import TestClient
+        import main
+
+        cls.client_class = TestClient
+        cls.main = main
+        cls.app = main.app
+
+    def setUp(self):
+        self.main.CATALOG_VERSION = None
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        self.db_path = Path(self.tempdir.name) / "wix_agent.db"
+        self.env_patch = patch.dict(os.environ, {"WIX_AGENT_DB": str(self.db_path)})
+        self.env_patch.start()
+        self.addCleanup(self.env_patch.stop)
+
+    def test_health_returns_200_when_credentials_are_absent(self):
+        """
+        /health must return HTTP 200 even when required integration credentials
+        are missing. A live process with degraded configuration is not a dead
+        process. Docker must not restart the container due to absent env vars.
+        """
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(self.main.wix, "WIX_API_KEY", ""))
+            stack.enter_context(patch.object(self.main.wix, "WIX_SITE_ID", ""))
+            stack.enter_context(patch.object(self.main, "OPERATOR_TOKEN", ""))
+            client = stack.enter_context(self.client_class(self.app))
+            response = client.get("/health")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "degraded")
+        self.assertFalse(body["ready"])
+
+    def test_health_returns_200_when_catalog_access_fails(self):
+        """
+        /health must return HTTP 200 even when the Wix catalog API is
+        unreachable. Credentials are patched to non-empty values so that
+        detect_catalog_version is actually reached — without them the readiness
+        function skips the catalog check entirely and the test would pass for
+        the wrong reason. The mock is asserted to have been called.
+        """
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(
+                patch.object(self.main.wix, "WIX_API_KEY", "test-wix-key")
+            )
+            stack.enter_context(
+                patch.object(self.main.wix, "WIX_SITE_ID", "test-site-id")
+            )
+            stack.enter_context(
+                patch.object(self.main, "OPERATOR_TOKEN", "test-operator-token")
+            )
+            mock_catalog = stack.enter_context(
+                patch.object(
+                    self.main.wix,
+                    "detect_catalog_version",
+                    side_effect=RuntimeError("network timeout"),
+                )
+            )
+            client = stack.enter_context(self.client_class(self.app))
+            response = client.get("/health")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "degraded")
+        mock_catalog.assert_called_once()
+
+    def test_ready_returns_503_when_required_credentials_absent(self):
+        """
+        /ready must return HTTP 503 when wix_api_key, wix_site_id, or
+        operator_token are absent. This blocks deployment until the runtime
+        environment is fully configured.
+        """
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(self.main.wix, "WIX_API_KEY", ""))
+            stack.enter_context(patch.object(self.main.wix, "WIX_SITE_ID", ""))
+            stack.enter_context(patch.object(self.main, "OPERATOR_TOKEN", ""))
+            client = stack.enter_context(self.client_class(self.app))
+            response = client.get("/ready")
+        self.assertEqual(response.status_code, 503)
+        body = response.json()
+        self.assertFalse(body["ready"])
+        self.assertIn("wix_api_key", body["blockers"])
+        self.assertIn("wix_site_id", body["blockers"])
+        self.assertIn("operator_token", body["blockers"])
+
+    def test_ready_returns_200_only_when_all_requirements_pass(self):
+        """
+        /ready must return HTTP 200 only when all required credentials are
+        present and the Wix catalog is accessible.
+        - WIX_FULFILLMENT_MODE is explicitly set to record_only so that Zendrop
+          is not a blocker (Zendrop blockers only fire in live mode).
+        - ZENDROP_VARIANT_MAP_JSON is cleared so variant mapping does not affect
+          the result.
+        - All credential values are patched explicitly. This test does not rely
+          on the laptop or CI environment for any configuration value.
+        """
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(
+                patch.object(self.main.wix, "WIX_API_KEY", "test-wix-key")
+            )
+            stack.enter_context(
+                patch.object(self.main.wix, "WIX_SITE_ID", "test-site-id")
+            )
+            stack.enter_context(
+                patch.object(self.main, "OPERATOR_TOKEN", "test-operator-token")
+            )
+            stack.enter_context(
+                patch.dict(
+                    os.environ,
+                    {
+                        "WIX_FULFILLMENT_MODE": "record_only",
+                        "ZENDROP_VARIANT_MAP_JSON": "",
+                    },
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    self.main.wix, "detect_catalog_version", return_value="v3"
+                )
+            )
+            client = stack.enter_context(self.client_class(self.app))
+            response = client.get("/ready")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["ready"])
+        self.assertEqual(body["blockers"], [])
+
+    def test_readiness_is_the_deployment_gate_not_the_runtime_probe(self):
+        """
+        Structural contract: both /health and /ready must be reachable without
+        the operator token so Docker and deployment tooling can call them freely.
+        /health must remain HTTP 200 while /ready reflects configuration state.
+        """
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(self.main.wix, "WIX_API_KEY", ""))
+            stack.enter_context(patch.object(self.main.wix, "WIX_SITE_ID", ""))
+            stack.enter_context(patch.object(self.main, "OPERATOR_TOKEN", ""))
+            client = stack.enter_context(self.client_class(self.app))
+            health = client.get("/health")
+            ready = client.get("/ready")
+        self.assertNotEqual(health.status_code, 401)
+        self.assertNotEqual(ready.status_code, 401)
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(ready.status_code, 503)
+
+
+class ComposeHealthcheckContractTests(unittest.TestCase):
+    """
+    Prove that docker-compose.yml configures the wix-agent HEALTHCHECK to
+    call /health (not /ready). Reads the compose file directly; does not
+    require a running Docker daemon or FastAPI installation.
+    """
+
+    COMPOSE_FILE = Path(__file__).resolve().parents[3] / "docker-compose.yml"
+
+    def _wix_agent_healthcheck_test_line(self) -> str:
+        """Return the raw healthcheck test line for the wix-agent service."""
+        self.assertTrue(
+            self.COMPOSE_FILE.exists(),
+            f"docker-compose.yml not found at {self.COMPOSE_FILE}",
+        )
+        content = self.COMPOSE_FILE.read_text()
+        in_wix_agent = False
+        in_healthcheck = False
+        for line in content.splitlines():
+            stripped = line.strip()
+            if line.startswith("  wix-agent:"):
+                in_wix_agent = True
+                in_healthcheck = False
+                continue
+            if (
+                in_wix_agent
+                and line.startswith("  ")
+                and stripped.endswith(":")
+                and not line.startswith("    ")
+            ):
+                in_wix_agent = False
+            if in_wix_agent and stripped == "healthcheck:":
+                in_healthcheck = True
+                continue
+            if in_wix_agent and in_healthcheck and stripped.startswith("test:"):
+                return stripped
+        return ""
+
+    def test_compose_healthcheck_targets_health_not_ready(self):
+        """
+        The Docker HEALTHCHECK for wix-agent must call /health, not /ready.
+        /ready returns HTTP 503 on degraded configuration; urllib.request.urlopen
+        raises on non-2xx responses, which would mark a live container unhealthy.
+        """
+        command = self._wix_agent_healthcheck_test_line()
+        self.assertTrue(
+            command,
+            "Could not locate wix-agent healthcheck test line in docker-compose.yml",
+        )
+        self.assertIn(
+            "/health",
+            command,
+            "wix-agent healthcheck must target /health, not /ready",
+        )
+        self.assertNotIn(
+            "/ready",
+            command,
+            "wix-agent healthcheck must not target /ready — returns 503 on degraded config",
+        )
+
+    def test_compose_healthcheck_uses_urlopen_exit_pattern(self):
+        """
+        The healthcheck command must use urllib.request.urlopen with the
+        || exit 1 guard so any non-2xx response or connection failure fails.
+        """
+        command = self._wix_agent_healthcheck_test_line()
+        self.assertIn("urllib.request", command)
+        self.assertIn("exit 1", command)
 
 
 if __name__ == "__main__":

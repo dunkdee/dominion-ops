@@ -1,8 +1,8 @@
-# Dominion One-Percent Execution Blueprint v1.1
+# Dominion One-Percent Execution Blueprint v1.2
 
 **Status:** Canonical execution blueprint candidate for governed buildout  
 **Prepared:** 2026-07-30  
-**Revision:** 2026-07-30 — governance, Obsidian, archive-integrity, and quantitative Alpha gates reconciled  
+**Revision:** 2026-07-30 — governance, Obsidian, archive-integrity, CI isolation, and quantitative Alpha gates reconciled  
 **Authority:** Founder and Human Overseer retain final authority within constitutional, legal, security, and evidence boundaries  
 **Repository:** `dunkdee/dominion-ops`  
 **Doctrine:** Cash flow → Systems → Scale  
@@ -89,7 +89,7 @@ Agents        Research         Agents
 Cross-cutting systems:
 
 - **GitHub:** versioned definitions, branches, reviews, CI, release evidence.
-- **Foundation VM:** active production runtime only.
+- **Foundation VM:** production runtime ground truth. CI is prohibited there by default; a temporary runner is allowed only as an explicitly approved, isolated exception after every capacity and isolation gate in section 6.5 passes, and it must be removed when the approved validation work ends.
 - **Obsidian:** command context, decisions, service registry, roadmaps, and evidence links.
 - **Google Cloud Storage:** primary archive and overflow storage after cost and policy verification.
 - **Laptop archive:** secondary cold-storage and recovery copy.
@@ -136,7 +136,8 @@ Keep only:
 - current deployment artifacts;
 - essential local rollback points;
 - live models required by active services;
-- operational logs within approved retention limits.
+- operational logs within approved retention limits;
+- a temporary isolated CI runner only while a separately approved exception is active and every section 6.5 control remains continuously satisfied.
 
 ### 6.2 Google Cloud — primary archive
 
@@ -185,9 +186,11 @@ No VM source is deleted until all applicable gates pass:
 
 Folder presence, an SCP exit code, or approximate disk usage is not sufficient verification. Directory transfers require exact file-count and manifest reconciliation. Any mismatch is classified as a failed or partial transfer and blocks deletion.
 
-### 6.5 Capacity gates
+### 6.5 Temporary CI-runner exception and capacity gates
 
-No self-hosted CI runner is installed on Foundation VM until:
+A CI runner on Foundation VM is prohibited unless a separate Founder-approved temporary exception names the repository, workflow set, runner label, start condition, stop condition, and removal deadline.
+
+Before installation and throughout runner operation:
 
 - at least 15 GiB is available on `/`;
 - root usage is no more than 85%;
@@ -196,8 +199,13 @@ No self-hosted CI runner is installed on Foundation VM until:
 - a dedicated non-root runner identity exists;
 - the runner has no sudo, no production secret access, and no production volume access;
 - the runner is isolated from `/var/run/docker.sock` and uses an explicit rootless Docker endpoint;
-- CPU, memory, process, and disk limits are defined;
-- the temporary repo-scoped runner and label have a removal procedure.
+- no production container, network, credential, bind mount, or persistent volume is available to the runner;
+- CPU, memory, process, and disk limits are enforced;
+- workflows are pinned to full action SHAs and reject untrusted fork execution;
+- only explicitly approved repository workflows may select the temporary label;
+- runner registration, service state, jobs, and resource use are monitored;
+- any gate failure disables the runner and blocks new jobs;
+- the runner service, registration token, working directory, rootless containers, and temporary label are removed after the approved validation work.
 
 The 15 GiB gate is not lowered to force the runner onto an unsafe production host. A separate approved worker or redesigned CI path is preferred when the gate cannot be met without removing active dependencies.
 
@@ -561,12 +569,12 @@ All must pass in this exact order:
 6. deposit and withdrawal verification is documented without exposing sensitive values;
 7. pilot bankroll, 0.5%-maximum per-decision risk, 2% daily stop, and 5% weekly stop are recorded;
 8. kill-switch, fail-closed, restart, and evidence-ledger tests pass;
-9. Security and Risk issues an affirmative approval;
-10. Law and Governance issues an affirmative Legal/Compliance approval;
-11. Engineering and Reliability verifies technical and rollback readiness;
-12. Truth and Evidence verifies the complete record and calculations;
-13. Business Value and Human Impact verifies proportionality and human impact;
-14. Founder scope authorization is recorded before Council review;
+9. Founder scope authorization is recorded for the exact pilot proposal and evidence packet;
+10. Security and Risk issues an affirmative approval;
+11. Law and Governance issues an affirmative Legal/Compliance approval;
+12. Engineering and Reliability verifies technical and rollback readiness;
+13. Truth and Evidence verifies the complete record and calculations;
+14. Business Value and Human Impact verifies proportionality and human impact;
 15. all five independent Council reviews bind to the same release-request hash and unanimously approve;
 16. any HOLD, VETO, DENY, moved code SHA, changed configuration, changed platform boundary, or stale evidence blocks execution.
 

@@ -3,16 +3,24 @@ set -euo pipefail
 
 # Work Order 001A — Approval Gate A v2
 # Read-only source, capacity, production-container identity, and open-write-handle preflight.
-# This script may write only the exact temporary evidence files declared below.
+# Evidence is written only inside a private per-run directory under /tmp.
 
 SOURCE=/home/malachisingleton8/releases
 EXPECTED=/home/malachisingleton8/releases
-LSOF_OUT=/tmp/dominion-releases-lsof.out
-LSOF_ERR=/tmp/dominion-releases-lsof.err
-BASELINE=/tmp/dominion-releases-container-baseline.txt
-STATUS_BEFORE=/tmp/dominion-releases-container-status-before.txt
+
+umask 077
+EVIDENCE_DIR=$(mktemp -d /tmp/dominion-releases-gate-a.XXXXXX) || {
+  echo 'BLOCKED: unable to create private evidence directory'
+  exit 18
+}
+chmod 700 -- "$EVIDENCE_DIR"
+LSOF_OUT="$EVIDENCE_DIR/lsof.out"
+LSOF_ERR="$EVIDENCE_DIR/lsof.err"
+BASELINE="$EVIDENCE_DIR/container-baseline.txt"
+STATUS_BEFORE="$EVIDENCE_DIR/container-status-before.txt"
 
 printf '%s\n' '=== WORK ORDER 001A PREFLIGHT V2 ==='
+printf 'evidence_dir=%s\n' "$EVIDENCE_DIR"
 resolved=$(readlink -f -- "$SOURCE")
 printf 'resolved_source=%s\n' "$resolved"
 [ "$resolved" = "$EXPECTED" ] || { echo 'BLOCKED: source path mismatch'; exit 10; }

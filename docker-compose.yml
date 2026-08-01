@@ -111,7 +111,7 @@ services:
       BABY_API_URL: http://baby-api:8080
       N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/ready\").read()' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\", timeout=5).read()' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

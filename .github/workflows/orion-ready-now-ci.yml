@@ -1,0 +1,27 @@
+name: ORION Ready-Now CI
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'systems/orion-extreme-v3/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: systems/orion-extreme-v3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.txt
+      - run: python -m py_compile orion_engine.py orion_production.py orion_market_scanner.py scripts/configure_telegram.py
+      - run: python -m unittest discover -s tests -v
+      - run: |
+          export ORION_WEBHOOK_TOKEN='ci-webhook-token-at-least-32-characters'
+          export ORION_API_TOKEN='ci-api-token-at-least-32-characters-xx'
+          export ORION_DB_PATH=/tmp/orion-ci.db
+          python orion_production.py --doctor

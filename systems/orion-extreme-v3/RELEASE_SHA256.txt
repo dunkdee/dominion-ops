@@ -1,0 +1,3 @@
+ORION_EXTREME_V3_2_MATH_LOCK.zip
+SHA-256: 6766378798dbe2a79934724dca0ed549c1f90321299c02beaa8bd12cff7d434d
+Local deterministic validation: 33/33 tests passed on 2026-08-01.

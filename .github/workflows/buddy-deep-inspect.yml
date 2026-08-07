@@ -1,0 +1,61 @@
+name: Buddy Brain and Route Deep Inspect
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/buddy-deep-inspect.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Inspect live Buddy wiring read-only
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" 'bash -se' <<'REMOTE'
+          set -u
+          B="$HOME/buddy_core"
+          show() { f="$1"; a="$2"; z="$3"; echo "===== $f:$a-$z ====="; if [ -f "$f" ]; then sed -n "${a},${z}p" "$f"; else echo MISSING; fi; }
+
+          show "$B/buddy_web.py" 35 85
+          show "$B/buddy_web.py" 350 435
+          show "$B/proposal_queue.py" 1 115
+          show "$B/core/brain.py" 1 260
+          show "$B/core/router.py" 1 300
+          show "$B/core/planner.py" 1 300
+          show "$B/core/orchestrator.py" 1 320
+          show "$B/core/dominion_brain.py" 1 320
+          show "$B/core/local_model.py" 1 260
+          show "$B/core/evolution_engine.py" 1 320
+          show "$B/core/watchdog.py" 1 320
+          show "$B/phi_memory.py" 1 320
+          show "$B/jarvis/jarvis_core.py" 1 330
+
+          echo '===== ROUTE DEPENDENCY MAP ====='
+          grep -RniE 'verify_token\(|Depends\(verify_token|core\.brain|core\.router|core\.planner|core\.orchestrator|phi_memory|EvolutionEngine|watchdog|local_model|dominion_brain' "$B" --include='*.py' 2>/dev/null | head -300 || true
+
+          echo '===== DONE READ ONLY ====='
+          REMOTE

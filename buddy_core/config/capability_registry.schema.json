@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Buddy Capability Registry",
+  "type": "object",
+  "required": ["version", "capabilities"],
+  "properties": {
+    "version": {"type": "string"},
+    "updated_at": {"type": "string"},
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "executor", "classification", "health_check", "evidence"],
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "executor": {"type": "string"},
+          "tool_or_agent": {"type": "string"},
+          "classification": {
+            "enum": ["read", "write", "privileged_write", "destructive"]
+          },
+          "auth_required": {"type": "boolean"},
+          "health_check": {"type": "string"},
+          "timeout_seconds": {"type": "integer", "minimum": 1},
+          "max_retries": {"type": "integer", "minimum": 0},
+          "fallback": {"type": ["string", "null"]},
+          "evidence": {"type": "string"},
+          "enabled": {"type": "boolean"},
+          "tags": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Buddy Brain Registry",
+  "type": "object",
+  "required": ["version", "brains"],
+  "properties": {
+    "version": {"type": "string"},
+    "updated_at": {"type": "string"},
+    "routing_policy": {
+      "type": "object",
+      "properties": {
+        "prefer_local_when_suitable": {"type": "boolean"},
+        "require_provider_provenance": {"type": "boolean"},
+        "max_fallback_hops": {"type": "integer", "minimum": 0},
+        "fail_truthfully_when_exhausted": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "brains": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "provider", "model_or_service", "health_check", "enabled"],
+        "properties": {
+          "id": {"type": "string"},
+          "provider": {"type": "string"},
+          "model_or_service": {"type": "string"},
+          "endpoint": {"type": ["string", "null"]},
+          "task_types": {"type": "array", "items": {"type": "string"}},
+          "strengths": {"type": "array", "items": {"type": "string"}},
+          "health_check": {"type": "string"},
+          "timeout_seconds": {"type": "integer", "minimum": 1},
+          "priority": {"type": "integer"},
+          "fallback_to": {"type": "array", "items": {"type": "string"}},
+          "requires_network": {"type": "boolean"},
+          "requires_secret_names": {"type": "array", "items": {"type": "string"}},
+          "enabled": {"type": "boolean"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

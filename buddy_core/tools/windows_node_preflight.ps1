@@ -19,6 +19,12 @@ $buddyCandidates = @(
     'C:\Users\Dell\dominion-ops\buddy_core'
 ) | Select-Object -Unique
 
+$vaultCandidates = @(
+    (Join-Path $homeDir 'Documents\Dominion Command Vault'),
+    'C:\Users\Dell\Documents\Dominion Command Vault',
+    (Join-Path $homeDir 'vault')
+) | Select-Object -Unique
+
 Write-Host '=== CANDIDATE PATHS ==='
 $repo = $null
 foreach ($p in $repoCandidates) {
@@ -40,6 +46,36 @@ foreach ($p in $buddyCandidates) {
     }
 }
 
+Write-Host '=== OBSIDIAN / COMMAND VAULT ==='
+$vaultDirs = @()
+foreach ($p in $vaultCandidates) {
+    if (Test-Path $p) {
+        Write-Host "VAULT_FOUND $p"
+        $vaultDirs += $p
+        $obsidianMeta = Join-Path $p '.obsidian'
+        if (Test-Path $obsidianMeta) { Write-Host "OBSIDIAN_METADATA_FOUND $obsidianMeta" }
+        else { Write-Host "OBSIDIAN_METADATA_MISSING $p" }
+
+        try {
+            $mdCount = (Get-ChildItem -Path $p -File -Recurse -Filter '*.md' -ErrorAction SilentlyContinue | Measure-Object).Count
+            Write-Host "MARKDOWN_COUNT $mdCount"
+        } catch { Write-Host "MARKDOWN_COUNT_UNKNOWN $p" }
+
+        Write-Host 'Top-level vault folders:'
+        Get-ChildItem -Path $p -Directory -ErrorAction SilentlyContinue |
+            Select-Object -First 80 -ExpandProperty Name
+    } else {
+        Write-Host "VAULT_MISSING $p"
+    }
+}
+
+try {
+    $obsidianProc = Get-Process -Name Obsidian -ErrorAction Stop
+    Write-Host ('OBSIDIAN_PROCESS_RUNNING PID=' + ($obsidianProc.Id -join ','))
+} catch {
+    Write-Host 'OBSIDIAN_PROCESS_NOT_RUNNING'
+}
+
 Write-Host '=== PYTHON ==='
 try { python --version } catch { Write-Host 'python not found' }
 try { py --version } catch { Write-Host 'py launcher not found' }
@@ -55,7 +91,7 @@ if ($repo) {
         Write-Host 'Status:'
         git status --short --untracked-files=all | Select-Object -First 200
         Write-Host 'Tracked Buddy-related paths:'
-        git ls-files | Select-String -Pattern 'buddy|jarvis|sentinel|proposal|brain|ollama' | Select-Object -First 250
+        git ls-files | Select-String -Pattern 'buddy|jarvis|sentinel|proposal|brain|ollama|obsidian|vault' | Select-Object -First 250
     } catch {
         Write-Host ('Git inspection failed: ' + $_.Exception.Message)
     }
@@ -104,8 +140,8 @@ foreach ($b in $buddyDirs) {
 Write-Host '=== BUDDY / AI PROCESSES ==='
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Where-Object {
-        $_.Name -match 'python|ollama|node' -or
-        $_.CommandLine -match 'buddy|jarvis|ollama|dominion'
+        $_.Name -match 'python|ollama|node|obsidian' -or
+        $_.CommandLine -match 'buddy|jarvis|ollama|dominion|obsidian'
     } |
     Select-Object ProcessId, Name, CommandLine |
     Format-Table -AutoSize -Wrap
@@ -123,24 +159,26 @@ foreach ($p in $ports) {
 
 Write-Host '=== WINDOWS SERVICES / SCHEDULED TASKS ==='
 Get-Service -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -match 'buddy|ollama|dominion|jarvis' -or $_.DisplayName -match 'buddy|ollama|dominion|jarvis' } |
+    Where-Object { $_.Name -match 'buddy|ollama|dominion|jarvis|obsidian' -or $_.DisplayName -match 'buddy|ollama|dominion|jarvis|obsidian' } |
     Select-Object Status, Name, DisplayName |
     Format-Table -AutoSize
 
 Get-ScheduledTask -ErrorAction SilentlyContinue |
-    Where-Object { $_.TaskName -match 'buddy|ollama|dominion|jarvis' -or $_.TaskPath -match 'buddy|ollama|dominion|jarvis' } |
+    Where-Object { $_.TaskName -match 'buddy|ollama|dominion|jarvis|obsidian' -or $_.TaskPath -match 'buddy|ollama|dominion|jarvis|obsidian' } |
     Select-Object TaskName, TaskPath, State |
     Format-Table -AutoSize
 
 Write-Host '=== ENV VAR NAMES ONLY ==='
 Get-ChildItem Env: |
-    Where-Object { $_.Name -match '^(BUDDY|OLLAMA|OPENAI|ANTHROPIC|GROQ|GEMINI|GOOGLE|N8N|CONDUCTOR|TELEGRAM)' } |
+    Where-Object { $_.Name -match '^(BUDDY|OLLAMA|OPENAI|ANTHROPIC|GROQ|GEMINI|GOOGLE|N8N|CONDUCTOR|TELEGRAM|VAULT|OBSIDIAN)' } |
     Sort-Object Name |
     ForEach-Object { Write-Host ($_.Name + '=<REDACTED>') }
 
 Write-Host '=== NODE READINESS SUMMARY ==='
 if ($buddyDirs.Count -eq 0) { Write-Host 'FAIL: no Buddy runtime directory found in expected laptop locations' }
 else { Write-Host ('Buddy runtime candidates: ' + $buddyDirs.Count) }
+if ($vaultDirs.Count -eq 0) { Write-Host 'FAIL: no Buddy Obsidian/Command Vault found in expected laptop locations' }
+else { Write-Host ('Buddy vault candidates: ' + $vaultDirs.Count) }
 if (Get-Command ollama -ErrorAction SilentlyContinue) { Write-Host 'Local brain runtime: AVAILABLE (Ollama)' }
 else { Write-Host 'Local brain runtime: NOT DETECTED' }
 Write-Host '=== PREFLIGHT COMPLETE: NO MUTATIONS PERFORMED ==='

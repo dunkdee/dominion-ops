@@ -1,50 +1,176 @@
-name: Buddy Brains Check
+name: Buddy End-to-End Production Preflight
+
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/buddy-brains-check.yml'
+
+permissions:
+  contents: read
+
 jobs:
-  check:
+  preflight:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: SSH Diagnostic
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          script: |
-            echo "====== WHAT IS ON PORT 5055 ======"
-            sudo ss -tlnp | grep 5055 || echo "nothing on 5055 via ss"
-            sudo lsof -i :5055 2>/dev/null || echo "nothing on 5055 via lsof"
+      - name: Validate VM connection secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
 
-            echo "====== PORT 5055 PROCESS DETAIL ======"
-            PID=$(sudo lsof -ti :5055 2>/dev/null | head -1)
-            if [ -n "$PID" ]; then
-              echo "PID: $PID"
-              cat /proc/$PID/cmdline 2>/dev/null | tr '\0' ' ' || echo "no cmdline"
-              echo ""
-              ps aux | grep $PID | grep -v grep
-            else
-              echo "No PID holding 5055"
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Read-only Buddy production preflight
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 "$VM_USER@$VM_HOST" 'bash -se' <<'REMOTE'
+          set -u
+          HOME_DIR="$HOME"
+          BUDDY_DIR="$HOME_DIR/buddy_core"
+
+          echo '=== PREFLIGHT META ==='
+          date -u '+UTC %Y-%m-%dT%H:%M:%SZ'
+          hostname
+          uname -srmo
+
+          echo '=== BUDDY DIRECTORY / CANONICAL CANDIDATES ==='
+          if [ -d "$BUDDY_DIR" ]; then
+            find "$BUDDY_DIR" -maxdepth 2 -type f \
+              \( -name '*.py' -o -name '*.json' -o -name '*.md' -o -name '*.yaml' -o -name '*.yml' \) \
+              -printf '%p\n' | sort | head -250
+          else
+            echo 'MISSING buddy_core directory'
+          fi
+
+          echo '=== HASHES: HIGH-VALUE BUDDY FILES ==='
+          for f in \
+            "$BUDDY_DIR/buddy_web.py" \
+            "$BUDDY_DIR/buddy_bridge_api.py" \
+            "$BUDDY_DIR/sentinel.py" \
+            "$BUDDY_DIR/proposal_queue.py" \
+            "$BUDDY_DIR/port_manifest.json" \
+            "$BUDDY_DIR/jarvis/jarvis_core.py"
+          do
+            if [ -f "$f" ]; then sha256sum "$f"; else echo "MISSING $f"; fi
+          done
+
+          echo '=== PYTHON SYNTAX ==='
+          for f in "$BUDDY_DIR/buddy_web.py" "$BUDDY_DIR/buddy_bridge_api.py" "$BUDDY_DIR/sentinel.py" "$BUDDY_DIR/proposal_queue.py" "$BUDDY_DIR/jarvis/jarvis_core.py"; do
+            if [ -f "$f" ]; then
+              python3 -m py_compile "$f" && echo "SYNTAX_OK $f" || echo "SYNTAX_FAIL $f"
             fi
+          done
 
-            echo "====== GEMINI SERVER STATUS ======"
-            systemctl status gemini-server --no-pager -l | head -30
+          echo '=== BUDDY AUTH WIRING (NO SECRET VALUES) ==='
+          if [ -f "$BUDDY_DIR/buddy_web.py" ]; then
+            grep -nE 'def verify_token|BUDDY_WEB_TOKEN|Depends\(|Authorization|X-Buddy|APIKey|HTTPException|@app\.(get|post|put|patch|delete)' "$BUDDY_DIR/buddy_web.py" | head -160 || true
+          fi
 
-            echo "====== GEMINI SERVER FILE (check port config) ======"
-            cat /etc/systemd/system/gemini-server.service
+          echo '=== PROPOSAL MUTATION AUTH WIRING ==='
+          if [ -f "$BUDDY_DIR/proposal_queue.py" ]; then
+            grep -nE '@app\.(get|post|put|patch|delete)|mark-submitted|Authorization|X-Conductor|APIKey|Depends\(|HTTPException|middleware' "$BUDDY_DIR/proposal_queue.py" | head -180 || true
+          fi
 
-            echo "====== BUDDY SERVICE STATUS ======"
-            systemctl status dominion-buddy --no-pager -l | head -40 || echo "dominion-buddy not found"
-            systemctl status buddy --no-pager -l | head -20 || echo "buddy not found"
+          echo '=== SENTINEL DATABASE QUERY ==='
+          if [ -f "$BUDDY_DIR/sentinel.py" ]; then
+            grep -nE 'SELECT COUNT|captured_leads|FROM leads|Postgres|check_db' "$BUDDY_DIR/sentinel.py" | head -120 || true
+          fi
 
-            echo "====== BUDDY RECENT LOGS ======"
-            journalctl -u dominion-buddy -n 30 --no-pager 2>/dev/null || echo "no dominion-buddy journal"
+          echo '=== BRAIN / ROUTER EVIDENCE ==='
+          for f in "$BUDDY_DIR/jarvis/jarvis_core.py" "$BUDDY_DIR/buddy_bridge_api.py" "$BUDDY_DIR/buddy_web.py"; do
+            if [ -f "$f" ]; then
+              echo "--- $f"
+              grep -nEi 'gemini|groq|claude|openai|ollama|brain|model|fallback|route|router|orchestrat|provider|timeout|retry|memory|tool|agent|capabil' "$f" | head -220 || true
+            fi
+          done
 
-            echo "====== ALL RUNNING DOMINION SERVICES ======"
-            systemctl list-units --type=service --state=running 2>/dev/null | grep -iE 'dominion|buddy|gemini|intel|juris' | head -20
+          echo '=== MEMORY / SKILL / CAPABILITY CANDIDATES ==='
+          if [ -d "$BUDDY_DIR" ]; then
+            find "$BUDDY_DIR" -maxdepth 3 -type f | grep -Ei 'memory|skill|capabil|registry|manifest|constitution|identity|prompt|lesson|history|audit|router|brain' | sort | head -220 || true
+          fi
 
-            echo "====== INTEL TIMER STATUS ======"
-            systemctl status dominion-intel.timer --no-pager | head -20 || echo "no intel timer"
+          echo '=== SERVICE STATE ==='
+          services='dominion-buddy-web.service buddy-bridge.service dominion-buddy.service dominion-sentinel.service dominion-proposal-queue.service gemini-server.service'
+          for s in $services; do
+            echo "--- $s"
+            systemctl is-active "$s" 2>/dev/null || true
+            systemctl is-enabled "$s" 2>/dev/null || true
+            systemctl show "$s" -p MainPID -p FragmentPath -p User -p WorkingDirectory -p ExecStart -p EnvironmentFiles --no-pager 2>/dev/null || true
+          done
 
-            echo "====== INTEL SERVICE LAST RUN ======"
-            journalctl -u dominion-intel.service -n 20 --no-pager 2>/dev/null | tail -20
+          echo '=== LISTENING PORTS: BUDDY / BRAINS / CONTROL ==='
+          ss -ltnp 2>/dev/null | grep -E ':(5052|5055|5056|5070|5100|5101|5102|5060|5678|9380)\b' || true
+
+          echo '=== LOCAL HTTP PROBES (READ ONLY) ==='
+          for url in \
+            http://127.0.0.1:5070/buddy \
+            http://127.0.0.1:5100/api/status \
+            http://127.0.0.1:5101/api/proposals \
+            http://127.0.0.1:5060/health
+          do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "$url" 2>/dev/null || true)"
+            echo "$code $url"
+          done
+
+          echo '=== CADDY/TLS BUDDY PATH ==='
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 https://buddy.dominionhealing.org/buddy 2>/dev/null || true)"
+          echo "$code https://buddy.dominionhealing.org/buddy"
+
+          echo '=== FIREWALL / EXPOSURE (READ ONLY) ==='
+          if command -v gcloud >/dev/null 2>&1; then
+            gcloud compute firewall-rules list --filter='allowed.tcp:5070 OR allowed.tcp:5100 OR allowed.tcp:5101 OR allowed.tcp:5102' --format='table(name,direction,sourceRanges.list():label=SOURCE_RANGES,allowed[].map().firewall_rule().list():label=ALLOW)' 2>/dev/null || true
+          else
+            echo 'gcloud CLI unavailable on VM; exposure already covered by prior audit'
+          fi
+
+          echo '=== ENVIRONMENT VARIABLE NAMES ONLY ==='
+          for s in dominion-buddy-web.service dominion-proposal-queue.service buddy-bridge.service; do
+            pid="$(systemctl show "$s" -p MainPID --value 2>/dev/null || true)"
+            echo "--- $s pid=${pid:-0}"
+            if [ -n "${pid:-}" ] && [ "$pid" != '0' ] && [ -r "/proc/$pid/environ" ]; then
+              tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | sed 's/=.*$/=<REDACTED>/' | grep -E '^(BUDDY|CONDUCTOR|GROQ|ANTHROPIC|OPENAI|GEMINI|GOOGLE|OLLAMA|N8N|DATABASE|POSTGRES|TELEGRAM|TWILIO)[A-Z0-9_]*=' | sort || true
+            else
+              echo 'environment not readable or service not running'
+            fi
+          done
+
+          echo '=== RECENT BUDDY ERRORS / RESTARTS ==='
+          for s in dominion-buddy-web.service buddy-bridge.service dominion-sentinel.service dominion-proposal-queue.service gemini-server.service; do
+            echo "--- $s"
+            systemctl show "$s" -p NRestarts -p ActiveEnterTimestamp -p ExecMainStatus --no-pager 2>/dev/null || true
+            journalctl -u "$s" -n 35 --no-pager 2>/dev/null | grep -Ei 'error|exception|traceback|failed|timeout|refused|unauthorized|forbidden' | tail -20 || true
+          done
+
+          echo '=== SOURCE CONTROL GAP ==='
+          if [ -d "$HOME_DIR/dominion-ops/.git" ]; then
+            cd "$HOME_DIR/dominion-ops"
+            git status --short --untracked-files=all | head -200 || true
+            echo 'tracked Buddy paths:'
+            git ls-files | grep -Ei '(^|/)buddy|sentinel|proposal_queue|jarvis' | head -250 || true
+          else
+            echo 'dominion-ops repo not found on VM'
+          fi
+
+          echo '=== PREFLIGHT COMPLETE: NO VM MUTATIONS PERFORMED ==='
+          REMOTE

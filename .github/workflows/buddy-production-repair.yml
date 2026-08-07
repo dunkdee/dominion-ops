@@ -1,0 +1,176 @@
+name: Buddy Production Repair
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/buddy-production-repair.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Repair and validate Buddy stack
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -euo pipefail
+
+            BUDDY="$HOME/buddy_core/buddy_web.py"
+            SENTINEL="$HOME/buddy_core/sentinel.py"
+            PROPOSAL="$HOME/buddy_core/proposal_queue.py"
+            STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+            BACKUP="$HOME/buddy_core/repair_backups/$STAMP"
+
+            echo '=== GATE 0: PREFLIGHT ==='
+            for f in "$BUDDY" "$SENTINEL" "$PROPOSAL"; do
+              test -f "$f" || { echo "MISSING: $f"; exit 10; }
+              python3 -m py_compile "$f"
+            done
+
+            # Read required secrets from the running service environments without printing them.
+            buddy_pid="$(systemctl show -p MainPID --value dominion-buddy-web.service)"
+            proposal_pid="$(systemctl show -p MainPID --value dominion-proposal-queue.service)"
+            test "${buddy_pid:-0}" != "0" || { echo 'Buddy service has no MainPID'; exit 11; }
+            test "${proposal_pid:-0}" != "0" || { echo 'Proposal service has no MainPID'; exit 12; }
+
+            BUDDY_WEB_TOKEN="$(sudo tr '\0' '\n' < "/proc/$buddy_pid/environ" | sed -n 's/^BUDDY_WEB_TOKEN=//p' | head -1)"
+            CONDUCTOR_API_KEY="$(sudo tr '\0' '\n' < "/proc/$proposal_pid/environ" | sed -n 's/^CONDUCTOR_API_KEY=//p' | head -1)"
+
+            test -n "$BUDDY_WEB_TOKEN" || { echo 'BUDDY_WEB_TOKEN missing; refusing partial repair'; exit 13; }
+            test -n "$CONDUCTOR_API_KEY" || { echo 'CONDUCTOR_API_KEY missing; refusing partial repair'; exit 14; }
+
+            grep -q 'SELECT COUNT(\*) FROM leads;' "$SENTINEL" || grep -q 'SELECT COUNT(\*) FROM captured_leads;' "$SENTINEL" || { echo 'Sentinel expected query not found'; exit 15; }
+            grep -q 'def verify_token(request: Request)' "$BUDDY" || { echo 'Buddy verify_token function not found'; exit 16; }
+            grep -q 'mark-submitted' "$PROPOSAL" || { echo 'Proposal mutation route not found'; exit 17; }
+
+            echo '=== BACKUP ==='
+            mkdir -p "$BACKUP"
+            cp -a "$BUDDY" "$SENTINEL" "$PROPOSAL" "$BACKUP/"
+            sha256sum "$BUDDY" "$SENTINEL" "$PROPOSAL" > "$BACKUP/SHA256SUMS.before"
+
+            echo '=== PATCH ==='
+            python3 - <<'PY'
+            from pathlib import Path
+            import re
+
+            home = Path.home()
+            buddy = home / 'buddy_core' / 'buddy_web.py'
+            sentinel = home / 'buddy_core' / 'sentinel.py'
+            proposal = home / 'buddy_core' / 'proposal_queue.py'
+
+            # 1) Sentinel: source-of-truth table is captured_leads.
+            s = sentinel.read_text()
+            if 'SELECT COUNT(*) FROM leads;' in s:
+                s = s.replace('SELECT COUNT(*) FROM leads;', 'SELECT COUNT(*) FROM captured_leads;', 1)
+            if 'SELECT COUNT(*) FROM captured_leads;' not in s:
+                raise SystemExit('sentinel patch verification failed')
+            sentinel.write_text(s)
+
+            # 2) Buddy: restore token enforcement. The function is self-contained so it
+            # does not depend on existing HTTPException/hmac imports.
+            b = buddy.read_text()
+            replacement = '''def verify_token(request: Request):
+                import hmac
+                from fastapi import HTTPException
+                expected = os.getenv("BUDDY_WEB_TOKEN", "")
+                supplied = request.headers.get("X-Buddy-Token") or request.query_params.get("token", "")
+                if not expected:
+                    raise HTTPException(status_code=503, detail="Buddy authentication is not configured")
+                if not supplied or not hmac.compare_digest(supplied, expected):
+                    raise HTTPException(status_code=401, detail="Unauthorized")
+            '''
+            pattern = re.compile(r'^def verify_token\(request: Request\):[^\n]*\n(?:[ \t]+.*\n)+?(?=\S|\Z)', re.M)
+            m = pattern.search(b)
+            if not m:
+                raise SystemExit('buddy verify_token body not found')
+            old = m.group(0)
+            # Preserve any decorators/functions after this block and only replace verify_token.
+            b = b[:m.start()] + replacement + b[m.end():]
+            buddy.write_text(b)
+
+            # 3) Proposal Queue: add middleware guarding mutation methods under
+            # /api/proposals/ with the existing CONDUCTOR_API_KEY.
+            p = proposal.read_text()
+            marker = '# DOMINION_PROPOSAL_AUTH_V1'
+            if marker not in p:
+                app_match = re.search(r'^(app\s*=\s*FastAPI\([^\n]*\)\s*)$', p, re.M)
+                if not app_match:
+                    raise SystemExit('FastAPI app declaration not found in proposal_queue.py')
+                guard = r'''
+
+# DOMINION_PROPOSAL_AUTH_V1
+@app.middleware("http")
+async def _protect_proposal_mutations(request, call_next):
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/proposals/"):
+        import hmac
+        from fastapi.responses import JSONResponse
+        expected = os.getenv("CONDUCTOR_API_KEY", "")
+        supplied = request.headers.get("X-Conductor-Key", "")
+        if not expected:
+            return JSONResponse(status_code=503, content={"detail": "Proposal authentication is not configured"})
+        if not supplied or not hmac.compare_digest(supplied, expected):
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
+'''
+                p = p[:app_match.end()] + guard + p[app_match.end():]
+                proposal.write_text(p)
+            if marker not in proposal.read_text():
+                raise SystemExit('proposal auth insertion failed')
+            PY
+
+            echo '=== GATE 1: STATIC VALIDATION ==='
+            python3 -m py_compile "$BUDDY" "$SENTINEL" "$PROPOSAL"
+            grep -q 'SELECT COUNT(\*) FROM captured_leads;' "$SENTINEL"
+            grep -q 'DOMINION_PROPOSAL_AUTH_V1' "$PROPOSAL"
+            grep -q 'hmac.compare_digest' "$BUDDY"
+
+            echo '=== GATE 2: DATABASE TRUTH ==='
+            lead_count="$(sudo docker exec dominion-db psql -U dominion dominion -Atc 'SELECT COUNT(*) FROM captured_leads;')"
+            test "$lead_count" = '17' || { echo "Unexpected captured_leads count: $lead_count"; exit 20; }
+
+            echo '=== RESTART ==='
+            sudo systemctl restart dominion-buddy-web.service
+            sudo systemctl restart dominion-proposal-queue.service
+            sudo systemctl restart dominion-sentinel.service
+            sleep 4
+            systemctl is-active --quiet dominion-buddy-web.service
+            systemctl is-active --quiet dominion-proposal-queue.service
+            systemctl is-active --quiet dominion-sentinel.service
+
+            echo '=== GATE 3: BUDDY AUTH ==='
+            unauth_code="$(curl -sS -o /tmp/buddy_unauth.out -w '%{http_code}' http://127.0.0.1:5070/buddy || true)"
+            test "$unauth_code" = '401' || { echo "Buddy unauth expected 401, got $unauth_code"; exit 21; }
+            auth_code="$(curl -sS -o /tmp/buddy_auth.out -w '%{http_code}' -H "X-Buddy-Token: $BUDDY_WEB_TOKEN" http://127.0.0.1:5070/buddy || true)"
+            test "$auth_code" = '200' || { echo "Buddy auth expected 200, got $auth_code"; exit 22; }
+
+            echo '=== GATE 4: PROPOSAL MUTATION AUTH ==='
+            unauth_prop="$(curl -sS -o /tmp/proposal_unauth.out -w '%{http_code}' -X POST http://127.0.0.1:5101/api/proposals/__auth_probe_does_not_exist__/mark-submitted || true)"
+            test "$unauth_prop" = '401' || { echo "Proposal unauth expected 401, got $unauth_prop"; exit 23; }
+            auth_prop="$(curl -sS -o /tmp/proposal_auth.out -w '%{http_code}' -X POST -H "X-Conductor-Key: $CONDUCTOR_API_KEY" http://127.0.0.1:5101/api/proposals/__auth_probe_does_not_exist__/mark-submitted || true)"
+            test "$auth_prop" != '401' || { echo 'Proposal valid key was rejected'; exit 24; }
+
+            echo '=== GATE 5: SENTINEL ==='
+            sleep 2
+            journalctl -u dominion-sentinel.service -n 80 --no-pager | grep -E 'Leads table: 17 rows|Postgres: ONLINE' >/dev/null || {
+              echo 'Sentinel expected DB health evidence not yet present';
+              exit 25;
+            }
+
+            echo '=== GATE 6: PUBLIC BUDDY TLS PATH ==='
+            caddy_code="$(curl -sS -o /tmp/buddy_public.out -w '%{http_code}' https://buddy.dominionhealing.org/buddy || true)"
+            test "$caddy_code" = '401' || { echo "Public Buddy unauth expected 401, got $caddy_code"; exit 26; }
+
+            echo '=== REPAIR COMPLETE ==='
+            echo "Backup: $BACKUP"
+            echo 'Buddy auth: ENFORCED'
+            echo 'Proposal mutation auth: ENFORCED'
+            echo 'Sentinel captured_leads query: CORRECTED'

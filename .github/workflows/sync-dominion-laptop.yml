@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/sync_dominion_laptop.ps1'
+      - 'scripts/quarantine_dominion_laptop_repo.ps1'
       - '.github/workflows/sync-dominion-laptop.yml'
   push:
     branches: [main]
@@ -26,21 +27,23 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Parse governed laptop sync script
+      - name: Parse governed laptop scripts
         shell: pwsh
         run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path 'scripts/sync_dominion_laptop.ps1'),
-            [ref]$tokens,
-            [ref]$errors
-          ) | Out-Null
-          if ($errors.Count -gt 0) {
-            $errors | ForEach-Object { Write-Error $_.Message }
-            exit 1
+          foreach ($path in @('scripts/sync_dominion_laptop.ps1','scripts/quarantine_dominion_laptop_repo.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+            }
           }
-          Write-Host 'LAPTOP_SYNC_SCRIPT_PARSE=PASS'
+          Write-Host 'LAPTOP_PARITY_SCRIPTS_PARSE=PASS'
 
   build-canonical-brain:
     runs-on: ubuntu-24.04
@@ -123,6 +126,11 @@ jobs:
           $brainRoot = $manifest.Directory.FullName
           "bundle=$bundle" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "brain_root=$brainRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - name: Preserve laptop Git-visible drift locally
+        shell: pwsh
+        run: |
+          & ./scripts/quarantine_dominion_laptop_repo.ps1 -RepoPath 'C:\Users\Dell\dominion-ops'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Synchronize canonical laptop repo and Obsidian brain
         shell: pwsh
         run: |

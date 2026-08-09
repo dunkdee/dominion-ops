@@ -34,6 +34,30 @@ jobs:
       - name: Test
         run: pytest -q tests/test_email_drip_governance.py
       - name: Reject committed runtime secrets/data
+        shell: bash
         run: |
           set -euo pipefail
-          ! git ls-files | grep -E '(^|/)\.env($|\.)|leads_drip\.json|email_suppression\.json|email_outbox'
+          python - <<'PY'
+          from pathlib import PurePosixPath
+          import subprocess
+
+          tracked = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+          forbidden = []
+          for raw in tracked:
+              path = PurePosixPath(raw)
+              name = path.name
+              is_runtime_env = name == ".env" or (
+                  name.startswith(".env.") and not name.endswith(".example")
+              )
+              is_runtime_data = name in {"leads_drip.json", "email_suppression.json"}
+              is_outbox = "email_outbox" in path.parts
+              if is_runtime_env or is_runtime_data or is_outbox:
+                  forbidden.append(raw)
+
+          if forbidden:
+              print("Tracked runtime secrets/data are forbidden:")
+              for item in forbidden:
+                  print(item)
+              raise SystemExit(1)
+          print("RUNTIME_SECRET_DATA_TRACKING=PASS")
+          PY

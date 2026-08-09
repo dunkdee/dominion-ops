@@ -17,7 +17,7 @@
 - **Five Council:** independent review across Truth/Evidence, Law/Governance, Security/Risk, Engineering/Reliability, Business Value/Human Impact.
 - **Engineering:** implementation within approved scope.
 - **Research:** read-only evidence gathering unless separately authorized.
-- **Revenue Operations:** revenue execution within approved prices, channels, and contact rules.
+- **Revenue Operations:** analysis, measurement, and approved funnel operations within effective authority; no autonomous protected external action.
 
 ## Named operational agents/services that require reconciliation into the registry
 
@@ -55,7 +55,7 @@ No live component may remain ownerless.
 - PrivateEmail SMTP is the controlled production rail.
 - No automatic SendGrid fallback.
 - Free Audit remains zero-email hold.
-- Live activation requires a separate founder GO after merge, exact-SHA deployment, production-faithful preflight, and acceptance verification.
+- Live activation requires exact-SHA deployment, production-faithful preflight, a current live-authorization gate, and acceptance verification.
 
 ### Meta / Facebook
 
@@ -73,7 +73,16 @@ Paper-only. No live-money execution without explicit approval and applicable pro
 
 ### Obsidian / Browser Agents
 
-Preparation is allowed. Production activation remains blocked by the current Stage 2F-W1 Wix diagnosis gate recorded in `governance/RUNTIME_ALIGNMENT.md` and `governance/AGENT_OPERATIONS_STATE.md`.
+**Current truth state: `UNKNOWN`.**
+
+Evidence is contradictory and time-separated:
+
+- older `governance/RUNTIME_ALIGNMENT.md` text records an unresolved Stage 2F-W1 Wix prerequisite;
+- later August 1 production evidence records the Wix healthcheck correction deployed with `DEPLOY_GATE=PASS` and Wix classified `ACTIVE — healthy`;
+- prior production inventory records `obsidian-remote` running healthy with Syncthing present, but the vault itself stale and not proven connected to the full control plane;
+- an authenticated exact-SHA Obsidian verification/deployment workflow exists on `main`.
+
+Therefore neither “blocked” nor “fully active” is currently justified without a fresh live verification. Preparation, review, and generation of the brain pack may proceed. Production claims about Obsidian require current runtime evidence.
 
 ## Shared operating doctrine
 
@@ -87,15 +96,17 @@ Preparation is allowed. Production activation remains blocked by the current Sta
 8. No secrets or customer PII in GitHub, Obsidian, prompts, screenshots, or reports.
 9. Fail closed on ambiguous configuration, corrupted state, missing suppression data, or unknown send history.
 10. No agent may expand its own authority.
+11. Truth states are exactly `VERIFIED`, `INFERRED`, `UNKNOWN`, or `BLOCKED`.
 
 ## Current priority queue
 
-1. Finish RC3 Email Drip hardening and independent reviews.
-2. Keep Email Drip HOLD until approved deployment and acceptance.
-3. Complete Stage 2F-W1 isolated Wix diagnosis/correction before Obsidian or Browser Agent activation.
-4. Reconcile all named agents/services into `agents/registry.json` ownership classes.
-5. Render the GitHub brain pack into the standard Obsidian `Dominion-Brain` structure.
+1. Finish RC3 Email Drip hardening and current independent review findings.
+2. Merge only exact reviewed GitHub SHAs with passing CI.
+3. Reconcile current Obsidian live state from production evidence; do not rely on the stale Wix block.
+4. Render and publish the governed brain generation while preserving `Dominion-Operator-Notes`.
+5. Reconcile named agents/services into `agents/registry.json` ownership classes and validate the control-plane chain.
 6. Validate GitHub ↔ Obsidian ↔ runtime parity without copying secrets.
+7. Activate revenue execution lanes only inside their approved contact, pricing, publishing, payment, and compliance gates.
 
 ## Required report format
 
@@ -109,4 +120,4 @@ next_action:
 human_approval_required:
 ```
 
-If evidence is insufficient, `result` must be `unverified`.
+If evidence is insufficient, `result` must be `UNKNOWN`.

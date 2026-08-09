@@ -13,6 +13,7 @@ on:
       - 'scripts/render_dominion_brain.py'
       - 'scripts/check_brain_inputs.py'
       - 'scripts/deploy_dominion_brain_remote.sh'
+      - 'scripts/quarantine_vm_repo_state.sh'
       - '.github/workflows/publish-dominion-brain-production.yml'
 
 permissions:
@@ -42,7 +43,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-          bash -n scripts/deploy_dominion_brain_remote.sh
+          bash -n scripts/deploy_dominion_brain_remote.sh scripts/quarantine_vm_repo_state.sh
           python -m py_compile scripts/render_dominion_brain.py scripts/check_brain_inputs.py
           python scripts/check_brain_inputs.py
           root="$(mktemp -d)"
@@ -79,7 +80,7 @@ jobs:
           test -n "$VM_USER"
           test -n "$VM_SSH_KEY"
           test -n "$OBSIDIAN_PASSWORD"
-      - name: Prepare SSH, bundle, and protected password material
+      - name: Prepare SSH, exact bundle, quarantine helper, and protected password material
         id: stage
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -102,37 +103,46 @@ jobs:
           git bundle verify "$bundle"
           scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
 
+          quarantine="$RUNNER_TEMP/quarantine-vm-repo-${GITHUB_RUN_ID}.sh"
+          remote_quarantine="/tmp/quarantine-vm-repo-${GITHUB_RUN_ID}.sh"
+          cp scripts/quarantine_vm_repo_state.sh "$quarantine"
+          chmod 700 "$quarantine"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$quarantine" "$VM_USER@$VM_HOST:$remote_quarantine"
+
           password_file="$RUNNER_TEMP/obsidian-password-${GITHUB_RUN_ID}"
           remote_password="/tmp/obsidian-password-${GITHUB_RUN_ID}"
           umask 077
           printf '%s' "$OBSIDIAN_PASSWORD" > "$password_file"
           scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$password_file" "$VM_USER@$VM_HOST:$remote_password"
-          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "chmod 600 '$remote_bundle' '$remote_password'"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "chmod 600 '$remote_bundle' '$remote_password'; chmod 700 '$remote_quarantine'"
           echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
           echo "remote_password=$remote_password" >> "$GITHUB_OUTPUT"
-      - name: Synchronize exact Git commit and publish brain
+          echo "remote_quarantine=$remote_quarantine" >> "$GITHUB_OUTPUT"
+      - name: Preserve VM drift, synchronize exact Git commit, and publish brain
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
           REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
           REMOTE_PASSWORD: ${{ steps.stage.outputs.remote_password }}
+          REMOTE_QUARANTINE: ${{ steps.stage.outputs.remote_quarantine }}
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
-            "DEPLOY_SHA='$DEPLOY_SHA' BUNDLE='$REMOTE_BUNDLE' PASSWORD_FILE='$REMOTE_PASSWORD' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
+            "DEPLOY_SHA='$DEPLOY_SHA' BUNDLE='$REMOTE_BUNDLE' PASSWORD_FILE='$REMOTE_PASSWORD' QUARANTINE_SCRIPT='$REMOTE_QUARANTINE' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
           set -euo pipefail
-          trap 'rm -f "$BUNDLE" "$PASSWORD_FILE"' EXIT
+          trap 'rm -f "$BUNDLE" "$PASSWORD_FILE" "$QUARANTINE_SCRIPT"' EXIT
           repo="$HOME/dominion-ops"
           test -d "$repo/.git"
+          RUN_ID="$RUN_ID" DOMINION_REPO="$repo" bash "$QUARANTINE_SCRIPT"
           cd "$repo"
-          test -z "$(git status --porcelain --untracked-files=no)" || { echo "BRAIN_DEPLOY=FAIL reason=tracked_vm_repo_dirty"; exit 1; }
           git fetch "$BUNDLE" dominion-release:refs/remotes/dominion-release/main
           git cat-file -e "${DEPLOY_SHA}^{commit}"
           git merge-base --is-ancestor HEAD "$DEPLOY_SHA" || { echo "BRAIN_DEPLOY=FAIL reason=non_fast_forward_vm_repo"; exit 1; }
           git checkout main
           git merge --ff-only "$DEPLOY_SHA"
           test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)" || { echo "BRAIN_DEPLOY=FAIL reason=post_sync_tracked_dirty"; exit 1; }
           password="$(cat "$PASSWORD_FILE")"
           test -n "$password"
           DEPLOY_SHA="$DEPLOY_SHA" OBSIDIAN_PASSWORD="$password" RUN_ID="$RUN_ID" bash scripts/deploy_dominion_brain_remote.sh
@@ -150,4 +160,4 @@ jobs:
       - name: Remove temporary access material
         if: always()
         run: |
-          rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/dominion-brain-*.bundle "$RUNNER_TEMP"/obsidian-password-*
+          rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/dominion-brain-*.bundle "$RUNNER_TEMP"/obsidian-password-* "$RUNNER_TEMP"/quarantine-vm-repo-*.sh

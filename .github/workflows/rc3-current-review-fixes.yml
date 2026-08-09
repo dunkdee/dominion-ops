@@ -1,0 +1,43 @@
+name: RC3 Current Review Fixes
+
+on:
+  push:
+    branches:
+      - rc3/email-drip-review-ready-20260809
+    paths:
+      - scripts/runtime/rc3_current_review_fixes.py
+      - .github/workflows/rc3-current-review-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: rc3/email-drip-review-ready-20260809
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Apply exact review fixes
+        run: python scripts/runtime/rc3_current_review_fixes.py
+      - name: Validate
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check 'fastapi>=0.110,<1' 'pydantic>=2,<3' 'filelock>=3,<4' 'uvicorn>=0.29,<1' 'pytest>=8,<9'
+          python -m py_compile services/email_drip/email_drip.py tests/test_email_drip_governance.py
+          pytest -q tests/test_email_drip_governance.py
+          git diff --check
+      - name: Commit durable files only
+        run: |
+          set -euo pipefail
+          git config user.name dominion-github-engineer
+          git config user.email actions@users.noreply.github.com
+          git add services/email_drip/email_drip.py tests/test_email_drip_governance.py
+          git diff --cached --check
+          git commit -m 'fix(rc3): close current review safety findings'
+          git push origin HEAD:rc3/email-drip-review-ready-20260809

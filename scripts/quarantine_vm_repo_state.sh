@@ -35,12 +35,59 @@ normalize_origin_target() {
   printf '%s' "${normalized,,}"
 }
 
+origin_fingerprint() {
+  local origin_url="${1:-}"
+  local lower kind="other" authority="" host="" path="" github_host=0 expected_path=0 userinfo=0
+  lower="${origin_url,,}"
+  lower="${lower%/}"
+  lower="${lower%.git}"
+
+  case "$lower" in
+    https://*|http://*)
+      kind="http"
+      authority="${lower#*://}"
+      path="${authority#*/}"
+      authority="${authority%%/*}"
+      [[ "$authority" == *@* ]] && userinfo=1
+      host="${authority##*@}"
+      host="${host%%:*}"
+      ;;
+    ssh://*)
+      kind="ssh-url"
+      authority="${lower#ssh://}"
+      path="${authority#*/}"
+      authority="${authority%%/*}"
+      [[ "$authority" == *@* ]] && userinfo=1
+      host="${authority##*@}"
+      host="${host%%:*}"
+      ;;
+    *@*:*|*:*)
+      kind="ssh-scp"
+      authority="${lower%%:*}"
+      path="${lower#*:}"
+      [[ "$authority" == *@* ]] && userinfo=1
+      host="${authority##*@}"
+      ;;
+    file://*|/*)
+      kind="file"
+      path="$lower"
+      ;;
+  esac
+
+  path="${path#/}"
+  path="${path%/}"
+  path="${path%.git}"
+  [ "$host" = "github.com" ] && github_host=1
+  [ "$path" = "dunkdee/dominion-ops" ] && expected_path=1
+  printf 'kind=%s github_host=%s expected_path=%s userinfo=%s' "$kind" "$github_host" "$expected_path" "$userinfo"
+}
+
 test -d "$repo/.git" || { echo "VM_DRIFT_QUARANTINE=FAIL reason=repo_missing"; exit 1; }
 cd "$repo"
 origin="$(git remote get-url origin 2>/dev/null || true)"
 origin_target="$(normalize_origin_target "$origin")"
 if [ "$origin_target" != "dunkdee/dominion-ops" ]; then
-  echo "VM_DRIFT_QUARANTINE=FAIL reason=origin_mismatch"
+  echo "VM_DRIFT_QUARANTINE=FAIL reason=origin_mismatch $(origin_fingerprint "$origin")"
   exit 1
 fi
 

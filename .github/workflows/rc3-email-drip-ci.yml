@@ -7,6 +7,7 @@ on:
       - 'services/email_drip/**'
       - 'scripts/set_email_drip_runtime.py'
       - 'scripts/deploy_email_drip_hold_remote.sh'
+      - 'scripts/activate_email_drip_remote.sh'
       - 'tests/test_email_drip_governance.py'
       - 'tests/test_email_drip_runtime_setter.py'
       - '.github/workflows/rc3-email-drip-ci.yml'
@@ -20,6 +21,7 @@ on:
       - 'services/email_drip/**'
       - 'scripts/set_email_drip_runtime.py'
       - 'scripts/deploy_email_drip_hold_remote.sh'
+      - 'scripts/activate_email_drip_remote.sh'
       - 'tests/test_email_drip_governance.py'
       - 'tests/test_email_drip_runtime_setter.py'
       - '.github/workflows/rc3-email-drip-ci.yml'
@@ -43,7 +45,8 @@ jobs:
       - name: Compile and shell syntax
         run: |
           python -m py_compile services/email_drip/email_drip.py scripts/set_email_drip_runtime.py tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
-          if [ -f scripts/deploy_email_drip_hold_remote.sh ]; then bash -n scripts/deploy_email_drip_hold_remote.sh; fi
+          bash -n scripts/deploy_email_drip_hold_remote.sh
+          bash -n scripts/activate_email_drip_remote.sh
       - name: Test
         run: pytest -q tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
       - name: Reject committed runtime secrets/data

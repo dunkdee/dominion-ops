@@ -7,6 +7,7 @@ on:
       - 'brain/**'
       - 'scripts/render_dominion_brain.py'
       - 'scripts/check_brain_inputs.py'
+      - 'scripts/deploy_dominion_brain_remote.sh'
       - 'tests/test_render_dominion_brain.py'
       - 'agents/registry.json'
       - 'governance/**'
@@ -14,6 +15,7 @@ on:
       - 'STATE.md'
       - 'README.md'
       - '.github/workflows/dominion-brain-ci.yml'
+      - '.github/workflows/publish-dominion-brain-production.yml'
   push:
     branches:
       - main
@@ -22,6 +24,7 @@ on:
       - 'brain/**'
       - 'scripts/render_dominion_brain.py'
       - 'scripts/check_brain_inputs.py'
+      - 'scripts/deploy_dominion_brain_remote.sh'
       - 'tests/test_render_dominion_brain.py'
       - 'agents/registry.json'
       - 'governance/**'
@@ -29,6 +32,7 @@ on:
       - 'STATE.md'
       - 'README.md'
       - '.github/workflows/dominion-brain-ci.yml'
+      - '.github/workflows/publish-dominion-brain-production.yml'
 
 permissions:
   contents: read
@@ -42,8 +46,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Compile
-        run: python -m py_compile scripts/render_dominion_brain.py scripts/check_brain_inputs.py tests/test_render_dominion_brain.py
+      - name: Compile and shell syntax
+        run: |
+          python -m py_compile scripts/render_dominion_brain.py scripts/check_brain_inputs.py tests/test_render_dominion_brain.py
+          bash -n scripts/deploy_dominion_brain_remote.sh
       - name: Reject secret-bearing governed inputs
         run: |
           set -euo pipefail

@@ -1,0 +1,68 @@
+name: Sync Dominion Laptop — Canonical Parity
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/sync_dominion_laptop.ps1'
+      - '.github/workflows/sync-dominion-laptop.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dominion-laptop-canonical-sync
+  cancel-in-progress: false
+
+jobs:
+  validate-script:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Parse governed laptop sync script
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/sync_dominion_laptop.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host 'LAPTOP_SYNC_SCRIPT_PARSE=PASS'
+
+  sync-canonical-laptop:
+    if: github.event_name != 'pull_request'
+    needs: validate-script
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    environment: dominion-laptop-production
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Verify workflow checkout is exact canonical SHA
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          $expected = '${{ github.sha }}'.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "workflow checkout mismatch: $actual != $expected" }
+          Write-Host "GITHUB_CANONICAL_SHA=$actual"
+      - name: Synchronize canonical laptop repo and Obsidian brain
+        shell: pwsh
+        run: |
+          & ./scripts/sync_dominion_laptop.ps1 -ExpectedSha '${{ github.sha }}'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host 'LAPTOP_PARITY=PASS'

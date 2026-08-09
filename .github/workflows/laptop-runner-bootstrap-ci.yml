@@ -1,0 +1,42 @@
+name: Laptop Runner Bootstrap CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/bootstrap_dominion_laptop_runner.ps1'
+      - '.github/workflows/laptop-runner-bootstrap-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/bootstrap_dominion_laptop_runner.ps1'
+      - '.github/workflows/laptop-runner-bootstrap-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Parse governed runner bootstrap
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/bootstrap_dominion_laptop_runner.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          $text = Get-Content -LiteralPath 'scripts/bootstrap_dominion_laptop_runner.ps1' -Raw
+          if ($text -notmatch [regex]::Escape('2.336.0')) { throw 'runner version pin missing' }
+          if ($text -notmatch [regex]::Escape('d59123a43003e357b0805b5d0f611d0bd2f65ab67d51bd070dd4e7a0f685c162')) { throw 'runner checksum pin missing' }
+          if ($text -match 'Write-Host.*registrationToken') { throw 'registration token must never be logged' }
+          Write-Host 'LAPTOP_RUNNER_BOOTSTRAP_CI=PASS'

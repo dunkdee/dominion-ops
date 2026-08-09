@@ -113,7 +113,7 @@ try {
 
         foreach ($entry in $manifest.files) {
             $relative = [string]$entry.path
-            if ($relative -match '(^|[\\/])\.\.([\\/]|$)') { throw 'unsafe_manifest_path' }
+            if ([IO.Path]::IsPathRooted($relative) -or $relative -match '(^|[\\/])\.\.([\\/]|$)') { throw 'unsafe_manifest_path' }
             $filePath = Join-Path $stage $relative
             if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) { throw 'manifest_file_missing' }
             $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $filePath).Hash.ToLowerInvariant()

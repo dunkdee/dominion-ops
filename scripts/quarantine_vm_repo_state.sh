@@ -5,19 +5,44 @@ set -euo pipefail
 repo="${DOMINION_REPO:-$HOME/dominion-ops}"
 backup_root="$HOME/.local/state/dominion-deploy/backups"
 
+normalize_origin_target() {
+  local origin_url="${1:-}"
+  local normalized=""
+
+  origin_url="${origin_url%/}"
+  origin_url="${origin_url%.git}"
+
+  case "$origin_url" in
+    git@github.com:*)
+      normalized="${origin_url#git@github.com:}"
+      ;;
+    ssh://git@github.com:22/*)
+      normalized="${origin_url#ssh://git@github.com:22/}"
+      ;;
+    ssh://git@github.com/*)
+      normalized="${origin_url#ssh://git@github.com/}"
+      ;;
+    https://github.com/*)
+      normalized="${origin_url#https://github.com/}"
+      ;;
+    https://*@github.com/*)
+      normalized="${origin_url#https://*@github.com/}"
+      ;;
+  esac
+
+  normalized="${normalized#/}"
+  normalized="${normalized%/}"
+  printf '%s' "${normalized,,}"
+}
+
 test -d "$repo/.git" || { echo "VM_DRIFT_QUARANTINE=FAIL reason=repo_missing"; exit 1; }
 cd "$repo"
 origin="$(git remote get-url origin 2>/dev/null || true)"
-origin="${origin%/}"
-origin="${origin%.git}"
-case "${origin,,}" in
-  https://github.com/dunkdee/dominion-ops|git@github.com:dunkdee/dominion-ops|ssh://git@github.com/dunkdee/dominion-ops)
-    ;;
-  *)
-    echo "VM_DRIFT_QUARANTINE=FAIL reason=origin_mismatch"
-    exit 1
-    ;;
-esac
+origin_target="$(normalize_origin_target "$origin")"
+if [ "$origin_target" != "dunkdee/dominion-ops" ]; then
+  echo "VM_DRIFT_QUARANTINE=FAIL reason=origin_mismatch"
+  exit 1
+fi
 
 status="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null || true)"
 if [ -z "$status" ]; then

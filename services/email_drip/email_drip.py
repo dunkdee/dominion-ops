@@ -27,7 +27,7 @@ from typing import Optional
 from filelock import FileLock, Timeout
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 import uvicorn
 
 # ---------------------------------------------------------------------------
@@ -122,9 +122,34 @@ def _save_leads(data: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# SendGrid delivery (graceful fallback)
+# Controlled PrivateEmail SMTP delivery (no provider fallback)
 # ---------------------------------------------------------------------------
 
+
+
+def _normalize_email(value: str) -> str:
+    """Normalize a conservative Internet email shape without adding a runtime dependency."""
+    email = str(value or "").strip().lower()
+    if not email or len(email) > 254 or email.count("@") != 1 or any(ch.isspace() for ch in email):
+        return ""
+    local, domain = email.rsplit("@", 1)
+    if not local or len(local) > 64 or not domain or "." not in domain:
+        return ""
+    if local.startswith(".") or local.endswith(".") or ".." in local:
+        return ""
+    labels = domain.split(".")
+    if len(labels[-1]) < 2:
+        return ""
+    for label in labels:
+        if (
+            not label
+            or len(label) > 63
+            or label.startswith("-")
+            or label.endswith("-")
+            or not all(ch.isalnum() or ch == "-" for ch in label)
+        ):
+            return ""
+    return email
 
 
 def _lead_ref(email: str) -> str:
@@ -598,8 +623,8 @@ class EmailCapture(BaseModel):
 @app.post("/api/email-capture")
 
 def capture_email(payload: EmailCapture):
-    email = (payload.email or "").strip().lower()
-    if not email or "@" not in email:
+    email = _normalize_email(payload.email)
+    if not email:
         raise HTTPException(status_code=400, detail="invalid_email")
 
     suppression = _suppression_state(email)
@@ -622,7 +647,7 @@ def capture_email(payload: EmailCapture):
             data["stats"].setdefault("emails_sent", 0)
 
             for lead in data["leads"]:
-                if str(lead.get("email", "")).lower() == email:
+                if _normalize_email(str(lead.get("email", ""))) == email:
                     if book == "free_audit_hold" and lead.get("book") != "free_audit_hold":
                         lead["source"] = source_value
                         lead["book"] = "free_audit_hold"
@@ -665,7 +690,8 @@ def drip_status():
     for lead in data["leads"]:
         b = lead.get("book", "unknown")
         by_book[b] = by_book.get(b, 0) + 1
-        if len(lead.get("emails_sent", [])) >= 5:
+        sent_steps = lead.get("emails_sent", [])
+        if isinstance(sent_steps, list) and len(sent_steps) >= 5:
             fully_dripped += 1
 
     return {
@@ -706,10 +732,11 @@ def health():
 
 def _plan_due_message(lead: dict, now: datetime) -> dict:
     """Return one scheduler-faithful candidate or a non-send status; never mutate state."""
-    email = str(lead.get("email", "")).strip().lower()
+    raw_email = str(lead.get("email", ""))
+    email = _normalize_email(raw_email)
     captured_raw = str(lead.get("captured_at", "")).strip()
-    if not email or "@" not in email or not captured_raw:
-        return {"status": "ghost_or_invalid", "lead_ref": _lead_ref(email)}
+    if not email or not captured_raw:
+        return {"status": "ghost_or_invalid", "lead_ref": _lead_ref(raw_email)}
 
     suppression = _suppression_state(email)
     if suppression == "error":
@@ -725,7 +752,10 @@ def _plan_due_message(lead: dict, now: datetime) -> dict:
         return {"status": "invalid_captured_at", "lead_ref": _lead_ref(email)}
 
     days_since = (now - captured).days
-    already_sent = set(lead.get("emails_sent", []))
+    sent_raw = lead.get("emails_sent", [])
+    if not isinstance(sent_raw, list):
+        return {"status": "invalid_emails_sent", "lead_ref": _lead_ref(email)}
+    already_sent = {str(value) for value in sent_raw}
     resolved_from_source = _resolve_book(str(lead.get("source", "")))
     stored_book = str(lead.get("book", "")).strip()
     book = "free_audit_hold" if resolved_from_source == "free_audit_hold" else (stored_book or resolved_from_source)

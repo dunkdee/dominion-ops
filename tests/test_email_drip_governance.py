@@ -191,3 +191,38 @@ def test_service_defaults_to_loopback_binding():
     text = SOURCE.read_text(encoding="utf-8")
     assert 'host=os.getenv("DRIP_HOST", "127.0.0.1")' in text
     assert 'host="0.0.0.0"' not in text
+
+
+@pytest.mark.parametrize(
+    "bad_email",
+    ["not-an-email", "bad@", "bad @example.com", "bad@example", "a..b@example.com", "a@-example.com"],
+)
+def test_capture_rejects_malformed_email(tmp_path, monkeypatch, bad_email):
+    module, _, _ = load_module(tmp_path, monkeypatch)
+    with pytest.raises(module.HTTPException) as exc:
+        module.capture_email(module.EmailCapture(email=bad_email, source="sovereign_mind"))
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "invalid_email"
+
+
+def test_malformed_emails_sent_fails_closed_per_lead_without_blocking_valid_candidate(tmp_path, monkeypatch):
+    module, _, _ = load_module(tmp_path, monkeypatch)
+    now = datetime.now(timezone.utc)
+    malformed = due_lead(now)
+    malformed["emails_sent"] = None
+    valid = due_lead(now)
+    valid["email"] = "second@example.invalid"
+    report = module._build_preflight_report(data={"leads": [malformed, valid], "stats": {}}, now=now)
+    assert report["status_counts"]["invalid_emails_sent"] == 1
+    assert report["candidate_count"] == 1
+    assert report["candidates"][0]["step"] == "soft_sell"
+
+
+def test_scheduler_and_capture_share_email_validation(tmp_path, monkeypatch):
+    module, _, _ = load_module(tmp_path, monkeypatch)
+    now = datetime.now(timezone.utc)
+    invalid = due_lead(now)
+    invalid["email"] = "bad@"
+    report = module._build_preflight_report(data={"leads": [invalid], "stats": {}}, now=now)
+    assert report["candidate_count"] == 0
+    assert report["status_counts"]["ghost_or_invalid"] == 1

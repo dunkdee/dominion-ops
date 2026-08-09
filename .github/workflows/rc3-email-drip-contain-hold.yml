@@ -1,0 +1,194 @@
+name: RC3 Email Drip — Contain to HOLD
+
+on:
+  push:
+    branches:
+      - rc3/email-drip-canonicalize-20260809
+    paths:
+      - .github/workflows/rc3-email-drip-contain-hold.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc3-email-drip-production-mode
+  cancel-in-progress: false
+
+jobs:
+  contain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Require VM credentials
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Build governed containment payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/contain.py" <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import os
+          import stat
+          import tempfile
+          import time
+          from pathlib import Path
+
+          target = Path("/home/malachisingleton8/.env")
+          if not target.is_file():
+              raise SystemExit("HOLD: target .env missing")
+
+          original = target.read_bytes()
+          st = target.stat()
+          mode = stat.S_IMODE(st.st_mode)
+          uid, gid = st.st_uid, st.st_gid
+          pre_sha = hashlib.sha256(original).hexdigest()
+
+          text = original.decode("utf-8")
+          lines = text.splitlines(keepends=True)
+          matches = [i for i, line in enumerate(lines) if line.startswith("DRIP_SEND_MODE=")]
+          if len(matches) != 1:
+              raise SystemExit(f"HOLD: expected exactly one DRIP_SEND_MODE assignment, found {len(matches)}")
+
+          idx = matches[0]
+          newline = "\r\n" if lines[idx].endswith("\r\n") else "\n"
+          old_assignment = lines[idx].rstrip("\r\n")
+          if old_assignment not in {"DRIP_SEND_MODE=live", "DRIP_SEND_MODE=hold"}:
+              raise SystemExit("HOLD: unexpected DRIP_SEND_MODE value")
+          lines[idx] = "DRIP_SEND_MODE=hold" + newline
+          new_bytes = "".join(lines).encode("utf-8")
+
+          # Verify the transformation changed no other logical line.
+          before_logical = text.splitlines()
+          after_logical = new_bytes.decode("utf-8").splitlines()
+          if len(before_logical) != len(after_logical):
+              raise SystemExit("HOLD: line-count changed unexpectedly")
+          diffs = [i for i, (a, b) in enumerate(zip(before_logical, after_logical)) if a != b]
+          if old_assignment == "DRIP_SEND_MODE=live" and diffs != [idx]:
+              raise SystemExit("HOLD: more than DRIP_SEND_MODE would change")
+          if old_assignment == "DRIP_SEND_MODE=hold" and diffs:
+              raise SystemExit("HOLD: idempotent hold unexpectedly changed content")
+
+          stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+          backup = target.with_name(f"{target.name}.rc3githubhold_{stamp}")
+          fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+          try:
+              with os.fdopen(fd, "wb", closefd=True) as handle:
+                  handle.write(original)
+                  handle.flush()
+                  os.fsync(handle.fileno())
+          except Exception:
+              try:
+                  backup.unlink()
+              except OSError:
+                  pass
+              raise
+          os.chown(backup, uid, gid)
+          os.chmod(backup, mode)
+
+          if new_bytes != original:
+              tmp_fd, tmp_name = tempfile.mkstemp(prefix=f".{target.name}.rc3hold.", suffix=".tmp", dir=str(target.parent))
+              tmp = Path(tmp_name)
+              try:
+                  with os.fdopen(tmp_fd, "wb", closefd=True) as handle:
+                      handle.write(new_bytes)
+                      handle.flush()
+                      os.fsync(handle.fileno())
+                  os.chown(tmp, uid, gid)
+                  os.chmod(tmp, mode)
+                  os.replace(tmp, target)
+                  parent_fd = os.open(str(target.parent), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                  try:
+                      os.fsync(parent_fd)
+                  finally:
+                      os.close(parent_fd)
+              finally:
+                  if tmp.exists():
+                      tmp.unlink()
+
+          final = target.read_bytes()
+          final_text = final.decode("utf-8")
+          if final_text.splitlines().count("DRIP_SEND_MODE=hold") != 1:
+              raise SystemExit("HOLD: final DRIP_SEND_MODE verification failed")
+          if any(line == "DRIP_SEND_MODE=live" for line in final_text.splitlines()):
+              raise SystemExit("HOLD: live assignment remains")
+          final_st = target.stat()
+          if (final_st.st_uid, final_st.st_gid, stat.S_IMODE(final_st.st_mode)) != (uid, gid, mode):
+              raise SystemExit("HOLD: owner/group/mode changed")
+
+          print("CONTAINMENT_WRITE=PASS")
+          print(f"ENV_PRE_SHA256={pre_sha}")
+          print(f"ENV_POST_SHA256={hashlib.sha256(final).hexdigest()}")
+          print(f"BACKUP_PATH={backup}")
+          print(f"ENV_MODE={mode:o}")
+          print("DRIP_SEND_MODE=hold")
+          print("SECRET_VALUES_PRINTED=NO")
+          PY
+          base64 -w0 "$RUNNER_TEMP/contain.py" > "$RUNNER_TEMP/contain.b64"
+
+      - name: Apply HOLD atomically and restart Email Drip only
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          PAYLOAD="$(cat "$RUNNER_TEMP/contain.b64")"
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            "printf '%s' '$PAYLOAD' | base64 -d | sudo python3 -"
+
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            'sudo systemctl restart dominion-email-drip.service; sleep 3; systemctl is-active dominion-email-drip.service; ss -tln | grep -q ":8099 "; curl -fsS http://127.0.0.1:8099/health'
+
+      - name: Verify effective HOLD after restart
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          HEALTH="$(ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" 'curl -fsS http://127.0.0.1:8099/health')"
+          HEALTH="$HEALTH" python3 - <<'PY'
+          import json, os
+          data = json.loads(os.environ["HEALTH"])
+          assert data.get("status") == "ok", data
+          assert data.get("service") == "email_drip", data
+          assert data.get("send_mode") == "hold", data
+          print("EMAIL_DRIP_HEALTH=PASS")
+          print("HEALTH_SEND_MODE=hold")
+          print("PROPOSAL_QUEUE=UNTOUCHED")
+          print("GATEKEEPER=UNTOUCHED")
+          PY
+
+      - name: Cleanup SSH material
+        if: always()
+        shell: bash
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP/contain.py" "$RUNNER_TEMP/contain.b64"

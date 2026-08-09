@@ -5,6 +5,8 @@ param(
     [string]$ExpectedBrainDigest,
     [Parameter(Mandatory = $true)]
     [string]$BundlePath,
+    [Parameter(Mandatory = $true)]
+    [string]$BrainSourcePath,
     [string]$RepoPath = 'C:\Users\Dell\dominion-ops',
     [string]$VaultRoot = 'C:\Users\Dell\Documents\Dominion Command Vault'
 )
@@ -22,8 +24,12 @@ if ($ExpectedBrainDigest -notmatch '^[0-9a-fA-F]{64}$') { Fail 'invalid_expected
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail 'git_missing' }
 if (-not (Test-Path -LiteralPath (Join-Path $RepoPath '.git'))) { Fail 'repo_missing' }
 if (-not (Test-Path -LiteralPath $BundlePath -PathType Leaf)) { Fail 'bundle_missing' }
+if (-not (Test-Path -LiteralPath $BrainSourcePath -PathType Container)) { Fail 'brain_artifact_missing' }
 $bundleItem = Get-Item -LiteralPath $BundlePath -Force
+$brainSourceItem = Get-Item -LiteralPath $BrainSourcePath -Force
 if ($bundleItem.Attributes -band [IO.FileAttributes]::ReparsePoint) { Fail 'bundle_symlink_or_reparse' }
+if ($brainSourceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) { Fail 'brain_artifact_symlink_or_reparse' }
+if (Get-ChildItem -LiteralPath $BrainSourcePath -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { Fail 'brain_artifact_contains_reparse' }
 
 Push-Location $RepoPath
 try {
@@ -66,15 +72,6 @@ try {
     $postStatus = @(& git status --porcelain=v1 --untracked-files=all)
     if ($postStatus.Count -gt 0) { Fail 'post_sync_repo_dirty' }
 
-    $python = $null
-    if (Get-Command py -ErrorAction SilentlyContinue) {
-        $python = @('py','-3')
-    } elseif (Get-Command python -ErrorAction SilentlyContinue) {
-        $python = @('python')
-    } else {
-        Fail 'python_missing'
-    }
-
     if (-not (Test-Path -LiteralPath $VaultRoot)) {
         New-Item -ItemType Directory -Path $VaultRoot -Force | Out-Null
     }
@@ -91,12 +88,10 @@ try {
     $published = $false
     $oldPresent = $false
     try {
-        if ($python[0] -eq 'py') {
-            & py -3 scripts/render_dominion_brain.py $stage
-        } else {
-            & python scripts/render_dominion_brain.py $stage
+        New-Item -ItemType Directory -Path $stage | Out-Null
+        Get-ChildItem -LiteralPath $BrainSourcePath -Force | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
         }
-        if ($LASTEXITCODE -ne 0) { throw 'render_failed' }
 
         $manifestPath = Join-Path $stage 'MANIFEST.json'
         if (-not (Test-Path -LiteralPath $manifestPath)) { throw 'manifest_missing' }
@@ -108,8 +103,10 @@ try {
         if ($brainDigest -ne $ExpectedBrainDigest.ToLowerInvariant()) { throw 'canonical_brain_digest_mismatch' }
 
         foreach ($entry in $manifest.files) {
-            $filePath = Join-Path $stage ([string]$entry.path)
-            if (-not (Test-Path -LiteralPath $filePath)) { throw 'manifest_file_missing' }
+            $relative = [string]$entry.path
+            if ($relative -match '(^|[\\/])\.\.([\\/]|$)') { throw 'unsafe_manifest_path' }
+            $filePath = Join-Path $stage $relative
+            if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) { throw 'manifest_file_missing' }
             $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $filePath).Hash.ToLowerInvariant()
             if ($hash -ne ([string]$entry.sha256).ToLowerInvariant()) { throw 'manifest_hash_mismatch' }
         }

@@ -8,6 +8,7 @@ on:
       - 'scripts/render_dominion_brain.py'
       - 'scripts/check_brain_inputs.py'
       - 'scripts/deploy_dominion_brain_remote.sh'
+      - 'scripts/quarantine_vm_repo_state.sh'
       - 'tests/test_render_dominion_brain.py'
       - 'agents/registry.json'
       - 'governance/**'
@@ -20,11 +21,13 @@ on:
     branches:
       - main
       - governance/agent-brain-pack-20260809
+      - fix/brain-vm-drift-quarantine-20260809
     paths:
       - 'brain/**'
       - 'scripts/render_dominion_brain.py'
       - 'scripts/check_brain_inputs.py'
       - 'scripts/deploy_dominion_brain_remote.sh'
+      - 'scripts/quarantine_vm_repo_state.sh'
       - 'tests/test_render_dominion_brain.py'
       - 'agents/registry.json'
       - 'governance/**'
@@ -49,7 +52,7 @@ jobs:
       - name: Compile and shell syntax
         run: |
           python -m py_compile scripts/render_dominion_brain.py scripts/check_brain_inputs.py tests/test_render_dominion_brain.py
-          bash -n scripts/deploy_dominion_brain_remote.sh
+          bash -n scripts/deploy_dominion_brain_remote.sh scripts/quarantine_vm_repo_state.sh
       - name: Reject secret-bearing governed inputs
         run: |
           set -euo pipefail

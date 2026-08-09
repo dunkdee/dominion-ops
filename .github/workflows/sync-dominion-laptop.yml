@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dominion-laptop-canonical-sync
+  group: dominion-laptop-canonical-sync-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -88,7 +88,7 @@ jobs:
           retention-days: 1
 
   sync-canonical-laptop:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: [validate-script, build-canonical-brain]
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 20
@@ -114,7 +114,7 @@ jobs:
 
           git update-ref refs/heads/dominion-release $expected
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $bundle = Join-Path $env:RUNNER_TEMP ("dominion-laptop-{0}.bundle" -f $env:GITHUB_RUN_ID)
+          $bundle = Join-Path $env:RUNNER_TEMP ("dominion-laptop-{0}-{1}.bundle" -f $env:GITHUB_RUN_ID,$env:GITHUB_RUN_ATTEMPT)
           git bundle create $bundle refs/heads/dominion-release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git bundle verify $bundle

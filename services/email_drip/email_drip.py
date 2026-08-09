@@ -553,7 +553,7 @@ def _suppression_state(email: str) -> str:
     try:
         with SUPPRESSION_LOCK:
             if not SUPPRESSION_FILE.exists():
-                return "clear"
+                return "error"
             with SUPPRESSION_FILE.open("r", encoding="utf-8") as handle:
                 data = json.load(handle)
             emails = data.get("emails", [])
@@ -611,7 +611,7 @@ def capture_email(payload: EmailCapture):
     name = (payload.name or "Friend").strip() or "Friend"
     source_value = (payload.source or "").strip()
     book = _resolve_book(source_value)
-    unsubscribe_url = (payload.unsubscribe_url or "").strip() or _unsubscribe_url(email)
+    unsubscribe_url = _unsubscribe_url(email)
 
     try:
         with LEADS_LOCK:
@@ -651,7 +651,7 @@ def capture_email(payload: EmailCapture):
         log.error("Lead store failure: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="lead_store_unavailable")
 
-    log.info("Captured lead_ref=%s for book=%s source=%s", _lead_ref(email), book, source_value)
+    log.info("Captured lead_ref=%s for book=%s", _lead_ref(email), book)
     return {"status": "ok", "message": f"Lead captured for {book}", "book": book}
 
 
@@ -727,8 +727,11 @@ def _plan_due_message(lead: dict, now: datetime) -> dict:
     days_since = (now - captured).days
     already_sent = set(lead.get("emails_sent", []))
     resolved_from_source = _resolve_book(str(lead.get("source", "")))
-    book = "free_audit_hold" if resolved_from_source == "free_audit_hold" else lead.get("book", DEFAULT_BOOK)
-    emails = BOOK_EMAILS.get(book, BOOK_EMAILS[DEFAULT_BOOK])
+    stored_book = str(lead.get("book", "")).strip()
+    book = "free_audit_hold" if resolved_from_source == "free_audit_hold" else (stored_book or resolved_from_source)
+    if book not in BOOK_EMAILS:
+        return {"status": "invalid_book", "book": book, "lead_ref": _lead_ref(email)}
+    emails = BOOK_EMAILS[book]
     if not emails:
         return {"status": "no_email_content", "book": book, "lead_ref": _lead_ref(email)}
 
@@ -738,9 +741,7 @@ def _plan_due_message(lead: dict, now: datetime) -> dict:
         content = emails.get(step["key"])
         if not content:
             continue
-        unsubscribe_url = (lead.get("unsubscribe_url") or "").strip() or _unsubscribe_url(email)
-        if not unsubscribe_url:
-            return {"status": "unsubscribe_unavailable", "book": book, "step": step["key"], "lead_ref": _lead_ref(email)}
+        unsubscribe_url = _unsubscribe_url(email)
         return {
             "status": "candidate",
             "email": email,
@@ -813,7 +814,8 @@ def _run_drip_cycle() -> int:
                     log.info("DRIP HOLD: due email blocked lead_ref=%s book=%s step=%s", plan["lead_ref"], plan["book"], plan["step"])
                     continue
 
-                body = plan["body"].replace("{{name}}", plan["name"])
+                safe_name = html_lib.escape(str(plan["name"]), quote=True)
+                body = plan["body"].replace("{{name}}", safe_name)
                 safe_url = html_lib.escape(plan["unsubscribe_url"], quote=True)
                 disclaimer = BOOK_DISCLAIMERS.get(plan["book"], "")
                 body += '<hr style="margin-top:28px;border:0;border-top:1px solid #ddd;">'
@@ -843,7 +845,7 @@ def _drip_loop():
         try:
             _run_drip_cycle()
         except Exception as exc:
-            log.error("Drip cycle error: %s", exc)
+            log.error("Drip cycle error_type=%s", type(exc).__name__)
         time.sleep(DRIP_CHECK_INTERVAL)
 
 
@@ -864,7 +866,7 @@ def start_drip_scheduler():
 if __name__ == "__main__":
     uvicorn.run(
         "email_drip:app",
-        host="0.0.0.0",
+        host=os.getenv("DRIP_HOST", "127.0.0.1"),
         port=int(os.getenv("DRIP_PORT", "8099")),
         reload=False,
         log_level="info",

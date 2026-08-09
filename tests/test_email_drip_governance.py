@@ -131,3 +131,63 @@ def test_source_contains_no_legacy_transport_or_high_risk_claim_markers():
     text = SOURCE.read_text(encoding="utf-8")
     forbidden = ["SENDGRID_API_KEY", "sendgrid.SendGridAPIClient", "trying SendGrid", "email_outbox", "Johns Hopkins", "42% more likely", "dopamine and serotonin", "antidepressants", "$23,000", "14% more likely", "78% of Americans", "mailto:{FROM_EMAIL}?subject=Unsubscribe"]
     assert [item for item in forbidden if item in text] == []
+
+
+def test_missing_suppression_store_is_fail_closed(tmp_path, monkeypatch):
+    module, _, suppression = load_module(tmp_path, monkeypatch)
+    suppression.unlink()
+    report = module._build_preflight_report(
+        data={"leads": [due_lead(datetime.now(timezone.utc))], "stats": {}}
+    )
+    assert report["candidate_count"] == 0
+    assert report["status_counts"]["suppression_error"] == 1
+
+
+def test_unknown_stored_book_is_fail_closed(tmp_path, monkeypatch):
+    module, _, _ = load_module(tmp_path, monkeypatch)
+    now = datetime.now(timezone.utc)
+    lead = due_lead(now, source="website", book="unapproved_sequence")
+    report = module._build_preflight_report(data={"leads": [lead], "stats": {}}, now=now)
+    assert report["candidate_count"] == 0
+    assert report["status_counts"]["invalid_book"] == 1
+
+
+def test_capture_ignores_supplied_unsubscribe_url_and_logs_no_raw_source(tmp_path, monkeypatch):
+    module, leads_path, _ = load_module(tmp_path, monkeypatch)
+    payload = module.EmailCapture(
+        email="customer@example.invalid",
+        name="Customer",
+        source="sovereign_mind private-note-should-not-be-logged",
+        unsubscribe_url="https://attacker.invalid/unsubscribe",
+    )
+    result = module.capture_email(payload)
+    assert result["status"] == "ok"
+    lead = json.loads(leads_path.read_text(encoding="utf-8"))["leads"][0]
+    assert lead["unsubscribe_url"].startswith(module.UNSUBSCRIBE_BASE_URL + "?")
+    assert "attacker.invalid" not in lead["unsubscribe_url"]
+
+
+def test_scheduler_escapes_customer_name_before_transport(tmp_path, monkeypatch):
+    module, leads_path, _ = load_module(tmp_path, monkeypatch, mode="live")
+    now = datetime.now(timezone.utc)
+    lead = due_lead(now)
+    lead["name"] = '<img src=x onerror="alert(1)">'
+    data = {"leads": [lead], "stats": {"total_captured": 1, "emails_sent": 0}}
+    leads_path.write_text(json.dumps(data), encoding="utf-8")
+    captured = {}
+
+    def transport(_email, _name, _subject, body):
+        captured["body"] = body
+        return False
+
+    monkeypatch.setattr(module, "_send_email", transport)
+    assert module._run_drip_cycle() == 0
+    assert "<img src=x" not in captured["body"]
+    assert "&lt;img src=x" in captured["body"]
+    assert "attacker.invalid" not in captured["body"]
+
+
+def test_service_defaults_to_loopback_binding():
+    text = SOURCE.read_text(encoding="utf-8")
+    assert 'host=os.getenv("DRIP_HOST", "127.0.0.1")' in text
+    assert 'host="0.0.0.0"' not in text

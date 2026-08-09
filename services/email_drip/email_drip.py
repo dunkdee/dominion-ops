@@ -21,6 +21,7 @@ import base64
 import hmac
 import hashlib
 import html as html_lib
+import ssl
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
@@ -43,9 +44,32 @@ GMAIL_PASSWORD = os.getenv("SMTP_PASSWORD", os.getenv("EMAIL_PASSWORD", ""))
 FROM_EMAIL = os.getenv("DRIP_FROM_EMAIL", "dewayne@dominionhealing.org")
 FROM_NAME = os.getenv("DRIP_FROM_NAME", "Dewayne | Dominion Healing")
 DRIP_CHECK_INTERVAL = int(os.getenv("DRIP_CHECK_INTERVAL", "3600"))  # seconds
-DRIP_SEND_MODE = os.getenv("DRIP_SEND_MODE", "hold").strip().lower()
-if DRIP_SEND_MODE not in {"hold", "live"}:
+if DRIP_CHECK_INTERVAL <= 0:
+    raise RuntimeError("DRIP_CHECK_INTERVAL must be positive")
+CONFIGURED_DRIP_SEND_MODE = os.getenv("DRIP_SEND_MODE", "hold").strip().lower()
+if CONFIGURED_DRIP_SEND_MODE not in {"hold", "live"}:
     raise RuntimeError("DRIP_SEND_MODE must be hold or live")
+DRIP_LIVE_AUTHORIZED_AT = os.getenv("DRIP_LIVE_AUTHORIZED_AT", "").strip()
+DRIP_LIVE_AUTH_MAX_AGE_SECONDS = int(os.getenv("DRIP_LIVE_AUTH_MAX_AGE_SECONDS", "900"))
+if DRIP_LIVE_AUTH_MAX_AGE_SECONDS <= 0:
+    raise RuntimeError("DRIP_LIVE_AUTH_MAX_AGE_SECONDS must be positive")
+
+def _live_start_authorized(now=None):
+    if CONFIGURED_DRIP_SEND_MODE != "live":
+        return False
+    if not DRIP_LIVE_AUTHORIZED_AT:
+        return False
+    current = now or datetime.now(timezone.utc)
+    try:
+        authorized = datetime.fromisoformat(DRIP_LIVE_AUTHORIZED_AT.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if authorized.tzinfo is None:
+        return False
+    age = (current - authorized).total_seconds()
+    return 0 <= age <= DRIP_LIVE_AUTH_MAX_AGE_SECONDS
+
+DRIP_SEND_MODE = "live" if _live_start_authorized() else "hold"
 LEADS_FILE = Path(os.getenv("DRIP_LEADS_FILE", str(LEADS_FILE)))
 SUPPRESSION_FILE = Path(os.getenv(
     "DRIP_SUPPRESSION_FILE",
@@ -76,10 +100,10 @@ app = FastAPI(title="KDP Email Drip Engine", version="1.0.0")
 
 
 def _load_leads() -> dict:
-    if LEADS_FILE.exists():
-        with open(LEADS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"leads": [], "stats": {"total_captured": 0, "emails_sent": 0}}
+    if not LEADS_FILE.exists():
+        raise FileNotFoundError(f"Lead store missing: {LEADS_FILE}")
+    with open(LEADS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 
@@ -97,7 +121,8 @@ def _save_leads(data: dict) -> None:
         mode = 0o600
     tmp = LEADS_FILE.parent / f".{LEADS_FILE.name}.{os.getpid()}.{threading.get_ident()}.tmp"
     try:
-        with tmp.open("w", encoding="utf-8") as handle:
+        fd_tmp = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd_tmp, "w", encoding="utf-8") as handle:
             json.dump(data, handle, indent=2, default=str)
             handle.flush()
             os.fsync(handle.fileno())
@@ -180,7 +205,7 @@ def _send_email(to_email: str, to_name: str, subject: str, html_body: str) -> bo
         msg["Reply-To"] = FROM_EMAIL
         msg.attach(MIMEText(html_body, "html"))
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as srv:
-            srv.starttls()
+            srv.starttls(context=ssl.create_default_context())
             srv.login(GMAIL_ADDRESS, GMAIL_PASSWORD)
             srv.send_message(msg)
         log.info("SMTP sent lead_ref=%s subject=%s", lead_ref, subject)
@@ -709,8 +734,7 @@ def drip_status():
 
 @app.post("/api/run-drip")
 def run_drip_manual():
-    sent = _run_drip_cycle()
-    return {"status": "ok", "emails_sent_this_cycle": sent}
+    raise HTTPException(status_code=403, detail="manual_drip_disabled")
 
 
 @app.get("/health")
@@ -721,6 +745,8 @@ def health():
         "service": "email_drip",
         "version": "1.0.0",
         "send_mode": DRIP_SEND_MODE,
+        "configured_send_mode": CONFIGURED_DRIP_SEND_MODE,
+        "live_start_authorized": DRIP_SEND_MODE == "live",
     }
 
 
@@ -732,6 +758,8 @@ def health():
 
 def _plan_due_message(lead: dict, now: datetime) -> dict:
     """Return one scheduler-faithful candidate or a non-send status; never mutate state."""
+    if not isinstance(lead, dict):
+        return {"status": "invalid_lead_record", "lead_ref": "missing"}
     raw_email = str(lead.get("email", ""))
     email = _normalize_email(raw_email)
     captured_raw = str(lead.get("captured_at", "")).strip()
@@ -752,9 +780,13 @@ def _plan_due_message(lead: dict, now: datetime) -> dict:
         return {"status": "invalid_captured_at", "lead_ref": _lead_ref(email)}
 
     days_since = (now - captured).days
-    sent_raw = lead.get("emails_sent", [])
+    if "emails_sent" not in lead:
+        return {"status": "invalid_emails_sent", "lead_ref": _lead_ref(email)}
+    sent_raw = lead.get("emails_sent")
     if not isinstance(sent_raw, list):
         return {"status": "invalid_emails_sent", "lead_ref": _lead_ref(email)}
+    if lead.get("pending_send"):
+        return {"status": "send_reconciliation_required", "lead_ref": _lead_ref(email)}
     already_sent = {str(value) for value in sent_raw}
     resolved_from_source = _resolve_book(str(lead.get("source", "")))
     stored_book = str(lead.get("book", "")).strip()
@@ -765,25 +797,49 @@ def _plan_due_message(lead: dict, now: datetime) -> dict:
     if not emails:
         return {"status": "no_email_content", "book": book, "lead_ref": _lead_ref(email)}
 
-    for step in DRIP_SCHEDULE:
-        if step["key"] in already_sent or days_since < step["day"]:
-            continue
-        content = emails.get(step["key"])
-        if not content:
-            continue
-        unsubscribe_url = _unsubscribe_url(email)
-        return {
-            "status": "candidate",
-            "email": email,
-            "lead_ref": _lead_ref(email),
-            "name": lead.get("name") or "Friend",
-            "book": book,
-            "step": step["key"],
-            "subject": content["subject"],
-            "body": content["body"],
-            "unsubscribe_url": unsubscribe_url,
-        }
-    return {"status": "no_due_email", "book": book, "lead_ref": _lead_ref(email)}
+    schedule_keys = [step["key"] for step in DRIP_SCHEDULE]
+    if any(key not in schedule_keys for key in already_sent):
+        return {"status": "invalid_send_history", "book": book, "lead_ref": _lead_ref(email)}
+    expected_prefix = schedule_keys[:len(sent_raw)]
+    if sent_raw != expected_prefix:
+        return {"status": "invalid_send_history", "book": book, "lead_ref": _lead_ref(email)}
+
+    next_index = len(sent_raw)
+    if next_index >= len(DRIP_SCHEDULE):
+        return {"status": "no_due_email", "book": book, "lead_ref": _lead_ref(email)}
+    step = DRIP_SCHEDULE[next_index]
+    if days_since < step["day"]:
+        return {"status": "no_due_email", "book": book, "lead_ref": _lead_ref(email)}
+
+    if next_index > 0:
+        last_raw = str(lead.get("last_sent_at", "")).strip()
+        if not last_raw:
+            return {"status": "invalid_send_history", "book": book, "lead_ref": _lead_ref(email)}
+        try:
+            last_sent = datetime.fromisoformat(last_raw.replace("Z", "+00:00"))
+        except ValueError:
+            return {"status": "invalid_send_history", "book": book, "lead_ref": _lead_ref(email)}
+        if last_sent.tzinfo is None:
+            return {"status": "invalid_send_history", "book": book, "lead_ref": _lead_ref(email)}
+        required_gap_days = step["day"] - DRIP_SCHEDULE[next_index - 1]["day"]
+        if (now - last_sent) < timedelta(days=required_gap_days):
+            return {"status": "spacing_hold", "book": book, "lead_ref": _lead_ref(email)}
+
+    content = emails.get(step["key"])
+    if not content:
+        return {"status": "no_email_content", "book": book, "lead_ref": _lead_ref(email)}
+    unsubscribe_url = _unsubscribe_url(email)
+    return {
+        "status": "candidate",
+        "email": email,
+        "lead_ref": _lead_ref(email),
+        "name": lead.get("name") or "Friend",
+        "book": book,
+        "step": step["key"],
+        "subject": content["subject"],
+        "body": content["body"],
+        "unsubscribe_url": unsubscribe_url,
+    }
 
 
 def _build_preflight_report(data: Optional[dict] = None, now: Optional[datetime] = None) -> dict:
@@ -818,7 +874,6 @@ def _run_drip_cycle() -> int:
     """Execute one cycle; advance state only after approved SMTP returns success."""
     now = datetime.now(timezone.utc)
     sent_count = 0
-    changed = False
     try:
         with LEADS_LOCK:
             data = _load_leads()
@@ -846,23 +901,31 @@ def _run_drip_cycle() -> int:
 
                 safe_name = html_lib.escape(str(plan["name"]), quote=True)
                 body = plan["body"].replace("{{name}}", safe_name)
+                subject = str(plan["subject"]).replace("{{name}}", str(plan["name"]))
                 safe_url = html_lib.escape(plan["unsubscribe_url"], quote=True)
                 disclaimer = BOOK_DISCLAIMERS.get(plan["book"], "")
-                body += '<hr style="margin-top:28px;border:0;border-top:1px solid #ddd;">'
+                footer = '<hr style="margin-top:28px;border:0;border-top:1px solid #ddd;">'
                 if disclaimer:
-                    body += f'<p style="font-size:12px;color:#777">{html_lib.escape(disclaimer)}</p>'
-                body += '<p style="font-size:12px;color:#777">You received this because you signed up at Dominion Healing. ' + f'<a href="{safe_url}">Unsubscribe</a></p>'
+                    footer += f'<p style="font-size:12px;color:#777">{html_lib.escape(disclaimer)}</p>'
+                footer += '<p style="font-size:12px;color:#777">You received this because you signed up at Dominion Healing. ' + f'<a href="{safe_url}">Unsubscribe</a></p>'
+                if "</body>" not in body:
+                    log.error("Email template missing closing body; send blocked lead_ref=%s", plan["lead_ref"])
+                    continue
+                body = body.replace("</body>", footer + "</body>", 1)
 
-                if _send_email(plan["email"], plan["name"], plan["subject"], body):
+                lead["pending_send"] = {"step": plan["step"], "attempted_at": now.isoformat()}
+                _save_leads(data)
+                if _send_email(plan["email"], plan["name"], subject, body):
                     lead.setdefault("emails_sent", []).append(plan["step"])
                     lead["last_sent_at"] = now.isoformat()
+                    lead.pop("pending_send", None)
                     data["stats"]["emails_sent"] += 1
+                    _save_leads(data)
                     sent_count += 1
-                    changed = True
+                else:
+                    log.error("Send outcome requires reconciliation lead_ref=%s step=%s", plan["lead_ref"], plan["step"])
 
-            if changed:
-                _save_leads(data)
-    except (RuntimeError, json.JSONDecodeError, OSError, Timeout, TypeError, ValueError) as exc:
+    except (RuntimeError, json.JSONDecodeError, OSError, Timeout, TypeError, ValueError, FileNotFoundError) as exc:
         log.error("Drip cycle blocked: %s", type(exc).__name__)
         return 0
     log.info("Drip cycle complete: %d emails sent", sent_count)
@@ -881,9 +944,8 @@ def _drip_loop():
 
 @app.on_event("startup")
 def start_drip_scheduler():
-    # Ensure leads file exists
     if not LEADS_FILE.exists():
-        _save_leads({"leads": [], "stats": {"total_captured": 0, "emails_sent": 0}})
+        raise RuntimeError("Lead store missing; explicit initialization required")
     thread = threading.Thread(target=_drip_loop, daemon=True)
     thread.start()
     log.info("Email drip engine online | from=%s | transport=smtp | mode=%s", FROM_EMAIL, DRIP_SEND_MODE)

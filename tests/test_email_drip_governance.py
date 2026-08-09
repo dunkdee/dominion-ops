@@ -12,7 +12,7 @@ import pytest
 SOURCE = Path(__file__).parents[1] / "services" / "email_drip" / "email_drip.py"
 
 
-def load_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, mode: str = "hold"):
+def load_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, mode: str | None = "hold"):
     secret = tmp_path / "webhook_secret.key"
     secret.write_text("synthetic-test-secret", encoding="utf-8")
     leads = tmp_path / "leads.json"
@@ -22,7 +22,12 @@ def load_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, mode: str = 
     monkeypatch.setenv("DRIP_WEBHOOK_SECRET_PATH", str(secret))
     monkeypatch.setenv("DRIP_LEADS_FILE", str(leads))
     monkeypatch.setenv("DRIP_SUPPRESSION_FILE", str(suppression))
-    monkeypatch.setenv("DRIP_SEND_MODE", mode)
+    if mode is not None:
+        monkeypatch.setenv("DRIP_SEND_MODE", mode)
+        if mode == "live":
+            monkeypatch.setenv("DRIP_LIVE_AUTHORIZED_AT", datetime.now(timezone.utc).isoformat())
+        else:
+            monkeypatch.delenv("DRIP_LIVE_AUTHORIZED_AT", raising=False)
     monkeypatch.setenv("SMTP_EMAIL", "sender@example.invalid")
     monkeypatch.setenv("SMTP_PASSWORD", "synthetic-password")
     name = f"email_drip_test_{id(tmp_path)}_{mode}"
@@ -43,7 +48,7 @@ def due_lead(now: datetime, *, source: str = "sovereign_mind", book: str = "sove
         "book": book,
         "captured_at": (now - timedelta(days=7)).isoformat(),
         "emails_sent": ["welcome", "value", "social_proof"],
-        "last_sent_at": None,
+        "last_sent_at": (now - timedelta(days=2)).isoformat(),
         "unsubscribe_url": "",
     }
 
@@ -87,7 +92,10 @@ def test_failed_transport_does_not_advance_state(tmp_path, monkeypatch):
     leads_path.write_text(json.dumps(data), encoding="utf-8")
     monkeypatch.setattr(module, "_send_email", lambda *a, **k: False)
     assert module._run_drip_cycle() == 0
-    assert json.loads(leads_path.read_text(encoding="utf-8")) == data
+    saved = json.loads(leads_path.read_text(encoding="utf-8"))
+    assert saved["leads"][0]["emails_sent"] == data["leads"][0]["emails_sent"]
+    assert saved["leads"][0]["pending_send"]["step"] == "soft_sell"
+    assert saved["stats"]["emails_sent"] == 0
 
 
 def test_success_advances_once_and_does_not_duplicate(tmp_path, monkeypatch):
@@ -226,3 +234,89 @@ def test_scheduler_and_capture_share_email_validation(tmp_path, monkeypatch):
     report = module._build_preflight_report(data={"leads": [invalid], "stats": {}}, now=now)
     assert report["candidate_count"] == 0
     assert report["status_counts"]["ghost_or_invalid"] == 1
+
+
+
+def test_manual_run_endpoint_is_disabled(tmp_path, monkeypatch):
+    module, _, _ = load_module(tmp_path, monkeypatch)
+    with pytest.raises(module.HTTPException) as exc:
+        module.run_drip_manual()
+    assert exc.value.status_code == 403
+
+
+def test_missing_lead_store_fails_closed(tmp_path, monkeypatch):
+    module, leads_path, _ = load_module(tmp_path, monkeypatch)
+    leads_path.unlink()
+    with pytest.raises(FileNotFoundError):
+        module._load_leads()
+
+
+def test_non_mapping_lead_is_invalid(tmp_path, monkeypatch):
+    module, _, _ = load_module(tmp_path, monkeypatch)
+    plan = module._plan_due_message(None, datetime.now(timezone.utc))
+    assert plan['status'] == 'invalid_lead_record'
+
+
+def test_missing_send_history_is_not_assumed_empty(tmp_path, monkeypatch):
+    module, _, _ = load_module(tmp_path, monkeypatch)
+    now = datetime.now(timezone.utc)
+    lead = due_lead(now)
+    lead.pop('emails_sent')
+    assert module._plan_due_message(lead, now)['status'] == 'invalid_emails_sent'
+
+
+def test_pending_send_blocks_retry(tmp_path, monkeypatch):
+    module, _, _ = load_module(tmp_path, monkeypatch)
+    now = datetime.now(timezone.utc)
+    lead = due_lead(now)
+    lead['pending_send'] = {'step': 'welcome', 'attempted_at': now.isoformat()}
+    assert module._plan_due_message(lead, now)['status'] == 'send_reconciliation_required'
+
+
+def test_overdue_sequence_preserves_spacing(tmp_path, monkeypatch):
+    module, _, _ = load_module(tmp_path, monkeypatch)
+    now = datetime.now(timezone.utc)
+    lead = due_lead(now - timedelta(days=20))
+    lead['emails_sent'] = ['welcome']
+    lead['last_sent_at'] = now.isoformat()
+    plan = module._plan_due_message(lead, now)
+    assert plan['status'] == 'spacing_hold'
+
+
+def test_footer_inserted_inside_html_and_failed_transport_leaves_pending(tmp_path, monkeypatch):
+    module, leads_path, _ = load_module(tmp_path, monkeypatch, mode='hold')
+    module.DRIP_SEND_MODE = 'live'
+    now = datetime.now(timezone.utc)
+    lead = due_lead(now)
+    leads_path.write_text(json.dumps({'leads':[lead], 'stats':{'total_captured':1,'emails_sent':0}}), encoding='utf-8')
+    captured = {}
+    def transport(_email, _name, _subject, body):
+        captured['body'] = body
+        return False
+    monkeypatch.setattr(module, '_send_email', transport)
+    assert module._run_drip_cycle() == 0
+    assert captured['body'].index('Unsubscribe') < captured['body'].index('</body>')
+    saved = json.loads(leads_path.read_text(encoding='utf-8'))['leads'][0]
+    assert saved['pending_send']['step'] == 'soft_sell'
+    assert saved['emails_sent'] == ['welcome', 'value', 'social_proof']
+
+
+def test_live_mode_requires_fresh_start_authorization(tmp_path, monkeypatch):
+    monkeypatch.setenv('DRIP_SEND_MODE', 'live')
+    monkeypatch.delenv('DRIP_LIVE_AUTHORIZED_AT', raising=False)
+    module, _, _ = load_module(tmp_path, monkeypatch, mode=None)
+    assert module.CONFIGURED_DRIP_SEND_MODE == 'live'
+    assert module.DRIP_SEND_MODE == 'hold'
+
+
+def test_nonpositive_interval_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv('DRIP_CHECK_INTERVAL', '0')
+    with pytest.raises(RuntimeError):
+        load_module(tmp_path, monkeypatch)
+
+
+def test_default_send_mode_is_hold_when_unset(tmp_path, monkeypatch):
+    monkeypatch.delenv('DRIP_SEND_MODE', raising=False)
+    module, _, _ = load_module(tmp_path, monkeypatch, mode=None)
+    assert module.CONFIGURED_DRIP_SEND_MODE == 'hold'
+    assert module.DRIP_SEND_MODE == 'hold'

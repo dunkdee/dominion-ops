@@ -1,0 +1,72 @@
+name: RC3 Email Drip Subject Sanitization
+
+on:
+  push:
+    branches:
+      - rc3/email-drip-review-ready-20260809
+    paths:
+      - .github/workflows/rc3-email-drip-subject-sanitize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: rc3/email-drip-review-ready-20260809
+          fetch-depth: 0
+      - name: Patch and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          source_path = Path('services/email_drip/email_drip.py')
+          source = source_path.read_text(encoding='utf-8')
+          old = '                subject = str(plan["subject"]).replace("{{name}}", str(plan["name"]))'
+          new = '                safe_subject_name = " ".join(str(plan["name"]).replace("\\r", " ").replace("\\n", " ").split())\n                subject = str(plan["subject"]).replace("{{name}}", safe_subject_name)'
+          if source.count(old) != 1:
+              raise SystemExit(f'subject anchor count={source.count(old)}')
+          source_path.write_text(source.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          tests_path = Path('tests/test_email_drip_governance.py')
+          tests = tests_path.read_text(encoding='utf-8')
+          marker = 'def test_subject_name_cannot_inject_headers'
+          if marker not in tests:
+              tests += '''\n\n
+def test_subject_name_cannot_inject_headers(tmp_path, monkeypatch):
+    module, leads_path, _ = load_module(tmp_path, monkeypatch, mode='hold')
+    module.DRIP_SEND_MODE = 'live'
+    now = datetime.now(timezone.utc)
+    lead = due_lead(now)
+    lead['name'] = 'Dewayne\\r\\nBcc: attacker@example.invalid'
+    module.BOOK_EMAILS['sovereign_mind']['soft_sell']['subject'] = 'A note for {{name}}'
+    leads_path.write_text(json.dumps({'leads':[lead], 'stats':{'total_captured':1,'emails_sent':0}}), encoding='utf-8')
+    captured = {}
+    def transport(_email, _name, subject, _body):
+        captured['subject'] = subject
+        return False
+    monkeypatch.setattr(module, '_send_email', transport)
+    assert module._run_drip_cycle() == 0
+    assert '\\r' not in captured['subject']
+    assert '\\n' not in captured['subject']
+    assert captured['subject'] == 'A note for Dewayne Bcc: attacker@example.invalid'
+'''
+              tests_path.write_text(tests, encoding='utf-8', newline='\n')
+          PY
+          python -m pip install --disable-pip-version-check 'fastapi>=0.110,<1' 'pydantic>=2,<3' 'filelock>=3,<4' 'uvicorn>=0.29,<1' 'pytest>=8,<9'
+          python -m py_compile services/email_drip/email_drip.py tests/test_email_drip_governance.py
+          pytest -q tests/test_email_drip_governance.py
+          git diff --check
+      - name: Commit source and tests only
+        run: |
+          git config user.name dominion-github-engineer
+          git config user.email actions@users.noreply.github.com
+          git add services/email_drip/email_drip.py tests/test_email_drip_governance.py
+          git diff --cached --check
+          git commit -m 'fix(rc3): sanitize customer name in SMTP subject'
+          git push origin HEAD:rc3/email-drip-review-ready-20260809

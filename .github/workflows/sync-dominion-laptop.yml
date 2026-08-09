@@ -22,7 +22,7 @@ permissions:
 
 concurrency:
   group: dominion-canonical-parity-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   validate-scripts:

@@ -1,0 +1,39 @@
+name: RC3 Email Drip CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/email_drip/**'
+      - 'tests/test_email_drip_governance.py'
+      - '.github/workflows/rc3-email-drip-ci.yml'
+  push:
+    branches:
+      - rc3/email-drip-review-ready-20260809
+    paths:
+      - 'services/email_drip/**'
+      - 'tests/test_email_drip_governance.py'
+      - '.github/workflows/rc3-email-drip-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check 'fastapi>=0.110,<1' 'pydantic>=2,<3' 'filelock>=3,<4' 'uvicorn>=0.29,<1' 'pytest>=8,<9'
+      - name: Compile
+        run: python -m py_compile services/email_drip/email_drip.py tests/test_email_drip_governance.py
+      - name: Test
+        run: pytest -q tests/test_email_drip_governance.py
+      - name: Reject committed runtime secrets/data
+        run: |
+          set -euo pipefail
+          ! git ls-files | grep -E '(^|/)\.env($|\.)|leads_drip\.json|email_suppression\.json|email_outbox'

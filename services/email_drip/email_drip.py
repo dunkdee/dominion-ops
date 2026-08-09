@@ -9,7 +9,7 @@ Endpoints:
     GET  /api/drip-status      -- dashboard stats
     POST /api/run-drip         -- manually trigger drip scheduler
 
-Deploy: systemd service on foundation-vm  |  SendGrid for delivery
+Deploy: systemd service on foundation-vm  |  PrivateEmail SMTP for controlled delivery
 """
 
 import os
@@ -19,6 +19,7 @@ import logging
 import threading
 import base64
 import hmac
+import hashlib
 import html as html_lib
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -35,7 +36,6 @@ import uvicorn
 
 DATA_DIR = Path(__file__).parent
 LEADS_FILE = DATA_DIR / "leads_drip.json"
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
 SMTP_HOST     = os.getenv("SMTP_HOST", "mail.privateemail.com")
 SMTP_PORT     = int(os.getenv("SMTP_PORT", "587"))
 GMAIL_ADDRESS = os.getenv("SMTP_EMAIL", os.getenv("EMAIL_ADDRESS", ""))
@@ -44,6 +44,8 @@ FROM_EMAIL = os.getenv("DRIP_FROM_EMAIL", "dewayne@dominionhealing.org")
 FROM_NAME = os.getenv("DRIP_FROM_NAME", "Dewayne | Dominion Healing")
 DRIP_CHECK_INTERVAL = int(os.getenv("DRIP_CHECK_INTERVAL", "3600"))  # seconds
 DRIP_SEND_MODE = os.getenv("DRIP_SEND_MODE", "hold").strip().lower()
+if DRIP_SEND_MODE not in {"hold", "live"}:
+    raise RuntimeError("DRIP_SEND_MODE must be hold or live")
 LEADS_FILE = Path(os.getenv("DRIP_LEADS_FILE", str(LEADS_FILE)))
 SUPPRESSION_FILE = Path(os.getenv(
     "DRIP_SUPPRESSION_FILE",
@@ -53,7 +55,7 @@ UNSUBSCRIBE_BASE_URL = os.getenv(
     "UNSUBSCRIBE_BASE_URL",
     "https://dominionhealing.org/api/unsubscribe",
 )
-SECRET_PATH = Path("/home/malachisingleton8/buddy_core/core/webhook_secret.key")
+SECRET_PATH = Path(os.getenv("DRIP_WEBHOOK_SECRET_PATH", "/home/malachisingleton8/buddy_core/core/webhook_secret.key"))
 WEBHOOK_SECRET = SECRET_PATH.read_text(encoding="utf-8").strip()
 if not WEBHOOK_SECRET:
     raise RuntimeError("Dominion webhook secret is empty; refusing to start email drip")
@@ -125,70 +127,46 @@ def _save_leads(data: dict) -> None:
 
 
 
+def _lead_ref(email: str) -> str:
+    """Return a stable non-PII reference for operational logs."""
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        return "missing"
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+
 def _send_email(to_email: str, to_name: str, subject: str, html_body: str) -> bool:
-    """Send only when DRIP_SEND_MODE=live. HOLD touches no transport or outbox."""
+    """Send through approved PrivateEmail SMTP only; fail closed on any error."""
+    lead_ref = _lead_ref(to_email)
     if DRIP_SEND_MODE != "live":
-        log.info("DRIP HOLD: transport blocked for %s (mode=%s)", to_email, DRIP_SEND_MODE)
+        log.info("DRIP HOLD: transport blocked lead_ref=%s mode=%s", lead_ref, DRIP_SEND_MODE)
         return False
+    if not GMAIL_ADDRESS or not GMAIL_PASSWORD:
+        log.error("SMTP blocked: credentials unavailable lead_ref=%s", lead_ref)
+        return False
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
 
-    if GMAIL_ADDRESS and GMAIL_PASSWORD:
-        try:
-            import smtplib
-            from email.mime.text import MIMEText
-            from email.mime.multipart import MIMEMultipart
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
-            msg["To"] = to_email
-            msg["Reply-To"] = FROM_EMAIL
-            msg.attach(MIMEText(html_body, "html"))
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as srv:
-                srv.starttls()
-                srv.login(GMAIL_ADDRESS, GMAIL_PASSWORD)
-                srv.send_message(msg)
-            log.info("SMTP sent to %s: %s", to_email, subject)
-            return True
-        except Exception as smtp_err:
-            log.error("SMTP failed for %s: %s -- trying SendGrid", to_email, smtp_err)
-
-    if SENDGRID_API_KEY:
-        try:
-            import sendgrid
-            from sendgrid.helpers.mail import Mail, Email, To, Content
-            sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-            message = Mail(
-                from_email=Email(FROM_EMAIL, FROM_NAME),
-                to_emails=To(to_email, to_name),
-                subject=subject,
-                html_content=Content("text/html", html_body),
-            )
-            response = sg.send(message)
-            log.info("SendGrid sent to %s | status=%s", to_email, response.status_code)
-            return 200 <= response.status_code < 300
-        except Exception as exc:
-            log.error("SendGrid error for %s: %s", to_email, exc)
-
-    from pathlib import Path as _Path
-    import json as _json
-    _outbox = _Path.home() / "email_outbox"
-    _outbox.mkdir(exist_ok=True)
-    _ts = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
-    _efile = _outbox / f"{_ts}_{to_email.replace('@', '_at_')}.json"
-    _tmp = _efile.parent / f".{_efile.name}.{os.getpid()}.tmp"
-    with _tmp.open("w", encoding="utf-8") as _handle:
-        _json.dump({
-            "to": to_email,
-            "name": to_name,
-            "subject": subject,
-            "body": html_body,
-            "queued_at": _ts,
-        }, _handle)
-        _handle.flush()
-        os.fsync(_handle.fileno())
-    os.replace(_tmp, _efile)
-    return False
-
-
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
+        msg["To"] = to_email
+        msg["Reply-To"] = FROM_EMAIL
+        msg.attach(MIMEText(html_body, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as srv:
+            srv.starttls()
+            srv.login(GMAIL_ADDRESS, GMAIL_PASSWORD)
+            srv.send_message(msg)
+        log.info("SMTP sent lead_ref=%s subject=%s", lead_ref, subject)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log.error(
+            "SMTP failed lead_ref=%s error_type=%s; provider fallback disabled",
+            lead_ref,
+            type(exc).__name__,
+        )
+        return False
 
 # ---------------------------------------------------------------------------
 # Email content -- 5 emails x 3 books = 15 total
@@ -212,104 +190,84 @@ BUNDLE_LINK = "https://www.amazon.com/s?k=Dominion+Healing+Press"
 
 
 def _wrap_html(body: str) -> str:
+    """Wrap message content; scheduler appends the one canonical signed unsubscribe link."""
     return f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
 <body style="font-family:Georgia,serif;max-width:600px;margin:0 auto;padding:20px;color:#2d2d2d;line-height:1.7;">
 {body}
-<hr style="border:none;border-top:1px solid #e0d6c8;margin-top:30px;">
-<p style="font-size:12px;color:#999;">You received this because you signed up at Dominion Healing.<br>
-<a href="mailto:{FROM_EMAIL}?subject=Unsubscribe">Unsubscribe</a></p>
 </body></html>"""
-
 
 # ===== GOLDEN YEARS WORD SEARCH =====
 
 EMAILS_GOLDEN_YEARS = {
     "welcome": {
-        "subject": "Your brain just thanked you (here's a free puzzle)",
+        "subject": "A simple puzzle habit to start today",
         "body": _wrap_html("""
 <h2 style="color:#5b4a3f;">Welcome, {{name}}!</h2>
-<p>Thank you for joining the Dominion Healing community. You just took a real step toward keeping your mind sharp and active.</p>
-<p>Here is something most people do not realize: <strong>word search puzzles activate the same neural pathways used in memory recall and pattern recognition.</strong> Neurologists at Johns Hopkins confirmed that adults who engage in daily word puzzles show measurably slower cognitive decline.</p>
-<p>To get you started, try this quick exercise right now:</p>
-<p style="background:#faf6f0;padding:15px;border-left:4px solid #c9a96e;">
-<strong>60-Second Brain Boost:</strong> Write down 10 words related to "garden" as fast as you can. Time yourself. Tomorrow, try to beat your time. This simple drill strengthens the same retrieval circuits our puzzles target.</p>
-<p>Our <em>Golden Years Word Search</em> book has 90+ large-print puzzles built around themes that matter to you -- health, nature, family, travel, and more.</p>
-<p>Keep an eye on your inbox. In two days, I am sending you three brain-health tips that pair perfectly with your puzzle practice.</p>
-<p>Stay sharp,<br><strong>Dominion Healing Press</strong></p>
+<p>Thank you for joining the Dominion Healing community.</p>
+<p>Word searches are recreational puzzles that practice attention, scanning, and pattern recognition. They can be an enjoyable part of a mentally active routine, but they are not a treatment or a guarantee against cognitive decline.</p>
+<p style="background:#faf6f0;padding:15px;border-left:4px solid #c9a96e;"><strong>60-Second Word Challenge:</strong> Write down 10 words related to "garden" as fast as you can. Tomorrow, try a different theme. Use it for variety, not as a medical test.</p>
+<p><em>Golden Years Word Search</em> includes 90+ large-print puzzles across themes such as nature, family, travel, and everyday life.</p>
+<p>In two days, I will send three simple ideas for making a puzzle routine easier to enjoy.</p>
+<p>Stay curious,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "value": {
-        "subject": "3 brain-health habits backed by science",
+        "subject": "3 simple habits for a more intentional day",
         "body": _wrap_html("""
-<h2 style="color:#5b4a3f;">3 Daily Habits That Protect Your Memory</h2>
+<h2 style="color:#5b4a3f;">Three Simple Routine Ideas</h2>
 <p>Hi {{name}},</p>
-<p>Puzzles are powerful, but they work best alongside these three research-backed habits:</p>
 <ol>
-<li><strong>Morning hydration.</strong> Your brain is 75% water. Even mild dehydration reduces concentration by up to 13%. Drink a full glass before breakfast.</li>
-<li><strong>The 20-minute walk.</strong> A University of British Columbia study showed that regular aerobic exercise actually increases the size of the hippocampus -- the brain region tied to verbal memory and learning.</li>
-<li><strong>Novel challenges.</strong> Routine numbs your neurons. Word searches work because each puzzle forces your brain to scan, compare, and decide -- activities that build new synaptic connections at any age.</li>
+<li><strong>Hydration.</strong> Keep water available and follow any guidance your clinician has given you about fluid intake.</li>
+<li><strong>Movement.</strong> If it is appropriate for you, walking or another activity you enjoy can be part of a balanced routine.</li>
+<li><strong>Variety.</strong> Rotate between puzzles, reading, conversation, hobbies, and other activities you enjoy.</li>
 </ol>
-<p>Pair these habits with a daily puzzle session from <em>Golden Years Word Search</em> and you are giving your brain a full workout -- no gym membership required.</p>
-<p>More coming in a few days.</p>
-<p>To your clarity,<br><strong>Dominion Healing Press</strong></p>
+<p>If you enjoy word searches, a short puzzle session can be one pleasant, screen-free part of your day.</p>
+<p>To your routine,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "social_proof": {
-        "subject": "\"My mother does a puzzle every morning now\"",
+        "subject": "What makes a puzzle habit easier to keep",
         "body": _wrap_html("""
-<h2 style="color:#5b4a3f;">Real People, Real Results</h2>
+<h2 style="color:#5b4a3f;">Make the Habit Easy to Return To</h2>
 <p>Hi {{name}},</p>
-<p>We asked readers what changed after they started doing daily word searches. Here is what they told us:</p>
-<blockquote style="border-left:4px solid #c9a96e;padding:10px 15px;background:#faf6f0;margin:15px 0;">
-"I bought this for my mother after her doctor suggested brain exercises. She does one puzzle every morning with her coffee. Her focus and mood have both improved noticeably." -- <em>R. Thompson</em>
-</blockquote>
-<blockquote style="border-left:4px solid #c9a96e;padding:10px 15px;background:#faf6f0;margin:15px 0;">
-"The large print is a game-changer. I tried other puzzle books and could not read them without my magnifying glass. This one I can do anywhere." -- <em>M. Dawson</em>
-</blockquote>
-<p>What these readers have in common is simple: they committed to a small daily habit and their brains responded. Cognitive fitness is not about grand gestures. It is about consistent, enjoyable practice.</p>
-<p>If you have been thinking about starting, now is the perfect time.</p>
+<p>A puzzle routine is easier to keep when the material is readable, the sessions are short enough to enjoy, and you can stop and restart without losing your place.</p>
+<p><em>Golden Years Word Search</em> uses large print, themed puzzles, and a full solution key so the activity can stay recreational instead of becoming frustrating.</p>
+<p>Consistency does not require perfection. Pick a time that fits your day and use the book when you want a focused activity.</p>
 <p>Warmly,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "soft_sell": {
-        "subject": "90+ puzzles designed for sharper days ahead",
+        "subject": "90+ large-print puzzles for your routine",
         "body": _wrap_html(f"""
-<h2 style="color:#5b4a3f;">Ready to Make It a Daily Habit?</h2>
+<h2 style="color:#5b4a3f;">Ready to Keep the Puzzle Habit Going?</h2>
 <p>Hi {{{{name}}}},</p>
-<p>Over the past week, you have learned why word puzzles protect your memory, the three daily habits that amplify the effect, and what other readers have experienced.</p>
-<p>If any of that resonated, <em>Golden Years Word Search</em> was built for exactly this moment:</p>
+<p><em>Golden Years Word Search</em> includes:</p>
 <ul>
-<li>90+ large-print puzzles across 12 life-enriching themes</li>
-<li>Progressive difficulty -- start comfortable, build strength</li>
-<li>Full solution key in the back so you never get stuck</li>
-<li>Designed for readers 55+ who want substance, not fluff</li>
+<li>90+ large-print puzzles across 12 themes</li>
+<li>Progressive difficulty</li>
+<li>A full solution key</li>
+<li>A format designed for easy, screen-free use</li>
 </ul>
-<p style="text-align:center;margin:25px 0;">
-<a href="{AMAZON_LINKS['golden_years']}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Get Your Copy on Amazon</a>
-</p>
-<p>A sharper mind is a daily choice. This book makes that choice easy.</p>
+<p style="text-align:center;margin:25px 0;"><a href="{AMAZON_LINKS['golden_years']}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Get Your Copy on Amazon</a></p>
+<p>If that format fits your routine, the book is there when you want the next puzzle.</p>
 <p>Stay well,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "last_chance": {
-        "subject": "Complete your brain-health library (all 3 books)",
+        "subject": "Three different tools for three different routines",
         "body": _wrap_html(f"""
-<h2 style="color:#5b4a3f;">One Last Thing, {{{{name}}}}</h2>
-<p>Two weeks ago you took the first step toward a sharper, more engaged mind. That matters.</p>
-<p>Today I want to share something we put together for committed readers: <strong>the Dominion Healing complete library.</strong></p>
-<p>Three books. Three dimensions of personal growth:</p>
+<h2 style="color:#5b4a3f;">One Last Note, {{{{name}}}}</h2>
+<p>This is the last email in this series.</p>
+<p>Dominion Healing Press currently offers three different kinds of structured practice:</p>
 <ol>
-<li><strong>Golden Years Word Search</strong> -- cognitive fitness through daily puzzles</li>
-<li><strong>Sovereign Mind Journal</strong> -- mindset mastery through guided reflection</li>
-<li><strong>Debt Freedom Planner</strong> -- financial clarity through structured action</li>
+<li><strong>Golden Years Word Search</strong> -- recreational puzzle practice</li>
+<li><strong>Sovereign Mind Journal</strong> -- guided reflection</li>
+<li><strong>Debt Freedom Planner</strong> -- structured debt-payoff planning</li>
 </ol>
-<p>Together they cover mind, purpose, and prosperity. Readers who pick up all three tell us it feels like a personal development system, not just a stack of books.</p>
-<p style="text-align:center;margin:25px 0;">
-<a href="{BUNDLE_LINK}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Browse All 3 Books on Amazon</a>
-</p>
-<p>This is my last email in this series. Whatever you decide, thank you for spending these two weeks with us. Your brain is already better for it.</p>
+<p style="text-align:center;margin:25px 0;"><a href="{BUNDLE_LINK}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Browse the Books on Amazon</a></p>
+<p>Thank you for spending these two weeks with us.</p>
 <p>With gratitude,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
@@ -319,91 +277,74 @@ EMAILS_GOLDEN_YEARS = {
 
 EMAILS_SOVEREIGN_MIND = {
     "welcome": {
-        "subject": "Your mind is sovereign -- here's how to prove it",
+        "subject": "Turn one intention into a written next step",
         "body": _wrap_html("""
 <h2 style="color:#5b4a3f;">Welcome, {{name}}!</h2>
-<p>Thank you for joining us. The fact that you are here tells me something important: you are not content to drift. You want direction, clarity, and control over your own thinking.</p>
-<p>That instinct is backed by hard science. A 2015 study published in <em>Psychological Science</em> found that people who write about their goals are <strong>42% more likely to achieve them</strong> than those who simply think about them.</p>
-<p>Here is a challenge to start right now:</p>
-<p style="background:#faf6f0;padding:15px;border-left:4px solid #c9a96e;">
-<strong>The Sovereignty Snapshot:</strong> Grab a piece of paper. Write one sentence answering each question: (1) What do I want most right now? (2) What is stopping me? (3) What is one action I can take today? This 3-line exercise is the seed of everything our journal builds on.</p>
-<p>The <em>Sovereign Mind Journal</em> gives you 90 days of guided prompts, gratitude frames, and reflection architecture designed to rewire how you think about your own potential.</p>
-<p>In two days, I will send you the science behind gratitude journaling -- and why most people do it wrong.</p>
-<p>Own your mind,<br><strong>Dominion Healing Press</strong></p>
+<p>Thank you for joining us.</p>
+<p>Writing a goal down can make a vague intention more concrete. Research on goal setting has examined written commitments and accountability, but no writing exercise guarantees an outcome.</p>
+<p style="background:#faf6f0;padding:15px;border-left:4px solid #c9a96e;"><strong>The Sovereignty Snapshot:</strong> Write one sentence for each question: (1) What do I want most right now? (2) What is getting in the way? (3) What is one action I can take today?</p>
+<p>The <em>Sovereign Mind Journal</em> provides 90 days of guided prompts, gratitude frames, and reflection checkpoints designed to help you examine your own patterns and choices.</p>
+<p>In two days, I will send a practical way to make gratitude entries more specific.</p>
+<p>Own your next step,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "value": {
-        "subject": "Why most gratitude journals fail (and what works instead)",
+        "subject": "A more specific way to practice gratitude",
         "body": _wrap_html("""
-<h2 style="color:#5b4a3f;">The Gratitude Mistake Almost Everyone Makes</h2>
+<h2 style="color:#5b4a3f;">Make Gratitude More Specific</h2>
 <p>Hi {{name}},</p>
-<p>You have probably heard that gratitude journaling improves happiness. That is true -- but there is a catch most people miss.</p>
-<p><strong>Writing "I'm grateful for my family" every day does almost nothing.</strong></p>
-<p>Research from UC Davis psychologist Robert Emmons shows that gratitude only rewires your brain when it is <em>specific</em> and <em>novel</em>. Here is the difference:</p>
+<p>Research reviews suggest gratitude practices can produce small average improvements in well-being, although effects vary from person to person.</p>
+<p>One useful technique is to record a specific moment instead of repeating the same broad phrase every day:</p>
 <ul>
-<li><strong>Weak:</strong> "I'm grateful for my health."</li>
-<li><strong>Strong:</strong> "I'm grateful that my knee felt good enough to walk to the park this morning and watch the herons."</li>
+<li><strong>Broad:</strong> "I am grateful for my health."</li>
+<li><strong>Specific:</strong> "I am grateful I had enough energy to walk to the park this morning."</li>
 </ul>
-<p>The second version forces your brain to relive the experience. That activates the prefrontal cortex and floods your system with dopamine and serotonin -- the same chemicals targeted by antidepressants, generated naturally.</p>
-<p>The <em>Sovereign Mind Journal</em> is structured around this principle. Every prompt pushes you past surface-level answers into the kind of specific reflection that actually changes your neurochemistry.</p>
-<p>More in a few days.</p>
+<p>The second entry gives you a concrete event to reflect on later. The journal uses specific prompts to help you build a more detailed record of your own observations.</p>
 <p>Intentionally,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "social_proof": {
-        "subject": "\"I stopped needing my therapist to tell me what I already knew\"",
+        "subject": "A structured way to notice your own patterns",
         "body": _wrap_html("""
-<h2 style="color:#5b4a3f;">What Guided Journaling Unlocks</h2>
+<h2 style="color:#5b4a3f;">Use Prompts to Notice Patterns</h2>
 <p>Hi {{name}},</p>
-<p>We hear from readers regularly. These two messages capture something important:</p>
-<blockquote style="border-left:4px solid #c9a96e;padding:10px 15px;background:#faf6f0;margin:15px 0;">
-"After 30 days with this journal, I stopped needing my therapist to tell me what I already knew. The prompts helped me see my own patterns clearly for the first time." -- <em>J. Carter</em>
-</blockquote>
-<blockquote style="border-left:4px solid #c9a96e;padding:10px 15px;background:#faf6f0;margin:15px 0;">
-"I have tried five different journals. They all felt generic. This one asks questions that actually make me think. I look forward to it every morning." -- <em>S. Mitchell</em>
-</blockquote>
-<p>Self-awareness is not a personality trait. It is a skill -- and like any skill, it improves with the right practice and the right structure. That is exactly what guided journaling provides.</p>
-<p>The question is not whether journaling works. The question is whether you are using a system designed to work for you.</p>
+<p>A blank page asks you to invent both the question and the answer. A guided journal removes the first problem by giving you a specific prompt to respond to.</p>
+<p>That structure can help you compare what you wrote across days and weeks, notice recurring themes, and decide what you want to do next.</p>
+<p>It is a reflection tool, not a substitute for professional mental-health care.</p>
 <p>Onward,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "soft_sell": {
-        "subject": "90 days to a mind you actually control",
+        "subject": "A 90-day guided reflection structure",
         "body": _wrap_html(f"""
-<h2 style="color:#5b4a3f;">Your 90-Day Sovereignty Blueprint</h2>
+<h2 style="color:#5b4a3f;">Your 90-Day Reflection Framework</h2>
 <p>Hi {{{{name}}}},</p>
-<p>Over the past week, you have seen the science, the method, and the results. Here is what the <em>Sovereign Mind Journal</em> puts in your hands:</p>
+<p><em>Sovereign Mind Journal</em> includes:</p>
 <ul>
-<li>90 daily guided prompts -- no blank-page anxiety, no generic questions</li>
-<li>Weekly reflection checkpoints to track your growth</li>
-<li>Gratitude architecture built on the specificity principle</li>
-<li>Goal-setting frameworks that move beyond wishful thinking</li>
-<li>Morning and evening rhythm suggestions for lasting habit formation</li>
+<li>90 daily guided prompts</li>
+<li>Weekly reflection checkpoints</li>
+<li>Specific gratitude prompts</li>
+<li>Goal-setting and next-action exercises</li>
+<li>Morning and evening routine suggestions</li>
 </ul>
-<p>This is not a diary. It is a cognitive operating system for people who refuse to leave their potential on the table.</p>
-<p style="text-align:center;margin:25px 0;">
-<a href="{AMAZON_LINKS['sovereign_mind']}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Get Your Copy on Amazon</a>
-</p>
-<p>Ninety days from now, you will either be the same person or someone who took the time to build a sovereign mind. The journal just makes the process clear.</p>
+<p style="text-align:center;margin:25px 0;"><a href="{AMAZON_LINKS['sovereign_mind']}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Get Your Copy on Amazon</a></p>
+<p>Ninety days gives you a defined practice window. What you get from it depends on how consistently and thoughtfully you use it.</p>
 <p>With conviction,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "last_chance": {
-        "subject": "Mind, money, and meaning -- the complete system",
+        "subject": "Reflection, puzzles, and financial planning",
         "body": _wrap_html(f"""
 <h2 style="color:#5b4a3f;">Before I Go, {{{{name}}}}</h2>
-<p>This is my final email in this series, and I want to leave you with something bigger than a single book.</p>
-<p>Over two weeks, we have explored how structured reflection reshapes your thinking. But mindset is only one pillar. Real sovereignty requires three:</p>
+<p>This is the final email in this series.</p>
+<p>The Dominion Healing Press books serve different purposes:</p>
 <ol>
-<li><strong>Sovereign Mind Journal</strong> -- clarity and purpose through guided daily practice</li>
-<li><strong>Golden Years Word Search</strong> -- cognitive sharpness through engaging mental exercise</li>
-<li><strong>Debt Freedom Planner</strong> -- financial control through a proven payoff system</li>
+<li><strong>Sovereign Mind Journal</strong> -- guided reflection</li>
+<li><strong>Golden Years Word Search</strong> -- recreational puzzle practice</li>
+<li><strong>Debt Freedom Planner</strong> -- structured debt-payoff planning</li>
 </ol>
-<p>Readers who combine all three consistently report that the effect is compounding. A clear mind makes better financial decisions. A sharp brain sustains long-term discipline. Financial freedom removes the stress that clouds everything else.</p>
-<p style="text-align:center;margin:25px 0;">
-<a href="{BUNDLE_LINK}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">See All 3 Books on Amazon</a>
-</p>
-<p>Whatever path you choose, thank you for these two weeks. Your willingness to invest in yourself is rare and valuable.</p>
+<p style="text-align:center;margin:25px 0;"><a href="{BUNDLE_LINK}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">See the Books on Amazon</a></p>
+<p>Use whichever tool fits the area you want to work on.</p>
 <p>With respect,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
@@ -413,89 +354,69 @@ EMAILS_SOVEREIGN_MIND = {
 
 EMAILS_DEBT_FREEDOM = {
     "welcome": {
-        "subject": "The number most people are afraid to calculate",
+        "subject": "Start with the numbers you can actually see",
         "body": _wrap_html("""
 <h2 style="color:#5b4a3f;">Welcome, {{name}}!</h2>
-<p>Thank you for signing up. You just did something that 78% of Americans avoid: you acknowledged that debt is worth confronting head-on.</p>
-<p>Here is the truth nobody tells you: <strong>debt is not a character flaw. It is a math problem.</strong> And math problems have solutions.</p>
-<p>Before you do anything else, try this one exercise:</p>
-<p style="background:#faf6f0;padding:15px;border-left:4px solid #c9a96e;">
-<strong>The Total Truth Number:</strong> Open every account -- credit cards, student loans, car note, medical bills -- and add up every balance. Write that single number down. This is not about shame. This is your starting line. Every finish line needs one.</p>
-<p>The <em>Debt Freedom Planner</em> is built around this principle: clarity first, strategy second, momentum always. It walks you through choosing the right payoff method, building a realistic timeline, and tracking every dollar of progress.</p>
-<p>In two days, I will break down the two most effective debt payoff strategies -- and help you pick the right one for your situation.</p>
-<p>To your freedom,<br><strong>Dominion Healing Press</strong></p>
+<p>Thank you for signing up. You chose to look at your debt directly and turn it into a set of numbers you can work with.</p>
+<p>A repayment plan starts with concrete information: balances, interest rates, minimum payments, fees, and available cash flow.</p>
+<p style="background:#faf6f0;padding:15px;border-left:4px solid #c9a96e;"><strong>The Starting Number:</strong> List each debt and record its current balance, rate, and required payment. This is a planning baseline, not a judgment about you.</p>
+<p>The <em>Debt Freedom Planner</em> provides worksheets for organizing those numbers and comparing payoff approaches.</p>
+<p>In two days, I will break down two common payoff strategies.</p>
+<p>To your plan,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "value": {
-        "subject": "Snowball vs. avalanche -- which one wins?",
+        "subject": "Snowball vs. avalanche -- two common approaches",
         "body": _wrap_html("""
-<h2 style="color:#5b4a3f;">The Two Strategies That Actually Work</h2>
+<h2 style="color:#5b4a3f;">Two Ways to Order Extra Payments</h2>
 <p>Hi {{name}},</p>
-<p>There are dozens of debt strategies out there, but only two have survived serious academic scrutiny:</p>
-<p><strong>The Debt Snowball (Dave Ramsey's method):</strong><br>
-Pay minimums on everything. Throw extra money at your <em>smallest</em> balance first. When it is gone, roll that payment into the next smallest. The wins come fast, and the psychological momentum is real. A Northwestern University study found snowball users are 14% more likely to eliminate all debt.</p>
-<p><strong>The Debt Avalanche (the math-optimal method):</strong><br>
-Pay minimums on everything. Throw extra money at the <em>highest interest rate</em> first. You save more money over time, but the first payoff takes longer. This method suits people who are motivated by efficiency over emotion.</p>
-<p><strong>Which one wins?</strong> The one you actually stick with. If you need early victories to stay motivated, choose the snowball. If watching interest charges drop gives you energy, choose the avalanche.</p>
-<p>The <em>Debt Freedom Planner</em> includes worksheets for both methods so you can map out your exact timeline either way.</p>
-<p>More coming soon.</p>
+<p><strong>Debt snowball:</strong> Pay required minimums, then direct available extra money to the smallest balance first. When it is paid, roll that amount toward the next balance. Some people prefer the earlier account closures.</p>
+<p><strong>Debt avalanche:</strong> Pay required minimums, then direct available extra money to the highest interest rate first. With the same payment amounts and no special constraints, prioritizing higher rates generally reduces interest cost compared with paying lower-rate balances first.</p>
+<p>Which approach fits depends on your balances, rates, fees, cash flow, and what you can sustain. The planner includes worksheets for both so you can compare and revise a working timeline.</p>
 <p>Strategically,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "social_proof": {
-        "subject": "\"We paid off $23,000 in 11 months using this planner\"",
+        "subject": "Why visible progress matters in a payoff plan",
         "body": _wrap_html("""
-<h2 style="color:#5b4a3f;">From Overwhelmed to Debt-Free</h2>
+<h2 style="color:#5b4a3f;">Make Progress Visible</h2>
 <p>Hi {{name}},</p>
-<p>Numbers on a page are powerful. But real stories are what make people take action:</p>
-<blockquote style="border-left:4px solid #c9a96e;padding:10px 15px;background:#faf6f0;margin:15px 0;">
-"My wife and I sat down with this planner on a Sunday afternoon. Seeing everything mapped out -- balances, interest rates, the payoff timeline -- changed the conversation. We stopped fighting about money and started working as a team. Eleven months later, $23,000 gone." -- <em>D. and K. Williams</em>
-</blockquote>
-<blockquote style="border-left:4px solid #c9a96e;padding:10px 15px;background:#faf6f0;margin:15px 0;">
-"I tried apps, spreadsheets, everything. Something about writing it down by hand and physically checking off each payment made it stick. I am four months in and already eliminated two credit cards." -- <em>T. Nguyen</em>
-</blockquote>
-<p>The common thread is not willpower. It is structure. When you can see the path laid out in front of you, the daily discipline gets easier because you know exactly where each dollar is going and exactly when freedom arrives.</p>
+<p>A payoff plan is easier to evaluate when balances, rates, required payments, and extra payments are visible in one place.</p>
+<p>Tracking each update gives you a record you can compare with your original estimate. If income, expenses, rates, or balances change, revise the plan rather than treating the first timeline as a promise.</p>
+<p>The planner is designed to make that record-keeping straightforward.</p>
 <p>Warmly,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "soft_sell": {
-        "subject": "Your debt-free date is closer than you think",
+        "subject": "Build a debt-payoff plan you can update",
         "body": _wrap_html(f"""
-<h2 style="color:#5b4a3f;">See Your Payoff Date in Black and White</h2>
+<h2 style="color:#5b4a3f;">Put the Plan in One Place</h2>
 <p>Hi {{{{name}}}},</p>
-<p>You have learned the two strategies. You have seen what structured planning does for real people. Now here is what the <em>Debt Freedom Planner</em> puts in your hands:</p>
+<p><em>Debt Freedom Planner</em> includes:</p>
 <ul>
-<li>Complete debt inventory worksheets -- every balance, rate, and minimum in one place</li>
-<li>Snowball and avalanche planning templates with month-by-month timelines</li>
-<li>Budget frameworks that find extra payoff money you did not know you had</li>
-<li>Progress tracking pages with visual milestones</li>
-<li>Emergency fund planning so you never go backward</li>
+<li>Debt inventory worksheets for balances, rates, and minimums</li>
+<li>Snowball and avalanche planning templates</li>
+<li>Budget worksheets for identifying possible room for extra payments</li>
+<li>Progress tracking pages</li>
+<li>Emergency-fund planning prompts</li>
 </ul>
-<p>This planner does not just tell you to pay off debt. It shows you exactly how, in what order, and by what date.</p>
-<p style="text-align:center;margin:25px 0;">
-<a href="{AMAZON_LINKS['debt_freedom']}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Get Your Copy on Amazon</a>
-</p>
-<p>Your debt-free date exists. This planner helps you find it and work toward it every single day.</p>
-<p>To your freedom,<br><strong>Dominion Healing Press</strong></p>
+<p style="text-align:center;margin:25px 0;"><a href="{AMAZON_LINKS['debt_freedom']}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Get Your Copy on Amazon</a></p>
+<p>The planner helps you choose an order, estimate a timeline, and track progress. Results depend on your balances, rates, fees, income, and payment amounts.</p>
+<p>To your plan,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
     "last_chance": {
-        "subject": "Sharp mind, clear purpose, zero debt -- the full picture",
+        "subject": "Three practical books, three different uses",
         "body": _wrap_html(f"""
-<h2 style="color:#5b4a3f;">The Final Piece, {{{{name}}}}</h2>
-<p>This is my last email in this series, and I want to zoom out for a moment.</p>
-<p>Financial freedom is not just about spreadsheets and payment schedules. It is about what happens when money stress stops consuming your mental energy. That is when real growth begins.</p>
-<p>We built three books for exactly this reason:</p>
+<h2 style="color:#5b4a3f;">The Final Note, {{{{name}}}}</h2>
+<p>This is the last email in this series.</p>
 <ol>
-<li><strong>Debt Freedom Planner</strong> -- eliminate financial stress with a clear, structured payoff system</li>
-<li><strong>Sovereign Mind Journal</strong> -- build the mindset discipline that sustains long-term change</li>
-<li><strong>Golden Years Word Search</strong> -- keep your brain sharp and engaged through daily cognitive exercise</li>
+<li><strong>Debt Freedom Planner</strong> -- structured debt-payoff planning</li>
+<li><strong>Sovereign Mind Journal</strong> -- guided reflection</li>
+<li><strong>Golden Years Word Search</strong> -- recreational puzzle practice</li>
 </ol>
-<p>Money, mind, and mental fitness. When all three are working together, the compounding effect is remarkable. Readers who use the full set consistently report feeling more in control of their lives than they have in years.</p>
-<p style="text-align:center;margin:25px 0;">
-<a href="{BUNDLE_LINK}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">See All 3 Books on Amazon</a>
-</p>
-<p>Whatever you decide, thank you for these two weeks. Taking control of your finances takes courage, and you have already shown you have it.</p>
+<p style="text-align:center;margin:25px 0;"><a href="{BUNDLE_LINK}" style="background:#c9a96e;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">See the Books on Amazon</a></p>
+<p>Use the tools that fit your goals and circumstances.</p>
 <p>With respect,<br><strong>Dominion Healing Press</strong></p>
 """),
     },
@@ -504,78 +425,74 @@ Pay minimums on everything. Throw extra money at the <em>highest interest rate</
 # ===== DIVINE SOVEREIGNTY =====
 
 EMAILS_DIVINE_SOVEREIGNTY = {
-    'welcome': {
-        'subject': 'Your sovereignty starts here, {{name}}',
-        'body': _wrap_html(chr(10).join([
-            '<h2 style="color:#5b4a3f;">Welcome, {{name}}.</h2>',
-            '<p>You just took a step most people never take: you chose to question the systems that were never designed for your liberation.</p>',
-            '<p>Divine Sovereignty is not a self-help book. It is <strong>spiritual architecture</strong> -- a framework for reclaiming authority over your mind, your finances, your faith, and your future.</p>',
-            '<p style="background:#faf6f0;padding:15px;border-left:4px solid #d4af37;">',
-            '<strong>Sovereignty is not rebellion. It is alignment with divine authority.</strong> It is the ability to live, think, decide, and build according to the truth placed inside you.</p>',
-            '<p>Over the next two weeks, I will share principles from the book that have transformed lives. Real principles. No hype.</p>',
-            '<p>Stay sovereign,<br><strong>Dewayne Singleton</strong><br>Dominion Healing</p>',
-        ])),
+    "welcome": {
+        "subject": "Your sovereignty starts with what you choose to examine",
+        "body": _wrap_html("""
+<h2 style="color:#5b4a3f;">Welcome, {{name}}.</h2>
+<p>Thank you for joining Dominion Healing.</p>
+<p><em>Divine Sovereignty</em> presents a spiritual and personal-development framework for examining authority, responsibility, faith, finances, and future choices.</p>
+<p style="background:#faf6f0;padding:15px;border-left:4px solid #d4af37;"><strong>Sovereignty is not rebellion.</strong> In the book's framework, it begins with examining what you believe, what you are responsible for, and how those beliefs show up in your decisions.</p>
+<p>Over the next two weeks, I will share several themes from the book for you to consider.</p>
+<p>Stay sovereign,<br><strong>Dewayne Singleton</strong><br>Dominion Healing</p>
+"""),
     },
-    'value': {
-        'subject': 'The Five Pillars most people never learn',
-        'body': _wrap_html(chr(10).join([
-            '<h2 style="color:#5b4a3f;">The Five Pillars of Mental Sovereignty</h2>',
-            '<p>Hi {{name}},</p>',
-            '<p>Most people live their entire lives under mental architecture they did not build and never agreed to.</p>',
-            '<ol>',
-            '<li><strong>Identify the Unquestioned Beliefs</strong> -- drag every assumption into the light</li>',
-            '<li><strong>Trace the Source</strong> -- who installed this belief and why?</li>',
-            '<li><strong>Test Against Truth</strong> -- does it hold up under honest scrutiny?</li>',
-            '<li><strong>Replace with Sovereignty</strong> -- install your own operating system</li>',
-            '<li><strong>Guard the Gates</strong> -- protect your mind from re-infection</li>',
-            '</ol>',
-            '<p>This is not theory. This is a daily practice that changes how you see everything.</p>',
-            '<p>In truth,<br><strong>Dewayne Singleton</strong></p>',
-        ])),
+    "value": {
+        "subject": "Five questions for examining inherited beliefs",
+        "body": _wrap_html("""
+<h2 style="color:#5b4a3f;">Five Practices from the Book</h2>
+<p>Hi {{name}},</p>
+<ol>
+<li><strong>Identify the unquestioned belief.</strong></li>
+<li><strong>Trace the source.</strong> Where did it come from?</li>
+<li><strong>Test it.</strong> Does it hold up under honest scrutiny?</li>
+<li><strong>Choose deliberately.</strong> What belief or principle do you want to act from?</li>
+<li><strong>Guard the gates.</strong> Be intentional about what you repeatedly allow to shape your thinking.</li>
+</ol>
+<p>This is a repeatable practice for examining assumptions and choices within the book's spiritual framework.</p>
+<p>In truth,<br><strong>Dewayne Singleton</strong></p>
+"""),
     },
-    'social_proof': {
-        'subject': 'What readers say about Divine Sovereignty',
-        'body': _wrap_html(chr(10).join([
-            '<h2 style="color:#5b4a3f;">This Book Changes People</h2>',
-            '<p>Hi {{name}},</p>',
-            '<blockquote style="border-left:4px solid #d4af37;padding:10px 15px;background:#faf6f0;margin:15px 0;">"This book does not just inspire -- it rebuilds. A blueprint for those ready to break free."</blockquote>',
-            '<blockquote style="border-left:4px solid #d4af37;padding:10px 15px;background:#faf6f0;margin:15px 0;">"Rarely does a book challenge you spiritually, psychologically, and practically all at once."</blockquote>',
-            '<blockquote style="border-left:4px solid #d4af37;padding:10px 15px;background:#faf6f0;margin:15px 0;">"If you are tired of surface-level spirituality and want real transformation, this is your manual."</blockquote>',
-            '<p>Warmly,<br><strong>Dewayne Singleton</strong></p>',
-        ])),
+    "social_proof": {
+        "subject": "Questions Divine Sovereignty asks you to examine",
+        "body": _wrap_html("""
+<h2 style="color:#5b4a3f;">Questions Worth Examining</h2>
+<p>Hi {{name}},</p>
+<ul>
+<li>Which beliefs did you inherit without examining?</li>
+<li>Which values do you want your decisions to reflect?</li>
+<li>Where do responsibility, faith, and personal agency meet in your daily life?</li>
+</ul>
+<p>The book develops these questions through its own spiritual and personal-development framework.</p>
+<p>Warmly,<br><strong>Dewayne Singleton</strong></p>
+"""),
     },
-    'soft_sell': {
-        'subject': 'Freedom, healing, and wealth -- all in one book',
-        'body': _wrap_html(chr(10).join([
-            '<h2 style="color:#5b4a3f;">Ready to Reclaim Your Sovereignty?</h2>',
-            '<p>Hi {{name}},</p>',
-            '<p>Divine Sovereignty covers the full transformation:</p>',
-            '<ul>',
-            '<li><strong>Part One: The Foundation</strong> -- Awakening, breaking invisible chains, divine law</li>',
-            '<li><strong>Part Two: The Transformation</strong> -- Destroying bondage, creator mindset, wealth as divine right</li>',
-            '<li><strong>Part Three: The Ascension</strong> -- Real faith, purpose, and the life beyond limitation</li>',
-            '</ul>',
-            '<p style="text-align:center;margin:25px 0;">',
-            '<a href="https://buy.stripe.com/9B6cN5ar19NJfbr4k78Zq0b" style="background:linear-gradient(135deg,#d4af37,#a07830);color:#000;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Get Divine Sovereignty -- $19</a></p>',
-            '<p>In service,<br><strong>Dewayne Singleton</strong></p>',
-        ])),
+    "soft_sell": {
+        "subject": "Freedom, purpose, and responsibility -- inside one book",
+        "body": _wrap_html("""
+<h2 style="color:#5b4a3f;">Ready to Read Divine Sovereignty?</h2>
+<p>Hi {{name}},</p>
+<p>The book is organized around three parts:</p>
+<ul>
+<li><strong>Part One: The Foundation</strong> -- awakening, invisible constraints, and divine law</li>
+<li><strong>Part Two: The Transformation</strong> -- examining bondage, creator mindset, responsibility, and beliefs about wealth</li>
+<li><strong>Part Three: The Ascension</strong> -- faith, purpose, and life beyond self-imposed limitation</li>
+</ul>
+<p style="text-align:center;margin:25px 0;"><a href="https://buy.stripe.com/9B6cN5ar19NJfbr4k78Zq0b" style="background:linear-gradient(135deg,#d4af37,#a07830);color:#000;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Get Divine Sovereignty -- $19</a></p>
+<p>In service,<br><strong>Dewayne Singleton</strong></p>
+"""),
     },
-    'last_chance': {
-        'subject': 'Last call: the path is clear, {{name}}',
-        'body': _wrap_html(chr(10).join([
-            '<h2 style="color:#5b4a3f;">The Choice Is Yours</h2>',
-            '<p>Hi {{name}},</p>',
-            '<p>Two weeks ago something brought you here. A feeling. A knowing that you were made for more.</p>',
-            '<p style="background:#faf6f0;padding:15px;border-left:4px solid #d4af37;">',
-            '<strong>"Sovereignty is internal freedom that produces external impact."</strong><br>-- Divine Sovereignty, Chapter 1</p>',
-            '<p style="text-align:center;margin:25px 0;">',
-            '<a href="https://buy.stripe.com/9B6cN5ar19NJfbr4k78Zq0b" style="background:linear-gradient(135deg,#d4af37,#a07830);color:#000;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Get Divine Sovereignty -- $19</a></p>',
-            '<p>The pillars stand. The path is clear. The choice is yours.</p>',
-            '<p>With honor,<br><strong>Dewayne Singleton</strong><br>Founder, Dominion Healing</p>',
-        ])),
+    "last_chance": {
+        "subject": "One last note about Divine Sovereignty",
+        "body": _wrap_html("""
+<h2 style="color:#5b4a3f;">The Choice Is Yours</h2>
+<p>Hi {{name}},</p>
+<p>The book's core theme is that internal authority should show up in your decisions, habits, and responsibilities.</p>
+<p style="text-align:center;margin:25px 0;"><a href="https://buy.stripe.com/9B6cN5ar19NJfbr4k78Zq0b" style="background:linear-gradient(135deg,#d4af37,#a07830);color:#000;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Get Divine Sovereignty -- $19</a></p>
+<p>The path described in the book is an invitation to examine and choose; the choice remains yours.</p>
+<p>With honor,<br><strong>Dewayne Singleton</strong><br>Founder, Dominion Healing</p>
+"""),
     },
 }
-
 
 # Map source keywords to book email sets
 BOOK_EMAILS = {
@@ -586,6 +503,14 @@ BOOK_EMAILS = {
 }
 
 BOOK_EMAILS["free_audit_hold"] = {}
+
+BOOK_DISCLAIMERS = {
+    "golden_years": "Recreational and general educational content only; not medical advice or treatment.",
+    "sovereign_mind": "Personal reflection and general educational content only; not mental-health treatment.",
+    "debt_freedom": "General educational planning content only; not individualized financial, tax, or legal advice.",
+    "divine_sovereignty": "Spiritual and personal-development content; not medical, legal, or financial advice.",
+    "free_audit_hold": "",
+}
 
 # Default if no source match
 DEFAULT_BOOK = "sovereign_mind"
@@ -726,7 +651,7 @@ def capture_email(payload: EmailCapture):
         log.error("Lead store failure: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="lead_store_unavailable")
 
-    log.info("Captured lead: %s for book=%s source=%s", email, book, source_value)
+    log.info("Captured lead_ref=%s for book=%s source=%s", _lead_ref(email), book, source_value)
     return {"status": "ok", "message": f"Lead captured for {book}", "book": book}
 
 
@@ -748,7 +673,9 @@ def drip_status():
         "leads_by_book": by_book,
         "total_emails_sent": data["stats"].get("emails_sent", 0),
         "fully_completed_sequences": fully_dripped,
-        "sendgrid_configured": bool(SENDGRID_API_KEY),
+        "sendgrid_configured": False,
+        "smtp_configured": bool(GMAIL_ADDRESS and GMAIL_PASSWORD),
+        "transport": "smtp",
         "from_email": FROM_EMAIL,
         "drip_check_interval_seconds": DRIP_CHECK_INTERVAL,
     }
@@ -777,13 +704,90 @@ def health():
 # ---------------------------------------------------------------------------
 
 
+def _plan_due_message(lead: dict, now: datetime) -> dict:
+    """Return one scheduler-faithful candidate or a non-send status; never mutate state."""
+    email = str(lead.get("email", "")).strip().lower()
+    captured_raw = str(lead.get("captured_at", "")).strip()
+    if not email or "@" not in email or not captured_raw:
+        return {"status": "ghost_or_invalid", "lead_ref": _lead_ref(email)}
+
+    suppression = _suppression_state(email)
+    if suppression == "error":
+        return {"status": "suppression_error", "lead_ref": _lead_ref(email)}
+    if suppression == "suppressed":
+        return {"status": "suppressed", "lead_ref": _lead_ref(email)}
+
+    try:
+        captured = datetime.fromisoformat(captured_raw.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return {"status": "invalid_captured_at", "lead_ref": _lead_ref(email)}
+    if captured.tzinfo is None:
+        return {"status": "invalid_captured_at", "lead_ref": _lead_ref(email)}
+
+    days_since = (now - captured).days
+    already_sent = set(lead.get("emails_sent", []))
+    resolved_from_source = _resolve_book(str(lead.get("source", "")))
+    book = "free_audit_hold" if resolved_from_source == "free_audit_hold" else lead.get("book", DEFAULT_BOOK)
+    emails = BOOK_EMAILS.get(book, BOOK_EMAILS[DEFAULT_BOOK])
+    if not emails:
+        return {"status": "no_email_content", "book": book, "lead_ref": _lead_ref(email)}
+
+    for step in DRIP_SCHEDULE:
+        if step["key"] in already_sent or days_since < step["day"]:
+            continue
+        content = emails.get(step["key"])
+        if not content:
+            continue
+        unsubscribe_url = (lead.get("unsubscribe_url") or "").strip() or _unsubscribe_url(email)
+        if not unsubscribe_url:
+            return {"status": "unsubscribe_unavailable", "book": book, "step": step["key"], "lead_ref": _lead_ref(email)}
+        return {
+            "status": "candidate",
+            "email": email,
+            "lead_ref": _lead_ref(email),
+            "name": lead.get("name") or "Friend",
+            "book": book,
+            "step": step["key"],
+            "subject": content["subject"],
+            "body": content["body"],
+            "unsubscribe_url": unsubscribe_url,
+        }
+    return {"status": "no_due_email", "book": book, "lead_ref": _lead_ref(email)}
+
+
+def _build_preflight_report(data: Optional[dict] = None, now: Optional[datetime] = None) -> dict:
+    """Report blast radius through the exact scheduler planner; invoke no transport and mutate no state."""
+    snapshot = _load_leads() if data is None else data
+    if not isinstance(snapshot, dict) or not isinstance(snapshot.get("leads"), list):
+        raise ValueError("invalid lead store schema")
+    current = now or datetime.now(timezone.utc)
+    status_counts = {}
+    candidates = []
+    for lead in snapshot["leads"]:
+        plan = _plan_due_message(lead, current)
+        status = plan["status"]
+        status_counts[status] = status_counts.get(status, 0) + 1
+        if status == "candidate":
+            candidates.append({"book": plan["book"], "step": plan["step"], "subject": plan["subject"]})
+    return {
+        "total_leads": len(snapshot["leads"]),
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+        "status_counts": status_counts,
+        "free_audit_candidate_count": sum(1 for item in candidates if item["book"] == "free_audit_hold"),
+        "pii_fields_included": False,
+        "transport_invoked": False,
+        "state_mutated": False,
+    }
+
+
+
 
 def _run_drip_cycle() -> int:
-    """Check all leads; HOLD and suppression failures advance no send state."""
+    """Execute one cycle; advance state only after approved SMTP returns success."""
     now = datetime.now(timezone.utc)
     sent_count = 0
     changed = False
-
     try:
         with LEADS_LOCK:
             data = _load_leads()
@@ -792,82 +796,45 @@ def _run_drip_cycle() -> int:
             data.setdefault("stats", {}).setdefault("emails_sent", 0)
 
             for lead in data["leads"]:
-                email = str(lead.get("email", "")).strip().lower()
-                captured_raw = str(lead.get("captured_at", "")).strip()
-                if not email or "@" not in email or not captured_raw:
+                plan = _plan_due_message(lead, now)
+                status = plan["status"]
+                if status == "ghost_or_invalid":
                     log.warning("Ghost/invalid drip lead skipped; report-only, no deletion")
                     continue
-
-                suppression = _suppression_state(email)
-                if suppression == "error":
-                    log.error("Suppression check failed; send blocked for %s", email)
+                if status == "invalid_captured_at":
+                    log.warning("Invalid captured_at skipped lead_ref=%s; report-only, no deletion", plan["lead_ref"])
                     continue
-                if suppression == "suppressed":
+                if status == "suppression_error":
+                    log.error("Suppression check failed; send blocked lead_ref=%s", plan["lead_ref"])
                     continue
-
-                try:
-                    captured = datetime.fromisoformat(captured_raw)
-                except (TypeError, ValueError):
-                    log.warning("Invalid captured_at skipped for %s; report-only, no deletion", email)
+                if status != "candidate":
+                    continue
+                if DRIP_SEND_MODE != "live":
+                    log.info("DRIP HOLD: due email blocked lead_ref=%s book=%s step=%s", plan["lead_ref"], plan["book"], plan["step"])
                     continue
 
-                days_since = (now - captured).days
-                already_sent = set(lead.get("emails_sent", []))
-                resolved_from_source = _resolve_book(str(lead.get("source", "")))
-                book = "free_audit_hold" if resolved_from_source == "free_audit_hold" else lead.get("book", DEFAULT_BOOK)
-                emails = BOOK_EMAILS.get(book, BOOK_EMAILS[DEFAULT_BOOK])
+                body = plan["body"].replace("{{name}}", plan["name"])
+                safe_url = html_lib.escape(plan["unsubscribe_url"], quote=True)
+                disclaimer = BOOK_DISCLAIMERS.get(plan["book"], "")
+                body += '<hr style="margin-top:28px;border:0;border-top:1px solid #ddd;">'
+                if disclaimer:
+                    body += f'<p style="font-size:12px;color:#777">{html_lib.escape(disclaimer)}</p>'
+                body += '<p style="font-size:12px;color:#777">You received this because you signed up at Dominion Healing. ' + f'<a href="{safe_url}">Unsubscribe</a></p>'
 
-                for step in DRIP_SCHEDULE:
-                    if step["key"] in already_sent:
-                        continue
-                    if days_since < step["day"]:
-                        continue
-
-                    email_content = emails.get(step["key"])
-                    if not email_content:
-                        continue
-
-                    if DRIP_SEND_MODE != "live":
-                        log.info(
-                            "DRIP HOLD: due email blocked for %s book=%s step=%s",
-                            email, book, step["key"],
-                        )
-                        break
-
-                    unsubscribe_url = (lead.get("unsubscribe_url") or "").strip() or _unsubscribe_url(email)
-                    if not unsubscribe_url:
-                        log.error("LIVE send blocked: unsubscribe URL unavailable")
-                        break
-
-                    subject = email_content["subject"]
-                    body = email_content["body"].replace("{{name}}", lead.get("name") or "Friend")
-                    safe_url = html_lib.escape(unsubscribe_url, quote=True)
-                    body += (
-                        '<hr style="margin-top:28px;border:0;border-top:1px solid #ddd;">'
-                        '<p style="font-size:12px;color:#777">'
-                        f'<a href="{safe_url}">Unsubscribe</a>'
-                        '</p>'
-                    )
-
-                    success = _send_email(email, lead.get("name") or "Friend", subject, body)
-                    if success:
-                        lead.setdefault("emails_sent", []).append(step["key"])
-                        lead["last_sent_at"] = now.isoformat()
-                        data["stats"]["emails_sent"] += 1
-                        sent_count += 1
-                        changed = True
-                    break
+                if _send_email(plan["email"], plan["name"], plan["subject"], body):
+                    lead.setdefault("emails_sent", []).append(plan["step"])
+                    lead["last_sent_at"] = now.isoformat()
+                    data["stats"]["emails_sent"] += 1
+                    sent_count += 1
+                    changed = True
 
             if changed:
                 _save_leads(data)
     except (RuntimeError, json.JSONDecodeError, OSError, Timeout, TypeError, ValueError) as exc:
         log.error("Drip cycle blocked: %s", type(exc).__name__)
         return 0
-
     log.info("Drip cycle complete: %d emails sent", sent_count)
     return sent_count
-
-
 
 def _drip_loop():
     """Background thread that runs the drip cycle on an interval."""
@@ -887,7 +854,7 @@ def start_drip_scheduler():
         _save_leads({"leads": [], "stats": {"total_captured": 0, "emails_sent": 0}})
     thread = threading.Thread(target=_drip_loop, daemon=True)
     thread.start()
-    log.info("Email drip engine online | from=%s | sendgrid=%s", FROM_EMAIL, bool(SENDGRID_API_KEY))
+    log.info("Email drip engine online | from=%s | transport=smtp | mode=%s", FROM_EMAIL, DRIP_SEND_MODE)
 
 
 # ---------------------------------------------------------------------------

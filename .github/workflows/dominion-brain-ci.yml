@@ -12,11 +12,14 @@ on:
       - '.github/workflows/dominion-brain-ci.yml'
   push:
     branches:
+      - main
       - governance/agent-brain-pack-20260809
     paths:
       - 'brain/**'
       - 'scripts/render_dominion_brain.py'
       - 'tests/test_render_dominion_brain.py'
+      - 'agents/registry.json'
+      - 'governance/**'
       - '.github/workflows/dominion-brain-ci.yml'
 
 permissions:

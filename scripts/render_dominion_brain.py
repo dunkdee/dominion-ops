@@ -152,11 +152,20 @@ def _iter_output_files(target: Path) -> Iterable[Path]:
 
 
 def render(target: Path) -> dict:
+    if target.is_symlink():
+        raise SystemExit("brain target must not be a symlink")
+    if target.exists():
+        if not target.is_dir():
+            raise SystemExit("brain target must be a directory")
+        if any(target.iterdir()):
+            raise SystemExit("brain target must be empty")
+    else:
+        target.mkdir(parents=True, exist_ok=False)
+
     registry = json.loads(_require_source(REGISTRY))
     if not isinstance(registry.get("agents"), list) or not registry["agents"]:
         raise SystemExit("agent registry is empty or malformed")
 
-    target.mkdir(parents=True, exist_ok=True)
     for directory in ROOT_DIRS:
         (target / directory).mkdir(parents=True, exist_ok=True)
 

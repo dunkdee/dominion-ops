@@ -55,3 +55,25 @@ def test_renderer_does_not_read_environment_secrets(tmp_path, monkeypatch):
         if path.is_file()
     )
     assert "MUST_NOT_APPEAR_IN_BRAIN" not in combined
+
+
+
+def test_renderer_rejects_nonempty_target(tmp_path):
+    module = load_renderer()
+    target = tmp_path / "Dominion-Brain"
+    target.mkdir()
+    (target / "ungoverned.md").write_text("must not be incorporated", encoding="utf-8")
+    import pytest
+    with pytest.raises(SystemExit, match="must be empty"):
+        module.render(target)
+
+
+def test_renderer_rejects_symlink_target(tmp_path):
+    module = load_renderer()
+    real = tmp_path / "real"
+    real.mkdir()
+    target = tmp_path / "Dominion-Brain"
+    target.symlink_to(real, target_is_directory=True)
+    import pytest
+    with pytest.raises(SystemExit, match="must not be a symlink"):
+        module.render(target)

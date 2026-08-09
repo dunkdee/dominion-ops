@@ -53,16 +53,32 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Verify workflow checkout is exact canonical SHA
+      - name: Verify workflow checkout and build exact release bundle
+        id: stage
         shell: pwsh
         run: |
           $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
           $expected = '${{ github.sha }}'.ToLowerInvariant()
           if ($actual -ne $expected) { throw "workflow checkout mismatch: $actual != $expected" }
           Write-Host "GITHUB_CANONICAL_SHA=$actual"
+
+          git update-ref refs/heads/dominion-release $expected
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $bundle = Join-Path $env:RUNNER_TEMP ("dominion-laptop-{0}.bundle" -f $env:GITHUB_RUN_ID)
+          git bundle create $bundle refs/heads/dominion-release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git bundle verify $bundle
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "bundle=$bundle" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - name: Synchronize canonical laptop repo and Obsidian brain
         shell: pwsh
         run: |
-          & ./scripts/sync_dominion_laptop.ps1 -ExpectedSha '${{ github.sha }}'
+          & ./scripts/sync_dominion_laptop.ps1 -ExpectedSha '${{ github.sha }}' -BundlePath '${{ steps.stage.outputs.bundle }}'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host 'LAPTOP_PARITY=PASS'
+      - name: Remove temporary release bundle
+        if: always()
+        shell: pwsh
+        run: |
+          $bundle = '${{ steps.stage.outputs.bundle }}'
+          if ($bundle -and (Test-Path -LiteralPath $bundle)) { Remove-Item -LiteralPath $bundle -Force }

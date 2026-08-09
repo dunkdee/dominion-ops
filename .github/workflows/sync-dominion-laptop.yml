@@ -21,11 +21,16 @@ jobs:
   validate-script:
     runs-on: windows-latest
     timeout-minutes: 10
+    outputs:
+      brain_digest: ${{ steps.brain.outputs.digest }}
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - name: Parse governed laptop sync script
         shell: pwsh
         run: |
@@ -41,6 +46,19 @@ jobs:
             exit 1
           }
           Write-Host 'LAPTOP_SYNC_SCRIPT_PARSE=PASS'
+      - name: Compute canonical GitHub brain digest
+        id: brain
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP ('brain-' + [Guid]::NewGuid().ToString('N'))
+          $target = Join-Path $root 'Dominion-Brain'
+          python scripts/render_dominion_brain.py $target
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $manifest = Get-Content -LiteralPath (Join-Path $target 'MANIFEST.json') -Raw | ConvertFrom-Json
+          $digest = ([string]$manifest.source_revision.sha256).ToLowerInvariant()
+          if ($digest -notmatch '^[0-9a-f]{64}$') { throw 'invalid canonical brain digest' }
+          "digest=$digest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "GITHUB_BRAIN_DIGEST=$digest"
 
   sync-canonical-laptop:
     if: github.event_name != 'pull_request'
@@ -61,6 +79,7 @@ jobs:
           $expected = '${{ github.sha }}'.ToLowerInvariant()
           if ($actual -ne $expected) { throw "workflow checkout mismatch: $actual != $expected" }
           Write-Host "GITHUB_CANONICAL_SHA=$actual"
+          Write-Host "GITHUB_BRAIN_DIGEST=${{ needs.validate-script.outputs.brain_digest }}"
 
           git update-ref refs/heads/dominion-release $expected
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -73,7 +92,10 @@ jobs:
       - name: Synchronize canonical laptop repo and Obsidian brain
         shell: pwsh
         run: |
-          & ./scripts/sync_dominion_laptop.ps1 -ExpectedSha '${{ github.sha }}' -BundlePath '${{ steps.stage.outputs.bundle }}'
+          & ./scripts/sync_dominion_laptop.ps1 `
+            -ExpectedSha '${{ github.sha }}' `
+            -ExpectedBrainDigest '${{ needs.validate-script.outputs.brain_digest }}' `
+            -BundlePath '${{ steps.stage.outputs.bundle }}'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host 'LAPTOP_PARITY=PASS'
       - name: Remove temporary release bundle

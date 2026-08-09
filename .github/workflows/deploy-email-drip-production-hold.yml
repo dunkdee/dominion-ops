@@ -68,6 +68,7 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
         run: |
           set -euo pipefail
           install -m 700 -d "$HOME/.ssh"
@@ -77,7 +78,8 @@ jobs:
           chmod 600 "$HOME/.ssh/known_hosts"
           bundle="$RUNNER_TEMP/email-drip-${GITHUB_RUN_ID}.bundle"
           remote_bundle="/tmp/email-drip-${GITHUB_RUN_ID}.bundle"
-          git bundle create "$bundle" main
+          git update-ref refs/heads/dominion-release "$DEPLOY_SHA"
+          git bundle create "$bundle" refs/heads/dominion-release
           git bundle verify "$bundle"
           scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "chmod 600 '$remote_bundle'"
@@ -98,7 +100,7 @@ jobs:
           test -d "$repo/.git"
           cd "$repo"
           test -z "$(git status --porcelain --untracked-files=no)" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=tracked_vm_repo_dirty"; exit 1; }
-          git fetch "$BUNDLE" main:refs/remotes/dominion-release/main
+          git fetch "$BUNDLE" dominion-release:refs/remotes/dominion-release/main
           git cat-file -e "${DEPLOY_SHA}^{commit}"
           git merge-base --is-ancestor HEAD "$DEPLOY_SHA" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=non_fast_forward_vm_repo"; exit 1; }
           git checkout main

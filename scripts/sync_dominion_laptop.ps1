@@ -106,6 +106,7 @@ try {
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
         if ($manifest.schema -ne 'dominion-brain-manifest-v2') { throw 'manifest_schema' }
         if ([int]$manifest.agent_count -le 0) { throw 'agent_count' }
+        if (@($manifest.files).Count -le 0) { throw 'manifest_files_empty' }
         $brainDigest = ([string]$manifest.source_revision.sha256).ToLowerInvariant()
         if ($brainDigest -notmatch '^[0-9a-f]{64}$') { throw 'brain_digest' }
         if ($brainDigest -ne $ExpectedBrainDigest.ToLowerInvariant()) { throw 'canonical_brain_digest_mismatch' }

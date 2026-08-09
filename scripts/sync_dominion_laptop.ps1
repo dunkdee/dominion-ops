@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$ExpectedSha,
+    [Parameter(Mandatory = $true)]
+    [string]$BundlePath,
     [string]$RepoPath = 'C:\Users\Dell\dominion-ops',
     [string]$VaultRoot = 'C:\Users\Dell\Documents\Dominion Command Vault'
 )
@@ -16,6 +18,9 @@ function Fail([string]$Reason) {
 if ($ExpectedSha -notmatch '^[0-9a-fA-F]{40}$') { Fail 'invalid_expected_sha' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail 'git_missing' }
 if (-not (Test-Path -LiteralPath (Join-Path $RepoPath '.git'))) { Fail 'repo_missing' }
+if (-not (Test-Path -LiteralPath $BundlePath -PathType Leaf)) { Fail 'bundle_missing' }
+$bundleItem = Get-Item -LiteralPath $BundlePath -Force
+if ($bundleItem.Attributes -band [IO.FileAttributes]::ReparsePoint) { Fail 'bundle_symlink_or_reparse' }
 
 Push-Location $RepoPath
 try {
@@ -34,15 +39,20 @@ try {
         Fail 'laptop_repo_dirty'
     }
 
-    & git fetch --prune origin main
-    if ($LASTEXITCODE -ne 0) { Fail 'fetch_failed' }
+    & git bundle verify $BundlePath
+    if ($LASTEXITCODE -ne 0) { Fail 'bundle_verify_failed' }
+    & git fetch --force $BundlePath 'refs/heads/dominion-release:refs/remotes/dominion-release/main'
+    if ($LASTEXITCODE -ne 0) { Fail 'bundle_fetch_failed' }
 
-    $originMain = (& git rev-parse origin/main).Trim().ToLowerInvariant()
-    if ($LASTEXITCODE -ne 0) { Fail 'origin_main_unreadable' }
-    if ($originMain -ne $ExpectedSha.ToLowerInvariant()) {
-        Write-Host "LAPTOP_PARITY_HOLD expected=$ExpectedSha origin_main=$originMain"
-        Fail 'github_sha_mismatch'
+    $releaseSha = (& git rev-parse 'refs/remotes/dominion-release/main').Trim().ToLowerInvariant()
+    if ($LASTEXITCODE -ne 0) { Fail 'bundle_release_ref_unreadable' }
+    if ($releaseSha -ne $ExpectedSha.ToLowerInvariant()) {
+        Write-Host "LAPTOP_PARITY_HOLD expected=$ExpectedSha bundle_sha=$releaseSha"
+        Fail 'bundle_sha_mismatch'
     }
+
+    & git merge-base --is-ancestor HEAD $ExpectedSha
+    if ($LASTEXITCODE -ne 0) { Fail 'non_fast_forward_laptop_repo' }
 
     & git checkout main
     if ($LASTEXITCODE -ne 0) { Fail 'checkout_main_failed' }
@@ -51,7 +61,8 @@ try {
 
     $head = (& git rev-parse HEAD).Trim().ToLowerInvariant()
     if ($head -ne $ExpectedSha.ToLowerInvariant()) { Fail 'post_sync_sha_mismatch' }
-    if (@(& git status --porcelain=v1 --untracked-files=all).Count -gt 0) { Fail 'post_sync_repo_dirty' }
+    $postStatus = @(& git status --porcelain=v1 --untracked-files=all)
+    if ($postStatus.Count -gt 0) { Fail 'post_sync_repo_dirty' }
 
     $python = $null
     if (Get-Command py -ErrorAction SilentlyContinue) {

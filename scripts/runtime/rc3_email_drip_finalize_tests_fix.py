@@ -34,4 +34,7 @@ replace_once(
     'failed transport reconciliation semantics',
 )
 
+# Final appended footer test uses the shared due_lead fixture, whose next step is soft_sell.
+text = text.replace("assert saved['pending_send']['step'] == 'welcome'", "assert saved['pending_send']['step'] == 'soft_sell'")
+
 path.write_text(text, encoding='utf-8', newline='\n')

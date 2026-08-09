@@ -1,0 +1,152 @@
+name: Publish Dominion Brain — Production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'brain/**'
+      - 'agents/registry.json'
+      - 'governance/**'
+      - 'architecture/CONTROL_PLANE.md'
+      - 'STATE.md'
+      - 'README.md'
+      - 'scripts/render_dominion_brain.py'
+      - 'scripts/check_brain_inputs.py'
+      - 'scripts/deploy_dominion_brain_remote.sh'
+      - '.github/workflows/publish-dominion-brain-production.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      deploy_sha: ${{ steps.sha.outputs.value }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Verify exact main commit and brain gates
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          bash -n scripts/deploy_dominion_brain_remote.sh
+          python -m py_compile scripts/render_dominion_brain.py scripts/check_brain_inputs.py
+          python scripts/check_brain_inputs.py
+          root="$(mktemp -d)"
+          python scripts/render_dominion_brain.py "$root/Dominion-Brain"
+          python - "$root/Dominion-Brain/MANIFEST.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          doc=json.loads(Path(sys.argv[1]).read_text())
+          assert doc['schema']=='dominion-brain-manifest-v2'
+          assert doc['agent_count'] > 0
+          assert len(doc['source_revision']['sha256']) == 64
+          print('BRAIN_RELEASE_PREFLIGHT=PASS')
+          PY
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.validate.outputs.deploy_sha }}
+          fetch-depth: 0
+      - name: Require protected deployment secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          OBSIDIAN_PASSWORD: ${{ secrets.OBSIDIAN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          test -n "$OBSIDIAN_PASSWORD"
+      - name: Prepare SSH, bundle, and protected password material
+        id: stage
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          OBSIDIAN_PASSWORD: ${{ secrets.OBSIDIAN_PASSWORD }}
+          DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          bundle="$RUNNER_TEMP/dominion-brain-${GITHUB_RUN_ID}.bundle"
+          remote_bundle="/tmp/dominion-brain-${GITHUB_RUN_ID}.bundle"
+          git bundle create "$bundle" main
+          git bundle verify "$bundle"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
+
+          password_file="$RUNNER_TEMP/obsidian-password-${GITHUB_RUN_ID}"
+          remote_password="/tmp/obsidian-password-${GITHUB_RUN_ID}"
+          umask 077
+          printf '%s' "$OBSIDIAN_PASSWORD" > "$password_file"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$password_file" "$VM_USER@$VM_HOST:$remote_password"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "chmod 600 '$remote_bundle' '$remote_password'"
+          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
+          echo "remote_password=$remote_password" >> "$GITHUB_OUTPUT"
+      - name: Synchronize exact Git commit and publish brain
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
+          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+          REMOTE_PASSWORD: ${{ steps.stage.outputs.remote_password }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
+            "DEPLOY_SHA='$DEPLOY_SHA' BUNDLE='$REMOTE_BUNDLE' PASSWORD_FILE='$REMOTE_PASSWORD' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f "$BUNDLE" "$PASSWORD_FILE"' EXIT
+          repo="$HOME/dominion-ops"
+          test -d "$repo/.git"
+          cd "$repo"
+          test -z "$(git status --porcelain --untracked-files=no)" || { echo "BRAIN_DEPLOY=FAIL reason=tracked_vm_repo_dirty"; exit 1; }
+          git fetch "$BUNDLE" main:refs/remotes/dominion-release/main
+          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          git merge-base --is-ancestor HEAD "$DEPLOY_SHA" || { echo "BRAIN_DEPLOY=FAIL reason=non_fast_forward_vm_repo"; exit 1; }
+          git checkout main
+          git merge --ff-only "$DEPLOY_SHA"
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+          password="$(cat "$PASSWORD_FILE")"
+          test -n "$password"
+          DEPLOY_SHA="$DEPLOY_SHA" OBSIDIAN_PASSWORD="$password" RUN_ID="$RUN_ID" bash scripts/deploy_dominion_brain_remote.sh
+          unset password
+          REMOTE
+      - name: Verify external authenticated route
+        env:
+          OBSIDIAN_PASSWORD: ${{ secrets.OBSIDIAN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 6 --retry-all-errors --retry-delay 3 --max-time 30 -u "dominion:$OBSIDIAN_PASSWORD" https://vault.dominionhealing.org/ >/dev/null
+          unauth="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://vault.dominionhealing.org/ || true)"
+          test "$unauth" = "401"
+          echo "BRAIN_PUBLIC_ACCEPTANCE=PASS sha=${{ needs.validate.outputs.deploy_sha }}"
+      - name: Remove temporary access material
+        if: always()
+        run: |
+          rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/dominion-brain-*.bundle "$RUNNER_TEMP"/obsidian-password-*

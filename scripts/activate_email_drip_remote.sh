@@ -40,53 +40,53 @@ trap on_error ERR
 
 sudo systemctl is-active --quiet "$service"
 health="$(curl -fsS --max-time 10 http://127.0.0.1:8099/health)"
-python3 - "$health" <<'PY'
+runtime_status="$(curl -fsS --max-time 10 http://127.0.0.1:8099/api/drip-status)"
+python3 - "$health" "$runtime_status" <<'PY'
 import json,sys
-j=json.loads(sys.argv[1])
-assert j['send_mode']=='hold'
+h=json.loads(sys.argv[1]); s=json.loads(sys.argv[2])
+assert h['send_mode']=='hold'
+assert h['live_preflight_ok'] is False
+assert s['smtp_configured'] is True
+assert s['transport']=='smtp'
 PY
+before_total="$(python3 - "$runtime_status" <<'PY'
+import json,sys
+print(int(json.loads(sys.argv[1])['total_emails_sent']))
+PY
+)"
 
 main_pid="$(sudo systemctl show -p MainPID --value "$service")"
 python_bin="$(sudo readlink -f "/proc/$main_pid/exe")"
 owner="$(stat -c '%U' "$target")"
 
-preflight="$({ sudo -u "$owner" env DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$python_bin" - "$target" <<'PY'
+planner="$(sudo -u "$owner" env DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$python_bin" - "$target" <<'PY'
 import importlib.util,json,sys
 from datetime import datetime,timezone
 from pathlib import Path
 path=Path(sys.argv[1])
 spec=importlib.util.spec_from_file_location('dominion_email_drip_activation_preflight', path)
 m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-r=m._build_preflight_report(now=datetime.now(timezone.utc)); s=m.drip_status()
+r=m._build_preflight_report(now=datetime.now(timezone.utc))
 out={
  'candidate_count':r['candidate_count'],
  'free_audit_candidate_count':r['free_audit_candidate_count'],
  'status_counts':r['status_counts'],
- 'smtp_configured':bool(s['smtp_configured']),
- 'before_total_emails_sent':int(s['total_emails_sent']),
  'candidates':[{'book':x['book'],'step':x['step']} for x in r['candidates']],
 }
 print(json.dumps(out,separators=(',',':'),sort_keys=True))
 PY
-} )"
-python3 - "$preflight" "$EXPECTED_CANDIDATE_COUNT" "$MAX_CANDIDATE_COUNT" <<'PY'
+)"
+python3 - "$planner" "$EXPECTED_CANDIDATE_COUNT" "$MAX_CANDIDATE_COUNT" <<'PY'
 import json,sys
 p=json.loads(sys.argv[1]); expected=int(sys.argv[2]); maximum=int(sys.argv[3])
 assert p['candidate_count']==expected
 assert p['candidate_count']<=maximum
 assert p['free_audit_candidate_count']==0
-assert p['smtp_configured'] is True
 assert p['status_counts'].get('suppression_error',0)==0
 assert p['status_counts'].get('send_reconciliation_required',0)==0
 assert p['status_counts'].get('invalid_send_history',0)==0
-print('EMAIL_DRIP_LIVE_PREFLIGHT=PASS '+json.dumps({k:p[k] for k in ('candidate_count','candidates','status_counts')},separators=(',',':'),sort_keys=True))
+print('EMAIL_DRIP_LIVE_PREFLIGHT=PASS '+json.dumps(p,separators=(',',':'),sort_keys=True))
 PY
-before_total="$(python3 - "$preflight" -c '' 2>/dev/null || true)"
-before_total="$(python3 - "$preflight" <<'PY'
-import json,sys
-print(json.loads(sys.argv[1])['before_total_emails_sent'])
-PY
-)"
 
 sudo python3 scripts/set_email_drip_runtime.py live --env-file "$env_file" --expect hold
 live_changed=1
@@ -116,7 +116,7 @@ print(f'EMAIL_DRIP_FIRST_CYCLE_ACCEPTANCE=PASS expected={expected} actual={delta
 PY
 
 # The next planner state must have no immediately due candidate after the accepted startup cycle.
-postflight="$({ sudo -u "$owner" env DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$python_bin" - "$target" <<'PY'
+postflight="$(sudo -u "$owner" env DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$python_bin" - "$target" <<'PY'
 import importlib.util,json,sys
 from datetime import datetime,timezone
 from pathlib import Path
@@ -125,7 +125,7 @@ m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 r=m._build_preflight_report(now=datetime.now(timezone.utc))
 print(json.dumps({'candidate_count':r['candidate_count'],'status_counts':r['status_counts'],'free_audit_candidate_count':r['free_audit_candidate_count']},separators=(',',':'),sort_keys=True))
 PY
-} )"
+)"
 python3 - "$postflight" <<'PY'
 import json,sys
 p=json.loads(sys.argv[1])

@@ -7,6 +7,18 @@ backup_root="$HOME/.local/state/dominion-deploy/backups"
 
 test -d "$repo/.git" || { echo "VM_DRIFT_QUARANTINE=FAIL reason=repo_missing"; exit 1; }
 cd "$repo"
+origin="$(git remote get-url origin 2>/dev/null || true)"
+origin="${origin%/}"
+origin="${origin%.git}"
+case "${origin,,}" in
+  https://github.com/dunkdee/dominion-ops|git@github.com:dunkdee/dominion-ops|ssh://git@github.com/dunkdee/dominion-ops)
+    ;;
+  *)
+    echo "VM_DRIFT_QUARANTINE=FAIL reason=origin_mismatch"
+    exit 1
+    ;;
+esac
+
 status="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null || true)"
 if [ -z "$status" ]; then
   echo "VM_DRIFT_QUARANTINE=PASS state=clean backup=none"

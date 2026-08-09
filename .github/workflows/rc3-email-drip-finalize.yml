@@ -22,7 +22,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply final patch
-        run: python scripts/runtime/rc3_email_drip_finalize_patch.py
+        run: |
+          python scripts/runtime/rc3_email_drip_finalize_patch.py
+          python scripts/runtime/rc3_email_drip_finalize_tests_fix.py
 
       - name: Validate
         run: |

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Render the governed Dominion Brain into an Obsidian-compatible directory.
+"""Render a governed Dominion Brain generation for Obsidian.
 
-This renderer is intentionally local/offline. It reads only version-controlled
-non-secret governance/registry files and writes a deterministic knowledge mirror.
-It never activates Obsidian, contacts production, or reads environment secrets.
+The renderer is local/offline and stage-only: the target must not already exist.
+It reads only version-controlled governance/registry sources, never environment
+secrets, and cleans a failed partial generation. Production publication is a
+separate governed synchronization step.
 """
 
 from __future__ import annotations
@@ -12,17 +13,44 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import shutil
 from pathlib import Path
 from typing import Iterable
 
 REPO = Path(__file__).resolve().parents[1]
+
+SYSTEM_CONSTITUTION = REPO / "governance" / "SYSTEM_CONSTITUTION.md"
+STATE = REPO / "STATE.md"
+REPOSITORY_README = REPO / "README.md"
 REGISTRY = REPO / "agents" / "registry.json"
 AUTHORITY = REPO / "governance" / "authority_matrix.json"
+FIVE_COUNCIL = REPO / "governance" / "five_council_policy.json"
+INCIDENT_LEARNING = REPO / "governance" / "incident_learning_policy.json"
+VERTICALS = REPO / "governance" / "verticals.json"
+CONTROL_PLANE = REPO / "architecture" / "CONTROL_PLANE.md"
 OPERATING_MAP = REPO / "governance" / "DOMINION_OPERATING_MAP.md"
 AGENT_STATE = REPO / "governance" / "AGENT_OPERATIONS_STATE.md"
 RUNTIME_ALIGNMENT = REPO / "governance" / "RUNTIME_ALIGNMENT.md"
 BRAIN_README = REPO / "brain" / "README.md"
 TEAM_STATE = REPO / "brain" / "agent-team-current-state.md"
+
+GOVERNED_SOURCES = (
+    SYSTEM_CONSTITUTION,
+    STATE,
+    REPOSITORY_README,
+    REGISTRY,
+    AUTHORITY,
+    FIVE_COUNCIL,
+    INCIDENT_LEARNING,
+    VERTICALS,
+    CONTROL_PLANE,
+    OPERATING_MAP,
+    AGENT_STATE,
+    RUNTIME_ALIGNMENT,
+    BRAIN_README,
+    TEAM_STATE,
+)
 
 ROOT_DIRS = (
     "00-Constitution",
@@ -57,6 +85,12 @@ AGENT_FILES = (
     "10-Change-Log.md",
 )
 
+OPERATOR_BRIDGE_FILES = frozenset(
+    {"08-Incidents-and-Lessons.md", "09-Current-State.md", "10-Change-Log.md"}
+)
+OPERATOR_NOTES_ROOT = "Dominion-Operator-Notes"
+_AGENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
 
 def _require_source(path: Path) -> str:
     if not path.is_file():
@@ -64,8 +98,17 @@ def _require_source(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _validate_agent_id(value: object) -> str:
+    aid = str(value or "")
+    if aid in {".", ".."} or not _AGENT_ID_RE.fullmatch(aid):
+        raise SystemExit(f"unsafe agent id in governed registry: {aid!r}")
+    return aid
+
+
 def _atomic_write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.parent.is_symlink():
+        raise SystemExit(f"refusing symlinked output parent: {path.parent}")
     tmp = path.parent / f".{path.name}.{os.getpid()}.tmp"
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     fd = os.open(tmp, flags, 0o600)
@@ -87,130 +130,260 @@ def _atomic_write(path: Path, content: str) -> None:
             tmp.unlink()
 
 
-def _copy_governed(target: Path, relative: str, source: Path) -> None:
-    text = _require_source(source)
+def _markdown_source(path: Path, text: str) -> str:
+    rel = path.relative_to(REPO).as_posix()
     header = (
         "<!-- GENERATED FROM GOVERNED GITHUB SOURCE. EDIT SOURCE, NOT THIS MIRROR. -->\n"
-        f"<!-- source: {source.relative_to(REPO).as_posix()} -->\n\n"
+        f"<!-- source: {rel} -->\n\n"
     )
-    _atomic_write(target / relative, header + text)
+    if path.suffix == ".json":
+        title = path.stem.replace("_", " ").title()
+        return header + f"# {title}\n\n```json\n{text.rstrip()}\n```\n"
+    return header + text
 
 
-def _agent_doc(agent: dict, filename: str) -> str:
-    aid = agent["id"]
-    role = agent["role"]
-    purpose = agent["purpose"]
-    state = agent["state"]
-    permissions = agent.get("permissions", [])
-    prohibited = agent.get("prohibited_actions", [])
-    escalates = agent.get("escalates_to") or "none"
+def _copy_governed(target: Path, relative: str, source: Path) -> None:
+    _atomic_write(target / relative, _markdown_source(source, _require_source(source)))
+
+
+def _source_digest(paths: Iterable[Path]) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(paths, key=lambda item: item.relative_to(REPO).as_posix()):
+        rel = path.relative_to(REPO).as_posix().encode("utf-8")
+        raw = path.read_bytes()
+        digest.update(rel)
+        digest.update(b"\0")
+        digest.update(hashlib.sha256(raw).digest())
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def _authority_doc(agent: dict, authority: dict) -> str:
+    role = str(agent.get("role", ""))
+    actions = authority.get("actions") if isinstance(authority.get("actions"), list) else []
+    risk_levels = authority.get("risk_levels") if isinstance(authority.get("risk_levels"), dict) else {}
+    effective = []
+    for action in actions:
+        if not isinstance(action, dict) or role not in action.get("allowed_roles", []):
+            continue
+        risk = str(action.get("risk", "unknown"))
+        risk_rule = risk_levels.get(risk) if isinstance(risk_levels.get(risk), dict) else {}
+        effective.append(
+            {
+                "id": str(action.get("id", "unknown")),
+                "risk": risk,
+                "council": risk_rule.get("council_approvals_required", "unknown"),
+                "human": risk_rule.get("human_approval_required", "unknown"),
+                "constraints": [str(x) for x in action.get("constraints", [])],
+            }
+        )
+
+    lines = [
+        "## Effective governed action permissions",
+        "",
+        f"Default behavior: `{authority.get('default_behavior', 'deny')}`.",
+        "The authority matrix, risk rule, constraints, approvals, and current lifecycle gate all apply together.",
+        "",
+    ]
+    if effective:
+        for item in effective:
+            constraints = ", ".join(f"`{x}`" for x in item["constraints"]) or "none listed"
+            lines.extend(
+                [
+                    f"### `{item['id']}`",
+                    f"- Risk: `{item['risk']}`",
+                    f"- Council approvals required by risk rule: `{item['council']}`",
+                    f"- Human approval required by risk rule: `{item['human']}`",
+                    f"- Constraints: {constraints}",
+                    "",
+                ]
+            )
+    else:
+        lines.extend(
+            [
+                "No action ID in the current authority matrix is delegated directly to this role.",
+                "Consequential actions therefore remain default-deny unless a canonical policy explicitly authorizes them.",
+                "",
+            ]
+        )
+
+    caps = [str(x) for x in agent.get("permissions", [])]
+    prohibited = [str(x) for x in agent.get("prohibited_actions", [])]
+    lines.extend(
+        [
+            "## Registry capabilities — descriptive, not independent authority",
+            "",
+            *(f"- `{x}`" for x in (caps or ["none"])),
+            "",
+            "## Registry prohibitions",
+            "",
+            *(f"- `{x}`" for x in (prohibited or ["none"])),
+            "",
+            "## Escalation",
+            "",
+            f"`{agent.get('escalates_to') or 'none'}`",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _agent_doc(agent: dict, filename: str, authority: dict) -> str:
+    aid = _validate_agent_id(agent.get("id"))
+    role = str(agent.get("role", "unknown"))
+    purpose = str(agent.get("purpose", ""))
+    state = str(agent.get("state", "UNKNOWN"))
 
     common = (
         f"# {aid} — {filename[:-3]}\n\n"
-        "> Generated from `agents/registry.json`. This note grants no authority beyond the registry.\n\n"
+        "> Generated from governed GitHub sources. This mirror grants no authority beyond effective policy.\n\n"
     )
     if filename == "00-Identity.md":
-        body = f"- Agent ID: `{aid}`\n- Role: `{role}`\n- Lifecycle state: `{state}`\n"
+        body = f"- Agent ID: `{aid}`\n- Role: `{role}`\n- Registry lifecycle state: `{state}`\n"
     elif filename == "01-Mission.md":
         body = f"## Purpose\n\n{purpose}\n"
     elif filename == "02-Authority.md":
-        body = "## Allowed\n\n" + "\n".join(f"- `{x}`" for x in permissions or ["none"]) + "\n\n"
-        body += "## Prohibited\n\n" + "\n".join(f"- `{x}`" for x in prohibited or ["none"]) + "\n\n"
-        body += f"## Escalation\n\n`{escalates}`\n"
+        body = _authority_doc(agent, authority)
     elif filename == "03-Inputs.md":
-        body = "Inputs must be authorized, source-grounded, and appropriate to this agent's registry permissions.\n"
+        body = "Inputs must be authorized, source-grounded, correctly classified, and allowed by effective policy.\n"
     elif filename == "04-Outputs.md":
         body = (
             "Every consequential report uses: `agent`, `duty`, `evidence`, `result`, `risks`, "
-            "`next_action`, `human_approval_required`.\n"
+            "`next_action`, `human_approval_required`. Truth states are `VERIFIED`, `INFERRED`, `UNKNOWN`, or `BLOCKED`.\n"
         )
     elif filename == "05-Dependencies.md":
         body = (
-            "- `governance/SYSTEM_CONSTITUTION.md`\n"
-            "- `governance/DOMINION_OPERATING_MAP.md`\n"
-            "- `governance/authority_matrix.json`\n"
-            "- `agents/registry.json`\n"
-            "- verified runtime evidence when live state matters\n"
+            "## Governing dependencies\n\n"
+            "1. [[00-Constitution/SYSTEM_CONSTITUTION]]\n"
+            "2. [[00-Constitution/STATE]]\n"
+            "3. [[00-Constitution/REPOSITORY_README]]\n"
+            "4. [[04-Agents/REGISTRY]]\n"
+            "5. [[01-Founder-Authority/AUTHORITY_MATRIX]]\n"
+            "6. [[02-Five-Council/FIVE_COUNCIL_POLICY]]\n"
+            "7. [[13-Learning/INCIDENT_LEARNING_POLICY]]\n"
+            "8. [[05-Verticals/VERTICALS]]\n"
+            "9. [[03-Control-Plane/CONTROL_PLANE]]\n"
+            "10. Applicable runbook/incident record\n"
+            "11. Verified live runtime evidence before production claims\n"
         )
     elif filename == "06-SOPs.md":
-        body = "Follow applicable version-controlled runbooks. Inventory → verify → reuse/connect → test → activate only within authority.\n"
+        body = (
+            "Follow the canonical required reading order in [[03-Control-Plane/DOMINION_OPERATING_MAP]]. "
+            "Then inventory → verify → reuse/connect → test → activate only within effective authority.\n"
+        )
     elif filename == "07-Health-and-Metrics.md":
-        body = "No health claim is current without timestamped retrievable evidence. Record status, evidence source, timestamp, and next check.\n"
-    elif filename == "08-Incidents-and-Lessons.md":
-        body = "Record failures and corrective lessons without secrets or customer PII. Durable policy changes return to GitHub review.\n"
-    elif filename == "09-Current-State.md":
-        body = f"Registry lifecycle state: `{state}`. Runtime state must be separately verified before operational claims.\n"
+        body = "No health claim is current without timestamped retrievable evidence. Record source, timestamp, result, and next check.\n"
+    elif filename in OPERATOR_BRIDGE_FILES:
+        note_name = filename[:-3]
+        body = (
+            "This is a generated bridge and is safe to replace. Do not record operator-owned evidence here.\n\n"
+            f"Use [[{OPERATOR_NOTES_ROOT}/{aid}/{note_name}]] for durable runtime notes. "
+            "That sibling operator-note tree is preserved across governed brain generations.\n"
+        )
     else:
-        body = "Generated baseline. Durable changes are made in GitHub and mirrored after review.\n"
+        raise SystemExit(f"unsupported agent home file: {filename}")
     return common + body
 
 
 def _iter_output_files(target: Path) -> Iterable[Path]:
     for path in sorted(target.rglob("*")):
-        if path.is_file():
+        if path.is_file() and not path.is_symlink():
             yield path
 
 
 def render(target: Path) -> dict:
-    if target.is_symlink():
-        raise SystemExit("brain target must not be a symlink")
-    if target.exists():
-        if not target.is_dir():
-            raise SystemExit("brain target must be a directory")
-        if any(target.iterdir()):
-            raise SystemExit("brain target must be empty")
-    else:
-        target.mkdir(parents=True, exist_ok=False)
+    target = target.expanduser().resolve(strict=False)
+    if target.exists() or target.is_symlink():
+        raise SystemExit("brain generation target must not already exist")
 
-    registry = json.loads(_require_source(REGISTRY))
-    if not isinstance(registry.get("agents"), list) or not registry["agents"]:
-        raise SystemExit("agent registry is empty or malformed")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.mkdir(parents=False, exist_ok=False)
+    try:
+        registry = json.loads(_require_source(REGISTRY))
+        authority = json.loads(_require_source(AUTHORITY))
+        if not isinstance(registry, dict) or not isinstance(registry.get("agents"), list) or not registry["agents"]:
+            raise SystemExit("agent registry is empty or malformed")
+        if not isinstance(authority, dict) or authority.get("default_behavior") != "deny":
+            raise SystemExit("authority matrix is empty, malformed, or not default-deny")
 
-    for directory in ROOT_DIRS:
-        (target / directory).mkdir(parents=True, exist_ok=True)
+        seen = set()
+        for agent in registry["agents"]:
+            if not isinstance(agent, dict):
+                raise SystemExit("agent registry contains a non-object entry")
+            aid = _validate_agent_id(agent.get("id"))
+            if aid in seen:
+                raise SystemExit(f"duplicate agent id in governed registry: {aid}")
+            seen.add(aid)
 
-    _copy_governed(target, "03-Control-Plane/DOMINION_OPERATING_MAP.md", OPERATING_MAP)
-    _copy_governed(target, "03-Control-Plane/AGENT_OPERATIONS_STATE.md", AGENT_STATE)
-    _copy_governed(target, "03-Control-Plane/RUNTIME_ALIGNMENT.md", RUNTIME_ALIGNMENT)
-    _copy_governed(target, "03-Control-Plane/BRAIN_README.md", BRAIN_README)
-    _copy_governed(target, "04-Agents/TEAM_CURRENT_STATE.md", TEAM_STATE)
-    _copy_governed(target, "01-Founder-Authority/authority_matrix.json.md", AUTHORITY)
+        for directory in ROOT_DIRS:
+            (target / directory).mkdir(parents=True, exist_ok=True)
 
-    registry_note = "# Agent Registry\n\n```json\n" + json.dumps(registry, indent=2) + "\n```\n"
-    _atomic_write(target / "04-Agents/REGISTRY.md", registry_note)
+        # Canonical startup order from DOMINION_OPERATING_MAP.md.
+        _copy_governed(target, "00-Constitution/SYSTEM_CONSTITUTION.md", SYSTEM_CONSTITUTION)
+        _copy_governed(target, "00-Constitution/STATE.md", STATE)
+        _copy_governed(target, "00-Constitution/REPOSITORY_README.md", REPOSITORY_README)
+        _copy_governed(target, "04-Agents/REGISTRY.md", REGISTRY)
+        _copy_governed(target, "01-Founder-Authority/AUTHORITY_MATRIX.md", AUTHORITY)
+        _copy_governed(target, "02-Five-Council/FIVE_COUNCIL_POLICY.md", FIVE_COUNCIL)
+        _copy_governed(target, "13-Learning/INCIDENT_LEARNING_POLICY.md", INCIDENT_LEARNING)
+        _copy_governed(target, "05-Verticals/VERTICALS.md", VERTICALS)
+        _copy_governed(target, "03-Control-Plane/CONTROL_PLANE.md", CONTROL_PLANE)
 
-    for agent in registry["agents"]:
-        for filename in AGENT_FILES:
-            _atomic_write(target / "04-Agents" / agent["id"] / filename, _agent_doc(agent, filename))
+        _copy_governed(target, "03-Control-Plane/DOMINION_OPERATING_MAP.md", OPERATING_MAP)
+        _copy_governed(target, "03-Control-Plane/AGENT_OPERATIONS_STATE.md", AGENT_STATE)
+        _copy_governed(target, "03-Control-Plane/RUNTIME_ALIGNMENT.md", RUNTIME_ALIGNMENT)
+        _copy_governed(target, "03-Control-Plane/BRAIN_README.md", BRAIN_README)
+        _copy_governed(target, "04-Agents/TEAM_CURRENT_STATE.md", TEAM_STATE)
 
-    manifest = []
-    for path in _iter_output_files(target):
-        if path.name == "MANIFEST.json":
-            continue
-        raw = path.read_bytes()
-        manifest.append(
-            {
-                "path": path.relative_to(target).as_posix(),
-                "sha256": hashlib.sha256(raw).hexdigest(),
-                "bytes": len(raw),
-            }
-        )
-    manifest_doc = {
-        "schema": "dominion-brain-manifest-v1",
-        "source": "dunkdee/dominion-ops",
-        "agent_count": len(registry["agents"]),
-        "files": manifest,
-    }
-    _atomic_write(target / "MANIFEST.json", json.dumps(manifest_doc, indent=2))
-    return manifest_doc
+        for agent in registry["agents"]:
+            aid = _validate_agent_id(agent.get("id"))
+            home = target / "04-Agents" / aid
+            if home.exists() or home.is_symlink():
+                raise SystemExit(f"agent home collision: {aid}")
+            home.mkdir(parents=False, exist_ok=False)
+            for filename in AGENT_FILES:
+                _atomic_write(home / filename, _agent_doc(agent, filename, authority))
+
+        manifest = []
+        for path in _iter_output_files(target):
+            if path.name == "MANIFEST.json":
+                continue
+            raw = path.read_bytes()
+            manifest.append(
+                {
+                    "path": path.relative_to(target).as_posix(),
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                    "bytes": len(raw),
+                }
+            )
+        manifest_doc = {
+            "schema": "dominion-brain-manifest-v2",
+            "source": "dunkdee/dominion-ops",
+            "source_revision": {
+                "kind": "governed-source-set-sha256",
+                "sha256": _source_digest(GOVERNED_SOURCES),
+            },
+            "agent_count": len(registry["agents"]),
+            "operator_notes_root": OPERATOR_NOTES_ROOT,
+            "files": manifest,
+        }
+        _atomic_write(target / "MANIFEST.json", json.dumps(manifest_doc, indent=2))
+        return manifest_doc
+    except BaseException:
+        shutil.rmtree(target, ignore_errors=True)
+        raise
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("target", type=Path, help="Target Dominion-Brain directory")
+    parser.add_argument("target", type=Path, help="Fresh staging directory for one Dominion-Brain generation")
     args = parser.parse_args()
-    manifest = render(args.target.expanduser().resolve())
-    print(f"BRAIN_RENDER=PASS agents={manifest['agent_count']} files={len(manifest['files'])}")
+    manifest = render(args.target)
+    print(
+        "BRAIN_RENDER=PASS "
+        f"agents={manifest['agent_count']} files={len(manifest['files'])} "
+        f"source_digest={manifest['source_revision']['sha256']}"
+    )
     return 0
 
 

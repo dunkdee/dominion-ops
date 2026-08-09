@@ -901,7 +901,8 @@ def _run_drip_cycle() -> int:
 
                 safe_name = html_lib.escape(str(plan["name"]), quote=True)
                 body = plan["body"].replace("{{name}}", safe_name)
-                subject = str(plan["subject"]).replace("{{name}}", str(plan["name"]))
+                safe_subject_name = " ".join(str(plan["name"]).replace("\r", " ").replace("\n", " ").split())
+                subject = str(plan["subject"]).replace("{{name}}", safe_subject_name)
                 safe_url = html_lib.escape(plan["unsubscribe_url"], quote=True)
                 disclaimer = BOOK_DISCLAIMERS.get(plan["book"], "")
                 footer = '<hr style="margin-top:28px;border:0;border-top:1px solid #ddd;">'

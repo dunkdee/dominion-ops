@@ -320,3 +320,23 @@ def test_default_send_mode_is_hold_when_unset(tmp_path, monkeypatch):
     module, _, _ = load_module(tmp_path, monkeypatch, mode=None)
     assert module.CONFIGURED_DRIP_SEND_MODE == 'hold'
     assert module.DRIP_SEND_MODE == 'hold'
+
+
+
+def test_subject_name_cannot_inject_headers(tmp_path, monkeypatch):
+    module, leads_path, _ = load_module(tmp_path, monkeypatch, mode='hold')
+    module.DRIP_SEND_MODE = 'live'
+    now = datetime.now(timezone.utc)
+    lead = due_lead(now)
+    lead['name'] = 'Dewayne\r\nBcc: attacker@example.invalid'
+    module.BOOK_EMAILS['sovereign_mind']['soft_sell']['subject'] = 'A note for {{name}}'
+    leads_path.write_text(json.dumps({'leads':[lead], 'stats':{'total_captured':1,'emails_sent':0}}), encoding='utf-8')
+    captured = {}
+    def transport(_email, _name, subject, _body):
+        captured['subject'] = subject
+        return False
+    monkeypatch.setattr(module, '_send_email', transport)
+    assert module._run_drip_cycle() == 0
+    assert '\r' not in captured['subject']
+    assert '\n' not in captured['subject']
+    assert captured['subject'] == 'A note for Dewayne Bcc: attacker@example.invalid'

@@ -2,6 +2,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ExpectedSha,
     [Parameter(Mandatory = $true)]
+    [string]$ExpectedBrainDigest,
+    [Parameter(Mandatory = $true)]
     [string]$BundlePath,
     [string]$RepoPath = 'C:\Users\Dell\dominion-ops',
     [string]$VaultRoot = 'C:\Users\Dell\Documents\Dominion Command Vault'
@@ -16,6 +18,7 @@ function Fail([string]$Reason) {
 }
 
 if ($ExpectedSha -notmatch '^[0-9a-fA-F]{40}$') { Fail 'invalid_expected_sha' }
+if ($ExpectedBrainDigest -notmatch '^[0-9a-fA-F]{64}$') { Fail 'invalid_expected_brain_digest' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail 'git_missing' }
 if (-not (Test-Path -LiteralPath (Join-Path $RepoPath '.git'))) { Fail 'repo_missing' }
 if (-not (Test-Path -LiteralPath $BundlePath -PathType Leaf)) { Fail 'bundle_missing' }
@@ -51,11 +54,10 @@ try {
         Fail 'bundle_sha_mismatch'
     }
 
-    & git merge-base --is-ancestor HEAD $ExpectedSha
-    if ($LASTEXITCODE -ne 0) { Fail 'non_fast_forward_laptop_repo' }
-
     & git checkout main
     if ($LASTEXITCODE -ne 0) { Fail 'checkout_main_failed' }
+    & git merge-base --is-ancestor HEAD $ExpectedSha
+    if ($LASTEXITCODE -ne 0) { Fail 'non_fast_forward_laptop_repo' }
     & git merge --ff-only $ExpectedSha
     if ($LASTEXITCODE -ne 0) { Fail 'fast_forward_failed' }
 
@@ -101,8 +103,9 @@ try {
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
         if ($manifest.schema -ne 'dominion-brain-manifest-v2') { throw 'manifest_schema' }
         if ([int]$manifest.agent_count -le 0) { throw 'agent_count' }
-        $brainDigest = [string]$manifest.source_revision.sha256
+        $brainDigest = ([string]$manifest.source_revision.sha256).ToLowerInvariant()
         if ($brainDigest -notmatch '^[0-9a-f]{64}$') { throw 'brain_digest' }
+        if ($brainDigest -ne $ExpectedBrainDigest.ToLowerInvariant()) { throw 'canonical_brain_digest_mismatch' }
 
         foreach ($entry in $manifest.files) {
             $filePath = Join-Path $stage ([string]$entry.path)
@@ -122,12 +125,15 @@ try {
 
         $receiptRoot = Join-Path $VaultRoot 'Dominion-Release-State'
         if (-not (Test-Path -LiteralPath $receiptRoot)) { New-Item -ItemType Directory -Path $receiptRoot -Force | Out-Null }
+        $receiptRootItem = Get-Item -LiteralPath $receiptRoot -Force
+        if (-not $receiptRootItem.PSIsContainer -or ($receiptRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'receipt_root_not_safe_directory' }
         $receipt = [ordered]@{
             schema = 'dominion-three-node-parity-v1'
             node = 'laptop'
             repository = 'dunkdee/dominion-ops'
             git_sha = $head
             brain_source_digest = $brainDigest
+            canonical_brain_source_digest = $ExpectedBrainDigest.ToLowerInvariant()
             agent_count = [int]$manifest.agent_count
             recorded_at_utc = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
         } | ConvertTo-Json -Depth 4

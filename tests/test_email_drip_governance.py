@@ -26,8 +26,10 @@ def load_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, mode: str | 
         monkeypatch.setenv("DRIP_SEND_MODE", mode)
         if mode == "live":
             monkeypatch.setenv("DRIP_LIVE_AUTHORIZED_AT", datetime.now(timezone.utc).isoformat())
+            monkeypatch.setenv("DRIP_LIVE_PREFLIGHT_OK", "true")
         else:
             monkeypatch.delenv("DRIP_LIVE_AUTHORIZED_AT", raising=False)
+            monkeypatch.delenv("DRIP_LIVE_PREFLIGHT_OK", raising=False)
     monkeypatch.setenv("SMTP_EMAIL", "sender@example.invalid")
     monkeypatch.setenv("SMTP_PASSWORD", "synthetic-password")
     name = f"email_drip_test_{id(tmp_path)}_{mode}"
@@ -340,3 +342,70 @@ def test_subject_name_cannot_inject_headers(tmp_path, monkeypatch):
     assert '\r' not in captured['subject']
     assert '\n' not in captured['subject']
     assert captured['subject'] == 'A note for Dewayne Bcc: attacker@example.invalid'
+
+
+
+def test_non_object_suppression_document_fails_closed(tmp_path, monkeypatch):
+    module, _, suppression = load_module(tmp_path, monkeypatch)
+    suppression.write_text('[]', encoding='utf-8')
+    assert module._suppression_state('customer@example.invalid') == 'error'
+
+
+def test_capture_skips_non_object_legacy_rows(tmp_path, monkeypatch):
+    module, leads_path, _ = load_module(tmp_path, monkeypatch)
+    leads_path.write_text(json.dumps({'leads':[None, 'legacy-row'], 'stats':{'total_captured':0,'emails_sent':0}}), encoding='utf-8')
+    result = module.capture_email(module.EmailCapture(email='new@example.invalid', name='New', source='sovereign_mind'))
+    assert result['status'] == 'ok'
+    saved = json.loads(leads_path.read_text(encoding='utf-8'))
+    assert any(isinstance(row, dict) and row.get('email') == 'new@example.invalid' for row in saved['leads'])
+
+
+def test_capture_fields_are_bounded(tmp_path, monkeypatch):
+    module, _, _ = load_module(tmp_path, monkeypatch)
+    with pytest.raises(module.HTTPException) as exc:
+        module.capture_email(module.EmailCapture(email='new@example.invalid', name='N' * 121, source='sovereign_mind'))
+    assert exc.value.status_code == 400
+    with pytest.raises(module.HTTPException) as exc:
+        module.capture_email(module.EmailCapture(email='new2@example.invalid', name='New', source='s' * 129))
+    assert exc.value.status_code == 400
+
+
+def test_status_counts_only_exact_completed_histories_and_tolerates_bad_rows(tmp_path, monkeypatch):
+    module, leads_path, _ = load_module(tmp_path, monkeypatch)
+    keys = [step['key'] for step in module.DRIP_SCHEDULE]
+    good = due_lead(datetime.now(timezone.utc))
+    good['emails_sent'] = keys.copy()
+    bad = {**good, 'email':'bad@example.invalid', 'emails_sent':['welcome'] * len(keys)}
+    leads_path.write_text(json.dumps({'leads':[None, good, bad], 'stats':{'emails_sent':5}}), encoding='utf-8')
+    status = module.drip_status()
+    assert status['fully_completed_sequences'] == 1
+    assert status['leads_by_book']['invalid_record'] == 1
+
+
+def test_missing_smtp_credentials_do_not_create_pending_send(tmp_path, monkeypatch):
+    module, leads_path, _ = load_module(tmp_path, monkeypatch, mode='live')
+    now = datetime.now(timezone.utc)
+    data = {'leads':[due_lead(now)], 'stats':{'total_captured':1,'emails_sent':0}}
+    leads_path.write_text(json.dumps(data), encoding='utf-8')
+    module.GMAIL_PASSWORD = ''
+    called = []
+    monkeypatch.setattr(module, '_send_email', lambda *a, **k: called.append(True) or False)
+    assert module._run_drip_cycle() == 0
+    saved = json.loads(leads_path.read_text(encoding='utf-8'))
+    assert 'pending_send' not in saved['leads'][0]
+    assert called == []
+
+
+def test_live_mode_requires_preflight_flag_even_with_fresh_authorization(tmp_path, monkeypatch):
+    monkeypatch.setenv('DRIP_SEND_MODE', 'live')
+    monkeypatch.setenv('DRIP_LIVE_AUTHORIZED_AT', datetime.now(timezone.utc).isoformat())
+    monkeypatch.delenv('DRIP_LIVE_PREFLIGHT_OK', raising=False)
+    module, _, _ = load_module(tmp_path, monkeypatch, mode=None)
+    assert module.CONFIGURED_DRIP_SEND_MODE == 'live'
+    assert module.DRIP_SEND_MODE == 'hold'
+    assert module.DRIP_LIVE_PREFLIGHT_OK is False
+
+
+def test_smtp_success_log_format_does_not_include_subject_literal():
+    text = SOURCE.read_text(encoding='utf-8')
+    assert 'SMTP sent lead_ref=%s subject=%s' not in text

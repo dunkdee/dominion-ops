@@ -1,8 +1,8 @@
 """
 Dominion Healing -- KDP Email Drip Sequence Engine
 ===================================================
-FastAPI service that captures leads and runs a 5-email drip sequence
-for each of the three KDP books.
+FastAPI service that captures leads and runs governed 5-email drip sequences
+for approved Dominion products.
 
 Endpoints:
     POST /api/email-capture   -- capture a new lead
@@ -50,12 +50,15 @@ CONFIGURED_DRIP_SEND_MODE = os.getenv("DRIP_SEND_MODE", "hold").strip().lower()
 if CONFIGURED_DRIP_SEND_MODE not in {"hold", "live"}:
     raise RuntimeError("DRIP_SEND_MODE must be hold or live")
 DRIP_LIVE_AUTHORIZED_AT = os.getenv("DRIP_LIVE_AUTHORIZED_AT", "").strip()
+DRIP_LIVE_PREFLIGHT_OK = os.getenv("DRIP_LIVE_PREFLIGHT_OK", "").strip().lower() == "true"
 DRIP_LIVE_AUTH_MAX_AGE_SECONDS = int(os.getenv("DRIP_LIVE_AUTH_MAX_AGE_SECONDS", "900"))
 if DRIP_LIVE_AUTH_MAX_AGE_SECONDS <= 0:
     raise RuntimeError("DRIP_LIVE_AUTH_MAX_AGE_SECONDS must be positive")
 
 def _live_start_authorized(now=None):
     if CONFIGURED_DRIP_SEND_MODE != "live":
+        return False
+    if not DRIP_LIVE_PREFLIGHT_OK:
         return False
     if not DRIP_LIVE_AUTHORIZED_AT:
         return False
@@ -92,7 +95,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("email_drip")
 
-app = FastAPI(title="KDP Email Drip Engine", version="1.0.0")
+app = FastAPI(title="Dominion Email Drip Engine", version="1.0.0")
 
 # ---------------------------------------------------------------------------
 # Data helpers
@@ -208,7 +211,7 @@ def _send_email(to_email: str, to_name: str, subject: str, html_body: str) -> bo
             srv.starttls(context=ssl.create_default_context())
             srv.login(GMAIL_ADDRESS, GMAIL_PASSWORD)
             srv.send_message(msg)
-        log.info("SMTP sent lead_ref=%s subject=%s", lead_ref, subject)
+        log.info("SMTP sent lead_ref=%s", lead_ref)
         return True
     except Exception as exc:  # noqa: BLE001
         log.error(
@@ -606,6 +609,8 @@ def _suppression_state(email: str) -> str:
                 return "error"
             with SUPPRESSION_FILE.open("r", encoding="utf-8") as handle:
                 data = json.load(handle)
+            if not isinstance(data, dict):
+                return "error"
             emails = data.get("emails", [])
             if not isinstance(emails, list):
                 return "error"
@@ -660,6 +665,8 @@ def capture_email(payload: EmailCapture):
 
     name = (payload.name or "Friend").strip() or "Friend"
     source_value = (payload.source or "").strip()
+    if len(name) > 120 or len(source_value) > 128:
+        raise HTTPException(status_code=400, detail="capture_field_too_long")
     book = _resolve_book(source_value)
     unsubscribe_url = _unsubscribe_url(email)
 
@@ -672,6 +679,8 @@ def capture_email(payload: EmailCapture):
             data["stats"].setdefault("emails_sent", 0)
 
             for lead in data["leads"]:
+                if not isinstance(lead, dict):
+                    continue
                 if _normalize_email(str(lead.get("email", ""))) == email:
                     if book == "free_audit_hold" and lead.get("book") != "free_audit_hold":
                         lead["source"] = source_value
@@ -709,20 +718,27 @@ def capture_email(payload: EmailCapture):
 @app.get("/api/drip-status")
 def drip_status():
     data = _load_leads()
+    if not isinstance(data, dict) or not isinstance(data.get("leads"), list):
+        raise HTTPException(status_code=503, detail="lead_store_unavailable")
+    stats = data.get("stats") if isinstance(data.get("stats"), dict) else {}
     total = len(data["leads"])
     by_book = {}
     fully_dripped = 0
+    schedule_keys = [step["key"] for step in DRIP_SCHEDULE]
     for lead in data["leads"]:
-        b = lead.get("book", "unknown")
+        if not isinstance(lead, dict):
+            by_book["invalid_record"] = by_book.get("invalid_record", 0) + 1
+            continue
+        b = str(lead.get("book", "unknown") or "unknown")
         by_book[b] = by_book.get(b, 0) + 1
-        sent_steps = lead.get("emails_sent", [])
-        if isinstance(sent_steps, list) and len(sent_steps) >= 5:
+        sent_steps = lead.get("emails_sent")
+        if isinstance(sent_steps, list) and sent_steps == schedule_keys:
             fully_dripped += 1
 
     return {
         "total_leads": total,
         "leads_by_book": by_book,
-        "total_emails_sent": data["stats"].get("emails_sent", 0),
+        "total_emails_sent": stats.get("emails_sent", 0),
         "fully_completed_sequences": fully_dripped,
         "sendgrid_configured": False,
         "smtp_configured": bool(GMAIL_ADDRESS and GMAIL_PASSWORD),
@@ -747,6 +763,7 @@ def health():
         "send_mode": DRIP_SEND_MODE,
         "configured_send_mode": CONFIGURED_DRIP_SEND_MODE,
         "live_start_authorized": DRIP_SEND_MODE == "live",
+        "live_preflight_ok": DRIP_LIVE_PREFLIGHT_OK,
     }
 
 
@@ -913,6 +930,10 @@ def _run_drip_cycle() -> int:
                     log.error("Email template missing closing body; send blocked lead_ref=%s", plan["lead_ref"])
                     continue
                 body = body.replace("</body>", footer + "</body>", 1)
+
+                if not GMAIL_ADDRESS or not GMAIL_PASSWORD:
+                    log.error("SMTP blocked before submission lead_ref=%s", plan["lead_ref"])
+                    continue
 
                 lead["pending_send"] = {"step": plan["step"], "attempted_at": now.isoformat()}
                 _save_leads(data)

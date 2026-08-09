@@ -84,17 +84,20 @@ test -x "$python_bin"
 ss -tlnp | grep -q ':8099 '
 
 health="$(curl -fsS --max-time 10 http://127.0.0.1:8099/health)"
-python3 - "$health" <<'PY'
+runtime_status="$(curl -fsS --max-time 10 http://127.0.0.1:8099/api/drip-status)"
+python3 - "$health" "$runtime_status" <<'PY'
 import json,sys
-j=json.loads(sys.argv[1])
-assert j['status']=='ok'
-assert j['send_mode']=='hold'
-assert j['live_preflight_ok'] is False
-print('EMAIL_DRIP_HEALTH=PASS mode=hold')
+h=json.loads(sys.argv[1]); s=json.loads(sys.argv[2])
+assert h['status']=='ok'
+assert h['send_mode']=='hold'
+assert h['live_preflight_ok'] is False
+assert s['smtp_configured'] is True
+assert s['transport']=='smtp'
+print('EMAIL_DRIP_HEALTH=PASS mode=hold smtp_configured=true')
 PY
 
-# Execute the exact deployed planner against production state with transport disabled.
-sudo -u "$(stat -c '%U' "$target")" env DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$python_bin" - "$target" <<'PY'
+# Execute only the exact deployed planner against production state; transport is never invoked.
+planner="$(sudo -u "$(stat -c '%U' "$target")" env DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$python_bin" - "$target" <<'PY'
 import importlib.util
 import json
 import sys
@@ -106,7 +109,6 @@ spec=importlib.util.spec_from_file_location('dominion_email_drip_preflight', pat
 module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 report=module._build_preflight_report(now=datetime.now(timezone.utc))
-status=module.drip_status()
 san={
   'candidate_count': report['candidate_count'],
   'candidates': [{'book':x['book'],'step':x['step']} for x in report['candidates']],
@@ -114,14 +116,18 @@ san={
   'free_audit_candidate_count': report['free_audit_candidate_count'],
   'transport_invoked': report['transport_invoked'],
   'state_mutated': report['state_mutated'],
-  'smtp_configured': bool(status['smtp_configured']),
   'total_leads': report['total_leads'],
 }
-assert san['transport_invoked'] is False
-assert san['state_mutated'] is False
-assert san['free_audit_candidate_count'] == 0
-assert san['smtp_configured'] is True
-print('EMAIL_DRIP_PREFLIGHT_JSON='+json.dumps(san,separators=(',',':'),sort_keys=True))
+print(json.dumps(san,separators=(',',':'),sort_keys=True))
+PY
+)"
+python3 - "$planner" <<'PY'
+import json,sys
+p=json.loads(sys.argv[1])
+assert p['transport_invoked'] is False
+assert p['state_mutated'] is False
+assert p['free_audit_candidate_count'] == 0
+print('EMAIL_DRIP_PREFLIGHT_JSON='+json.dumps(p,separators=(',',':'),sort_keys=True))
 PY
 
 unsubscribe_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 https://dominionhealing.org/api/unsubscribe || true)"
@@ -130,4 +136,4 @@ case "$unsubscribe_status" in
   *) echo "EMAIL_DRIP_DEPLOY=FAIL reason=unsubscribe_route_unverified status=$unsubscribe_status"; exit 1 ;;
 esac
 
-printf 'EMAIL_DRIP_DEPLOY=PASS sha=%s service=active pid=%s port=8099 send_mode=hold unsubscribe_status=%s\n' "$DEPLOY_SHA" "$main_pid" "$unsubscribe_status"
+printf 'EMAIL_DRIP_DEPLOY=PASS sha=%s service=active pid=%s port=8099 send_mode=hold smtp_configured=true unsubscribe_status=%s\n' "$DEPLOY_SHA" "$main_pid" "$unsubscribe_status"

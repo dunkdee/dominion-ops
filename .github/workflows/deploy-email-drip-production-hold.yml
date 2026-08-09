@@ -1,0 +1,111 @@
+name: Deploy Email Drip — Production HOLD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/email_drip/**'
+      - 'scripts/set_email_drip_runtime.py'
+      - 'scripts/deploy_email_drip_hold_remote.sh'
+      - '.github/workflows/deploy-email-drip-production-hold.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      deploy_sha: ${{ steps.sha.outputs.value }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Validate exact release commit
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          python -m pip install --disable-pip-version-check 'fastapi>=0.110,<1' 'pydantic>=2,<3' 'filelock>=3,<4' 'uvicorn>=0.29,<1' 'pytest>=8,<9'
+          python -m py_compile services/email_drip/email_drip.py scripts/set_email_drip_runtime.py tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
+          bash -n scripts/deploy_email_drip_hold_remote.sh
+          pytest -q tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
+          echo "EMAIL_DRIP_RELEASE_PREFLIGHT=PASS sha=$GITHUB_SHA"
+
+  deploy_hold:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.validate.outputs.deploy_sha }}
+          fetch-depth: 0
+      - name: Require protected VM secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+      - name: Stage exact Git bundle
+        id: stage
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          bundle="$RUNNER_TEMP/email-drip-${GITHUB_RUN_ID}.bundle"
+          remote_bundle="/tmp/email-drip-${GITHUB_RUN_ID}.bundle"
+          git bundle create "$bundle" main
+          git bundle verify "$bundle"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "chmod 600 '$remote_bundle'"
+          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
+      - name: Synchronize exact commit, deploy HOLD, and preflight production
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
+          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
+            "DEPLOY_SHA='$DEPLOY_SHA' BUNDLE='$REMOTE_BUNDLE' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f "$BUNDLE"' EXIT
+          repo="$HOME/dominion-ops"
+          test -d "$repo/.git"
+          cd "$repo"
+          test -z "$(git status --porcelain --untracked-files=no)" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=tracked_vm_repo_dirty"; exit 1; }
+          git fetch "$BUNDLE" main:refs/remotes/dominion-release/main
+          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          git merge-base --is-ancestor HEAD "$DEPLOY_SHA" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=non_fast_forward_vm_repo"; exit 1; }
+          git checkout main
+          git merge --ff-only "$DEPLOY_SHA"
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+          DEPLOY_SHA="$DEPLOY_SHA" RUN_ID="$RUN_ID" bash scripts/deploy_email_drip_hold_remote.sh
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/email-drip-*.bundle

@@ -35,8 +35,13 @@ Push-Location $RepoPath
 try {
     $origin = (& git remote get-url origin).Trim()
     if ($LASTEXITCODE -ne 0) { Fail 'origin_unreadable' }
-    $normalized = ($origin -replace '\.git$','').ToLowerInvariant()
-    if ($normalized -notmatch 'github\.com[:/]dunkdee/dominion-ops$') { Fail 'origin_mismatch' }
+    $normalized = (($origin -replace '\.git$','').TrimEnd('/')).ToLowerInvariant()
+    $allowedOrigins = @(
+        'https://github.com/dunkdee/dominion-ops',
+        'git@github.com:dunkdee/dominion-ops',
+        'ssh://git@github.com/dunkdee/dominion-ops'
+    )
+    if ($allowedOrigins -notcontains $normalized) { Fail 'origin_mismatch' }
 
     $status = @(& git status --porcelain=v1 --untracked-files=all)
     if ($LASTEXITCODE -ne 0) { Fail 'status_failed' }
@@ -76,12 +81,15 @@ try {
         New-Item -ItemType Directory -Path $VaultRoot -Force | Out-Null
     }
     $vaultItem = Get-Item -LiteralPath $VaultRoot -Force
+    if (-not $vaultItem.PSIsContainer) { Fail 'vault_root_not_directory' }
     if ($vaultItem.Attributes -band [IO.FileAttributes]::ReparsePoint) { Fail 'vault_root_symlink_or_reparse' }
 
     $runId = if ($env:GITHUB_RUN_ID) { $env:GITHUB_RUN_ID } else { [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString() }
+    $runAttempt = if ($env:GITHUB_RUN_ATTEMPT) { $env:GITHUB_RUN_ATTEMPT } else { '1' }
+    $releaseId = "$runId-$runAttempt"
     $current = Join-Path $VaultRoot 'Dominion-Brain'
-    $stage = Join-Path $VaultRoot ".dominion-brain-stage-$($ExpectedSha.Substring(0,12))-$runId"
-    $backup = Join-Path $VaultRoot ".dominion-brain-backup-$runId"
+    $stage = Join-Path $VaultRoot ".dominion-brain-stage-$($ExpectedSha.Substring(0,12))-$releaseId"
+    $backup = Join-Path $VaultRoot ".dominion-brain-backup-$releaseId"
     if (Test-Path -LiteralPath $stage) { Fail 'staging_collision' }
     if (Test-Path -LiteralPath $backup) { Fail 'backup_collision' }
 

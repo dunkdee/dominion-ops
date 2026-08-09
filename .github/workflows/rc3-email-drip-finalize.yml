@@ -6,6 +6,8 @@ on:
       - rc3/email-drip-review-ready-20260809
     paths:
       - .github/workflows/rc3-email-drip-finalize.yml
+      - scripts/runtime/rc3_email_drip_finalize_patch.py
+      - scripts/runtime/rc3_email_drip_finalize_tests_fix.py
 
 permissions:
   contents: write

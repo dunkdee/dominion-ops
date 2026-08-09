@@ -1,0 +1,131 @@
+name: Activate Email Drip — Production LIVE
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/releases/email-drip-live.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      deploy_sha: ${{ steps.resolve.outputs.deploy_sha }}
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+      expected: ${{ steps.resolve.outputs.expected }}
+      maximum: ${{ steps.resolve.outputs.maximum }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - id: resolve
+        name: Validate exact live release descriptor
+        run: |
+          set -euo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/release.env"
+          import json,re
+          from pathlib import Path
+          d=json.loads(Path('runtime/releases/email-drip-live.json').read_text())
+          assert d.get('schema')=='dominion-email-drip-live-v1'
+          assert d.get('authorized_role')=='human_overseer'
+          source=str(d.get('approved_source_commit',''))
+          assert re.fullmatch(r'[0-9a-f]{40}',source)
+          expected=d.get('expected_candidate_count'); maximum=d.get('max_candidate_count')
+          assert isinstance(expected,int) and not isinstance(expected,bool) and expected>=0
+          assert isinstance(maximum,int) and not isinstance(maximum,bool) and expected<=maximum<=10
+          print(f'SOURCE_SHA={source}')
+          print(f'EXPECTED={expected}')
+          print(f'MAXIMUM={maximum}')
+          PY
+          . "$RUNNER_TEMP/release.env"
+          git cat-file -e "${SOURCE_SHA}^{commit}"
+          git merge-base --is-ancestor "$SOURCE_SHA" HEAD
+          git merge-base --is-ancestor HEAD origin/main
+          git diff --quiet "$SOURCE_SHA" HEAD -- services/email_drip/email_drip.py scripts/set_email_drip_runtime.py scripts/activate_email_drip_remote.sh
+          echo "deploy_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "expected=$EXPECTED" >> "$GITHUB_OUTPUT"
+          echo "maximum=$MAXIMUM" >> "$GITHUB_OUTPUT"
+          echo "EMAIL_DRIP_LIVE_DESCRIPTOR=PASS source=$SOURCE_SHA expected=$EXPECTED max=$MAXIMUM"
+      - name: Validate activation tooling
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/set_email_drip_runtime.py services/email_drip/email_drip.py
+          bash -n scripts/activate_email_drip_remote.sh
+
+  activate:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.validate.outputs.deploy_sha }}
+          fetch-depth: 0
+      - name: Require protected VM secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+      - name: Stage exact Git bundle
+        id: stage
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          bundle="$RUNNER_TEMP/email-drip-live-${GITHUB_RUN_ID}.bundle"
+          remote_bundle="/tmp/email-drip-live-${GITHUB_RUN_ID}.bundle"
+          git bundle create "$bundle" main
+          git bundle verify "$bundle"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "chmod 600 '$remote_bundle'"
+          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
+      - name: Synchronize exact release and activate with automatic containment
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
+          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+          EXPECTED: ${{ needs.validate.outputs.expected }}
+          MAXIMUM: ${{ needs.validate.outputs.maximum }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
+            "DEPLOY_SHA='$DEPLOY_SHA' BUNDLE='$REMOTE_BUNDLE' EXPECTED='$EXPECTED' MAXIMUM='$MAXIMUM' bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f "$BUNDLE"' EXIT
+          repo="$HOME/dominion-ops"
+          cd "$repo"
+          test -z "$(git status --porcelain --untracked-files=no)" || { echo "EMAIL_DRIP_LIVE=FAIL reason=tracked_vm_repo_dirty"; exit 1; }
+          git fetch "$BUNDLE" main:refs/remotes/dominion-live/main
+          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          git merge-base --is-ancestor HEAD "$DEPLOY_SHA" || { echo "EMAIL_DRIP_LIVE=FAIL reason=non_fast_forward_vm_repo"; exit 1; }
+          git checkout main
+          git merge --ff-only "$DEPLOY_SHA"
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+          DEPLOY_SHA="$DEPLOY_SHA" EXPECTED_CANDIDATE_COUNT="$EXPECTED" MAX_CANDIDATE_COUNT="$MAXIMUM" bash scripts/activate_email_drip_remote.sh
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/email-drip-live-*.bundle

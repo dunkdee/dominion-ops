@@ -1,0 +1,170 @@
+name: Email Drip — Read-Only Production Planner
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/email-drip-readonly-planner.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  planner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Require protected VM secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Stage exact Git bundle and drift-quarantine helper
+        id: stage
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          bundle="$RUNNER_TEMP/email-drip-planner-${GITHUB_RUN_ID}.bundle"
+          remote_bundle="/tmp/email-drip-planner-${GITHUB_RUN_ID}.bundle"
+          remote_helper="/tmp/quarantine-vm-repo-state-email-drip-planner-${GITHUB_RUN_ID}.sh"
+          git update-ref refs/heads/dominion-planner "$DEPLOY_SHA"
+          git bundle create "$bundle" refs/heads/dominion-planner
+          git bundle verify "$bundle"
+
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+            "$bundle" scripts/quarantine_vm_repo_state.sh \
+            "$VM_USER@$VM_HOST:/tmp/"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" \
+            "mv '/tmp/quarantine_vm_repo_state.sh' '$remote_helper' && chmod 600 '$remote_bundle' '$remote_helper'"
+
+          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
+          echo "remote_helper=$remote_helper" >> "$GITHUB_OUTPUT"
+
+      - name: Synchronize exact repo and inspect production planner read-only
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          DEPLOY_SHA: ${{ github.sha }}
+          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+          REMOTE_HELPER: ${{ steps.stage.outputs.remote_helper }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
+            "DEPLOY_SHA='$DEPLOY_SHA' BUNDLE='$REMOTE_BUNDLE' HELPER='$REMOTE_HELPER' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f "$BUNDLE" "$HELPER"' EXIT
+
+          repo="$HOME/dominion-ops"
+          target="$HOME/email_drip/email_drip.py"
+          service="dominion-email-drip.service"
+          test -d "$repo/.git"
+          test -f "$target" && test ! -L "$target"
+
+          RUN_ID="$RUN_ID" DOMINION_REPO="$repo" bash "$HELPER"
+          cd "$repo"
+          git fetch "$BUNDLE" dominion-planner:refs/remotes/dominion-planner/main
+          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          git merge-base --is-ancestor HEAD "$DEPLOY_SHA" || { echo "EMAIL_DRIP_PLANNER=FAIL reason=non_fast_forward_vm_repo"; exit 1; }
+          git checkout main
+          git merge --ff-only "$DEPLOY_SHA"
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+
+          sudo systemctl is-active --quiet "$service"
+          health="$(curl -fsS --max-time 10 http://127.0.0.1:8099/health)"
+          python3 - "$health" <<'PY'
+          import json,sys
+          j=json.loads(sys.argv[1])
+          assert j['status']=='ok'
+          assert j['send_mode']=='hold'
+          print('EMAIL_DRIP_PLANNER_RUNTIME=PASS mode=hold')
+          PY
+
+          main_pid="$(sudo systemctl show -p MainPID --value "$service")"
+          test "$main_pid" -gt 0
+          python_bin="$(sudo python3 - "$main_pid" <<'PY'
+          import pathlib,sys
+          raw=pathlib.Path(f'/proc/{sys.argv[1]}/cmdline').read_bytes().split(b'\0')
+          if not raw or not raw[0]: raise SystemExit(1)
+          print(raw[0].decode())
+          PY
+          )"
+          test -x "$python_bin"
+          owner="$(stat -c '%U' "$target")"
+
+          planner="$(sudo -u "$owner" env \
+            PYTHONPATH="$repo/services/email_drip" \
+            DRIP_SEND_MODE=hold \
+            DRIP_LIVE_PREFLIGHT_OK=false \
+            DRIP_LEADS_FILE="$HOME/email_drip/leads_drip.json" \
+            "$python_bin" - "$repo/services/email_drip/email_drip.py" <<'PY'
+          import importlib.util,json,sys
+          from datetime import datetime,timezone
+          from pathlib import Path
+          path=Path(sys.argv[1])
+          spec=importlib.util.spec_from_file_location('dominion_email_drip_readonly_planner',path)
+          m=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(m)
+          r=m._build_preflight_report(now=datetime.now(timezone.utc))
+          out={
+              'candidate_count':r['candidate_count'],
+              'candidates':[{'book':x['book'],'step':x['step']} for x in r['candidates']],
+              'status_counts':r['status_counts'],
+              'free_audit_candidate_count':r['free_audit_candidate_count'],
+              'transport_invoked':r['transport_invoked'],
+              'state_mutated':r['state_mutated'],
+              'total_leads':r['total_leads'],
+          }
+          print(json.dumps(out,separators=(',',':'),sort_keys=True))
+          PY
+          )"
+
+          python3 - "$planner" <<'PY'
+          import json,sys
+          p=json.loads(sys.argv[1])
+          print('EMAIL_DRIP_PREFLIGHT_JSON='+json.dumps(p,separators=(',',':'),sort_keys=True))
+          checks={
+              'transport_invoked': p['transport_invoked'] is False,
+              'state_mutated': p['state_mutated'] is False,
+              'free_audit_candidates': p['free_audit_candidate_count']==0,
+              'suppression_error': p['status_counts'].get('suppression_error',0)==0,
+              'send_reconciliation_required': p['status_counts'].get('send_reconciliation_required',0)==0,
+              'invalid_send_history': p['status_counts'].get('invalid_send_history',0)==0,
+          }
+          failed=[name for name,ok in checks.items() if not ok]
+          if failed:
+              print('EMAIL_DRIP_PLANNER=HOLD blocking='+','.join(failed))
+              raise SystemExit(2)
+          print(f"EMAIL_DRIP_PLANNER=PASS candidate_count={p['candidate_count']} total_leads={p['total_leads']}")
+          PY
+          REMOTE
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/email-drip-planner-*.bundle

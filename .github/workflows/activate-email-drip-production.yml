@@ -60,6 +60,7 @@ jobs:
           set -euo pipefail
           python -m py_compile scripts/set_email_drip_runtime.py services/email_drip/email_drip.py
           bash -n scripts/activate_email_drip_remote.sh
+          bash -n scripts/quarantine_vm_repo_state.sh
 
   activate:
     needs: validate
@@ -81,7 +82,7 @@ jobs:
           test -n "$VM_HOST"
           test -n "$VM_USER"
           test -n "$VM_SSH_KEY"
-      - name: Stage exact Git bundle
+      - name: Stage exact Git bundle and drift-quarantine helper
         id: stage
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -97,29 +98,36 @@ jobs:
           chmod 600 "$HOME/.ssh/known_hosts"
           bundle="$RUNNER_TEMP/email-drip-live-${GITHUB_RUN_ID}.bundle"
           remote_bundle="/tmp/email-drip-live-${GITHUB_RUN_ID}.bundle"
+          remote_helper="/tmp/quarantine-vm-repo-state-email-drip-live-${GITHUB_RUN_ID}.sh"
           git update-ref refs/heads/dominion-live "$DEPLOY_SHA"
           git bundle create "$bundle" refs/heads/dominion-live
           git bundle verify "$bundle"
-          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
-          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "chmod 600 '$remote_bundle'"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+            "$bundle" scripts/quarantine_vm_repo_state.sh \
+            "$VM_USER@$VM_HOST:/tmp/"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" \
+            "mv '/tmp/quarantine_vm_repo_state.sh' '$remote_helper' && chmod 600 '$remote_bundle' '$remote_helper'"
           echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
-      - name: Synchronize exact release and activate with automatic containment
+          echo "remote_helper=$remote_helper" >> "$GITHUB_OUTPUT"
+      - name: Quarantine drift, synchronize exact release, and activate with automatic containment
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
           REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+          REMOTE_HELPER: ${{ steps.stage.outputs.remote_helper }}
           EXPECTED: ${{ needs.validate.outputs.expected }}
           MAXIMUM: ${{ needs.validate.outputs.maximum }}
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
-            "DEPLOY_SHA='$DEPLOY_SHA' BUNDLE='$REMOTE_BUNDLE' EXPECTED='$EXPECTED' MAXIMUM='$MAXIMUM' bash -s" <<'REMOTE'
+            "DEPLOY_SHA='$DEPLOY_SHA' BUNDLE='$REMOTE_BUNDLE' HELPER='$REMOTE_HELPER' EXPECTED='$EXPECTED' MAXIMUM='$MAXIMUM' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
           set -euo pipefail
-          trap 'rm -f "$BUNDLE"' EXIT
+          trap 'rm -f "$BUNDLE" "$HELPER"' EXIT
           repo="$HOME/dominion-ops"
+          test -d "$repo/.git"
+          RUN_ID="$RUN_ID" DOMINION_REPO="$repo" bash "$HELPER"
           cd "$repo"
-          test -z "$(git status --porcelain --untracked-files=no)" || { echo "EMAIL_DRIP_LIVE=FAIL reason=tracked_vm_repo_dirty"; exit 1; }
           git fetch "$BUNDLE" dominion-live:refs/remotes/dominion-live/main
           git cat-file -e "${DEPLOY_SHA}^{commit}"
           git merge-base --is-ancestor HEAD "$DEPLOY_SHA" || { echo "EMAIL_DRIP_LIVE=FAIL reason=non_fast_forward_vm_repo"; exit 1; }

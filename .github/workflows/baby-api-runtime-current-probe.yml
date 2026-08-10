@@ -1,0 +1,87 @@
+name: Baby API Runtime Current Probe
+
+on:
+  push:
+    branches: [diag/baby-api-runtime-current-20260810]
+    paths:
+      - '.github/workflows/baby-api-runtime-current-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: foundation-vm-production
+    steps:
+      - name: Require protected VM connection
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Read Baby API configuration presence only
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          docker inspect baby-api >/dev/null
+          python3 - <<'PY'
+          import json, subprocess
+          keys=['YOUTUBE_CLIENT_ID','YOUTUBE_CLIENT_SECRET','YOUTUBE_API_KEY','GUMROAD_TOKEN','OANDA_API_KEY','OANDA_ACCOUNT_ID','BINANCE_API_KEY','BINANCE_API_SECRET','BREVO_API_KEY','TIKTOK_CLIENT_ID','TIKTOK_CLIENT_SECRET','GEMINI_API_KEY','GOOGLE_SERVICE_ACCOUNT_JSON','GCP_PROJECT_ID','GCP_REGION','ANTHROPIC_API_KEY','GA4_MEASUREMENT_ID','VAULT_PATH']
+          raw=subprocess.check_output(['docker','inspect','baby-api'],text=True)
+          d=json.loads(raw)[0]
+          env={}
+          for item in d.get('Config',{}).get('Env',[]):
+              if '=' in item:
+                  k,v=item.split('=',1); env[k]=bool(v.strip())
+          labels=d.get('Config',{}).get('Labels') or {}
+          mounts=[]
+          for m in d.get('Mounts',[]):
+              mounts.append({'destination':m.get('Destination'),'type':m.get('Type'),'source_name_present':bool(m.get('Name') or m.get('Source'))})
+          networks=list((d.get('NetworkSettings',{}).get('Networks') or {}).keys())
+          ports=d.get('HostConfig',{}).get('PortBindings') or {}
+          safe={
+              'keys':{k:bool(env.get(k)) for k in keys},
+              'compose_project':labels.get('com.docker.compose.project'),
+              'compose_service':labels.get('com.docker.compose.service'),
+              'network_count':len(networks),
+              'networks':networks,
+              'mounts':mounts,
+              'restart_policy':(d.get('HostConfig',{}).get('RestartPolicy') or {}).get('Name'),
+              'port_8080_bound':bool(ports.get('8080/tcp')),
+              'image_present':bool(d.get('Image')),
+          }
+          print('BABY_API_RUNTIME_SAFE='+json.dumps(safe,separators=(',',':'),sort_keys=True))
+          PY
+          python3 - "$HOME/dominion-ops/.env" <<'PY'
+          import json,sys
+          from pathlib import Path
+          keys=['YOUTUBE_CLIENT_ID','YOUTUBE_CLIENT_SECRET','YOUTUBE_API_KEY','GUMROAD_TOKEN','OANDA_API_KEY','OANDA_ACCOUNT_ID','BINANCE_API_KEY','BINANCE_API_SECRET','BREVO_API_KEY','TIKTOK_CLIENT_ID','TIKTOK_CLIENT_SECRET','GEMINI_API_KEY','GOOGLE_SERVICE_ACCOUNT_JSON','GCP_PROJECT_ID','GCP_REGION','ANTHROPIC_API_KEY','GA4_MEASUREMENT_ID','VAULT_PATH']
+          p=Path(sys.argv[1]); found={k:False for k in keys}
+          if p.is_file():
+              for raw in p.read_text(errors='replace').splitlines():
+                  if '=' not in raw or raw.lstrip().startswith('#'): continue
+                  k,v=raw.split('=',1); k=k.strip()
+                  if k in found and v.strip(): found[k]=True
+          print('BABY_API_REPO_ENV_SAFE='+json.dumps({'exists':p.is_file(),'keys':found},separators=(',',':'),sort_keys=True))
+          PY
+          echo 'BABY_API_RUNTIME_PROBE=PASS'
+          REMOTE
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key"

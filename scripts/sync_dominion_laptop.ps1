@@ -171,11 +171,11 @@ try {
         if (Test-Path -LiteralPath $current) {
             $currentItem = Get-Item -LiteralPath $current -Force
             if (-not $currentItem.PSIsContainer -or ($currentItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'current_not_safe_directory' }
-            Invoke-FileSystemRetry -Operation { Move-Item -LiteralPath $current -Destination $backup -ErrorAction Stop }
+            Invoke-FileSystemRetry -Operation { [IO.Directory]::Move($current, $backup) }
             $oldPresent = $true
         }
         $publishPhase = 'stage_publish'
-        Invoke-FileSystemRetry -Operation { Move-Item -LiteralPath $stage -Destination $current -ErrorAction Stop }
+        Invoke-FileSystemRetry -Operation { [IO.Directory]::Move($stage, $current) }
         $published = $true
 
         $publishPhase = 'receipt_prepare'
@@ -204,15 +204,15 @@ try {
         $rollbackIssues = New-Object System.Collections.Generic.List[string]
 
         if ($published -and (Test-Path -LiteralPath $current)) {
-            try { Invoke-FileSystemRetry -Operation { Remove-Item -LiteralPath $current -Recurse -Force -ErrorAction Stop } }
+            try { Invoke-FileSystemRetry -Operation { [IO.Directory]::Delete($current, $true) } }
             catch { $rollbackIssues.Add('remove_current') }
         }
         if ($oldPresent -and (Test-Path -LiteralPath $backup)) {
-            try { Invoke-FileSystemRetry -Operation { Move-Item -LiteralPath $backup -Destination $current -ErrorAction Stop } }
+            try { Invoke-FileSystemRetry -Operation { [IO.Directory]::Move($backup, $current) } }
             catch { $rollbackIssues.Add('restore_backup') }
         }
         if (Test-Path -LiteralPath $stage) {
-            try { Invoke-FileSystemRetry -Operation { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction Stop } }
+            try { Invoke-FileSystemRetry -Operation { [IO.Directory]::Delete($stage, $true) } }
             catch { $rollbackIssues.Add('remove_stage') }
         }
 

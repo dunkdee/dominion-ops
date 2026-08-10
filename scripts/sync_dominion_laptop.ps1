@@ -37,6 +37,33 @@ function Invoke-FileSystemRetry {
     }
 }
 
+function Copy-TreeDataOnly {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot,
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationRoot
+    )
+
+    $sourceFull = (Get-Item -LiteralPath $SourceRoot -Force).FullName.TrimEnd('\')
+    Get-ChildItem -LiteralPath $SourceRoot -Recurse -Force | ForEach-Object {
+        $relative = $_.FullName.Substring($sourceFull.Length).TrimStart('\')
+        if ([string]::IsNullOrWhiteSpace($relative)) { return }
+        $destination = Join-Path $DestinationRoot $relative
+        if ($_.PSIsContainer) {
+            if (-not (Test-Path -LiteralPath $destination)) {
+                New-Item -ItemType Directory -Path $destination | Out-Null
+            }
+        } else {
+            $parent = Split-Path -Parent $destination
+            if (-not (Test-Path -LiteralPath $parent)) {
+                New-Item -ItemType Directory -Path $parent -Force | Out-Null
+            }
+            [IO.File]::Copy($_.FullName, $destination, $true)
+        }
+    }
+}
+
 if ($ExpectedSha -notmatch '^[0-9a-fA-F]{40}$') { Fail 'invalid_expected_sha' }
 if ($ExpectedBrainDigest -notmatch '^[0-9a-fA-F]{64}$') { Fail 'invalid_expected_brain_digest' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail 'git_missing' }
@@ -117,9 +144,7 @@ try {
     try {
         New-Item -ItemType Directory -Path $stage | Out-Null
         $publishPhase = 'artifact_copy'
-        Get-ChildItem -LiteralPath $BrainSourcePath -Force | ForEach-Object {
-            Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
-        }
+        Copy-TreeDataOnly -SourceRoot $BrainSourcePath -DestinationRoot $stage
 
         $publishPhase = 'manifest_read'
         $manifestPath = Join-Path $stage 'MANIFEST.json'

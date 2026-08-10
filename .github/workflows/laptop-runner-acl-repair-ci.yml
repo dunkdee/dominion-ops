@@ -1,0 +1,50 @@
+name: Laptop Runner ACL Repair CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/repair_dominion_laptop_runner_acl.ps1'
+      - '.github/workflows/laptop-runner-acl-repair-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - name: Parse and constrain ACL repair
+        shell: powershell
+        run: |
+          $path = 'scripts/repair_dominion_laptop_runner_acl.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          $content = Get-Content -LiteralPath $path -Raw
+          foreach ($required in @(
+            "C:\Users\Dell\dominion-ops",
+            "C:\Users\Dell\Documents\Dominion Command Vault",
+            "C:\actions-runner",
+            '/grant:r',
+            '(OI)(CI)M',
+            'safe.directory'
+          )) {
+            if (-not $content.Contains($required)) { throw "missing required guard: $required" }
+          }
+          foreach ($forbidden in @('FullControl','Set-Service','sc.exe','ChangeServiceConfig','/grant:F','/grant:r F')) {
+            if ($content -match [regex]::Escape($forbidden)) { throw "forbidden broad mutation: $forbidden" }
+          }
+          Write-Host 'LAPTOP_RUNNER_ACL_REPAIR_CI=PASS'

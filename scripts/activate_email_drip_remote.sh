@@ -7,6 +7,7 @@ set -euo pipefail
 
 repo="$HOME/dominion-ops"
 target="$HOME/email_drip/email_drip.py"
+lock_target="$HOME/email_drip/filelock.py"
 service="dominion-email-drip.service"
 env_file="$HOME/.env"
 live_changed=0
@@ -21,25 +22,58 @@ test "$(git rev-parse HEAD)" = "$DEPLOY_SHA" || { echo "EMAIL_DRIP_LIVE=FAIL rea
 repo_sha="$(sha256sum services/email_drip/email_drip.py | awk '{print $1}')"
 prod_sha="$(sha256sum "$target" | awk '{print $1}')"
 test "$repo_sha" = "$prod_sha" || { echo "EMAIL_DRIP_LIVE=FAIL reason=production_source_drift"; exit 1; }
+repo_lock_sha="$(sha256sum services/email_drip/filelock.py | awk '{print $1}')"
+prod_lock_sha="$(sha256sum "$lock_target" | awk '{print $1}')"
+test "$repo_lock_sha" = "$prod_lock_sha" || { echo "EMAIL_DRIP_LIVE=FAIL reason=production_lock_shim_drift"; exit 1; }
+
+wait_health() {
+  local expected="$1" health
+  for _ in $(seq 1 30); do
+    if health="$(curl -fsS --max-time 2 http://127.0.0.1:8099/health 2>/dev/null)" \
+      && python3 - "$health" "$expected" <<'PY' >/dev/null 2>&1
+import json,sys
+j=json.loads(sys.argv[1])
+assert j['status']=='ok'
+assert j['send_mode']==sys.argv[2]
+PY
+    then
+      printf '%s' "$health"
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
+service_python() {
+  local pid="$1"
+  sudo python3 - "$pid" <<'PY'
+import pathlib,sys
+raw=pathlib.Path(f'/proc/{sys.argv[1]}/cmdline').read_bytes().split(b'\0')
+if not raw or not raw[0]: raise SystemExit(1)
+print(raw[0].decode())
+PY
+}
 
 contain() {
   set +e
   sudo python3 scripts/set_email_drip_runtime.py hold --env-file "$env_file" --expect either >/dev/null 2>&1
   sudo systemctl restart "$service" >/dev/null 2>&1
   sudo systemctl is-active --quiet "$service"
-  curl -fsS --max-time 10 http://127.0.0.1:8099/health | python3 -c 'import json,sys; j=json.load(sys.stdin); assert j["send_mode"]=="hold"' >/dev/null 2>&1
+  wait_health hold >/dev/null 2>&1
   echo "EMAIL_DRIP_AUTO_CONTAIN=PASS mode=hold"
 }
 
 on_error() {
-  rc=$?
+  local rc=$?
+  trap - ERR
   if [ "$live_changed" -eq 1 ]; then contain || true; fi
   exit "$rc"
 }
 trap on_error ERR
 
 sudo systemctl is-active --quiet "$service"
-health="$(curl -fsS --max-time 10 http://127.0.0.1:8099/health)"
+health="$(wait_health hold)"
 runtime_status="$(curl -fsS --max-time 10 http://127.0.0.1:8099/api/drip-status)"
 python3 - "$health" "$runtime_status" <<'PY'
 import json,sys
@@ -56,10 +90,13 @@ PY
 )"
 
 main_pid="$(sudo systemctl show -p MainPID --value "$service")"
-python_bin="$(sudo readlink -f "/proc/$main_pid/exe")"
+test "$main_pid" -gt 0
+python_bin="$(service_python "$main_pid")"
+test -x "$python_bin"
 owner="$(stat -c '%U' "$target")"
+target_dir="$(dirname "$target")"
 
-planner="$(sudo -u "$owner" env DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$python_bin" - "$target" <<'PY'
+planner="$(sudo -u "$owner" env PYTHONPATH="$target_dir" DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$python_bin" - "$target" <<'PY'
 import importlib.util,json,sys
 from datetime import datetime,timezone
 from pathlib import Path
@@ -92,8 +129,8 @@ sudo python3 scripts/set_email_drip_runtime.py live --env-file "$env_file" --exp
 live_changed=1
 sudo systemctl restart "$service"
 sudo systemctl is-active --quiet "$service"
+health="$(wait_health live)"
 ss -tlnp | grep -q ':8099 '
-health="$(curl -fsS --max-time 10 http://127.0.0.1:8099/health)"
 python3 - "$health" <<'PY'
 import json,sys
 j=json.loads(sys.argv[1])
@@ -116,7 +153,10 @@ print(f'EMAIL_DRIP_FIRST_CYCLE_ACCEPTANCE=PASS expected={expected} actual={delta
 PY
 
 # The next planner state must have no immediately due candidate after the accepted startup cycle.
-postflight="$(sudo -u "$owner" env DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$python_bin" - "$target" <<'PY'
+post_pid="$(sudo systemctl show -p MainPID --value "$service")"
+post_python="$(service_python "$post_pid")"
+test -x "$post_python"
+postflight="$(sudo -u "$owner" env PYTHONPATH="$target_dir" DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$post_python" - "$target" <<'PY'
 import importlib.util,json,sys
 from datetime import datetime,timezone
 from pathlib import Path

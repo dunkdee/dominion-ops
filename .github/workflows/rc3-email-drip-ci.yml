@@ -1,0 +1,79 @@
+name: RC3 Email Drip CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/email_drip/**'
+      - 'scripts/set_email_drip_runtime.py'
+      - 'scripts/deploy_email_drip_hold_remote.sh'
+      - 'scripts/activate_email_drip_remote.sh'
+      - 'tests/test_email_drip_governance.py'
+      - 'tests/test_email_drip_runtime_setter.py'
+      - '.github/workflows/rc3-email-drip-ci.yml'
+      - '.github/workflows/deploy-email-drip-production-hold.yml'
+      - '.github/workflows/activate-email-drip-production.yml'
+  push:
+    branches:
+      - rc3/email-drip-review-ready-20260809
+      - main
+    paths:
+      - 'services/email_drip/**'
+      - 'scripts/set_email_drip_runtime.py'
+      - 'scripts/deploy_email_drip_hold_remote.sh'
+      - 'scripts/activate_email_drip_remote.sh'
+      - 'tests/test_email_drip_governance.py'
+      - 'tests/test_email_drip_runtime_setter.py'
+      - '.github/workflows/rc3-email-drip-ci.yml'
+      - '.github/workflows/deploy-email-drip-production-hold.yml'
+      - '.github/workflows/activate-email-drip-production.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check 'fastapi>=0.110,<1' 'pydantic>=2,<3' 'filelock>=3,<4' 'uvicorn>=0.29,<1' 'pytest>=8,<9'
+      - name: Compile and shell syntax
+        run: |
+          python -m py_compile services/email_drip/email_drip.py scripts/set_email_drip_runtime.py tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
+          bash -n scripts/deploy_email_drip_hold_remote.sh
+          bash -n scripts/activate_email_drip_remote.sh
+      - name: Test
+        run: pytest -q tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
+      - name: Reject committed runtime secrets/data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import PurePosixPath
+          import subprocess
+
+          tracked = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+          forbidden = []
+          for raw in tracked:
+              path = PurePosixPath(raw)
+              name = path.name
+              is_runtime_env = name == ".env" or (
+                  name.startswith(".env.") and not name.endswith(".example")
+              )
+              is_runtime_data = name in {"leads_drip.json", "email_suppression.json", "webhook_secret.key"}
+              is_outbox = "email_outbox" in path.parts
+              if is_runtime_env or is_runtime_data or is_outbox:
+                  forbidden.append(raw)
+
+          if forbidden:
+              print("Tracked runtime secrets/data are forbidden:")
+              for item in forbidden:
+                  print(item)
+              raise SystemExit(1)
+          print("RUNTIME_SECRET_DATA_TRACKING=PASS")
+          PY

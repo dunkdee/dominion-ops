@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  path_instructions:
+    - path: "services/email_drip/**"
+      instructions: |
+        Treat this as a production side-effect system. Verify scheduler/preflight parity, HOLD-by-default behavior, suppression fail-closed logic, source/book resolution, unsubscribe handling, transport fallback behavior, and state advancement only after successful send. Flag secrets/PII, unsupported claims, SendGrid fallback after SMTP failure, and any change that could increase blast radius without an explicit gate.
+    - path: ".github/workflows/**"
+      instructions: |
+        Review for least privilege, exact branch/SHA targeting, secret exposure, unsafe shell expansion, write permissions, untrusted input, production mutation risk, rollback/stop conditions, and whether a read-only workflow is truly read-only. Flag unnecessary broad permissions.
+    - path: "scripts/runtime/**"
+      instructions: |
+        Require deterministic preflight, smallest mutation, atomic replacement, preserved owner/group/mode, explicit rollback, bounded service restart scope, and evidence-based acceptance checks. Flag ad-hoc remote mutation or duplicated production logic.
+    - path: "tests/**"
+      instructions: |
+        Require failure-path and side-effect-safety coverage, especially ghost/invalid leads, malformed timestamps, suppression errors, hold mode, transport failures, duplicate-send prevention, and no state advancement under mocks.

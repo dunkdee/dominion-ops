@@ -33,12 +33,18 @@ jobs:
       - id: sha
         run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Validate exact release commit
+        env:
+          PYTHONPATH: services/email_drip
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-          python -m pip install --disable-pip-version-check 'fastapi>=0.110,<1' 'pydantic>=2,<3' 'filelock>=3,<4' 'uvicorn>=0.29,<1' 'pytest>=8,<9'
-          python -m py_compile services/email_drip/email_drip.py scripts/set_email_drip_runtime.py tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
+          python -m pip install --disable-pip-version-check 'fastapi>=0.110,<1' 'pydantic>=2,<3' 'uvicorn>=0.29,<1' 'pytest>=8,<9'
+          python -m py_compile services/email_drip/filelock.py services/email_drip/email_drip.py scripts/set_email_drip_runtime.py tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
+          python - <<'PY'
+          import filelock
+          assert filelock.__file__.endswith('services/email_drip/filelock.py'), filelock.__file__
+          PY
           bash -n scripts/deploy_email_drip_hold_remote.sh
           bash -n scripts/quarantine_vm_repo_state.sh
           pytest -q tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py

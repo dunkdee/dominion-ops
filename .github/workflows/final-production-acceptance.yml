@@ -1,0 +1,280 @@
+name: Dominion Final Production Acceptance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/final-production-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dominion-final-production-acceptance
+  cancel-in-progress: true
+
+jobs:
+  validate-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      agent_count: ${{ steps.registry.outputs.agent_count }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Require exact main release and registry
+        id: registry
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          data=json.loads(Path('agents/registry.json').read_text())
+          agents=data.get('agents', data if isinstance(data,list) else None)
+          if isinstance(agents, dict):
+              count=len(agents)
+          elif isinstance(agents, list):
+              count=len(agents)
+          else:
+              raise SystemExit('FINAL_ACCEPTANCE=HOLD reason=invalid_agent_registry')
+          if count <= 0:
+              raise SystemExit('FINAL_ACCEPTANCE=HOLD reason=empty_agent_registry')
+          print(f'agent_count={count}')
+          PY
+          echo "FINAL_REGISTRY=PASS"
+
+      - name: Validate Email Drip release tooling
+        env:
+          PYTHONPATH: services/email_drip
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            services/email_drip/filelock.py \
+            services/email_drip/email_drip.py \
+            scripts/set_email_drip_runtime.py
+          python - <<'PY'
+          import filelock
+          assert filelock.__file__.endswith('services/email_drip/filelock.py'), filelock.__file__
+          PY
+          python - <<'PY'
+          import json,re
+          from pathlib import Path
+          d=json.loads(Path('runtime/releases/email-drip-live.json').read_text())
+          assert d['schema']=='dominion-email-drip-live-v1'
+          assert d['authorized_role']=='human_overseer'
+          assert re.fullmatch(r'[0-9a-f]{40}',d['approved_source_commit'])
+          assert isinstance(d['expected_candidate_count'],int) and d['expected_candidate_count'] >= 0
+          assert isinstance(d['max_candidate_count'],int) and d['expected_candidate_count'] <= d['max_candidate_count'] <= 10
+          print('FINAL_EMAIL_RELEASE_DESCRIPTOR=PASS')
+          PY
+
+      - name: Verify public revenue surfaces
+        run: |
+          set -euo pipefail
+          check_url() {
+            local name="$1" url="$2" code
+            code="$(curl -L -sS -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 30 "$url")"
+            case "$code" in 2??) ;; *) echo "FINAL_ACCEPTANCE=HOLD reason=public_surface name=$name status=$code"; exit 1 ;; esac
+            echo "PUBLIC_SURFACE=PASS name=$name status=$code"
+          }
+          check_url dominion_healing https://dominionhealing.org/
+          check_url voltedge_store https://www.voltedgegoods.com/
+          check_url surplus https://surplus.dominionhealing.org/
+
+  runtime-acceptance:
+    needs: validate-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - name: Require protected VM connection
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Verify protected runtime, agents, and revenue lane read-only
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_AGENTS: ${{ needs.validate-release.outputs.agent_count }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
+            "$VM_USER@$VM_HOST" \
+            "EXPECTED_SHA='$EXPECTED_SHA' EXPECTED_AGENTS='$EXPECTED_AGENTS' bash -s" <<'REMOTE'
+          set -euo pipefail
+          repo="$HOME/dominion-ops"
+          drip="$HOME/email_drip/email_drip.py"
+          drip_dir="$HOME/email_drip"
+
+          test -d "$repo/.git" || { echo 'FINAL_ACCEPTANCE=HOLD reason=vm_repo_missing'; exit 1; }
+
+          # Parity workflow owns synchronization. This audit only waits for the exact
+          # release and never changes Git state.
+          matched=0
+          for _ in $(seq 1 90); do
+            if [ "$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)" = "$EXPECTED_SHA" ]; then
+              matched=1
+              break
+            fi
+            sleep 2
+          done
+          [ "$matched" -eq 1 ] || { echo 'FINAL_ACCEPTANCE=HOLD reason=vm_sha_not_current'; exit 1; }
+          echo "FINAL_VM_SHA=PASS sha=$EXPECTED_SHA"
+
+          test -f "$repo/services/email_drip/email_drip.py"
+          test -f "$repo/services/email_drip/filelock.py"
+          test -f "$drip" && test ! -L "$drip"
+          test -f "$drip_dir/filelock.py" && test ! -L "$drip_dir/filelock.py"
+          test "$(sha256sum "$repo/services/email_drip/email_drip.py" | awk '{print $1}')" = "$(sha256sum "$drip" | awk '{print $1}')" || { echo 'FINAL_ACCEPTANCE=HOLD reason=email_source_drift'; exit 1; }
+          test "$(sha256sum "$repo/services/email_drip/filelock.py" | awk '{print $1}')" = "$(sha256sum "$drip_dir/filelock.py" | awk '{print $1}')" || { echo 'FINAL_ACCEPTANCE=HOLD reason=email_lock_shim_drift'; exit 1; }
+          echo 'FINAL_EMAIL_SOURCE_PARITY=PASS'
+
+          # Caddy must validate before public/proxy health can count as production-ready.
+          sudo caddy validate --config /etc/caddy/Caddyfile >/dev/null
+          echo 'FINAL_CADDY_VALIDATE=PASS'
+
+          # Core listeners. These are transport-level assertions only; semantic HTTP
+          # assertions follow for services with canonical health endpoints.
+          python3 - <<'PY'
+          import socket
+          required=[80,443,5000,5050,5055,5056,5060,5070,5080,5090,5101,5678,8080,8082,8083,8090,8099,8787,11434]
+          missing=[]
+          for port in required:
+              s=socket.socket(); s.settimeout(1.0)
+              try:
+                  s.connect(('127.0.0.1',port))
+              except OSError:
+                  missing.append(port)
+              finally:
+                  s.close()
+          if missing:
+              print('FINAL_ACCEPTANCE=HOLD reason=missing_listeners ports='+','.join(map(str,missing)))
+              raise SystemExit(1)
+          print('FINAL_LISTENERS=PASS count='+str(len(required)))
+          PY
+
+          # Obsidian backend is deliberately loopback-only; Caddy is the public auth boundary.
+          obsidian_ss="$(ss -ltnH | awk '$4 ~ /:8083$/ {print $4}')"
+          printf '%s\n' "$obsidian_ss" | grep -Fxq '127.0.0.1:8083' || { echo 'FINAL_ACCEPTANCE=HOLD reason=obsidian_loopback_missing'; exit 1; }
+          if printf '%s\n' "$obsidian_ss" | grep -Eq '^(0\.0\.0\.0|\*|\[::\]):8083$'; then
+            echo 'FINAL_ACCEPTANCE=HOLD reason=obsidian_public_backend_bind'
+            exit 1
+          fi
+          echo 'FINAL_OBSIDIAN_BIND=PASS local=127.0.0.1:8083'
+
+          require_200() {
+            local name="$1" url="$2" code
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$url" || true)"
+            [ "$code" = '200' ] || { echo "FINAL_ACCEPTANCE=HOLD reason=http_health name=$name status=$code"; exit 1; }
+            echo "RUNTIME_HTTP=PASS name=$name status=200"
+          }
+          require_200 baby_api http://127.0.0.1:8080/
+          require_200 wix_agent http://127.0.0.1:8082/ready
+          require_200 dominion_web http://127.0.0.1:8090/
+          require_200 n8n http://127.0.0.1:5678/healthz
+          require_200 alpha_engine http://127.0.0.1:8787/health
+          require_200 conductor http://127.0.0.1:5060/health
+          require_200 email_drip http://127.0.0.1:8099/health
+          require_200 ollama http://127.0.0.1:11434/api/tags
+          require_200 obsidian_backend http://127.0.0.1:8083/
+
+          # Email Drip must be actually LIVE, armed, SMTP-backed, and protected against
+          # manual execution. No recipient data is logged.
+          email_health="$(curl -fsS --max-time 10 http://127.0.0.1:8099/health)"
+          email_status="$(curl -fsS --max-time 10 http://127.0.0.1:8099/api/drip-status)"
+          read -r email_leads email_sent <<EOF
+          $(python3 - "$email_health" "$email_status" <<'PY'
+          import json,sys
+          h=json.loads(sys.argv[1]); s=json.loads(sys.argv[2])
+          assert h['status']=='ok'
+          assert h['send_mode']=='live'
+          assert h['configured_send_mode']=='live'
+          assert h['live_start_authorized'] is True
+          assert h['live_preflight_ok'] is True
+          assert s['smtp_configured'] is True
+          assert s['transport']=='smtp'
+          leads=int(s['total_leads']); sent=int(s['total_emails_sent'])
+          assert leads >= 0 and sent >= 0
+          print(leads,sent)
+          PY
+          )
+          EOF
+          manual_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST --max-time 10 http://127.0.0.1:8099/api/run-drip || true)"
+          [ "$manual_code" = '403' ] || { echo "FINAL_ACCEPTANCE=HOLD reason=manual_drip_not_disabled status=$manual_code"; exit 1; }
+          invalid_capture_code="$(curl -sS -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{"email":"invalid"}' --max-time 10 http://127.0.0.1:8099/api/email-capture || true)"
+          [ "$invalid_capture_code" = '400' ] || { echo "FINAL_ACCEPTANCE=HOLD reason=capture_route_negative_test status=$invalid_capture_code"; exit 1; }
+          echo "FINAL_EMAIL_DRIP=PASS mode=live leads=$email_leads historical_sent=$email_sent manual=403 capture_negative=400"
+
+          # Baby API must see the live vault and current Gumroad product catalog.
+          # We intentionally do not call /gumroad/sales because it includes customer PII.
+          vault="$(curl -fsS --max-time 10 http://127.0.0.1:8080/vault/health)"
+          gumroad="$(curl -fsS --max-time 20 http://127.0.0.1:8080/gumroad)"
+          read -r vault_notes gumroad_products gumroad_published <<EOF
+          $(python3 - "$vault" "$gumroad" <<'PY'
+          import json,sys
+          v=json.loads(sys.argv[1]); g=json.loads(sys.argv[2])
+          assert v['vault']=='mounted'
+          notes=int(v['total_notes']); assert notes >= 0
+          assert g['success'] is True
+          products=g.get('products',[])
+          count=int(g['product_count'])
+          published=sum(1 for item in products if item.get('published') is True)
+          assert count == len(products)
+          assert count >= 1
+          assert published >= 1
+          print(notes,count,published)
+          PY
+          )
+          EOF
+          echo "FINAL_VAULT=PASS mounted=true notes=$vault_notes"
+          echo "FINAL_GUMROAD=PASS products=$gumroad_products published=$gumroad_published"
+
+          # Retired duplicate API units must remain contained if installed.
+          for unit in alchemist-api.service conductor-api.service juris-api.service dominion-port-healer.service; do
+            if systemctl list-unit-files --no-legend "$unit" 2>/dev/null | grep -q "^$unit"; then
+              enabled="$(systemctl is-enabled "$unit" 2>/dev/null || true)"
+              active="$(systemctl is-active "$unit" 2>/dev/null || true)"
+              [ "$enabled" = 'masked' ] || { echo "FINAL_ACCEPTANCE=HOLD reason=retired_unit_not_masked unit=$unit state=$enabled"; exit 1; }
+              [ "$active" != 'active' ] || { echo "FINAL_ACCEPTANCE=HOLD reason=retired_unit_active unit=$unit"; exit 1; }
+            fi
+          done
+          echo 'FINAL_RETIRED_UNITS=PASS'
+
+          # Current registry count is asserted by canonical parity; keep the audit
+          # dynamic rather than hard-coding a permanent team size.
+          registry_count="$(python3 - "$repo/agents/registry.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          a=d.get('agents',d if isinstance(d,list) else None)
+          print(len(a) if isinstance(a,(list,dict)) else 0)
+          PY
+          )"
+          [ "$registry_count" = "$EXPECTED_AGENTS" ] || { echo "FINAL_ACCEPTANCE=HOLD reason=vm_agent_count expected=$EXPECTED_AGENTS actual=$registry_count"; exit 1; }
+
+          echo "FINAL_PRODUCTION_ACCEPTANCE=PASS sha=$EXPECTED_SHA agents=$registry_count email_mode=live email_total_leads=$email_leads email_historical_sent=$email_sent gumroad_products=$gumroad_products gumroad_published=$gumroad_published vault_notes=$vault_notes"
+          REMOTE
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key"

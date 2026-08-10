@@ -17,6 +17,7 @@ on:
   push:
     branches:
       - rc3/email-drip-final-20260810
+      - fix/email-drip-runtime-preflight-20260810
       - main
     paths:
       - 'services/email_drip/**'
@@ -43,14 +44,25 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install test dependencies
-        run: python -m pip install --disable-pip-version-check 'fastapi>=0.110,<1' 'pydantic>=2,<3' 'filelock>=3,<4' 'uvicorn>=0.29,<1' 'pytest>=8,<9'
+        run: python -m pip install --disable-pip-version-check 'fastapi>=0.110,<1' 'pydantic>=2,<3' 'uvicorn>=0.29,<1' 'pytest>=8,<9'
       - name: Compile and shell syntax
+        env:
+          PYTHONPATH: services/email_drip
         run: |
-          python -m py_compile services/email_drip/email_drip.py scripts/set_email_drip_runtime.py tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
+          python -m py_compile services/email_drip/filelock.py services/email_drip/email_drip.py scripts/set_email_drip_runtime.py tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
+          python - <<'PY'
+          import filelock
+          assert filelock.__file__.endswith('services/email_drip/filelock.py'), filelock.__file__
+          from filelock import FileLock, Timeout
+          assert FileLock and Timeout
+          print('EMAIL_DRIP_LOCAL_FILELOCK=PASS')
+          PY
           bash -n scripts/deploy_email_drip_hold_remote.sh
           bash -n scripts/activate_email_drip_remote.sh
           bash -n scripts/quarantine_vm_repo_state.sh
       - name: Test
+        env:
+          PYTHONPATH: services/email_drip
         run: pytest -q tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
       - name: Reject committed runtime secrets/data
         shell: bash

@@ -6,10 +6,14 @@ set -euo pipefail
 
 repo="$HOME/dominion-ops"
 target="$HOME/email_drip/email_drip.py"
+lock_target="$HOME/email_drip/filelock.py"
 service="dominion-email-drip.service"
 env_file="$HOME/.env"
 source_backup="$HOME/email_drip/email_drip.py.github-rollback-${RUN_ID}.bak"
+lock_backup="$HOME/email_drip/filelock.py.github-rollback-${RUN_ID}.bak"
 source_published=0
+lock_published=0
+lock_preexisting=0
 
 [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=invalid_sha"; exit 1; }
 test -d "$repo/.git" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=repo_missing"; exit 1; }
@@ -17,6 +21,14 @@ cd "$repo"
 test "$(git rev-parse HEAD)" = "$DEPLOY_SHA" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=vm_sha_mismatch"; exit 1; }
 test -f "$target" && test ! -L "$target" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=production_target_invalid"; exit 1; }
 test ! -e "$source_backup" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=rollback_collision"; exit 1; }
+test -f services/email_drip/filelock.py && test ! -L services/email_drip/filelock.py || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=lock_shim_missing"; exit 1; }
+
+if sudo test -e "$lock_target"; then
+  sudo test -f "$lock_target" && sudo test ! -L "$lock_target" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=production_lock_target_invalid"; exit 1; }
+  test ! -e "$lock_backup" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=lock_rollback_collision"; exit 1; }
+  sudo cp -a "$lock_target" "$lock_backup"
+  lock_preexisting=1
+fi
 
 sudo cp -a "$target" "$source_backup"
 sudo python3 - "$source_backup" <<'PY'
@@ -24,11 +36,38 @@ import os,sys
 with open(sys.argv[1],'rb') as f: os.fsync(f.fileno())
 PY
 
-rollback() {
-  set +e
-  sudo python3 scripts/set_email_drip_runtime.py hold --env-file "$env_file" --expect either >/dev/null 2>&1
-  if [ "$source_published" -eq 1 ] && sudo test -f "$source_backup"; then
-    sudo python3 - "$source_backup" "$target" <<'PY'
+wait_health() {
+  local expected="$1" health
+  for _ in $(seq 1 30); do
+    if health="$(curl -fsS --max-time 2 http://127.0.0.1:8099/health 2>/dev/null)" \
+      && python3 - "$health" "$expected" <<'PY' >/dev/null 2>&1
+import json,sys
+j=json.loads(sys.argv[1])
+assert j['status']=='ok'
+assert j['send_mode']==sys.argv[2]
+PY
+    then
+      printf '%s' "$health"
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
+service_python() {
+  local pid="$1"
+  sudo python3 - "$pid" <<'PY'
+import pathlib,sys
+raw=pathlib.Path(f'/proc/{sys.argv[1]}/cmdline').read_bytes().split(b'\0')
+if not raw or not raw[0]: raise SystemExit(1)
+print(raw[0].decode())
+PY
+}
+
+restore_atomic() {
+  local backup="$1" destination="$2"
+  sudo python3 - "$backup" "$destination" <<'PY'
 import os,secrets,shutil,stat,sys
 from pathlib import Path
 backup=Path(sys.argv[1]); target=Path(sys.argv[2]); st=backup.stat()
@@ -44,16 +83,66 @@ try:
 finally:
     if tmp.exists(): tmp.unlink()
 PY
+}
+
+rollback() {
+  set +e
+  sudo python3 scripts/set_email_drip_runtime.py hold --env-file "$env_file" --expect either >/dev/null 2>&1
+  if [ "$source_published" -eq 1 ] && sudo test -f "$source_backup"; then
+    restore_atomic "$source_backup" "$target"
+  fi
+  if [ "$lock_published" -eq 1 ]; then
+    if [ "$lock_preexisting" -eq 1 ] && sudo test -f "$lock_backup"; then
+      restore_atomic "$lock_backup" "$lock_target"
+    else
+      sudo rm -f "$lock_target"
+    fi
   fi
   sudo systemctl restart "$service" >/dev/null 2>&1
   sudo systemctl is-active --quiet "$service"
-  curl -fsS --max-time 10 http://127.0.0.1:8099/health | python3 -c 'import json,sys; j=json.load(sys.stdin); assert j["send_mode"]=="hold"' >/dev/null 2>&1
-  echo "EMAIL_DRIP_AUTO_ROLLBACK=PASS source_restored=$source_published mode=hold"
+  wait_health hold >/dev/null 2>&1
+  echo "EMAIL_DRIP_AUTO_ROLLBACK=PASS source_restored=$source_published lock_restored=$lock_published mode=hold"
 }
-trap rollback ERR
 
-python3 -m py_compile services/email_drip/email_drip.py scripts/set_email_drip_runtime.py
+on_error() {
+  local rc=$?
+  trap - ERR
+  rollback || true
+  exit "$rc"
+}
+trap on_error ERR
+
+PYTHONPATH=services/email_drip python3 -m py_compile services/email_drip/filelock.py services/email_drip/email_drip.py scripts/set_email_drip_runtime.py
+PYTHONPATH=services/email_drip python3 - <<'PY'
+from filelock import FileLock, Timeout
+assert FileLock and Timeout
+PY
 sudo python3 scripts/set_email_drip_runtime.py hold --env-file "$env_file" --expect either
+
+# Publish the local lock shim first so the new service source has no external filelock dependency.
+lock_published=1
+sudo python3 - "$repo/services/email_drip/filelock.py" "$lock_target" "$target" <<'PY'
+import os,secrets,shutil,stat,sys
+from pathlib import Path
+source=Path(sys.argv[1]); dest=Path(sys.argv[2]); reference=Path(sys.argv[3]); ref=reference.stat()
+if not source.is_file() or source.is_symlink(): raise SystemExit('LOCK_SOURCE_INVALID')
+if dest.exists() and (not dest.is_file() or dest.is_symlink()): raise SystemExit('LOCK_TARGET_INVALID')
+if dest.exists():
+    st=dest.stat(); uid,gid,mode=st.st_uid,st.st_gid,stat.S_IMODE(st.st_mode)
+else:
+    uid,gid,mode=ref.st_uid,ref.st_gid,0o644
+tmp=dest.with_name(f'.{dest.name}.github-{os.getpid()}-{secrets.token_hex(8)}.tmp')
+fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_EXCL,mode)
+try:
+    with os.fdopen(fd,'wb') as out, source.open('rb') as src:
+        shutil.copyfileobj(src,out); out.flush(); os.fsync(out.fileno())
+    os.chown(tmp,uid,gid); os.chmod(tmp,mode); os.replace(tmp,dest)
+    dfd=os.open(dest.parent,os.O_RDONLY|getattr(os,'O_DIRECTORY',0))
+    try: os.fsync(dfd)
+    finally: os.close(dfd)
+finally:
+    if tmp.exists(): tmp.unlink()
+PY
 
 source_published=1
 sudo python3 - "$repo/services/email_drip/email_drip.py" "$target" "$RUN_ID" <<'PY'
@@ -93,13 +182,12 @@ PY
 
 sudo systemctl restart "$service"
 sudo systemctl is-active --quiet "$service"
+health="$(wait_health hold)"
 main_pid="$(sudo systemctl show -p MainPID --value "$service")"
 test "$main_pid" -gt 0
-python_bin="$(sudo readlink -f "/proc/$main_pid/exe")"
+python_bin="$(service_python "$main_pid")"
 test -x "$python_bin"
 ss -tlnp | grep -q ':8099 '
-
-health="$(curl -fsS --max-time 10 http://127.0.0.1:8099/health)"
 runtime_status="$(curl -fsS --max-time 10 http://127.0.0.1:8099/api/drip-status)"
 python3 - "$health" "$runtime_status" <<'PY'
 import json,sys
@@ -109,7 +197,9 @@ assert s['smtp_configured'] is True and s['transport']=='smtp'
 print('EMAIL_DRIP_HEALTH=PASS mode=hold smtp_configured=true')
 PY
 
-planner="$(sudo -u "$(stat -c '%U' "$target")" env DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$python_bin" - "$target" <<'PY'
+owner="$(stat -c '%U' "$target")"
+target_dir="$(dirname "$target")"
+planner="$(sudo -u "$owner" env PYTHONPATH="$target_dir" DRIP_SEND_MODE=hold DRIP_LIVE_PREFLIGHT_OK=false "$python_bin" - "$target" <<'PY'
 import importlib.util,json,sys
 from datetime import datetime,timezone
 from pathlib import Path
@@ -121,6 +211,9 @@ PY
 python3 - "$planner" <<'PY'
 import json,sys
 p=json.loads(sys.argv[1]); assert p['transport_invoked'] is False and p['state_mutated'] is False and p['free_audit_candidate_count']==0
+assert p['status_counts'].get('suppression_error',0)==0
+assert p['status_counts'].get('send_reconciliation_required',0)==0
+assert p['status_counts'].get('invalid_send_history',0)==0
 print('EMAIL_DRIP_PREFLIGHT_JSON='+json.dumps(p,separators=(',',':'),sort_keys=True))
 PY
 
@@ -128,4 +221,5 @@ unsubscribe_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 http
 case "$unsubscribe_status" in 400|401|403|405|422) ;; *) echo "EMAIL_DRIP_DEPLOY=FAIL reason=unsubscribe_route_unverified status=$unsubscribe_status"; false ;; esac
 
 trap - ERR
+rm -f "$lock_backup" 2>/dev/null || true
 printf 'EMAIL_DRIP_DEPLOY=PASS sha=%s service=active pid=%s port=8099 send_mode=hold smtp_configured=true unsubscribe_status=%s rollback=%s\n' "$DEPLOY_SHA" "$main_pid" "$unsubscribe_status" "$source_backup"

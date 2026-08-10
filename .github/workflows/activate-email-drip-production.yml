@@ -49,16 +49,26 @@ jobs:
           git cat-file -e "${SOURCE_SHA}^{commit}"
           git merge-base --is-ancestor "$SOURCE_SHA" HEAD
           git merge-base --is-ancestor HEAD origin/main
-          git diff --quiet "$SOURCE_SHA" HEAD -- services/email_drip/email_drip.py scripts/set_email_drip_runtime.py scripts/activate_email_drip_remote.sh
+          git diff --quiet "$SOURCE_SHA" HEAD -- \
+            services/email_drip/email_drip.py \
+            services/email_drip/filelock.py \
+            scripts/set_email_drip_runtime.py \
+            scripts/activate_email_drip_remote.sh
           echo "deploy_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
           echo "expected=$EXPECTED" >> "$GITHUB_OUTPUT"
           echo "maximum=$MAXIMUM" >> "$GITHUB_OUTPUT"
           echo "EMAIL_DRIP_LIVE_DESCRIPTOR=PASS source=$SOURCE_SHA expected=$EXPECTED max=$MAXIMUM"
       - name: Validate activation tooling
+        env:
+          PYTHONPATH: services/email_drip
         run: |
           set -euo pipefail
-          python -m py_compile scripts/set_email_drip_runtime.py services/email_drip/email_drip.py
+          python -m py_compile services/email_drip/filelock.py scripts/set_email_drip_runtime.py services/email_drip/email_drip.py
+          python - <<'PY'
+          import filelock
+          assert filelock.__file__.endswith('services/email_drip/filelock.py'), filelock.__file__
+          PY
           bash -n scripts/activate_email_drip_remote.sh
           bash -n scripts/quarantine_vm_repo_state.sh
 

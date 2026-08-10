@@ -1,0 +1,44 @@
+name: Gumroad Token Current Probe
+
+on:
+  push:
+    branches: [diag/gumroad-token-current-20260810]
+    paths:
+      - '.github/workflows/gumroad-token-current-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Verify protected Gumroad token without exposing data
+        env:
+          GUMROAD_TOKEN: ${{ secrets.GUMROAD_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GUMROAD_TOKEN:-}" ]; then
+            echo 'GUMROAD_TOKEN_PROBE=HOLD reason=secret_missing'
+            exit 1
+          fi
+          code="$(curl -sS -o /tmp/gumroad-products.json -w '%{http_code}' --max-time 20 \
+            -H "Authorization: Bearer $GUMROAD_TOKEN" \
+            https://api.gumroad.com/v2/products)"
+          python3 - /tmp/gumroad-products.json "$code" <<'PY'
+          import json,sys
+          path,code=sys.argv[1],sys.argv[2]
+          try:
+              data=json.load(open(path,encoding='utf-8'))
+          except Exception as exc:
+              print(f'GUMROAD_TOKEN_PROBE=HOLD reason=invalid_json status={code} error_type={type(exc).__name__}')
+              raise SystemExit(1)
+          if code != '200' or data.get('success') is not True:
+              print(f'GUMROAD_TOKEN_PROBE=HOLD reason=api_rejected status={code}')
+              raise SystemExit(1)
+          products=data.get('products',[])
+          published=sum(1 for p in products if p.get('published') is True)
+          print(f'GUMROAD_TOKEN_PROBE=PASS products={len(products)} published={published}')
+          PY
+          rm -f /tmp/gumroad-products.json

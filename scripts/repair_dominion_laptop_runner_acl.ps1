@@ -57,11 +57,18 @@ try {
 }
 if ($sid -notmatch '^S-1-') { Fail 'runner_service_sid_invalid' }
 
-$grantArg = "*$($sid):(OI)(CI)M"
+$modifyGrant = "*$($sid):(OI)(CI)M"
 foreach ($path in @($RepoPath, $VaultRoot)) {
-    & icacls.exe $path /grant:r $grantArg /T /Q | Out-Null
-    if ($LASTEXITCODE -ne 0) { Fail 'acl_grant_failed' }
+    & icacls.exe $path /grant:r $modifyGrant /T /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { Fail 'acl_modify_grant_failed' }
 }
+
+# Root-only Delete Child lets the runner remove governed staging/backup children even
+# when a copied child carries a restrictive ACL. It is narrower than Full Control and
+# is not propagated outside the Command Vault root.
+$deleteChildGrant = "*$($sid):(DC)"
+& icacls.exe $VaultRoot /grant $deleteChildGrant /Q | Out-Null
+if ($LASTEXITCODE -ne 0) { Fail 'vault_delete_child_grant_failed' }
 
 # Trust only the exact canonical Dominion repo path for Git ownership checks.
 $gitSafePath = ($RepoPath -replace '\\','/').TrimEnd('/')
@@ -74,4 +81,4 @@ if ($existingSafe -notcontains $gitSafePath) {
 $verifiedSafe = @(& git config --system --get-all safe.directory 2>$null)
 if ($LASTEXITCODE -ne 0 -or $verifiedSafe -notcontains $gitSafePath) { Fail 'git_safe_directory_verify_failed' }
 
-Write-Host "LAPTOP_RUNNER_ACL_REPAIR=PASS runner_service=$($service.Name) repo_acl=modify vault_acl=modify git_safe_directory=exact"
+Write-Host "LAPTOP_RUNNER_ACL_REPAIR=PASS runner_service=$($service.Name) repo_acl=modify vault_acl=modify+delete_child git_safe_directory=exact"

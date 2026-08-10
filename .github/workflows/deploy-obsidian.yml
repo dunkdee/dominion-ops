@@ -1,4 +1,4 @@
-name: Govern Obsidian Remote Access
+name: Verify Obsidian Remote Access
 
 on:
   workflow_dispatch:
@@ -43,13 +43,13 @@ jobs:
           git merge-base --is-ancestor "$requested" origin/main || { echo "Requested commit is not reachable from main"; exit 1; }
           echo "deploy_sha=$requested" >> "$GITHUB_OUTPUT"
 
-  access:
+  verify:
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: foundation-vm-production
     steps:
-      - name: Require protected access secrets
+      - name: Require protected verification secrets
         shell: bash
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -58,14 +58,10 @@ jobs:
           OBSIDIAN_PASSWORD: ${{ secrets.OBSIDIAN_PASSWORD }}
         run: |
           set -euo pipefail
-          test -n "$VM_HOST" || { echo "VM_HOST secret is missing"; exit 1; }
-          test -n "$VM_USER" || { echo "VM_USER secret is missing"; exit 1; }
-          test -n "$VM_SSH_KEY" || { echo "VM_SSH_KEY secret is missing"; exit 1; }
-          test -n "$OBSIDIAN_PASSWORD" || { echo "OBSIDIAN_PASSWORD secret is missing"; exit 1; }
-          [[ "$OBSIDIAN_PASSWORD" =~ ^[A-Za-z0-9._~!@%+=:,/-]{16,128}$ ]] || {
-            echo "OBSIDIAN_PASSWORD must be 16-128 characters using letters, numbers, or ._~!@%+=:,/-"
-            exit 1
-          }
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          test -n "$OBSIDIAN_PASSWORD"
 
       - name: Prepare SSH
         shell: bash
@@ -80,40 +76,12 @@ jobs:
           ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Stage protected Obsidian password
-        id: stage
-        shell: bash
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-          OBSIDIAN_PASSWORD: ${{ secrets.OBSIDIAN_PASSWORD }}
-        run: |
-          set -euo pipefail
-          local_password_file="$RUNNER_TEMP/obsidian-password-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          remote_password_file="/tmp/obsidian-password-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          umask 077
-          printf '%s' "$OBSIDIAN_PASSWORD" > "$local_password_file"
-          chmod 600 "$local_password_file"
-          scp -i "$HOME/.ssh/foundation_vm_key" \
-            -o BatchMode=yes \
-            -o ConnectTimeout=20 \
-            -o IdentitiesOnly=yes \
-            "$local_password_file" "$VM_USER@$VM_HOST:$remote_password_file"
-          ssh -i "$HOME/.ssh/foundation_vm_key" \
-            -o BatchMode=yes \
-            -o ConnectTimeout=20 \
-            -o IdentitiesOnly=yes \
-            "$VM_USER@$VM_HOST" "chmod 600 '$remote_password_file'"
-          echo "local_password_file=$local_password_file" >> "$GITHUB_OUTPUT"
-          echo "remote_password_file=$remote_password_file" >> "$GITHUB_OUTPUT"
-
-      - name: Protect and verify Obsidian Remote
+      - name: Verify exact VM release and loopback backend
         shell: bash
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
-          REMOTE_PASSWORD_FILE: ${{ steps.stage.outputs.remote_password_file }}
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/foundation_vm_key" \
@@ -123,116 +91,21 @@ jobs:
             -o ServerAliveInterval=15 \
             -o ServerAliveCountMax=2 \
             "$VM_USER@$VM_HOST" \
-            "DEPLOY_SHA='$DEPLOY_SHA' PASSWORD_FILE='$REMOTE_PASSWORD_FILE' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
+            "DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
-          trap 'rm -f "$PASSWORD_FILE"' EXIT
-
           repo="$HOME/dominion-ops"
-          obsidian_user="dominion"
-          test -d "$repo/.git" || { echo "Governed repository is missing"; exit 1; }
+          test -d "$repo/.git"
           cd "$repo"
-
-          current_sha="$(git rev-parse HEAD)"
-          test "$current_sha" = "$DEPLOY_SHA" || {
-            echo "Foundation VM is not on the authorized deployed SHA"
-            echo "VM_SHA=$current_sha"
-            echo "REQUESTED_SHA=$DEPLOY_SHA"
-            exit 1
-          }
-
-          password="$(cat "$PASSWORD_FILE")"
-          test -n "$password" || { echo "Transferred Obsidian password is empty"; exit 1; }
-          [[ "$password" =~ ^[A-Za-z0-9._~!@%+=:,/-]{16,128}$ ]] || {
-            echo "Transferred Obsidian password failed validation"
-            exit 1
-          }
-
-          umask 077
-          touch .env
-          chmod 600 .env
-          env_tmp="$(mktemp "$repo/.env.obsidian.XXXXXX")"
-          grep -v '^OBSIDIAN_PASSWORD=' .env > "$env_tmp" || true
-          printf 'OBSIDIAN_PASSWORD=%s\n' "$password" >> "$env_tmp"
-          chmod 600 "$env_tmp"
-          mv "$env_tmp" .env
-
-          docker compose config --quiet
-          docker compose up -d --no-deps --force-recreate obsidian-remote
-
-          service_ready=0
-          for _ in $(seq 1 40); do
-            state="$(docker inspect --format '{{.State.Status}}' obsidian-remote 2>/dev/null || true)"
-            if [ "$state" = "running" ] && curl -fsS --max-time 10 \
-              -u "$obsidian_user:$password" http://127.0.0.1:8083/ >/dev/null; then
-              service_ready=1
-              break
-            fi
-            sleep 3
-          done
-          test "$service_ready" -eq 1 || {
-            echo "Obsidian Remote did not become running and authenticated on localhost:8083"
-            docker compose ps obsidian-remote
-            docker logs --tail 80 obsidian-remote 2>&1 || true
-            exit 1
-          }
-
-          unauth_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8083/ || true)"
-          test "$unauth_status" = "401" || {
-            echo "Obsidian Remote is not enforcing HTTP authentication"
-            echo "UNAUTHENTICATED_HTTP_STATUS=$unauth_status"
-            exit 1
-          }
-
-          caddy_file=/etc/caddy/Caddyfile
-          test -f "$caddy_file" || { echo "Caddyfile is missing"; exit 1; }
-          backup="/etc/caddy/Caddyfile.obsidian-${RUN_ID}.bak"
-          route_added=0
-
-          if ! sudo grep -qF 'vault.dominionhealing.org {' "$caddy_file"; then
-            sudo cp -a "$caddy_file" "$backup"
-            route_added=1
-            sudo tee -a "$caddy_file" >/dev/null <<'CADDY'
-
-          vault.dominionhealing.org {
-              reverse_proxy 127.0.0.1:8083
-          }
-          CADDY
-          fi
-
-          if ! sudo caddy validate --config "$caddy_file" --adapter caddyfile; then
-            if [ "$route_added" -eq 1 ]; then
-              sudo cp -a "$backup" "$caddy_file"
-            fi
-            echo "Caddy validation failed"
-            exit 1
-          fi
-
-          sudo systemctl reload caddy
-          if [ "$route_added" -eq 1 ]; then
-            sudo rm -f "$backup"
-          fi
-
-          if ! getent ahostsv4 vault.dominionhealing.org >/dev/null 2>&1; then
-            echo "DNS_NOT_READY host=vault.dominionhealing.org"
-            exit 1
-          fi
-
-          public_ready=0
-          for _ in $(seq 1 20); do
-            if curl -fsS --max-time 15 -u "$obsidian_user:$password" \
-              https://vault.dominionhealing.org >/dev/null; then
-              public_ready=1
-              break
-            fi
-            sleep 3
-          done
-          test "$public_ready" -eq 1 || { echo "Public authenticated Obsidian URL did not become healthy"; exit 1; }
-
-          unset password
-          printf 'OBSIDIAN_ACCESS_SUCCESS sha=%s local=healthy auth=required public=healthy url=https://vault.dominionhealing.org\n' "$DEPLOY_SHA"
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA" || { echo "OBSIDIAN_VERIFY=FAIL reason=vm_sha_mismatch"; exit 1; }
+          state="$(docker inspect --format '{{.State.Status}}' obsidian-remote 2>/dev/null || true)"
+          test "$state" = "running" || { echo "OBSIDIAN_VERIFY=FAIL reason=backend_not_running"; exit 1; }
+          curl -fsS --max-time 10 http://127.0.0.1:8083/ >/dev/null || { echo "OBSIDIAN_VERIFY=FAIL reason=backend_unhealthy"; exit 1; }
+          ss -tln | grep -Eq '127\.0\.0\.1:8083[[:space:]]' || { echo "OBSIDIAN_VERIFY=FAIL reason=backend_not_loopback_bound"; exit 1; }
+          sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null || { echo "OBSIDIAN_VERIFY=FAIL reason=caddy_invalid"; exit 1; }
+          echo "OBSIDIAN_BACKEND_VERIFY=PASS sha=$DEPLOY_SHA boundary=loopback"
           REMOTE
 
-      - name: Verify public access from outside the VM
+      - name: Verify public Caddy authentication boundary
         shell: bash
         env:
           OBSIDIAN_PASSWORD: ${{ secrets.OBSIDIAN_PASSWORD }}
@@ -245,40 +118,15 @@ jobs:
             --connect-timeout 15 \
             --max-time 30 \
             -u "dominion:$OBSIDIAN_PASSWORD" \
-            https://vault.dominionhealing.org >/dev/null
-          unauth_status="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 15 --max-time 30 https://vault.dominionhealing.org || true)"
+            https://vault.dominionhealing.org/ >/dev/null
+          unauth_status="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 15 --max-time 30 https://vault.dominionhealing.org/ || true)"
           test "$unauth_status" = "401" || {
-            echo "Public route is not enforcing authentication"
-            echo "UNAUTHENTICATED_HTTP_STATUS=$unauth_status"
+            echo "OBSIDIAN_VERIFY=FAIL reason=public_auth_not_enforced status=$unauth_status"
             exit 1
           }
-          {
-            echo "## Obsidian Remote access"
-            echo
-            echo "- Deployed SHA: \`${{ needs.validate.outputs.deploy_sha }}\`"
-            echo "- VM-local service: healthy"
-            echo "- Public HTTPS route: healthy"
-            echo "- URL: https://vault.dominionhealing.org"
-            echo "- Username: \`dominion\`"
-            echo "- Password protection: required"
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "OBSIDIAN_ACCESS_VERIFY=PASS sha=${{ needs.validate.outputs.deploy_sha }} backend=loopback public_auth=caddy"
 
       - name: Remove temporary access material
         if: always()
         shell: bash
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-          REMOTE_PASSWORD_FILE: ${{ steps.stage.outputs.remote_password_file }}
-          LOCAL_PASSWORD_FILE: ${{ steps.stage.outputs.local_password_file }}
-        run: |
-          set +e
-          if [ -n "${REMOTE_PASSWORD_FILE:-}" ] && [ -f "$HOME/.ssh/foundation_vm_key" ]; then
-            ssh -i "$HOME/.ssh/foundation_vm_key" \
-              -o BatchMode=yes \
-              -o ConnectTimeout=20 \
-              -o IdentitiesOnly=yes \
-              "$VM_USER@$VM_HOST" "rm -f '$REMOTE_PASSWORD_FILE'" >/dev/null 2>&1
-          fi
-          rm -f "${LOCAL_PASSWORD_FILE:-}"
-          rm -f "$HOME/.ssh/foundation_vm_key"
+        run: rm -f "$HOME/.ssh/foundation_vm_key"

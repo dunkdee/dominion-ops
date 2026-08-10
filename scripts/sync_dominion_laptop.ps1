@@ -19,6 +19,24 @@ function Fail([string]$Reason) {
     exit 1
 }
 
+function Invoke-FileSystemRetry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$Operation,
+        [int]$Attempts = 8
+    )
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            & $Operation
+            return
+        } catch {
+            if ($attempt -eq $Attempts) { throw }
+            Start-Sleep -Milliseconds (250 * $attempt)
+        }
+    }
+}
+
 if ($ExpectedSha -notmatch '^[0-9a-fA-F]{40}$') { Fail 'invalid_expected_sha' }
 if ($ExpectedBrainDigest -notmatch '^[0-9a-fA-F]{64}$') { Fail 'invalid_expected_brain_digest' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail 'git_missing' }
@@ -128,11 +146,11 @@ try {
         if (Test-Path -LiteralPath $current) {
             $currentItem = Get-Item -LiteralPath $current -Force
             if (-not $currentItem.PSIsContainer -or ($currentItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'current_not_safe_directory' }
-            Move-Item -LiteralPath $current -Destination $backup
+            Invoke-FileSystemRetry -Operation { Move-Item -LiteralPath $current -Destination $backup -ErrorAction Stop }
             $oldPresent = $true
         }
         $publishPhase = 'stage_publish'
-        Move-Item -LiteralPath $stage -Destination $current
+        Invoke-FileSystemRetry -Operation { Move-Item -LiteralPath $stage -Destination $current -ErrorAction Stop }
         $published = $true
 
         $publishPhase = 'receipt_prepare'
@@ -153,7 +171,7 @@ try {
         $publishPhase = 'receipt_write'
         $receiptTmp = Join-Path $receiptRoot ('.latest-' + [Guid]::NewGuid().ToString('N') + '.tmp')
         [IO.File]::WriteAllText($receiptTmp, $receipt + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-        Move-Item -LiteralPath $receiptTmp -Destination (Join-Path $receiptRoot 'laptop-latest.json') -Force
+        Invoke-FileSystemRetry -Operation { Move-Item -LiteralPath $receiptTmp -Destination (Join-Path $receiptRoot 'laptop-latest.json') -Force -ErrorAction Stop }
 
         Write-Host "LAPTOP_SYNC=PASS git_sha=$head brain_digest=$brainDigest agents=$($manifest.agent_count)"
     } catch {
@@ -161,15 +179,15 @@ try {
         $rollbackIssues = New-Object System.Collections.Generic.List[string]
 
         if ($published -and (Test-Path -LiteralPath $current)) {
-            try { Remove-Item -LiteralPath $current -Recurse -Force -ErrorAction Stop }
+            try { Invoke-FileSystemRetry -Operation { Remove-Item -LiteralPath $current -Recurse -Force -ErrorAction Stop } }
             catch { $rollbackIssues.Add('remove_current') }
         }
         if ($oldPresent -and (Test-Path -LiteralPath $backup)) {
-            try { Move-Item -LiteralPath $backup -Destination $current -ErrorAction Stop }
+            try { Invoke-FileSystemRetry -Operation { Move-Item -LiteralPath $backup -Destination $current -ErrorAction Stop } }
             catch { $rollbackIssues.Add('restore_backup') }
         }
         if (Test-Path -LiteralPath $stage) {
-            try { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction Stop }
+            try { Invoke-FileSystemRetry -Operation { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction Stop } }
             catch { $rollbackIssues.Add('remove_stage') }
         }
 

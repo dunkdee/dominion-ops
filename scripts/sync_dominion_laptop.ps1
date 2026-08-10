@@ -195,8 +195,15 @@ try {
         } | ConvertTo-Json -Depth 4
         $publishPhase = 'receipt_write'
         $receiptTmp = Join-Path $receiptRoot ('.latest-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+        $receiptFinal = Join-Path $receiptRoot 'laptop-latest.json'
         [IO.File]::WriteAllText($receiptTmp, $receipt + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-        Invoke-FileSystemRetry -Operation { Move-Item -LiteralPath $receiptTmp -Destination (Join-Path $receiptRoot 'laptop-latest.json') -Force -ErrorAction Stop }
+        Invoke-FileSystemRetry -Operation {
+            if ([IO.File]::Exists($receiptFinal)) {
+                [IO.File]::Replace($receiptTmp, $receiptFinal, $null, $true)
+            } else {
+                [IO.File]::Move($receiptTmp, $receiptFinal)
+            }
+        }
 
         Write-Host "LAPTOP_SYNC=PASS git_sha=$head brain_digest=$brainDigest agents=$($manifest.agent_count)"
     } catch {

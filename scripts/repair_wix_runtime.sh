@@ -102,11 +102,17 @@ fi
 
 rm -rf "$work.tmp"
 install -d -m 700 "$work.tmp"
-tar -xzf "$release_tgz" -C "$work.tmp"
+# The release archive contains only version-controlled, non-secret Wix source.
+# Keep the process umask restrictive for credentials, but extract source with
+# normal code permissions so the non-root container user can read /app.
+(umask 022; tar -xzf "$release_tgz" -C "$work.tmp")
 rm -rf "$work"
 mv "$work.tmp" "$work"
 release_dir="$work/apps/wix-agent"
 test -f "$release_dir/Dockerfile" && test -f "$release_dir/main.py"
+find "$release_dir" -type d -exec chmod a+rx {} +
+find "$release_dir" -type f -exec chmod a+r {} +
+test -r "$release_dir/main.py"
 
 api_key="$(sed -n 's/^WIX_API_KEY=//p' "$key_file" | tail -n1)"
 test -n "$api_key"

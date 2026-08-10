@@ -5,10 +5,26 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/final-production-acceptance.yml'
+      - 'apps/**'
+      - 'services/**'
+      - 'scripts/**'
+      - 'runtime/**'
+      - 'agents/**'
+      - 'api/**'
+      - 'web/**'
+      - 'docker-compose.yml'
   push:
     branches: [main]
     paths:
       - '.github/workflows/final-production-acceptance.yml'
+      - 'apps/**'
+      - 'services/**'
+      - 'scripts/**'
+      - 'runtime/**'
+      - 'agents/**'
+      - 'api/**'
+      - 'web/**'
+      - 'docker-compose.yml'
   workflow_dispatch:
 
 permissions:

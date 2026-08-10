@@ -1,0 +1,7 @@
+{
+  "schema": "dominion-email-drip-live-v1",
+  "authorized_role": "human_overseer",
+  "approved_source_commit": "fb73dfc68dac0d2dbbeb2c32afd799374851935f",
+  "expected_candidate_count": 0,
+  "max_candidate_count": 0
+}

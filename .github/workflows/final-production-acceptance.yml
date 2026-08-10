@@ -1,6 +1,10 @@
 name: Dominion Final Production Acceptance
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/final-production-acceptance.yml'
   push:
     branches: [main]
     paths:
@@ -11,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dominion-final-production-acceptance
+  group: dominion-final-production-acceptance-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,12 +30,14 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Require exact main release and registry
+      - name: Require exact release and registry
         id: registry
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          if [ "$GITHUB_EVENT_NAME" != 'pull_request' ]; then
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          fi
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import json
           from pathlib import Path
@@ -88,6 +94,7 @@ jobs:
           check_url surplus https://surplus.dominionhealing.org/
 
   runtime-acceptance:
+    if: github.event_name != 'pull_request'
     needs: validate-release
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -150,12 +157,9 @@ jobs:
           test "$(sha256sum "$repo/services/email_drip/filelock.py" | awk '{print $1}')" = "$(sha256sum "$drip_dir/filelock.py" | awk '{print $1}')" || { echo 'FINAL_ACCEPTANCE=HOLD reason=email_lock_shim_drift'; exit 1; }
           echo 'FINAL_EMAIL_SOURCE_PARITY=PASS'
 
-          # Caddy must validate before public/proxy health can count as production-ready.
           sudo caddy validate --config /etc/caddy/Caddyfile >/dev/null
           echo 'FINAL_CADDY_VALIDATE=PASS'
 
-          # Core listeners. These are transport-level assertions only; semantic HTTP
-          # assertions follow for services with canonical health endpoints.
           python3 - <<'PY'
           import socket
           required=[80,443,5000,5050,5055,5056,5060,5070,5080,5090,5101,5678,8080,8082,8083,8090,8099,8787,11434]
@@ -174,7 +178,6 @@ jobs:
           print('FINAL_LISTENERS=PASS count='+str(len(required)))
           PY
 
-          # Obsidian backend is deliberately loopback-only; Caddy is the public auth boundary.
           obsidian_ss="$(ss -ltnH | awk '$4 ~ /:8083$/ {print $4}')"
           printf '%s\n' "$obsidian_ss" | grep -Fxq '127.0.0.1:8083' || { echo 'FINAL_ACCEPTANCE=HOLD reason=obsidian_loopback_missing'; exit 1; }
           if printf '%s\n' "$obsidian_ss" | grep -Eq '^(0\.0\.0\.0|\*|\[::\]):8083$'; then
@@ -199,8 +202,6 @@ jobs:
           require_200 ollama http://127.0.0.1:11434/api/tags
           require_200 obsidian_backend http://127.0.0.1:8083/
 
-          # Email Drip must be actually LIVE, armed, SMTP-backed, and protected against
-          # manual execution. No recipient data is logged.
           email_health="$(curl -fsS --max-time 10 http://127.0.0.1:8099/health)"
           email_status="$(curl -fsS --max-time 10 http://127.0.0.1:8099/api/drip-status)"
           read -r email_leads email_sent <<EOF
@@ -226,8 +227,6 @@ jobs:
           [ "$invalid_capture_code" = '400' ] || { echo "FINAL_ACCEPTANCE=HOLD reason=capture_route_negative_test status=$invalid_capture_code"; exit 1; }
           echo "FINAL_EMAIL_DRIP=PASS mode=live leads=$email_leads historical_sent=$email_sent manual=403 capture_negative=400"
 
-          # Baby API must see the live vault and current Gumroad product catalog.
-          # We intentionally do not call /gumroad/sales because it includes customer PII.
           vault="$(curl -fsS --max-time 10 http://127.0.0.1:8080/vault/health)"
           gumroad="$(curl -fsS --max-time 20 http://127.0.0.1:8080/gumroad)"
           read -r vault_notes gumroad_products gumroad_published <<EOF
@@ -250,7 +249,6 @@ jobs:
           echo "FINAL_VAULT=PASS mounted=true notes=$vault_notes"
           echo "FINAL_GUMROAD=PASS products=$gumroad_products published=$gumroad_published"
 
-          # Retired duplicate API units must remain contained if installed.
           for unit in alchemist-api.service conductor-api.service juris-api.service dominion-port-healer.service; do
             if systemctl list-unit-files --no-legend "$unit" 2>/dev/null | grep -q "^$unit"; then
               enabled="$(systemctl is-enabled "$unit" 2>/dev/null || true)"
@@ -261,8 +259,6 @@ jobs:
           done
           echo 'FINAL_RETIRED_UNITS=PASS'
 
-          # Current registry count is asserted by canonical parity; keep the audit
-          # dynamic rather than hard-coding a permanent team size.
           registry_count="$(python3 - "$repo/agents/registry.json" <<'PY'
           import json,sys
           d=json.load(open(sys.argv[1]))

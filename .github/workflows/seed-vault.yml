@@ -1,45 +1,36 @@
-name: Seed Obsidian Vault
+name: Legacy Obsidian Vault Seeder — RETIRED
 
 on:
   workflow_dispatch:
-    inputs:
-      force:
-        description: 'Force overwrite existing notes (type YES to confirm)'
-        required: false
-        default: 'no'
+
+permissions:
+  contents: read
 
 jobs:
-  seed:
-    runs-on: ubuntu-latest
+  verify-retired:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - name: SSH into VM and seed vault
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          timeout: 120s
-          script: |
-            set -e
-            echo "=== Vault Seed Starting ==="
-            echo "Date: $(date -u)"
+      - name: Checkout exact revision
+        uses: actions/checkout@v5
 
-            cd ~/dominion-ops
-            git fetch origin main
-            git checkout origin/main -- scripts/seed_vault.py
-            echo "Seed script pulled from origin/main."
+      - name: Verify governed Dominion Brain path
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f scripts/render_dominion_brain.py
+          test -f scripts/deploy_dominion_brain_remote.sh
+          test -f .github/workflows/dominion-brain-ci.yml
+          test -f .github/workflows/publish-dominion-brain-production.yml
+          echo "LEGACY_VAULT_SEEDER=RETIRED mutation=none"
+          echo "CANONICAL_BRAIN_RENDERER=scripts/render_dominion_brain.py"
+          echo "CANONICAL_BRAIN_PUBLISHER=.github/workflows/publish-dominion-brain-production.yml"
 
-            VAULT_PATH="${VAULT_PATH:-$HOME/vault}"
-            echo "Vault path: $VAULT_PATH"
-            mkdir -p "$VAULT_PATH"
-
-            VAULT_PATH="$VAULT_PATH" python3 ~/dominion-ops/scripts/seed_vault.py
-
-            echo ""
-            echo "=== All markdown files in vault ==="
-            find "$VAULT_PATH" -name '*.md' | sort
-
-            echo ""
-            echo "=== DONE ==="
-            echo "Open Obsidian at: $VAULT_PATH"
-            echo "Start here: 90-meta/00-HOME.md"
+      - name: Enforce retired script guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(python scripts/seed_vault.py 2>&1 || true)"
+          printf '%s\n' "$output"
+          grep -Fq 'LEGACY_VAULT_SEEDER=RETIRED' <<<"$output"
+          echo "LEGACY_SEED_GUARD=PASS"

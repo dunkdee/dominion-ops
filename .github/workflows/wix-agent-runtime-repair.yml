@@ -38,6 +38,8 @@ jobs:
           python -m py_compile apps/wix-agent/*.py
           bash -n scripts/repair_wix_runtime.sh
           grep -Fq 'WIX_FULFILLMENT_MODE=record_only' scripts/repair_wix_runtime.sh
+          grep -Fq '(umask 022; tar -xzf "$release_tgz" -C "$work.tmp")' scripts/repair_wix_runtime.sh
+          grep -Fq 'find "$release_dir" -type f -exec chmod a+r' scripts/repair_wix_runtime.sh
           grep -Fq '127.0.0.1:18082:8000' scripts/repair_wix_runtime.sh
           grep -Fq '127.0.0.1:8082/ready' scripts/repair_wix_runtime.sh
           grep -Fq 'docker compose' scripts/repair_wix_runtime.sh
@@ -119,8 +121,10 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
         run: |
-          rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP/wix-api-key.env" "$RUNNER_TEMP"/wix-agent-*.tgz
-          if [ -n "${VM_HOST:-}" ] && [ -n "${VM_USER:-}" ] && [ -f "$HOME/.ssh/known_hosts" ]; then
-            ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-              "$VM_USER@$VM_HOST" "rm -f '/tmp/repair-wix-runtime-${GITHUB_RUN_ID}.sh' '/tmp/wix-agent-${GITHUB_RUN_ID}.tgz' '/tmp/wix-api-key-${GITHUB_RUN_ID}.env'" || true
+          if [ -n "${VM_HOST:-}" ] && [ -n "${VM_USER:-}" ] && [ -f "$HOME/.ssh/foundation_vm_key" ] && [ -f "$HOME/.ssh/known_hosts" ]; then
+            ssh -i "$HOME/.ssh/foundation_vm_key" \
+              -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+              "$VM_USER@$VM_HOST" \
+              "rm -f '/tmp/repair-wix-runtime-${GITHUB_RUN_ID}.sh' '/tmp/wix-agent-${GITHUB_RUN_ID}.tgz' '/tmp/wix-api-key-${GITHUB_RUN_ID}.env'" || true
           fi
+          rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP/wix-api-key.env" "$RUNNER_TEMP"/wix-agent-*.tgz

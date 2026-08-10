@@ -24,6 +24,21 @@ function Is-Administrator {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Get-DominionRunnerRecord {
+    $runnerJson = & gh api "repos/$Repository/actions/runners" 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($runnerJson)) {
+        return $null
+    }
+
+    try {
+        $payload = $runnerJson | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        return $null
+    }
+
+    return @($payload.runners | Where-Object { $_.name -eq $RunnerName } | Select-Object -First 1)
+}
+
 if (-not (Is-Administrator)) { Fail 'administrator_required' }
 if (-not [Environment]::Is64BitOperatingSystem) { Fail 'windows_x64_required' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail 'git_missing' }
@@ -42,13 +57,10 @@ if (Test-Path -LiteralPath (Join-Path $InstallRoot '.runner')) {
         }
     }
     Start-Sleep -Seconds 3
-    $runnerState = & gh api "repos/$Repository/actions/runners" --jq ".runners[] | select(.name==\"$RunnerName\") | [.status,.busy] | @tsv" 2>$null
-    if ($LASTEXITCODE -eq 0 -and $runnerState) {
-        $fields = $runnerState.Trim() -split "`t"
-        if ($fields.Count -ge 1 -and $fields[0] -eq 'online') {
-            Write-Host "LAPTOP_RUNNER_BOOTSTRAP=PASS state=already_configured runner=$RunnerName service=running version=existing"
-            exit 0
-        }
+    $runnerRecord = Get-DominionRunnerRecord
+    if ($null -ne $runnerRecord -and $runnerRecord.status -eq 'online') {
+        Write-Host "LAPTOP_RUNNER_BOOTSTRAP=PASS state=already_configured runner=$RunnerName service=running version=existing"
+        exit 0
     }
     Fail 'existing_runner_not_online'
 }
@@ -78,8 +90,15 @@ try {
     if (-not (Test-Path -LiteralPath $config -PathType Leaf)) { Fail 'runner_config_missing_after_extract' }
 
     # GitHub's registration token is time-limited. Keep it only in process memory and never print it.
-    $registrationToken = (& gh api -X POST "repos/$Repository/actions/runners/registration-token" --jq '.token' 2>$null)
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($registrationToken)) { Fail 'github_admin_runner_token_unavailable' }
+    $tokenJson = & gh api -X POST "repos/$Repository/actions/runners/registration-token" 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tokenJson)) { Fail 'github_admin_runner_token_unavailable' }
+    try {
+        $tokenPayload = $tokenJson | ConvertFrom-Json -ErrorAction Stop
+        $registrationToken = [string]$tokenPayload.token
+    } catch {
+        Fail 'github_admin_runner_token_invalid_response'
+    }
+    if ([string]::IsNullOrWhiteSpace($registrationToken)) { Fail 'github_admin_runner_token_unavailable' }
 
     Push-Location $InstallRoot
     try {
@@ -108,13 +127,10 @@ try {
     $online = $false
     for ($attempt = 0; $attempt -lt 20; $attempt++) {
         Start-Sleep -Seconds 3
-        $runnerState = & gh api "repos/$Repository/actions/runners" --jq ".runners[] | select(.name==\"$RunnerName\") | [.status,.busy] | @tsv" 2>$null
-        if ($LASTEXITCODE -eq 0 -and $runnerState) {
-            $fields = $runnerState.Trim() -split "`t"
-            if ($fields.Count -ge 1 -and $fields[0] -eq 'online') {
-                $online = $true
-                break
-            }
+        $runnerRecord = Get-DominionRunnerRecord
+        if ($null -ne $runnerRecord -and $runnerRecord.status -eq 'online') {
+            $online = $true
+            break
         }
     }
     if (-not $online) { Fail 'runner_registered_but_not_online' }

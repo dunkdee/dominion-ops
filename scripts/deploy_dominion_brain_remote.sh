@@ -116,7 +116,7 @@ if len(starts)>1:
     raise SystemExit('VAULT_CADDY_ROUTE_DUPLICATE')
 block=(
     'vault.dominionhealing.org {\n'
-    '    basic_auth {\n'
+    '    basicauth {\n'
     f'        dominion {password_hash}\n'
     '    }\n'
     '    reverse_proxy 127.0.0.1:8083\n'
@@ -184,4 +184,4 @@ sudo rm -f "$caddy_backup"
 caddy_changed=0
 trap - ERR
 if [ "$old_present" -eq 0 ]; then backup="none"; fi
-printf 'BRAIN_DEPLOY=PASS sha=%s current=%s rollback=%s operator_notes=preserved obsidian_backend=loopback public_auth=basic_auth public=healthy\n' "$DEPLOY_SHA" "$current" "$backup"
+printf 'BRAIN_DEPLOY=PASS sha=%s current=%s rollback=%s operator_notes=preserved obsidian_backend=loopback public_auth=basicauth public=healthy\n' "$DEPLOY_SHA" "$current" "$backup"

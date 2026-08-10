@@ -149,14 +149,30 @@ try {
 
         Write-Host "LAPTOP_SYNC=PASS git_sha=$head brain_digest=$brainDigest agents=$($manifest.agent_count)"
     } catch {
+        $originalError = [string]$_.Exception.Message
+        $rollbackIssues = New-Object System.Collections.Generic.List[string]
+
         if ($published -and (Test-Path -LiteralPath $current)) {
-            Remove-Item -LiteralPath $current -Recurse -Force
+            try { Remove-Item -LiteralPath $current -Recurse -Force -ErrorAction Stop }
+            catch { $rollbackIssues.Add('remove_current') }
         }
         if ($oldPresent -and (Test-Path -LiteralPath $backup)) {
-            Move-Item -LiteralPath $backup -Destination $current
+            try { Move-Item -LiteralPath $backup -Destination $current -ErrorAction Stop }
+            catch { $rollbackIssues.Add('restore_backup') }
         }
-        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
-        Fail ('brain_publish_' + ($_.Exception.Message -replace '[^A-Za-z0-9_.-]','_'))
+        if (Test-Path -LiteralPath $stage) {
+            try { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction Stop }
+            catch { $rollbackIssues.Add('remove_stage') }
+        }
+
+        if ($rollbackIssues.Count -eq 0) {
+            Write-Host 'LAPTOP_SYNC_ROLLBACK=PASS'
+        } else {
+            Write-Host ("LAPTOP_SYNC_ROLLBACK=HOLD issues=" + (($rollbackIssues | Sort-Object -Unique) -join ','))
+        }
+        $safeError = ($originalError -replace '[^A-Za-z0-9_.-]','_')
+        if ([string]::IsNullOrWhiteSpace($safeError)) { $safeError = 'unknown' }
+        Fail ('brain_publish_' + $safeError)
     }
 } finally {
     Pop-Location

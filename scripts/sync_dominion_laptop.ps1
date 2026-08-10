@@ -196,13 +196,18 @@ try {
         $publishPhase = 'receipt_write'
         $receiptTmp = Join-Path $receiptRoot ('.latest-' + [Guid]::NewGuid().ToString('N') + '.tmp')
         $receiptFinal = Join-Path $receiptRoot 'laptop-latest.json'
+        $receiptBackup = Join-Path $receiptRoot ('.previous-' + [Guid]::NewGuid().ToString('N') + '.bak')
         [IO.File]::WriteAllText($receiptTmp, $receipt + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
         Invoke-FileSystemRetry -Operation {
             if ([IO.File]::Exists($receiptFinal)) {
-                [IO.File]::Replace($receiptTmp, $receiptFinal, $null, $true)
+                [IO.File]::Replace($receiptTmp, $receiptFinal, $receiptBackup, $true)
             } else {
                 [IO.File]::Move($receiptTmp, $receiptFinal)
             }
+        }
+        if ([IO.File]::Exists($receiptBackup)) {
+            try { [IO.File]::Delete($receiptBackup) }
+            catch { Write-Host 'LAPTOP_RECEIPT_BACKUP_CLEANUP=HOLD' }
         }
 
         Write-Host "LAPTOP_SYNC=PASS git_sha=$head brain_digest=$brainDigest agents=$($manifest.agent_count)"

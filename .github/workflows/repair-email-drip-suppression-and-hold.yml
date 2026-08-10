@@ -1,0 +1,132 @@
+name: Repair Email Drip Suppression + Redeploy HOLD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/initialize_email_suppression_remote.sh'
+      - '.github/workflows/repair-email-drip-suppression-and-hold.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      deploy_sha: ${{ steps.sha.outputs.value }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Validate repair and HOLD tooling
+        env:
+          PYTHONPATH: services/email_drip
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          bash -n scripts/initialize_email_suppression_remote.sh
+          bash -n scripts/deploy_email_drip_hold_remote.sh
+          bash -n scripts/quarantine_vm_repo_state.sh
+          python -m py_compile services/email_drip/filelock.py services/email_drip/email_drip.py scripts/set_email_drip_runtime.py
+          python - <<'PY'
+          import filelock
+          assert filelock.__file__.endswith('services/email_drip/filelock.py'), filelock.__file__
+          PY
+          echo "EMAIL_DRIP_SUPPRESSION_REPAIR_PREFLIGHT=PASS sha=$GITHUB_SHA"
+
+  repair_and_hold:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.validate.outputs.deploy_sha }}
+          fetch-depth: 0
+
+      - name: Require protected VM secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Stage exact Git bundle and drift-quarantine helper
+        id: stage
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          bundle="$RUNNER_TEMP/email-drip-suppression-repair-${GITHUB_RUN_ID}.bundle"
+          remote_bundle="/tmp/email-drip-suppression-repair-${GITHUB_RUN_ID}.bundle"
+          remote_helper="/tmp/quarantine-vm-repo-state-email-drip-suppression-${GITHUB_RUN_ID}.sh"
+          git update-ref refs/heads/dominion-suppression-repair "$DEPLOY_SHA"
+          git bundle create "$bundle" refs/heads/dominion-suppression-repair
+          git bundle verify "$bundle"
+
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+            "$bundle" scripts/quarantine_vm_repo_state.sh \
+            "$VM_USER@$VM_HOST:/tmp/"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" \
+            "mv '/tmp/quarantine_vm_repo_state.sh' '$remote_helper' && chmod 600 '$remote_bundle' '$remote_helper'"
+
+          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
+          echo "remote_helper=$remote_helper" >> "$GITHUB_OUTPUT"
+
+      - name: Initialize suppression store and redeploy governed HOLD
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
+          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+          REMOTE_HELPER: ${{ steps.stage.outputs.remote_helper }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
+            "DEPLOY_SHA='$DEPLOY_SHA' BUNDLE='$REMOTE_BUNDLE' HELPER='$REMOTE_HELPER' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f "$BUNDLE" "$HELPER"' EXIT
+          repo="$HOME/dominion-ops"
+          test -d "$repo/.git"
+
+          RUN_ID="$RUN_ID" DOMINION_REPO="$repo" bash "$HELPER"
+          cd "$repo"
+          git fetch "$BUNDLE" dominion-suppression-repair:refs/remotes/dominion-suppression-repair/main
+          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          git merge-base --is-ancestor HEAD "$DEPLOY_SHA" || { echo "EMAIL_DRIP_SUPPRESSION_REPAIR=FAIL reason=non_fast_forward_vm_repo"; exit 1; }
+          git checkout main
+          git merge --ff-only "$DEPLOY_SHA"
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+
+          bash scripts/initialize_email_suppression_remote.sh
+          DEPLOY_SHA="$DEPLOY_SHA" RUN_ID="$RUN_ID" bash scripts/deploy_email_drip_hold_remote.sh
+          echo "EMAIL_DRIP_SUPPRESSION_REPAIR_AND_HOLD=PASS sha=$DEPLOY_SHA"
+          REMOTE
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/email-drip-suppression-repair-*.bundle

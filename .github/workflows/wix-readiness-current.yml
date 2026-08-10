@@ -1,0 +1,80 @@
+name: Wix Current Readiness Probe
+
+on:
+  push:
+    branches:
+      - diag/wix-readiness-current-20260810
+    paths:
+      - '.github/workflows/wix-readiness-current.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: foundation-vm-production
+    steps:
+      - name: Require protected VM connection
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Read safe Wix readiness state
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/wix-ready.$$ -w '%{http_code}' --max-time 20 http://127.0.0.1:8082/ready || true)"
+          python3 - "/tmp/wix-ready.$$" "$code" <<'PY'
+          import json,sys
+          path,code=sys.argv[1],sys.argv[2]
+          try:
+              data=json.load(open(path,encoding='utf-8'))
+          except Exception as exc:
+              print(f'WIX_READINESS=HOLD status={code} reason=invalid_json error_type={type(exc).__name__}')
+              raise SystemExit(1)
+          integrations=data.get('integrations',{}) if isinstance(data,dict) else {}
+          fulfillment=data.get('fulfillment',{}) if isinstance(data,dict) else {}
+          database=data.get('database',{}) if isinstance(data,dict) else {}
+          catalog=data.get('catalog',{}) if isinstance(data,dict) else {}
+          variant=fulfillment.get('variant_mapping',{}) if isinstance(fulfillment,dict) else {}
+          blockers=data.get('blockers',[]) if isinstance(data,dict) else []
+          safe={
+              'status_code':int(code) if str(code).isdigit() else code,
+              'ready':bool(data.get('ready')),
+              'status':data.get('status'),
+              'blockers':blockers if isinstance(blockers,list) else ['invalid_blockers'],
+              'database_status':database.get('status') if isinstance(database,dict) else 'invalid',
+              'catalog_status':catalog.get('status') if isinstance(catalog,dict) else 'invalid',
+              'catalog_error_type':catalog.get('error_type') if isinstance(catalog,dict) else None,
+              'fulfillment_mode':fulfillment.get('mode') if isinstance(fulfillment,dict) else None,
+              'variant_mapping_status':variant.get('status') if isinstance(variant,dict) else None,
+              'wix_api_key_present':bool(integrations.get('wix_api_key')),
+              'wix_site_id_present':bool(integrations.get('wix_site_id')),
+              'zendrop_api_key_present':bool(integrations.get('zendrop_api_key')),
+              'operator_token_present':bool(integrations.get('operator_token')),
+              'n8n_webhook_present':bool(integrations.get('n8n_webhook')),
+          }
+          print('WIX_READINESS_SAFE='+json.dumps(safe,separators=(',',':'),sort_keys=True))
+          print('WIX_READINESS_PROBE=PASS')
+          PY
+          rm -f "/tmp/wix-ready.$$"
+          REMOTE
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key"

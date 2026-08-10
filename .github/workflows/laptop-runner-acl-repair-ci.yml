@@ -40,11 +40,15 @@ jobs:
             "C:\actions-runner",
             '/grant:r',
             '(OI)(CI)M',
+            '(DC)',
             'safe.directory'
           )) {
             if (-not $content.Contains($required)) { throw "missing required guard: $required" }
           }
           foreach ($forbidden in @('FullControl','Set-Service','sc.exe','ChangeServiceConfig','/grant:F','/grant:r F')) {
             if ($content -match [regex]::Escape($forbidden)) { throw "forbidden broad mutation: $forbidden" }
+          }
+          if (($content | Select-String -Pattern 'icacls\.exe \$VaultRoot /grant \$deleteChildGrant' -AllMatches).Matches.Count -ne 1) {
+            throw 'delete-child grant must be scoped exactly once to VaultRoot'
           }
           Write-Host 'LAPTOP_RUNNER_ACL_REPAIR_CI=PASS'

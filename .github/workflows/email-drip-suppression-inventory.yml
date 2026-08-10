@@ -1,0 +1,105 @@
+name: Email Drip — Suppression Inventory
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/email-drip-suppression-inventory.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: foundation-vm-production
+    steps:
+      - name: Require protected VM secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Inventory suppression-like files without content
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          service="dominion-email-drip.service"
+          sudo systemctl is-active --quiet "$service"
+          health="$(curl -fsS --max-time 10 http://127.0.0.1:8099/health)"
+          python3 - "$health" <<'PY'
+          import json,sys
+          j=json.loads(sys.argv[1])
+          assert j['status']=='ok' and j['send_mode']=='hold'
+          print('EMAIL_DRIP_SUPPRESSION_INVENTORY_RUNTIME=PASS mode=hold')
+          PY
+
+          python3 - "$HOME" <<'PY'
+          import json,os,stat,sys
+          from pathlib import Path
+
+          home=Path(sys.argv[1]).resolve()
+          roots=[home/'buddy_core',home/'email_drip',home/'.local'/'state']
+          terms=('suppression','unsubscribe','optout','opt-out')
+          rows=[]
+          seen=set()
+          for root in roots:
+              if not root.exists():
+                  continue
+              for base,dirs,files in os.walk(root):
+                  # Keep the inventory bounded and avoid caches/virtualenvs.
+                  dirs[:]=[d for d in dirs if d not in {'.git','venv','.venv','__pycache__','node_modules'}]
+                  for name in files:
+                      lower=name.lower()
+                      if not any(term in lower for term in terms):
+                          continue
+                      p=Path(base)/name
+                      try:
+                          rp=p.resolve()
+                          st=p.stat()
+                      except OSError:
+                          continue
+                      key=str(rp)
+                      if key in seen:
+                          continue
+                      seen.add(key)
+                      try:
+                          rel=str(rp.relative_to(home))
+                      except ValueError:
+                          rel=str(rp)
+                      rows.append({
+                          'path':rel,
+                          'mode':oct(stat.S_IMODE(st.st_mode)),
+                          'uid':st.st_uid,
+                          'gid':st.st_gid,
+                          'size':st.st_size,
+                          'symlink':p.is_symlink(),
+                      })
+          rows.sort(key=lambda r:r['path'])
+          print('EMAIL_DRIP_SUPPRESSION_INVENTORY='+json.dumps({'count':len(rows),'files':rows},separators=(',',':'),sort_keys=True))
+          PY
+          REMOTE
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key"

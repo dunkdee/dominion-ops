@@ -7,6 +7,7 @@ on:
       - 'services/email_drip/**'
       - 'scripts/set_email_drip_runtime.py'
       - 'scripts/deploy_email_drip_hold_remote.sh'
+      - 'scripts/quarantine_vm_repo_state.sh'
       - '.github/workflows/deploy-email-drip-production-hold.yml'
 
 permissions:
@@ -39,6 +40,7 @@ jobs:
           python -m pip install --disable-pip-version-check 'fastapi>=0.110,<1' 'pydantic>=2,<3' 'filelock>=3,<4' 'uvicorn>=0.29,<1' 'pytest>=8,<9'
           python -m py_compile services/email_drip/email_drip.py scripts/set_email_drip_runtime.py tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
           bash -n scripts/deploy_email_drip_hold_remote.sh
+          bash -n scripts/quarantine_vm_repo_state.sh
           pytest -q tests/test_email_drip_governance.py tests/test_email_drip_runtime_setter.py
           echo "EMAIL_DRIP_RELEASE_PREFLIGHT=PASS sha=$GITHUB_SHA"
 
@@ -62,7 +64,7 @@ jobs:
           test -n "$VM_HOST"
           test -n "$VM_USER"
           test -n "$VM_SSH_KEY"
-      - name: Stage exact Git bundle
+      - name: Stage exact Git bundle and drift-quarantine helper
         id: stage
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -78,28 +80,34 @@ jobs:
           chmod 600 "$HOME/.ssh/known_hosts"
           bundle="$RUNNER_TEMP/email-drip-${GITHUB_RUN_ID}.bundle"
           remote_bundle="/tmp/email-drip-${GITHUB_RUN_ID}.bundle"
+          remote_helper="/tmp/quarantine-vm-repo-state-email-drip-${GITHUB_RUN_ID}.sh"
           git update-ref refs/heads/dominion-release "$DEPLOY_SHA"
           git bundle create "$bundle" refs/heads/dominion-release
           git bundle verify "$bundle"
-          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
-          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "chmod 600 '$remote_bundle'"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+            "$bundle" scripts/quarantine_vm_repo_state.sh \
+            "$VM_USER@$VM_HOST:/tmp/"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" \
+            "mv '/tmp/quarantine_vm_repo_state.sh' '$remote_helper' && chmod 600 '$remote_bundle' '$remote_helper'"
           echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
-      - name: Synchronize exact commit, deploy HOLD, and preflight production
+          echo "remote_helper=$remote_helper" >> "$GITHUB_OUTPUT"
+      - name: Quarantine drift, synchronize exact commit, deploy HOLD, and preflight production
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           DEPLOY_SHA: ${{ needs.validate.outputs.deploy_sha }}
           REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+          REMOTE_HELPER: ${{ steps.stage.outputs.remote_helper }}
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
-            "DEPLOY_SHA='$DEPLOY_SHA' BUNDLE='$REMOTE_BUNDLE' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
+            "DEPLOY_SHA='$DEPLOY_SHA' BUNDLE='$REMOTE_BUNDLE' HELPER='$REMOTE_HELPER' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
           set -euo pipefail
-          trap 'rm -f "$BUNDLE"' EXIT
+          trap 'rm -f "$BUNDLE" "$HELPER"' EXIT
           repo="$HOME/dominion-ops"
           test -d "$repo/.git"
+          RUN_ID="$RUN_ID" DOMINION_REPO="$repo" bash "$HELPER"
           cd "$repo"
-          test -z "$(git status --porcelain --untracked-files=no)" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=tracked_vm_repo_dirty"; exit 1; }
           git fetch "$BUNDLE" dominion-release:refs/remotes/dominion-release/main
           git cat-file -e "${DEPLOY_SHA}^{commit}"
           git merge-base --is-ancestor HEAD "$DEPLOY_SHA" || { echo "EMAIL_DRIP_DEPLOY=FAIL reason=non_fast_forward_vm_repo"; exit 1; }

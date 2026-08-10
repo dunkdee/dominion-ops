@@ -1,0 +1,286 @@
+name: Wix Agent — Governed Runtime Repair
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/wix-agent-runtime-repair.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/wix-agent-runtime-repair.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+env:
+  WIX_SITE_ID_CANONICAL: a790d430-a3a0-4b0e-9be6-4c874c229167
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Validate immutable record-only repair inputs
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python -m py_compile apps/wix-agent/*.py
+          grep -Fq 'WIX_FULFILLMENT_MODE=record_only' .github/workflows/wix-agent-runtime-repair.yml
+          grep -Fq '127.0.0.1:18082:8000' .github/workflows/wix-agent-runtime-repair.yml
+          grep -Fq '127.0.0.1:8082:8000' .github/workflows/wix-agent-runtime-repair.yml
+          grep -Fq 'docker rename "$backup" wix-agent' .github/workflows/wix-agent-runtime-repair.yml
+          if grep -Fq -- '--privileged' .github/workflows/wix-agent-runtime-repair.yml; then
+            echo 'WIX_REPAIR_VALIDATE=HOLD reason=privileged_container'
+            exit 1
+          fi
+          echo 'WIX_REPAIR_VALIDATE=PASS'
+
+  repair:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: foundation-vm-production
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Require protected credentials and configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
+          test -n "$WIX_API_KEY" || { echo 'WIX_RUNTIME_REPAIR=HOLD reason=wix_api_key_missing'; exit 1; }
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Stage exact candidate and protected API key
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/wix-agent-${GITHUB_SHA}.tgz" apps/wix-agent
+          umask 077
+          printf 'WIX_API_KEY=%s\n' "$WIX_API_KEY" > "$RUNNER_TEMP/wix-api-key.env"
+          remote_release="/tmp/wix-agent-${GITHUB_RUN_ID}.tgz"
+          remote_key="/tmp/wix-api-key-${GITHUB_RUN_ID}.env"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$RUNNER_TEMP/wix-agent-${GITHUB_SHA}.tgz" "$VM_USER@$VM_HOST:$remote_release"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$RUNNER_TEMP/wix-api-key.env" "$VM_USER@$VM_HOST:$remote_key"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "chmod 600 '$remote_release' '$remote_key'"
+          rm -f "$RUNNER_TEMP/wix-api-key.env"
+
+      - name: Preflight isolated candidate and cut over with rollback
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          RELEASE_SHA: ${{ github.sha }}
+          WIX_SITE_ID: ${{ env.WIX_SITE_ID_CANONICAL }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
+            "$VM_USER@$VM_HOST" \
+            "RELEASE_SHA='$RELEASE_SHA' WIX_SITE_ID='$WIX_SITE_ID' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          release_tgz="/tmp/wix-agent-${RUN_ID}.tgz"
+          key_file="/tmp/wix-api-key-${RUN_ID}.env"
+          work="$HOME/releases/wix-agent/${RELEASE_SHA}"
+          env_dir="$HOME/.config/dominion"
+          runtime_env="$env_dir/wix-agent-runtime.env"
+          image="dominion/wix-agent:${RELEASE_SHA}"
+          candidate="wix-agent-preflight-${RUN_ID}"
+          candidate_data="${candidate}-data"
+          candidate_logs="${candidate}-logs"
+          backup="wix-agent-rollback-${RUN_ID}"
+          cutover_started=0
+          new_started=0
+
+          cleanup_temp() {
+            rm -f "$release_tgz" "$key_file" /tmp/wix-ready-${RUN_ID}.json /tmp/wix-prod-ready-${RUN_ID}.json
+            docker rm -f "$candidate" >/dev/null 2>&1 || true
+            docker volume rm "$candidate_data" "$candidate_logs" >/dev/null 2>&1 || true
+          }
+          rollback() {
+            rc=$?
+            trap - ERR
+            if [ "$cutover_started" -eq 1 ]; then
+              if [ "$new_started" -eq 1 ]; then docker rm -f wix-agent >/dev/null 2>&1 || true; fi
+              if docker inspect "$backup" >/dev/null 2>&1; then
+                docker rename "$backup" wix-agent >/dev/null 2>&1 || true
+                docker start wix-agent >/dev/null 2>&1 || true
+              fi
+              echo "WIX_RUNTIME_REPAIR=ROLLBACK original_rc=$rc"
+            fi
+            cleanup_temp
+            exit "$rc"
+          }
+          trap rollback ERR
+          trap cleanup_temp EXIT
+
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [ "$WIX_SITE_ID" = 'a790d430-a3a0-4b0e-9be6-4c874c229167' ]
+          test -s "$release_tgz" && test -s "$key_file"
+          docker inspect wix-agent >/dev/null
+          if ss -ltnH | awk '{print $4}' | grep -Eq '(^|:)18082$'; then
+            echo 'WIX_RUNTIME_REPAIR=HOLD reason=preflight_port_in_use'
+            exit 1
+          fi
+
+          rm -rf "$work.tmp"
+          install -d -m 700 "$work.tmp"
+          tar -xzf "$release_tgz" -C "$work.tmp"
+          rm -rf "$work"
+          mv "$work.tmp" "$work"
+          release_dir="$work/apps/wix-agent"
+          test -f "$release_dir/Dockerfile" && test -f "$release_dir/main.py"
+
+          install -d -m 700 "$env_dir"
+          api_key="$(sed -n 's/^WIX_API_KEY=//p' "$key_file" | tail -n1)"
+          test -n "$api_key"
+          operator_token=''
+          if [ -s "$runtime_env" ]; then
+            operator_token="$(sed -n 's/^WIX_AGENT_OPERATOR_TOKEN=//p' "$runtime_env" | tail -n1 || true)"
+          fi
+          if [ -z "$operator_token" ]; then
+            operator_token="$(openssl rand -hex 32)"
+          fi
+          tmp_env="$env_dir/.wix-agent-runtime.env.${RUN_ID}.tmp"
+          python3 - "$tmp_env" "$runtime_env" "$api_key" "$WIX_SITE_ID" "$operator_token" <<'PY'
+          import os,sys
+          tmp,dst,api_key,site_id,token=sys.argv[1:]
+          payload=(
+              f'WIX_API_KEY={api_key}\n'
+              f'WIX_SITE_ID={site_id}\n'
+              f'WIX_AGENT_OPERATOR_TOKEN={token}\n'
+              'WIX_FULFILLMENT_MODE=record_only\n'
+          ).encode()
+          fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+          try:
+              os.write(fd,payload); os.fsync(fd)
+          finally:
+              os.close(fd)
+          os.replace(tmp,dst)
+          dfd=os.open(os.path.dirname(dst),os.O_RDONLY|os.O_DIRECTORY)
+          try: os.fsync(dfd)
+          finally: os.close(dfd)
+          PY
+          chmod 600 "$runtime_env"
+
+          network="$(docker inspect wix-agent --format '{{range $name, $config := .NetworkSettings.Networks}}{{$name}}{{"\n"}}{{end}}' | head -n1)"
+          data_volume="$(docker inspect wix-agent --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}')"
+          logs_volume="$(docker inspect wix-agent --format '{{range .Mounts}}{{if eq .Destination "/app/logs"}}{{.Name}}{{end}}{{end}}')"
+          restart_policy="$(docker inspect wix-agent --format '{{.HostConfig.RestartPolicy.Name}}')"
+          test -n "$network"
+          test -n "$data_volume" && test -n "$logs_volume"
+          case "$restart_policy" in ''|no) restart_policy='unless-stopped' ;; esac
+
+          docker build --tag "$image" "$release_dir" >/dev/null
+          docker rm -f "$candidate" >/dev/null 2>&1 || true
+          docker volume rm "$candidate_data" "$candidate_logs" >/dev/null 2>&1 || true
+          docker volume create "$candidate_data" >/dev/null
+          docker volume create "$candidate_logs" >/dev/null
+          docker run -d --name "$candidate" \
+            --network "$network" --publish 127.0.0.1:18082:8000 \
+            --read-only --tmpfs /tmp:size=64m,noexec,nosuid,nodev \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 512m --cpus 1.0 \
+            --env-file "$runtime_env" --env WIX_AGENT_DB=/data/wix_agent.db \
+            --env BABY_API_URL=http://baby-api:8080 \
+            --volume "$candidate_data:/data" --volume "$candidate_logs:/app/logs" \
+            "$image" >/dev/null
+          ok=0
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 5 http://127.0.0.1:18082/ready > "/tmp/wix-ready-${RUN_ID}.json"; then ok=1; break; fi
+            sleep 2
+          done
+          [ "$ok" -eq 1 ] || { docker logs --tail 80 "$candidate"; echo 'WIX_RUNTIME_REPAIR=HOLD reason=isolated_not_ready'; exit 1; }
+          python3 - "/tmp/wix-ready-${RUN_ID}.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          assert d['ready'] is True
+          assert d['catalog']['status']=='ok'
+          assert str(d['catalog']['version']).lower()=='v3'
+          assert d['fulfillment']['mode']=='record_only'
+          assert d['integrations']['wix_api_key'] is True
+          assert d['integrations']['wix_site_id'] is True
+          assert d['integrations']['operator_token'] is True
+          PY
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:18082/fulfillments/status)" = '401'
+          curl -fsS -H "X-Operator-Token: $operator_token" http://127.0.0.1:18082/fulfillments/status >/dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "X-Operator-Token: $operator_token" http://127.0.0.1:18082/fulfill)" = '409'
+          echo 'WIX_ISOLATED_PREFLIGHT=PASS catalog=v3 fulfillment=record_only auth=PASS'
+          docker rm -f "$candidate" >/dev/null
+          docker volume rm "$candidate_data" "$candidate_logs" >/dev/null
+
+          docker rm -f "$backup" >/dev/null 2>&1 || true
+          docker rename wix-agent "$backup"
+          cutover_started=1
+          docker stop "$backup" >/dev/null
+          docker run -d --name wix-agent \
+            --network "$network" --publish 127.0.0.1:8082:8000 \
+            --restart "$restart_policy" \
+            --read-only --tmpfs /tmp:size=64m,noexec,nosuid,nodev \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 512m --cpus 1.0 \
+            --env-file "$runtime_env" --env WIX_AGENT_DB=/data/wix_agent.db \
+            --env BABY_API_URL=http://baby-api:8080 \
+            --volume "$data_volume:/data" --volume "$logs_volume:/app/logs" \
+            "$image" >/dev/null
+          new_started=1
+          ok=0
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 5 http://127.0.0.1:8082/ready > "/tmp/wix-prod-ready-${RUN_ID}.json"; then ok=1; break; fi
+            sleep 2
+          done
+          [ "$ok" -eq 1 ] || { docker logs --tail 80 wix-agent; echo 'WIX_RUNTIME_REPAIR=HOLD reason=production_not_ready'; false; }
+          python3 - "/tmp/wix-prod-ready-${RUN_ID}.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          assert d['ready'] is True
+          assert d['catalog']['status']=='ok'
+          assert str(d['catalog']['version']).lower()=='v3'
+          assert d['fulfillment']['mode']=='record_only'
+          assert d['integrations']['wix_api_key'] is True
+          assert d['integrations']['wix_site_id'] is True
+          assert d['integrations']['operator_token'] is True
+          PY
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8082/fulfillments/status)" = '401'
+          curl -fsS -H "X-Operator-Token: $operator_token" http://127.0.0.1:8082/fulfillments/status >/dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "X-Operator-Token: $operator_token" http://127.0.0.1:8082/fulfill)" = '409'
+          sleep 5
+          curl -fsS --max-time 5 http://127.0.0.1:8082/ready >/dev/null
+
+          docker rm "$backup" >/dev/null
+          cutover_started=0
+          new_started=0
+          echo "WIX_RUNTIME_REPAIR=PASS sha=$RELEASE_SHA site=voltedge catalog=v3 fulfillment=record_only"
+          REMOTE
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/wix-api-key.env "$RUNNER_TEMP"/wix-agent-*.tgz

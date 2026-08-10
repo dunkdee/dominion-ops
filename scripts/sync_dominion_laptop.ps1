@@ -95,12 +95,15 @@ try {
 
     $published = $false
     $oldPresent = $false
+    $publishPhase = 'stage_create'
     try {
         New-Item -ItemType Directory -Path $stage | Out-Null
+        $publishPhase = 'artifact_copy'
         Get-ChildItem -LiteralPath $BrainSourcePath -Force | ForEach-Object {
             Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
         }
 
+        $publishPhase = 'manifest_read'
         $manifestPath = Join-Path $stage 'MANIFEST.json'
         if (-not (Test-Path -LiteralPath $manifestPath)) { throw 'manifest_missing' }
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
@@ -111,6 +114,7 @@ try {
         if ($brainDigest -notmatch '^[0-9a-f]{64}$') { throw 'brain_digest' }
         if ($brainDigest -ne $ExpectedBrainDigest.ToLowerInvariant()) { throw 'canonical_brain_digest_mismatch' }
 
+        $publishPhase = 'manifest_verify'
         foreach ($entry in $manifest.files) {
             $relative = [string]$entry.path
             if ([IO.Path]::IsPathRooted($relative) -or $relative -match '(^|[\\/])\.\.([\\/]|$)') { throw 'unsafe_manifest_path' }
@@ -120,15 +124,18 @@ try {
             if ($hash -ne ([string]$entry.sha256).ToLowerInvariant()) { throw 'manifest_hash_mismatch' }
         }
 
+        $publishPhase = 'current_backup'
         if (Test-Path -LiteralPath $current) {
             $currentItem = Get-Item -LiteralPath $current -Force
             if (-not $currentItem.PSIsContainer -or ($currentItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'current_not_safe_directory' }
             Move-Item -LiteralPath $current -Destination $backup
             $oldPresent = $true
         }
+        $publishPhase = 'stage_publish'
         Move-Item -LiteralPath $stage -Destination $current
         $published = $true
 
+        $publishPhase = 'receipt_prepare'
         $receiptRoot = Join-Path $VaultRoot 'Dominion-Release-State'
         if (-not (Test-Path -LiteralPath $receiptRoot)) { New-Item -ItemType Directory -Path $receiptRoot -Force | Out-Null }
         $receiptRootItem = Get-Item -LiteralPath $receiptRoot -Force
@@ -143,6 +150,7 @@ try {
             agent_count = [int]$manifest.agent_count
             recorded_at_utc = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
         } | ConvertTo-Json -Depth 4
+        $publishPhase = 'receipt_write'
         $receiptTmp = Join-Path $receiptRoot ('.latest-' + [Guid]::NewGuid().ToString('N') + '.tmp')
         [IO.File]::WriteAllText($receiptTmp, $receipt + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
         Move-Item -LiteralPath $receiptTmp -Destination (Join-Path $receiptRoot 'laptop-latest.json') -Force
@@ -170,9 +178,11 @@ try {
         } else {
             Write-Host ("LAPTOP_SYNC_ROLLBACK=HOLD issues=" + (($rollbackIssues | Sort-Object -Unique) -join ','))
         }
+        $safePhase = ($publishPhase -replace '[^A-Za-z0-9_.-]','_')
         $safeError = ($originalError -replace '[^A-Za-z0-9_.-]','_')
+        if ([string]::IsNullOrWhiteSpace($safePhase)) { $safePhase = 'unknown' }
         if ([string]::IsNullOrWhiteSpace($safeError)) { $safeError = 'unknown' }
-        Fail ('brain_publish_' + $safeError)
+        Fail ('brain_publish_phase_' + $safePhase + '_' + $safeError)
     }
 } finally {
     Pop-Location

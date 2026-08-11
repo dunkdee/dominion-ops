@@ -161,7 +161,7 @@ jobs:
             '',
             '- TikTok: DISABLED',
             '- Markov and Dominion Alpha: PAPER_ONLY',
-            '- Nemotron: AUTHORIZED_FOR_GOVERNED_LOCAL_ACTIVATION (`nemotron-3-nano:4b`); VM evidence required',
+            '- Nemotron: ACTIVE (`nemotron-3-nano:4b`); local VM health and inference verified',
             '- Upwork, PPH, and freelance workstreams: RETIRED',
             '- VoltEdge laptop modules: EXPERIMENTAL / QUARANTINED',
             '- Payments and live trading: NOT AUTHORIZED',

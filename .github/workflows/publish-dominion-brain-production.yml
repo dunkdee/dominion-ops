@@ -1,5 +1,5 @@
 name: Publish Dominion Brain — Production
-# Authorized vault password rotation trigger — 2026-08-10
+# Authorized vault password rotation trigger — 2026-08-10T22:28-04:00
 
 on:
   push:

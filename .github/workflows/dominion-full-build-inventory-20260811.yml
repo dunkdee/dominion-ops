@@ -94,7 +94,7 @@ jobs:
           }
           Write-Host 'FULL_BUILD_INVENTORY_SECRET_SCAN=PASS findings=0'
 
-          $registry = @(Get-Content -LiteralPath (Join-Path $out 'component_registry.json') -Raw | ConvertFrom-Json)
+          $registry = Get-Content -LiteralPath (Join-Path $out 'component_registry.json') -Raw | ConvertFrom-Json
           $overlay = Get-Content -LiteralPath (Join-Path $out 'canonical_manifest_v3_overlay_phase5b.json') -Raw | ConvertFrom-Json
           $unknown = @($registry | Where-Object { $_.component_class -eq 'UNKNOWN' }).Count
           $oldMatches = 0
@@ -103,7 +103,7 @@ jobs:
             if (-not $record) { continue }
             $matches = $true
             foreach ($property in $decision.old_values.PSObject.Properties) {
-              $actualProperty = $record.PSObject.Properties[$property.Name]
+              $actualProperty = $record.PSObject.Properties | Where-Object { $_.Name -eq $property.Name } | Select-Object -First 1
               if (-not $actualProperty -or -not [object]::Equals($actualProperty.Value, $property.Value)) {
                 $matches = $false
                 break

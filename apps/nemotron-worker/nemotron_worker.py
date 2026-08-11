@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import ip_address, ip_network
 from typing import Any
@@ -110,11 +111,40 @@ class Handler(BaseHTTPRequestHandler):
             messages = payload.get("messages")
             if not isinstance(messages, list) or not messages:
                 raise ValueError("messages must be a non-empty array")
-            payload["model"] = NEMOTRON_MODEL
-            payload["messages"] = [{"role": "system", "content": DOMINION_CHARTER}, *messages]
-            payload["stream"] = False
-            result = _json_request("POST", f"{OLLAMA_BASE_URL}/v1/chat/completions", payload)
-            self._send(200, result)
+            upstream = {
+                "model": NEMOTRON_MODEL,
+                "messages": [{"role": "system", "content": DOMINION_CHARTER}, *messages],
+                "stream": False,
+                "think": False,
+                "keep_alive": "10m",
+                "options": {
+                    "temperature": float(payload.get("temperature", 0.2)),
+                    "num_ctx": 4096,
+                },
+            }
+            result = _json_request("POST", f"{OLLAMA_BASE_URL}/api/chat", upstream)
+            content = str((result.get("message") or {}).get("content") or "").strip()
+            if not content:
+                raise ValueError("Nemotron returned no final answer")
+            normalized = {
+                "id": f"chatcmpl-dominion-{int(time.time() * 1000)}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": NEMOTRON_MODEL,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": content},
+                        "finish_reason": result.get("done_reason") or "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": int(result.get("prompt_eval_count") or 0),
+                    "completion_tokens": int(result.get("eval_count") or 0),
+                    "total_tokens": int(result.get("prompt_eval_count") or 0) + int(result.get("eval_count") or 0),
+                },
+            }
+            self._send(200, normalized)
         except (ValueError, json.JSONDecodeError) as exc:
             self._send(400, {"error": {"message": str(exc), "type": "invalid_request"}})
         except (error.URLError, TimeoutError) as exc:

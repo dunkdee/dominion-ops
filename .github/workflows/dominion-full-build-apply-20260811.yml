@@ -7,6 +7,9 @@ on:
       - 'scripts/build_dominion_final_overlay.py'
       - 'scripts/apply_dominion_registry_overlay.py'
       - 'governance/registry/phase4e_founder_decisions_144.json'
+      - 'apps/nemotron-worker/nemotron_worker.py'
+      - 'apps/nemotron-worker/test_nemotron_worker.py'
+      - 'deploy/systemd/dominion-nemotron.service'
       - '.github/workflows/dominion-full-build-apply-20260811.yml'
 
 permissions:
@@ -28,7 +31,8 @@ jobs:
       - name: Validate governed release inputs
         run: |
           set -euo pipefail
-          python -m py_compile scripts/build_dominion_final_overlay.py scripts/apply_dominion_registry_overlay.py
+          python -m py_compile scripts/build_dominion_final_overlay.py scripts/apply_dominion_registry_overlay.py apps/nemotron-worker/nemotron_worker.py
+          python apps/nemotron-worker/test_nemotron_worker.py -v
           python - <<'PY'
           import json
           from pathlib import Path
@@ -151,11 +155,11 @@ jobs:
             "- Component registry SHA-256: $componentHash",
             "- Division registry SHA-256: $divisionHash",
             '',
-            '## Preserved holds',
+            '## Governed runtime state',
             '',
             '- TikTok: DISABLED',
             '- Markov and Dominion Alpha: PAPER_ONLY',
-            '- Nemotron: FROZEN',
+            '- Nemotron: ACTIVE_GOVERNED_LOCAL (`nemotron-3-nano:4b`)',
             '- Upwork, PPH, and freelance workstreams: RETIRED',
             '- VoltEdge laptop modules: EXPERIMENTAL / QUARANTINED',
             '- Payments and live trading: NOT AUTHORIZED',
@@ -188,7 +192,7 @@ jobs:
   enforce-vm-holds:
     needs: [validate-release, apply-laptop-registry]
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 35
     environment: foundation-vm-production
     outputs:
       result: ${{ steps.enforce.outputs.result }}
@@ -197,6 +201,9 @@ jobs:
       alpha_paper: ${{ steps.enforce.outputs.alpha_paper }}
       wix_record_only: ${{ steps.enforce.outputs.wix_record_only }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
       - name: Enforce runtime holds and verify safe integrations
         id: enforce
         env:
@@ -213,9 +220,16 @@ jobs:
           chmod 600 "$HOME/.ssh/known_hosts"
           report="$RUNNER_TEMP/vm-full-build-closure.txt"
           : > "$report"
+          remote_tmp="/tmp/dominion-nemotron-$GITHUB_RUN_ID"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "install -d -m 700 '$remote_tmp'"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+            apps/nemotron-worker/nemotron_worker.py \
+            deploy/systemd/dominion-nemotron.service \
+            "$VM_USER@$VM_HOST:$remote_tmp/"
 
-          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > "$report" <<'REMOTE'
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "bash -s -- '$remote_tmp'" > "$report" <<'REMOTE'
           set -euo pipefail
+          remote_tmp="$1"
           echo 'schema=dominion-vm-full-build-closure-v1'
 
           enforce_inactive() {
@@ -228,7 +242,55 @@ jobs:
             printf '%s=%s\n' "$service" "${state:-not-found}"
           }
           enforce_inactive dominion-tiktok.service
-          enforce_inactive dominion-nemotron.service
+
+          command -v ollama >/dev/null
+          command -v python3 >/dev/null
+          command -v curl >/dev/null
+          available_kib="$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)"
+          disk_available_kib="$(df -Pk / | awk 'NR==2 {print $4}')"
+          test "$available_kib" -ge 2500000
+          test "$disk_available_kib" -ge 5000000
+          curl --max-time 10 -fsS http://127.0.0.1:11434/api/version >/dev/null
+          ollama pull nemotron-3-nano:4b
+          install -d -m 755 "$HOME/dominion/apps/nemotron-worker"
+          install -m 644 "$remote_tmp/nemotron_worker.py" "$HOME/dominion/apps/nemotron-worker/nemotron_worker.py"
+          sudo install -m 644 "$remote_tmp/dominion-nemotron.service" /etc/systemd/system/dominion-nemotron.service
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now dominion-nemotron.service >/dev/null
+          for attempt in $(seq 1 30); do
+            if curl --max-time 10 -fsS http://127.0.0.1:11435/health >/dev/null 2>&1; then break; fi
+            test "$attempt" -lt 30
+            sleep 2
+          done
+          nemotron_health="$(curl --max-time 10 -fsS http://127.0.0.1:11435/health)"
+          python3 - "$nemotron_health" <<'PY'
+          import json, sys
+          health=json.loads(sys.argv[1])
+          assert health == {
+              'status':'ok',
+              'service':'dominion-nemotron',
+              'model':'nemotron-3-nano:4b',
+              'model_available':True,
+              'founder_authority':'final',
+              'ecosystem':'dominion',
+          }
+          PY
+          chat_response="$(curl --max-time 300 -fsS -H 'Content-Type: application/json' \
+            -d '{"messages":[{"role":"user","content":"Return only: DOMINION_NEMOTRON_READY"}],"temperature":0,"stream":false}' \
+            http://127.0.0.1:11435/v1/chat/completions)"
+          python3 - "$chat_response" <<'PY'
+          import json, sys
+          data=json.loads(sys.argv[1])
+          choices=data.get('choices') or []
+          assert choices and (choices[0].get('message') or {}).get('content')
+          PY
+          nemotron_state="$(systemctl is-active dominion-nemotron.service)"
+          test "$nemotron_state" = active
+          echo "dominion-nemotron.service=$nemotron_state"
+          echo 'dominion-nemotron.model=nemotron-3-nano:4b'
+          echo 'dominion-nemotron.inference=PASS'
+          echo 'dominion-nemotron.founder_authority=final'
+          rm -rf -- "$remote_tmp"
 
           alpha_mode="$(sed -n 's/^LIVE_TRADING=//p' "$HOME/dominion/alpha_engine/.env" 2>/dev/null | tail -1 | tr '[:upper:]' '[:lower:]')"
           if [ "$alpha_mode" != false ]; then
@@ -277,7 +339,7 @@ jobs:
           alpha_paper="$(sed -n 's/^dominion-alpha.paper=//p' "$report" | tail -1)"
           wix_record_only="$(sed -n 's/^wix.record_only=//p' "$report" | tail -1)"
           test -n "$tiktok_state" && test "$tiktok_state" != active
-          test -n "$nemotron_state" && test "$nemotron_state" != active
+          test "$nemotron_state" = active
           test "$alpha_paper" = PASS
           test "$wix_record_only" = PASS
           echo "result=PASS" >> "$GITHUB_OUTPUT"

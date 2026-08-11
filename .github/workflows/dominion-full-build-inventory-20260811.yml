@@ -103,7 +103,8 @@ jobs:
             if (-not $record) { continue }
             $matches = $true
             foreach ($property in $decision.old_values.PSObject.Properties) {
-              if ([string]$record.($property.Name) -ne [string]$property.Value) {
+              $actualProperty = $record.PSObject.Properties[$property.Name]
+              if (-not $actualProperty -or -not [object]::Equals($actualProperty.Value, $property.Value)) {
                 $matches = $false
                 break
               }

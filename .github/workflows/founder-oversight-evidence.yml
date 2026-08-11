@@ -1,0 +1,41 @@
+name: Founder Oversight Evidence Controls
+
+on:
+  pull_request:
+    paths:
+      - "governance/founder_oversight_contract.json"
+      - "governance/schemas/founder_mission_record.schema.json"
+      - "governance/schemas/founder_evidence_record.schema.json"
+      - "runtime/examples/founder_oversight_*.json"
+      - "scripts/validate_founder_oversight.py"
+      - "tests/test_founder_oversight.py"
+      - "obsidian/command-center/15-Founder-Oversight.md"
+      - ".github/workflows/founder-oversight-evidence.yml"
+  push:
+    branches: [main]
+    paths:
+      - "governance/founder_oversight_contract.json"
+      - "governance/schemas/founder_mission_record.schema.json"
+      - "governance/schemas/founder_evidence_record.schema.json"
+      - "runtime/examples/founder_oversight_*.json"
+      - "scripts/validate_founder_oversight.py"
+      - "tests/test_founder_oversight.py"
+      - "obsidian/command-center/15-Founder-Oversight.md"
+      - ".github/workflows/founder-oversight-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Compile validator
+        run: python3 -m py_compile scripts/validate_founder_oversight.py tests/test_founder_oversight.py
+      - name: Validate founder oversight contract
+        run: python3 scripts/validate_founder_oversight.py
+      - name: Run fail-closed tests
+        run: python3 tests/test_founder_oversight.py

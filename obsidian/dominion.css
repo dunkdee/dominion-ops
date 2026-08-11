@@ -1,0 +1,225 @@
+/* Dominion Obsidian UI — non-normative operator skin */
+:root,
+body,
+.theme-light,
+.theme-dark {
+  --dominion-black: #08090a;
+  --dominion-panel: #0d0f10;
+  --dominion-panel-2: #131516;
+  --dominion-gold: #c99a37;
+  --dominion-gold-bright: #e0b85a;
+  --dominion-gold-muted: #8d6b2d;
+  --dominion-ivory: #f2eee4;
+  --dominion-muted: #a8a39a;
+  --dominion-green: #6fb98f;
+  --dominion-red: #d36a6a;
+  --dominion-purple: #8e79c6;
+
+  --background-primary: var(--dominion-black);
+  --background-primary-alt: #0a0b0c;
+  --background-secondary: var(--dominion-panel);
+  --background-secondary-alt: var(--dominion-panel-2);
+  --background-modifier-border: rgba(201, 154, 55, 0.20);
+  --background-modifier-hover: rgba(201, 154, 55, 0.08);
+  --background-modifier-active-hover: rgba(201, 154, 55, 0.14);
+  --text-normal: var(--dominion-ivory);
+  --text-muted: var(--dominion-muted);
+  --text-faint: #6e6a63;
+  --text-accent: var(--dominion-gold-bright);
+  --text-accent-hover: #f0cf7a;
+  --interactive-accent: var(--dominion-gold);
+  --interactive-accent-hover: var(--dominion-gold-bright);
+  --titlebar-background: #070809;
+  --titlebar-background-focused: #090a0b;
+  --tab-container-background: #090a0b;
+  --divider-color: rgba(201, 154, 55, 0.18);
+  --icon-color: #b9aa87;
+  --icon-color-hover: var(--dominion-gold-bright);
+  --nav-item-color-active: var(--dominion-ivory);
+  --nav-item-background-active: rgba(201, 154, 55, 0.12);
+  --nav-item-background-hover: rgba(201, 154, 55, 0.07);
+  --link-color: var(--dominion-gold-bright);
+  --link-color-hover: #f0cf7a;
+  --checkbox-color: var(--dominion-gold);
+  --tag-color: var(--dominion-gold-bright);
+  --tag-background: rgba(201, 154, 55, 0.10);
+}
+
+body {
+  background:
+    radial-gradient(circle at 78% 12%, rgba(142, 121, 198, 0.055), transparent 24%),
+    radial-gradient(circle at 22% 0%, rgba(201, 154, 55, 0.075), transparent 28%),
+    var(--dominion-black);
+}
+
+.workspace,
+.workspace-split,
+.workspace-leaf,
+.workspace-leaf-content,
+.view-content {
+  background-color: transparent;
+}
+
+.workspace-leaf-content {
+  position: relative;
+}
+
+.workspace-leaf-content::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(201,154,55,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,154,55,0.02) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0.75), transparent 88%);
+}
+
+.workspace-leaf-content > * {
+  position: relative;
+  z-index: 1;
+}
+
+.workspace-tab-header-container,
+.mod-sidedock .workspace-tabs .workspace-tab-header-container {
+  border-bottom: 1px solid rgba(201, 154, 55, 0.18);
+  background: rgba(8, 9, 10, 0.96);
+}
+
+.nav-file-title,
+.nav-folder-title {
+  border-radius: 7px;
+  transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.nav-file-title:hover,
+.nav-folder-title:hover {
+  transform: translateX(2px);
+}
+
+.nav-file-title.is-active {
+  border-left: 2px solid var(--dominion-gold-bright);
+  box-shadow: inset 10px 0 24px rgba(201, 154, 55, 0.05);
+}
+
+.markdown-rendered h1,
+.HyperMD-header-1 {
+  color: var(--dominion-gold-bright);
+  letter-spacing: 0.025em;
+  text-shadow: 0 0 22px rgba(224, 184, 90, 0.15);
+}
+
+.markdown-rendered h2,
+.HyperMD-header-2 {
+  color: #e7d4a0;
+  border-bottom: 1px solid rgba(201, 154, 55, 0.18);
+  padding-bottom: 0.25em;
+}
+
+.markdown-rendered strong {
+  color: #f6e7bd;
+}
+
+.markdown-rendered a.internal-link {
+  text-decoration: none;
+  border-bottom: 1px solid rgba(224, 184, 90, 0.22);
+}
+
+.markdown-rendered a.internal-link:hover {
+  border-bottom-color: rgba(224, 184, 90, 0.70);
+  text-shadow: 0 0 12px rgba(224, 184, 90, 0.18);
+}
+
+.callout {
+  border: 1px solid rgba(201, 154, 55, 0.25);
+  border-left-width: 3px;
+  background: linear-gradient(135deg, rgba(201, 154, 55, 0.09), rgba(13, 15, 16, 0.82));
+  box-shadow: 0 8px 28px rgba(0,0,0,0.22);
+}
+
+.callout[data-callout="mission"] {
+  --callout-color: 224, 184, 90;
+  animation: dominion-breathe 5.8s ease-in-out infinite;
+}
+
+.callout[data-callout="scorecard"] {
+  --callout-color: 111, 185, 143;
+}
+
+.callout[data-callout="revenue"] {
+  --callout-color: 224, 184, 90;
+}
+
+.callout[data-callout="governance"] {
+  --callout-color: 142, 121, 198;
+}
+
+.markdown-rendered table {
+  border: 1px solid rgba(201, 154, 55, 0.20);
+  background: rgba(13, 15, 16, 0.72);
+}
+
+.markdown-rendered th {
+  color: var(--dominion-gold-bright);
+  background: rgba(201, 154, 55, 0.08);
+}
+
+.status-bar {
+  background: rgba(8, 9, 10, 0.96);
+  border-top: 1px solid rgba(201, 154, 55, 0.16);
+}
+
+.graph-view.color-fill {
+  color: var(--dominion-gold);
+}
+
+.graph-view.color-line {
+  color: rgba(201, 154, 55, 0.28);
+}
+
+.graph-view.color-text {
+  color: var(--dominion-ivory);
+}
+
+.graph-view.color-fill-highlight {
+  color: var(--dominion-gold-bright);
+}
+
+.modal,
+.prompt,
+.menu {
+  background: rgba(13, 15, 16, 0.98);
+  border: 1px solid rgba(201, 154, 55, 0.24);
+  box-shadow: 0 18px 60px rgba(0,0,0,0.45);
+}
+
+input,
+textarea {
+  caret-color: var(--dominion-gold-bright);
+}
+
+@keyframes dominion-breathe {
+  0%, 100% { box-shadow: 0 8px 28px rgba(0,0,0,0.22), 0 0 0 rgba(224,184,90,0); }
+  50% { box-shadow: 0 8px 28px rgba(0,0,0,0.22), 0 0 26px rgba(224,184,90,0.08); }
+}
+
+@keyframes dominion-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.markdown-reading-view .markdown-preview-view,
+.markdown-source-view.mod-cm6 .cm-scroller {
+  animation: dominion-enter 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

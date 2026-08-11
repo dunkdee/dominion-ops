@@ -1,0 +1,28 @@
+{
+  "schema_version": "dominion-founder-mission-record-v1",
+  "mission_id": "DOM-OVERSIGHT-EXAMPLE-001",
+  "title": "Founder oversight contract validation example",
+  "objective": "Validate the repo-native oversight contract without activating a runtime, contacting anyone, or changing production state.",
+  "status": "PLANNED",
+  "truth_state": "UNKNOWN",
+  "initiating_event": "Governance planning example",
+  "verified_facts": ["This is a non-executable example record."],
+  "unknowns_and_assumptions": ["No live runtime claim is made by this example."],
+  "lane_assignments": [
+    {
+      "lane": "verification",
+      "owner": "Sentinel",
+      "scope": "Run deterministic repository validation only.",
+      "state": "read_only",
+      "conflict_check": "No shared or production write is permitted."
+    }
+  ],
+  "risk_level": "low",
+  "required_approvals": [],
+  "verification_gate": "Deterministic validator and tests pass.",
+  "stop_conditions": ["Any request for production access, credentials, publishing, payments, customer contact, or live trading."],
+  "rollback_conditions": ["No runtime mutation is performed; revert the reviewed repository change if validation fails."],
+  "memory_destination": "Dominion-Operator-Notes/founder-oversight/",
+  "evidence_references": [],
+  "policy_version": "dominion-founder-oversight-contract-v1"
+}

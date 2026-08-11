@@ -38,6 +38,7 @@ jobs:
 
           $out = Join-Path $env:RUNNER_TEMP "dominion-full-build-inventory-$env:GITHUB_RUN_ID"
           New-Item -ItemType Directory -Path $out -Force | Out-Null
+          "artifact_path=$out" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           $allowlist = @(
             'build_canonical_manifest.py',
             'build_canonical_manifest_v2.py',
@@ -109,6 +110,10 @@ jobs:
             }
             if ($matches) { $oldMatches++ }
           }
+          $expectedOldMatches = @($overlay.decisions).Count
+          if ($oldMatches -ne $expectedOldMatches) {
+            throw "Phase 5B old-value validation failed: $oldMatches/$expectedOldMatches decisions match"
+          }
 
           $manifest = foreach ($name in $copied | Sort-Object) {
             $path = Join-Path $out $name
@@ -134,10 +139,10 @@ jobs:
           "component_count=$($registry.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "unknown_count=$unknown" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "overlay_match_count=$oldMatches" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "artifact_path=$out" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "FULL_BUILD_LAPTOP_INVENTORY=PASS components=$($registry.Count) unknown=$unknown phase5b_old_value_matches=$oldMatches vault_mutated=false"
 
       - name: Upload exact allowlisted build inputs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dominion-full-build-inventory-${{ github.run_id }}
@@ -172,6 +177,7 @@ jobs:
           chmod 600 "$HOME/.ssh/known_hosts"
 
           report="$RUNNER_TEMP/vm-readiness.txt"
+          : > "$report"
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > "$report" <<'REMOTE'
           set -u
           echo 'schema=dominion-vm-full-build-readiness-v1'
@@ -182,8 +188,7 @@ jobs:
             systemctl is-active "$service" 2>/dev/null || true
           done
           printf 'wix.container='; docker inspect -f '{{.State.Status}}' wix-agent 2>/dev/null || echo MISSING
-          printf 'wix.health='; curl --max-time 5 -fsS http://127.0.0.1:8082/health >/dev/null 2>&1 && echo PASS || echo FAIL
-          printf 'wix.ready='; curl --max-time 5 -fsS http://127.0.0.1:8082/ready >/dev/null 2>&1 && echo PASS || echo FAIL
+          printf 'wix.health='; docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' wix-agent 2>/dev/null || echo MISSING
           if docker inspect wix-agent >/dev/null 2>&1; then
             docker exec wix-agent sh -lc 'for name in WIX_API_KEY WIX_SITE_ID WIX_AGENT_OPERATOR_TOKEN ZENDROP_API_KEY WIX_AGENT_DB WIX_FULFILLMENT_MODE; do if printenv "$name" >/dev/null 2>&1; then echo "wix.env.$name=SET"; else echo "wix.env.$name=UNSET"; fi; done' 2>/dev/null || echo 'wix.env_audit=FAILED'
           fi
@@ -194,6 +199,7 @@ jobs:
           wix_health="$(sed -n 's/^wix.health=//p' "$report" | tail -1)"
           test -n "$tiktok_state" || tiktok_state=unknown
           test -n "$wix_health" || wix_health=FAIL
+          test "$wix_health" = healthy
           echo "vm_status=PASS" >> "$GITHUB_OUTPUT"
           echo "tiktok_state=$tiktok_state" >> "$GITHUB_OUTPUT"
           echo "wix_health=$wix_health" >> "$GITHUB_OUTPUT"
@@ -208,10 +214,11 @@ jobs:
           echo 'STRATEGIZER_PUBLIC_HEALTH=PASS'
 
       - name: Upload VM readiness report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dominion-vm-readiness-${{ github.run_id }}
-          path: ${{ steps.audit.outputs.report_path }}
+          path: ${{ runner.temp }}/vm-readiness.txt
           if-no-files-found: error
           retention-days: 1
 

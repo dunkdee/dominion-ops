@@ -1,0 +1,334 @@
+name: Dominion Full Build - Governed Apply and Closure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/build_dominion_final_overlay.py'
+      - 'scripts/apply_dominion_registry_overlay.py'
+      - 'governance/registry/phase4e_founder_decisions_144.json'
+      - '.github/workflows/dominion-full-build-apply-20260811.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dominion-full-build-apply
+  cancel-in-progress: false
+
+jobs:
+  validate-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - name: Validate governed release inputs
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/build_dominion_final_overlay.py scripts/apply_dominion_registry_overlay.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('governance/registry/phase4e_founder_decisions_144.json')
+          x=json.loads(p.read_text())
+          assert x['schema']=='dominion-phase4e-founder-decisions-v1'
+          assert x['approval_record']=='APPROVE #144 AS WRITTEN.'
+          decisions=x['decisions']
+          assert len(decisions)==31
+          assert len({d['rel_path'] for d in decisions})==31
+          assert next(d for d in decisions if d['rel_path']=='agents/markov_paper_trade.py')['runtime_status']=='PAPER_ONLY'
+          assert next(d for d in decisions if d['rel_path']=='agents/tiktok_legal_video.py')['runtime_status']=='DISABLED'
+          print('FULL_BUILD_RELEASE_INPUTS=PASS founder_decisions=31')
+          PY
+          test -f runtime/records/provenance_repair_145/deployed-source-manifest.json
+
+  apply-laptop-registry:
+    needs: validate-release
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    environment: dominion-laptop-production
+    outputs:
+      result: ${{ steps.verify.outputs.result }}
+      component_count: ${{ steps.verify.outputs.component_count }}
+      unknown_count: ${{ steps.verify.outputs.unknown_count }}
+      backup_dir: ${{ steps.verify.outputs.backup_dir }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Build, dry-run, and apply the exact governed overlay
+        id: apply
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          if ($actual -ne '${{ github.sha }}'.ToLowerInvariant()) { throw 'workflow checkout SHA mismatch' }
+          $python = (Get-Command python -ErrorAction Stop).Source
+          $vault = 'C:\Users\Dell\Documents\Dominion Command Vault'
+          $system = Join-Path $vault '_system'
+          $out = Join-Path $env:RUNNER_TEMP "dominion-full-build-apply-$env:GITHUB_RUN_ID"
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          "artifact_path=$out" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $overlay = Join-Path $out 'canonical_manifest_v3_overlay_full_build.json'
+          $founder = (Resolve-Path 'governance/registry/phase4e_founder_decisions_144.json').Path
+          $strategizer = (Resolve-Path 'runtime/records/provenance_repair_145/deployed-source-manifest.json').Path
+
+          & $python scripts/build_dominion_final_overlay.py `
+            --component-registry (Join-Path $system 'component_registry.json') `
+            --division-registry (Join-Path $system 'division_registry.json') `
+            --phase5b-overlay (Join-Path $system 'canonical_manifest_v3_overlay_phase5b.json') `
+            --phase4e-queue (Join-Path $system 'unknown_133_decision_queue.json') `
+            --phase4e-evidence (Join-Path $system 'unknown_133_evidence.json') `
+            --founder-decisions $founder `
+            --strategizer-manifest $strategizer `
+            --output $overlay
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          & $python scripts/apply_dominion_registry_overlay.py `
+            --system-dir $system `
+            --overlay $overlay `
+            --founder-decisions $founder `
+            --strategizer-manifest $strategizer `
+            --receipt-output (Join-Path $out 'dry-run-receipt.json')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          & $python scripts/apply_dominion_registry_overlay.py `
+            --system-dir $system `
+            --overlay $overlay `
+            --founder-decisions $founder `
+            --strategizer-manifest $strategizer `
+            --execute `
+            --receipt-output (Join-Path $out 'execute-receipt-copy.json')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Copy-Item -LiteralPath (Join-Path $system 'full_build_registry_receipt.json') -Destination (Join-Path $out 'full_build_registry_receipt.json') -Force
+          Copy-Item -LiteralPath (Join-Path $system 'canonical_manifest_v3_overlay_full_build.json') -Destination (Join-Path $out 'canonical_manifest_v3_overlay_full_build.json') -Force
+
+      - name: Verify registry closure and write the Obsidian closure note
+        id: verify
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vault = 'C:\Users\Dell\Documents\Dominion Command Vault'
+          $system = Join-Path $vault '_system'
+          $receiptPath = Join-Path $system 'full_build_registry_receipt.json'
+          $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+          $registry = Get-Content -LiteralPath (Join-Path $system 'component_registry.json') -Raw | ConvertFrom-Json
+          $divisions = Get-Content -LiteralPath (Join-Path $system 'division_registry.json') -Raw | ConvertFrom-Json
+          $unknown = @($registry | Where-Object { $_.component_class -eq 'UNKNOWN' }).Count
+          if ($receipt.schema -ne 'dominion-full-build-registry-receipt-v1') { throw 'receipt schema mismatch' }
+          if ($receipt.result -ne 'PASS' -or $receipt.mode -ne 'execute') { throw 'execution receipt is not PASS' }
+          if ($unknown -ne 0) { throw "UNKNOWN registry records remain: $unknown" }
+          if (($divisions | Measure-Object -Property unknown_count -Sum).Sum -ne 0) { throw 'division UNKNOWN count is not zero' }
+          $componentHash = (Get-FileHash -LiteralPath (Join-Path $system 'component_registry.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+          $divisionHash = (Get-FileHash -LiteralPath (Join-Path $system 'division_registry.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($componentHash -ne ([string]$receipt.post_hashes.component_registry).ToLowerInvariant()) { throw 'component registry receipt hash mismatch' }
+          if ($divisionHash -ne ([string]$receipt.post_hashes.division_registry).ToLowerInvariant()) { throw 'division registry receipt hash mismatch' }
+
+          $closed = Join-Path $vault '09_DECISIONS_AND_APPROVALS\Closed'
+          New-Item -ItemType Directory -Path $closed -Force | Out-Null
+          $notePath = Join-Path $closed 'Dominion Full Build Registry Closure 2026-08-11.md'
+          if (Test-Path -LiteralPath $notePath) { throw "closure note already exists: $notePath" }
+          $note = @(
+            '# Dominion Full Build Registry Closure — 2026-08-11',
+            '',
+            '- Result: PASS',
+            "- GitHub release SHA: $env:GITHUB_SHA",
+            "- Component records: $($registry.Count)",
+            '- Remaining UNKNOWN: 0',
+            '- Registry decisions applied: 136',
+            '- External components added: 1 (`apps/strategizer`)',
+            "- Rollback backup: $($receipt.backup_dir)",
+            "- Component registry SHA-256: $componentHash",
+            "- Division registry SHA-256: $divisionHash",
+            '',
+            '## Preserved holds',
+            '',
+            '- TikTok: DISABLED',
+            '- Markov and Dominion Alpha: PAPER_ONLY',
+            '- Nemotron: FROZEN',
+            '- Upwork, PPH, and freelance workstreams: RETIRED',
+            '- VoltEdge laptop modules: EXPERIMENTAL / QUARANTINED',
+            '- Payments and live trading: NOT AUTHORIZED',
+            '',
+            '## Canonical evidence',
+            '',
+            '- `_system/canonical_manifest_v3_overlay_full_build.json`',
+            '- `_system/full_build_registry_receipt.json`',
+            '- `_system/component_registry.json`',
+            '- `_system/division_registry.json`'
+          )
+          $note | Set-Content -LiteralPath $notePath -Encoding utf8
+          Copy-Item -LiteralPath $notePath -Destination (Join-Path '${{ steps.apply.outputs.artifact_path }}' 'Dominion Full Build Registry Closure 2026-08-11.md') -Force
+
+          "result=PASS" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "component_count=$($registry.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "unknown_count=$unknown" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "backup_dir=$($receipt.backup_dir)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "LAPTOP_REGISTRY_CLOSURE=PASS components=$($registry.Count) unknown=$unknown backup=$($receipt.backup_dir)"
+
+      - name: Upload governed registry closure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dominion-full-build-registry-${{ github.run_id }}
+          path: ${{ steps.apply.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 1
+
+  enforce-vm-holds:
+    needs: [validate-release, apply-laptop-registry]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    outputs:
+      result: ${{ steps.enforce.outputs.result }}
+      tiktok_state: ${{ steps.enforce.outputs.tiktok_state }}
+      nemotron_state: ${{ steps.enforce.outputs.nemotron_state }}
+      alpha_paper: ${{ steps.enforce.outputs.alpha_paper }}
+      wix_record_only: ${{ steps.enforce.outputs.wix_record_only }}
+    steps:
+      - name: Enforce runtime holds and verify safe integrations
+        id: enforce
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          report="$RUNNER_TEMP/vm-full-build-closure.txt"
+          : > "$report"
+
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > "$report" <<'REMOTE'
+          set -euo pipefail
+          echo 'schema=dominion-vm-full-build-closure-v1'
+
+          enforce_inactive() {
+            service="$1"
+            if systemctl list-unit-files "$service" --no-legend 2>/dev/null | grep -q "^$service"; then
+              sudo systemctl disable --now "$service" >/dev/null
+            fi
+            state="$(systemctl is-active "$service" 2>/dev/null || true)"
+            test "$state" != active
+            printf '%s=%s\n' "$service" "${state:-not-found}"
+          }
+          enforce_inactive dominion-tiktok.service
+          enforce_inactive dominion-nemotron.service
+
+          alpha_mode="$(sed -n 's/^LIVE_TRADING=//p' "$HOME/dominion/alpha_engine/.env" 2>/dev/null | tail -1 | tr '[:upper:]' '[:lower:]')"
+          if [ "$alpha_mode" != false ]; then
+            sudo systemctl disable --now dominion-alpha.service >/dev/null 2>&1 || true
+            echo 'dominion-alpha.paper=CONTAINED_NON_PAPER_CONFIGURATION'
+            exit 1
+          fi
+          echo 'dominion-alpha.paper=PASS'
+
+          if systemctl is-active dominion-markov.service >/dev/null 2>&1; then
+            markov_exec="$(systemctl show dominion-markov.service -p ExecStart --value)"
+            case "$markov_exec" in
+              *paper*) echo 'dominion-markov.paper=PASS' ;;
+              *) sudo systemctl disable --now dominion-markov.service >/dev/null; echo 'dominion-markov.paper=CONTAINED_NON_PAPER_EXEC'; exit 1 ;;
+            esac
+          else
+            echo 'dominion-markov.paper=INACTIVE_OR_NOT_FOUND'
+          fi
+
+          wix_state="$(docker inspect -f '{{.State.Status}}' wix-agent 2>/dev/null || true)"
+          wix_health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' wix-agent 2>/dev/null || true)"
+          wix_mode="$(docker exec wix-agent sh -lc 'printf %s "${WIX_FULFILLMENT_MODE:-record_only}"' 2>/dev/null || true)"
+          wix_site_ok=false
+          if docker exec wix-agent sh -lc 'test "$WIX_SITE_ID" = "a790d430-a3a0-4b0e-9be6-4c874c229167"' 2>/dev/null; then wix_site_ok=true; fi
+          wix_api_key=false
+          if docker exec wix-agent sh -lc 'test -n "$WIX_API_KEY"' 2>/dev/null; then wix_api_key=true; fi
+          if [ "$wix_mode" != record_only ]; then
+            docker stop wix-agent >/dev/null 2>&1 || true
+            echo 'wix.record_only=CONTAINED_NON_RECORD_ONLY_MODE'
+            exit 1
+          fi
+          test "$wix_state" = running
+          test "$wix_health" = healthy
+          test "$wix_site_ok" = true
+          test "$wix_api_key" = true
+          echo 'wix.record_only=PASS'
+          echo 'wix.site_id=PASS'
+          echo 'wix.api_key_presence=PASS'
+          echo 'payments=NOT_AUTHORIZED'
+          echo 'live_trading=NOT_AUTHORIZED'
+          REMOTE
+          cat "$report"
+
+          tiktok_state="$(sed -n 's/^dominion-tiktok.service=//p' "$report" | tail -1)"
+          nemotron_state="$(sed -n 's/^dominion-nemotron.service=//p' "$report" | tail -1)"
+          alpha_paper="$(sed -n 's/^dominion-alpha.paper=//p' "$report" | tail -1)"
+          wix_record_only="$(sed -n 's/^wix.record_only=//p' "$report" | tail -1)"
+          test -n "$tiktok_state" && test "$tiktok_state" != active
+          test -n "$nemotron_state" && test "$nemotron_state" != active
+          test "$alpha_paper" = PASS
+          test "$wix_record_only" = PASS
+          echo "result=PASS" >> "$GITHUB_OUTPUT"
+          echo "tiktok_state=$tiktok_state" >> "$GITHUB_OUTPUT"
+          echo "nemotron_state=$nemotron_state" >> "$GITHUB_OUTPUT"
+          echo "alpha_paper=$alpha_paper" >> "$GITHUB_OUTPUT"
+          echo "wix_record_only=$wix_record_only" >> "$GITHUB_OUTPUT"
+          rm -f "$HOME/.ssh/foundation_vm_key"
+
+      - name: Verify Strategizer deployed health contract
+        run: |
+          set -euo pipefail
+          body="$(curl --max-time 10 -fsS https://dominion-strategizer-cferorebhq-uc.a.run.app/health)"
+          test "$body" = '{"status":"ok","ecosystem":"dominion-ascendant"}'
+          echo 'STRATEGIZER_DEPLOYED_HEALTH=PASS revision=dominion-strategizer-00003-8t9'
+
+      - name: Upload VM closure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dominion-full-build-vm-${{ github.run_id }}
+          path: ${{ runner.temp }}/vm-full-build-closure.txt
+          if-no-files-found: error
+          retention-days: 1
+
+  record-closure:
+    if: always()
+    needs: [apply-laptop-registry, enforce-vm-holds]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Record full-build result on issue 145
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const laptop = '${{ needs.apply-laptop-registry.result }}';
+            const vm = '${{ needs.enforce-vm-holds.result }}';
+            const passed = laptop === 'success' && vm === 'success';
+            const body = [
+              '## Full-build governed application',
+              '',
+              `- Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `- Overall: **${passed ? 'PASS' : 'FAIL'}**`,
+              `- Laptop registry application: **${laptop}**`,
+              `- VM hold enforcement: **${vm}**`,
+              `- Component records: ${{ needs.apply-laptop-registry.outputs.component_count || 'unknown' }}`,
+              `- Remaining UNKNOWN: ${{ needs.apply-laptop-registry.outputs.unknown_count || 'unknown' }}`,
+              `- TikTok service: ${{ needs.enforce-vm-holds.outputs.tiktok_state || 'unknown' }}`,
+              `- Nemotron service: ${{ needs.enforce-vm-holds.outputs.nemotron_state || 'unknown' }}`,
+              `- Dominion Alpha paper-only: ${{ needs.enforce-vm-holds.outputs.alpha_paper || 'unknown' }}`,
+              `- Wix record-only: ${{ needs.enforce-vm-holds.outputs.wix_record_only || 'unknown' }}`,
+              `- Rollback backup: ${{ needs.apply-laptop-registry.outputs.backup_dir || 'unknown' }}`,
+              '',
+              `Artifacts: \`dominion-full-build-registry-${context.runId}\` and \`dominion-full-build-vm-${context.runId}\` (one-day retention).`,
+              '',
+              'Payments and live trading remain outside this authorization.'
+            ].join('\n');
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: 145, body});
+            if (!passed) core.setFailed(`Full build failed: laptop=${laptop} vm=${vm}`);

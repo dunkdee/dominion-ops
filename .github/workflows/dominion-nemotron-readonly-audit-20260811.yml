@@ -2,6 +2,10 @@ name: Dominion Nemotron - Read-only Runtime Audit
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dominion-nemotron-readonly-audit-20260811.yml'
 
 permissions:
   contents: read

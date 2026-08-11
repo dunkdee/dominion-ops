@@ -50,7 +50,7 @@ jobs:
           test -f runtime/records/provenance_repair_145/deployed-source-manifest.json
 
   apply-laptop-registry:
-    needs: validate-release
+    needs: [validate-release, enforce-vm-holds]
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 20
     environment: dominion-laptop-production
@@ -140,8 +140,7 @@ jobs:
 
           $closed = Join-Path $vault '09_DECISIONS_AND_APPROVALS\Closed'
           New-Item -ItemType Directory -Path $closed -Force | Out-Null
-          $notePath = Join-Path $closed 'Dominion Full Build Registry Closure 2026-08-11.md'
-          if (Test-Path -LiteralPath $notePath) { throw "closure note already exists: $notePath" }
+          $notePath = Join-Path $closed "Dominion Full Build Registry Closure 2026-08-11 run-$env:GITHUB_RUN_ID.md"
           $note = @(
             '# Dominion Full Build Registry Closure — 2026-08-11',
             '',
@@ -159,7 +158,7 @@ jobs:
             '',
             '- TikTok: DISABLED',
             '- Markov and Dominion Alpha: PAPER_ONLY',
-            '- Nemotron: ACTIVE_GOVERNED_LOCAL (`nemotron-3-nano:4b`)',
+            '- Nemotron: AUTHORIZED_FOR_GOVERNED_LOCAL_ACTIVATION (`nemotron-3-nano:4b`); VM evidence required',
             '- Upwork, PPH, and freelance workstreams: RETIRED',
             '- VoltEdge laptop modules: EXPERIMENTAL / QUARANTINED',
             '- Payments and live trading: NOT AUTHORIZED',
@@ -190,7 +189,7 @@ jobs:
           retention-days: 1
 
   enforce-vm-holds:
-    needs: [validate-release, apply-laptop-registry]
+    needs: validate-release
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     environment: foundation-vm-production

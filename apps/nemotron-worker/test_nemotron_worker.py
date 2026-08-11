@@ -32,7 +32,15 @@ class FakeOllama(BaseHTTPRequestHandler):
         payload = json.loads(self.rfile.read(length))
         assert payload["model"] == "nemotron-3-nano:4b"
         assert "Founder retains final authority" in payload["messages"][0]["content"]
-        self._send({"choices": [{"message": {"role": "assistant", "content": "verified"}}]})
+        assert payload["think"] is False
+        self._send(
+            {
+                "message": {"role": "assistant", "content": "verified"},
+                "done_reason": "stop",
+                "prompt_eval_count": 12,
+                "eval_count": 1,
+            }
+        )
 
     def log_message(self, format: str, *args: object) -> None:
         return

@@ -1,6 +1,7 @@
 name: Dominion Full Build - Governed Apply and Closure
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:

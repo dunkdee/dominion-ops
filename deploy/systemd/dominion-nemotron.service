@@ -10,7 +10,7 @@ Group=malachisingleton8
 WorkingDirectory=/home/malachisingleton8/dominion/apps/nemotron-worker
 Environment=OLLAMA_BASE_URL=http://127.0.0.1:11434
 Environment=NEMOTRON_MODEL=nemotron-3-nano:4b
-Environment=NEMOTRON_LISTEN_HOST=127.0.0.1
+Environment=NEMOTRON_LISTEN_HOST=0.0.0.0
 Environment=NEMOTRON_LISTEN_PORT=11435
 Environment=NEMOTRON_TIMEOUT_SECONDS=300
 ExecStart=/usr/bin/python3 /home/malachisingleton8/dominion/apps/nemotron-worker/nemotron_worker.py

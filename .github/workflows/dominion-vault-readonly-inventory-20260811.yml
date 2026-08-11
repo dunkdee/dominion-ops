@@ -65,20 +65,20 @@ jobs:
           $lines.Add('')
           $lines.Add('## Top-level file counts')
           foreach ($row in $topRows | Sort-Object Files -Descending) {
-            $lines.Add("- `$($row.Name)`: $($row.Files)")
+            $lines.Add(("- {0}: {1}" -f $row.Name, $row.Files))
           }
           $lines.Add('')
           $lines.Add('## Approved unknown_133 artifacts')
           foreach ($file in $unknown | Sort-Object Name) {
             $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             $relative = $file.FullName.Substring($vault.Length).TrimStart('\')
-            $lines.Add("- `$relative` — bytes=$($file.Length) sha256=`$hash`")
+            $lines.Add(("- {0} - bytes={1} sha256={2}" -f $relative, $file.Length, $hash))
           }
           $lines.Add('')
           $lines.Add('## System recovery artifacts')
           foreach ($file in $recovery | Sort-Object Name) {
             $relative = $file.FullName.Substring($vault.Length).TrimStart('\')
-            $lines.Add("- `$relative` — bytes=$($file.Length) modified=$($file.LastWriteTimeUtc.ToString('o'))")
+            $lines.Add(("- {0} - bytes={1} modified={2}" -f $relative, $file.Length, $file.LastWriteTimeUtc.ToString('o')))
           }
           $lines.Add('')
           $lines.Add('No Vault files were created, edited, moved, or deleted by this inventory.')

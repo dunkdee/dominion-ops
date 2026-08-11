@@ -8,10 +8,11 @@
 
 ## Start Here
 
-1. [[Dominion-Command-Center/14-Daily-State|14 · Daily State]] — what needs attention now
-2. [[Dominion-Command-Center/09-Revenue|09 · Revenue]] — demand, conversion, revenue, fulfillment, learning
-3. [[Dominion-Command-Center/04-Agents|04 · Agents]] — who owns the work
-4. [[Dominion-Command-Center/03-Control-Plane|03 · Control Plane]] — how work is authorized and executed
+1. [[Dominion-Command-Center/15-Founder-Oversight|15 · Founder Oversight]] — approvals, evidence, bounded lane state, and closure gates
+2. [[Dominion-Command-Center/14-Daily-State|14 · Daily State]] — what needs attention now
+3. [[Dominion-Command-Center/09-Revenue|09 · Revenue]] — demand, conversion, revenue, fulfillment, learning
+4. [[Dominion-Command-Center/04-Agents|04 · Agents]] — who owns the work
+5. [[Dominion-Command-Center/03-Control-Plane|03 · Control Plane]] — how work is authorized and executed
 
 ## Command Map
 

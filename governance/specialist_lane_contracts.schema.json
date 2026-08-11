@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominionhealing.org/schemas/specialist-lane-contracts.schema.json",
+  "title": "Dominion Dormant Specialist Lane Contracts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "authority",
+    "activation_default",
+    "budget_default_usd",
+    "truth_states",
+    "shared_memory",
+    "global_prohibitions",
+    "lanes"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "authority": {"const": "human_overseer"},
+    "activation_default": {"const": "DORMANT"},
+    "budget_default_usd": {"const": 0},
+    "truth_states": {
+      "type": "array",
+      "const": ["VERIFIED", "INFERRED", "UNKNOWN", "BLOCKED"]
+    },
+    "shared_memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_source", "operational_memory", "evidence_destination", "decision_destination", "learning_destination"],
+      "properties": {
+        "policy_source": {"const": "GitHub versioned governance and contracts"},
+        "operational_memory": {"const": "Obsidian Dominion-Brain"},
+        "evidence_destination": {"type": "string", "minLength": 1},
+        "decision_destination": {"type": "string", "minLength": 1},
+        "learning_destination": {"type": "string", "minLength": 1}
+      }
+    },
+    "global_prohibitions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "lanes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/lane"},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "truth_state": {"enum": ["VERIFIED", "INFERRED", "UNKNOWN", "BLOCKED"]},
+    "lane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "purpose",
+        "lifecycle_state",
+        "activation_state",
+        "budget_usd",
+        "owner",
+        "allowed_internal_actions",
+        "prohibited_actions",
+        "approval_gate",
+        "independent_verifier",
+        "input_contract",
+        "output_contract",
+        "shared_memory",
+        "kpi_interface",
+        "promotion_requirements"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "purpose": {"type": "string", "minLength": 1},
+        "lifecycle_state": {"const": "REGISTERED"},
+        "activation_state": {"const": "DORMANT"},
+        "budget_usd": {"const": 0},
+        "owner": {"const": "coordinator"},
+        "allowed_internal_actions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "prohibited_actions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "approval_gate": {"const": "human_overseer_recorded_approval"},
+        "independent_verifier": {"const": "sentinel"},
+        "input_contract": {"$ref": "#/$defs/packet"},
+        "output_contract": {"$ref": "#/$defs/packet"},
+        "shared_memory": {"$ref": "#/$defs/memory"},
+        "kpi_interface": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/kpi"}
+        },
+        "promotion_requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "packet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_fields", "truth_state_required", "secrets_permitted"],
+      "properties": {
+        "required_fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "truth_state_required": {"const": true},
+        "secrets_permitted": {"const": false}
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_home", "evidence", "decisions", "learning", "current_state"],
+      "properties": {
+        "agent_home": {"type": "string", "pattern": "^Dominion-Brain/04-Agents/"},
+        "evidence": {"const": "Dominion-Brain/08-Evidence/"},
+        "decisions": {"const": "Dominion-Brain/12-Decisions/"},
+        "learning": {"const": "Dominion-Brain/13-Learning/"},
+        "current_state": {"const": "Dominion-Brain/14-Daily-State/"}
+      }
+    },
+    "kpi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "definition", "evidence_source", "truth_state", "baseline_required", "target_state", "cadence"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "definition": {"type": "string", "minLength": 1},
+        "evidence_source": {"type": "string", "minLength": 1},
+        "truth_state": {"$ref": "#/$defs/truth_state"},
+        "baseline_required": {"const": true},
+        "target_state": {"const": "BASELINE_REQUIRED"},
+        "cadence": {"enum": ["per_mission", "daily", "weekly", "monthly"]}
+      }
+    }
+  }
+}

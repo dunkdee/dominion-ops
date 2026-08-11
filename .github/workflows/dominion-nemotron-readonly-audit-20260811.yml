@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   audit-nemotron:
@@ -98,3 +99,31 @@ jobs:
           path: ${{ runner.temp }}/nemotron-readonly-audit.txt
           if-no-files-found: error
           retention-days: 1
+
+      - name: Record audit evidence on the governance issue
+        if: always()
+        uses: actions/github-script@v8
+        env:
+          REPORT_PATH: ${{ runner.temp }}/nemotron-readonly-audit.txt
+        with:
+          script: |
+            const fs = require('fs');
+            const evidence = fs.existsSync(process.env.REPORT_PATH)
+              ? fs.readFileSync(process.env.REPORT_PATH, 'utf8')
+              : 'audit_report=missing';
+            const body = [
+              '## Nemotron read-only runtime audit',
+              '',
+              `- Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '- Mutation: **false**',
+              '',
+              '```text',
+              evidence.trim(),
+              '```'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 145,
+              body
+            });

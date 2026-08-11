@@ -64,7 +64,21 @@ jobs:
           New-Item -ItemType Directory -Path $payload,$raw -Force | Out-Null
           "stage=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'Strategizer archive missing at governed restore path' }
+          $archiveAccess = 'UNKNOWN'
+          $archiveHash = ''
+          $archiveBytes = 0
+          $members = @()
+          $allowedArchiveFiles = @()
+          try {
+            if (Test-Path -LiteralPath $archive -PathType Leaf) {
+              $archiveAccess = 'PASS'
+            } else {
+              $archiveAccess = 'MISSING'
+            }
+          } catch [System.UnauthorizedAccessException] {
+            $archiveAccess = 'BLOCKED_ACL'
+            Write-Host 'STRATEGIZER_LAPTOP_ARCHIVE=BLOCKED_ACL'
+          }
           if (-not (Test-Path -LiteralPath $voltEdgeRoot -PathType Container)) { throw 'VoltEdge governed source root missing' }
 
           $expectedVoltEdge = [ordered]@{
@@ -89,6 +103,7 @@ jobs:
             $voltEvidence += [ordered]@{ path = "application/voltedge/$name"; sha256 = $actual; classification = 'EXPERIMENTAL' }
           }
 
+          if ($archiveAccess -eq 'PASS') {
           $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           $archiveBytes = (Get-Item -LiteralPath $archive).Length
           $memberList = Join-Path $stage 'archive-members.txt'
@@ -123,6 +138,7 @@ jobs:
             $destination = Join-Path $strategizerDest $relative
             New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
             Copy-Item -LiteralPath $file.FullName -Destination $destination
+          }
           }
 
           $secretRules = @(
@@ -171,6 +187,7 @@ jobs:
             source_mutation = $false
             archive = [ordered]@{
               restore_path = $archive
+              access_status = $archiveAccess
               sha256 = $archiveHash
               bytes = $archiveBytes
               member_count = $members.Count
@@ -204,6 +221,241 @@ jobs:
         run: |
           $stage = '${{ env.stage }}'
           if ($stage -and (Test-Path -LiteralPath $stage)) { Remove-Item -LiteralPath $stage -Recurse -Force }
+
+  collect-deployed-strategizer-source:
+    if: ${{ github.event_name == 'push' || inputs.confirm == 'COLLECT_PROVENANCE_145' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - name: Recover exact Cloud Run build source and scan for secrets
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          stage="$RUNNER_TEMP/dominion-deployed-source-145-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          install -m 700 -d "$stage"
+          echo "deployed_source_stage=$stage" >> "$GITHUB_ENV"
+          remote_zip="/tmp/dominion-strategizer-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.zip"
+          source_zip="$stage/deployed-source.zip"
+          metadata="$stage/runtime-source-metadata.json"
+
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            "$VM_USER@$VM_HOST" "REMOTE_ZIP='$remote_zip' bash -se" > "$metadata" <<'REMOTE'
+          set -euo pipefail
+          project='dominion-ascendant'
+          region='us-central1'
+          service='dominion-strategizer'
+          service_json="$(mktemp)"
+          revision_json="$(mktemp)"
+          trap 'rm -f "$service_json" "$revision_json"' EXIT
+          chmod 600 "$service_json" "$revision_json"
+          gcloud run services describe "$service" --project "$project" --region "$region" --format=json > "$service_json"
+          read -r revision source_uri <<EOF
+          $(python3 - "$service_json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1],encoding='utf-8'))
+          revision=d.get('status',{}).get('latestReadyRevisionName','')
+          raw=d.get('metadata',{}).get('annotations',{}).get('run.googleapis.com/build-source-location','')
+          locations=json.loads(raw)
+          if len(locations)!=1:
+              raise SystemExit('expected exactly one Cloud Run build source location')
+          print(revision, next(iter(locations.values())))
+          PY
+          )
+          EOF
+          test -n "$revision"
+          test -n "$source_uri"
+          gcloud run revisions describe "$revision" --project "$project" --region "$region" --format=json > "$revision_json"
+          gcloud storage cp "$source_uri" "$REMOTE_ZIP" >/dev/null
+          chmod 600 "$REMOTE_ZIP"
+          python3 - "$service_json" "$revision_json" "$REMOTE_ZIP" <<'PY'
+          import datetime,hashlib,json,os,sys
+          service=json.load(open(sys.argv[1],encoding='utf-8'))
+          revision=json.load(open(sys.argv[2],encoding='utf-8'))
+          archive=sys.argv[3]
+          annotations=service.get('metadata',{}).get('annotations',{})
+          locations=json.loads(annotations['run.googleapis.com/build-source-location'])
+          source_uri=next(iter(locations.values()))
+          containers=revision.get('spec',{}).get('containers') or []
+          image=containers[0].get('image','') if containers else ''
+          h=hashlib.sha256()
+          with open(archive,'rb') as f:
+              for chunk in iter(lambda:f.read(1024*1024),b''):
+                  h.update(chunk)
+          out={
+              'schema':'dominion-provenance-repair-145-deployed-source-v1',
+              'generated_at_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              'project':'dominion-ascendant',
+              'region':'us-central1',
+              'service':'dominion-strategizer',
+              'latest_ready_revision':service.get('status',{}).get('latestReadyRevisionName',''),
+              'image':image,
+              'image_digest':revision.get('status',{}).get('imageDigest',''),
+              'build_id':annotations.get('run.googleapis.com/build-id',''),
+              'build_name':annotations.get('run.googleapis.com/build-name',''),
+              'source_location':source_uri,
+              'source_archive_sha256':h.hexdigest(),
+              'source_archive_bytes':os.path.getsize(archive),
+          }
+          print(json.dumps(out,indent=2,sort_keys=True))
+          PY
+          REMOTE
+
+          scp -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            "$VM_USER@$VM_HOST:$remote_zip" "$source_zip"
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            "$VM_USER@$VM_HOST" "rm -f -- '$remote_zip'"
+
+          python3 - "$source_zip" "$metadata" "$stage" <<'PY'
+          import hashlib,json,re,shutil,sys,zipfile
+          from pathlib import Path,PurePosixPath
+
+          archive=Path(sys.argv[1])
+          metadata_path=Path(sys.argv[2])
+          stage=Path(sys.argv[3])
+          metadata=json.loads(metadata_path.read_text(encoding='utf-8'))
+          actual=hashlib.sha256(archive.read_bytes()).hexdigest()
+          if actual != metadata['source_archive_sha256']:
+              raise SystemExit('deployed source archive hash mismatch after transfer')
+          if archive.stat().st_size != metadata['source_archive_bytes']:
+              raise SystemExit('deployed source archive byte mismatch after transfer')
+
+          raw=stage/'raw'
+          payload=stage/'payload'
+          dest=payload/'application'/'strategizer'
+          raw.mkdir(parents=True,exist_ok=True)
+          dest.mkdir(parents=True,exist_ok=True)
+          allowed_ext={'.py','.js','.ts','.tsx','.jsx','.json','.yaml','.yml','.toml','.ini','.cfg','.md','.txt','.html','.css','.sh','.ps1'}
+          allowed_names={'Dockerfile','requirements.txt','pyproject.toml','package.json','package-lock.json','.gitignore','.dockerignore'}
+          blocked_name=re.compile(r'(?i)(^|/)\.env($|\.)|\.(pem|key|p12|pfx)$|(^|/)(credentials|secrets?|tokens?|cookies?|sessions?)\.(json|ya?ml|txt)$')
+          rules={
+              'private_key':re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'),
+              'aws_access_key':re.compile(r'(?:AKIA|ASIA)[0-9A-Z]{16}'),
+              'github_token':re.compile(r'gh[pousr]_[A-Za-z0-9_]{20,}'),
+              'google_api_key':re.compile(r'AIza[0-9A-Za-z_-]{30,}'),
+              'stripe_secret':re.compile(r'sk_(?:live|test)_[0-9A-Za-z]{16,}'),
+              'slack_token':re.compile(r'xox[baprs]-[0-9A-Za-z-]{10,}'),
+              'openai_key':re.compile(r'sk-(?:proj-)?[0-9A-Za-z_-]{20,}'),
+              'jwt':re.compile(r'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'),
+              'hardcoded_secret_assignment':re.compile(r'''(?i)(api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|refresh[_-]?token)\s*[:=]\s*["'][^"']{16,}["']'''),
+          }
+          selected=[]
+          findings=[]
+          total_uncompressed=0
+          with zipfile.ZipFile(archive) as z:
+              for info in z.infolist():
+                  if info.is_dir():
+                      continue
+                  if info.flag_bits & 1:
+                      raise SystemExit('encrypted source archive member detected')
+                  p=PurePosixPath(info.filename.replace('\\','/'))
+                  if p.is_absolute() or '..' in p.parts:
+                      raise SystemExit('source archive path traversal detected')
+                  rel=p.as_posix().lstrip('./')
+                  if not rel or any(x in p.parts for x in ('.git','.venv','venv','node_modules','__pycache__','__MACOSX')):
+                      continue
+                  if blocked_name.search(rel):
+                      findings.append((rel,'blocked_filename'))
+                      continue
+                  if p.suffix.lower() not in allowed_ext and p.name not in allowed_names:
+                      continue
+                  total_uncompressed += info.file_size
+                  if info.file_size > 20*1024*1024 or total_uncompressed > 100*1024*1024:
+                      raise SystemExit('deployed source archive exceeds bounded extraction limit')
+                  data=z.read(info)
+                  try:
+                      text=data.decode('utf-8')
+                  except UnicodeDecodeError:
+                      findings.append((rel,'non_utf8_source'))
+                      continue
+                  for name,rule in rules.items():
+                      if rule.search(text):
+                          findings.append((rel,name))
+                  selected.append((p,data))
+          if findings:
+              for path,rule in findings:
+                  print(f'SECRET_SCAN_BLOCKED_FILE={path} RULE={rule}')
+              raise SystemExit(f'secret scan findings detected: {len(findings)}')
+          if not selected:
+              raise SystemExit('no allowlisted deployed source files found')
+
+          prefixes={p.parts[0] for p,_ in selected if len(p.parts)>1}
+          strip_prefix=next(iter(prefixes)) if len(prefixes)==1 and all(len(p.parts)>1 for p,_ in selected) else None
+          file_records=[]
+          for p,data in selected:
+              parts=p.parts[1:] if strip_prefix and p.parts[0]==strip_prefix else p.parts
+              rel=PurePosixPath(*parts)
+              target=dest.joinpath(*rel.parts)
+              target.parent.mkdir(parents=True,exist_ok=True)
+              target.write_bytes(data)
+              file_records.append({
+                  'path':(PurePosixPath('application/strategizer')/rel).as_posix(),
+                  'bytes':len(data),
+                  'sha256':hashlib.sha256(data).hexdigest(),
+              })
+          metadata['secret_scan']={
+              'status':'PASS',
+              'scanned_files':len(selected),
+              'findings':0,
+              'rule_names':sorted(rules),
+          }
+          metadata['files']=sorted(file_records,key=lambda x:x['path'])
+          provenance=payload/'provenance'
+          provenance.mkdir(parents=True,exist_ok=True)
+          (provenance/'deployed-source-manifest.json').write_text(json.dumps(metadata,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print('DEPLOYED_SOURCE=PASS files=%d source_sha256=%s secret_findings=0' % (len(selected),actual))
+          PY
+
+      - name: Upload exact secret-scanned deployed source
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dominion-provenance-145-deployed-source-${{ github.run_id }}
+          path: ${{ env.deployed_source_stage }}/payload
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+          compression-level: 9
+
+      - name: Remove temporary deployed-source material
+        if: always()
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set +e
+          remote_zip="/tmp/dominion-strategizer-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.zip"
+          if [ -f "$HOME/.ssh/foundation_vm_key" ]; then
+            ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" "rm -f -- '$remote_zip'" >/dev/null 2>&1
+          fi
+          rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"
+          stage='${{ env.deployed_source_stage }}'
+          if [ -n "$stage" ] && [ -d "$stage" ]; then rm -rf -- "$stage"; fi
 
   collect-runtime-provenance:
     if: ${{ github.event_name == 'push' || inputs.confirm == 'COLLECT_PROVENANCE_145' }}

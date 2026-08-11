@@ -118,13 +118,14 @@ services:
       start_period: 20s
 
   obsidian-remote:
-    image: ghcr.io/sytone/obsidian-remote:latest
+    image: lscr.io/linuxserver/obsidian:latest
     container_name: obsidian-remote
     ports:
-      - "127.0.0.1:8083:8080"
+      - "127.0.0.1:8083:3000"
     volumes:
       - ${VAULT_PATH:-/home/malachisingleton8/vault}:/vaults/Dominion
-      - obsidian_remote_config:/config
+      - obsidian_remote_config_v2:/config
+    shm_size: "1gb"
     restart: unless-stopped
     environment:
       PUID: 1000
@@ -132,14 +133,17 @@ services:
       TZ: America/New_York
       CUSTOM_USER: dominion
       PASSWORD: ${OBSIDIAN_PASSWORD}
+      CUSTOM_PORT: 3000
+      CUSTOM_HTTPS_PORT: 3001
       TITLE: Dominion Brain
-      FM_HOME: /vaults
+      SELKIES_UI_TITLE: Dominion Brain
+      FILE_MANAGER_PATH: /vaults/Dominion
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS -u \"$${CUSTOM_USER}:$${PASSWORD}\" http://localhost:8080/ >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS -u \"$${CUSTOM_USER}:$${PASSWORD}\" http://localhost:3000/ >/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 45s
+      retries: 6
+      start_period: 60s
 
 volumes:
   wix_agent_data:
@@ -148,3 +152,5 @@ volumes:
     name: ${WIX_AGENT_LOGS_VOLUME:-dominion-ops_wix_agent_logs}
   obsidian_remote_config:
     name: ${OBSIDIAN_REMOTE_CONFIG_VOLUME:-dominion-ops_obsidian_remote_config}
+  obsidian_remote_config_v2:
+    name: ${OBSIDIAN_REMOTE_CONFIG_V2_VOLUME:-dominion-ops_obsidian_remote_config_v2}

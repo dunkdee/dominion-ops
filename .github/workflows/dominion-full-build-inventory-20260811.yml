@@ -75,6 +75,24 @@ jobs:
             if ($required -notin $copied) { throw "Required build input missing: $required" }
           }
 
+          $secretPatterns = @(
+            '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----',
+            'AKIA[0-9A-Z]{16}',
+            'gh[pousr]_[A-Za-z0-9]{30,}',
+            'AIza[0-9A-Za-z_-]{30,}',
+            'sk-[A-Za-z0-9]{20,}',
+            'sk_(live|test)_[A-Za-z0-9]{16,}',
+            'xox[baprs]-[A-Za-z0-9-]{20,}'
+          )
+          foreach ($name in $copied) {
+            $path = Join-Path $out $name
+            $text = Get-Content -LiteralPath $path -Raw
+            foreach ($pattern in $secretPatterns) {
+              if ($text -match $pattern) { throw "Secret scan finding in allowlisted file: $name" }
+            }
+          }
+          Write-Host 'FULL_BUILD_INVENTORY_SECRET_SCAN=PASS findings=0'
+
           $registry = @(Get-Content -LiteralPath (Join-Path $out 'component_registry.json') -Raw | ConvertFrom-Json)
           $overlay = Get-Content -LiteralPath (Join-Path $out 'canonical_manifest_v3_overlay_phase5b.json') -Raw | ConvertFrom-Json
           $unknown = @($registry | Where-Object { $_.component_class -eq 'UNKNOWN' }).Count

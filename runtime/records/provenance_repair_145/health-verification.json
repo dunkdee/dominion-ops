@@ -1,0 +1,12 @@
+{
+  "schema": "dominion-provenance-repair-145-health-v1",
+  "verified_at_utc": "2026-08-11T19:37:25Z",
+  "method": "HTTPS GET without credentials",
+  "url": "https://dominion-strategizer-cferorebhq-uc.a.run.app/health",
+  "http_code": 200,
+  "response_shape": {
+    "status": "ok",
+    "ecosystem": "dominion-ascendant"
+  },
+  "mutation": false
+}

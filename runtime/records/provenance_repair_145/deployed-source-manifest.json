@@ -1,0 +1,53 @@
+{
+  "build_id": "d3c5442d-ce7b-470d-be58-b387121a55e1",
+  "build_name": "projects/288811801522/locations/us-central1/builds/d3c5442d-ce7b-470d-be58-b387121a55e1",
+  "files": [
+    {
+      "bytes": 110,
+      "path": "application/strategizer/Dockerfile",
+      "sha256": "b57b4a1839ebd80f8f1d0b028985687af6a7af6f420ba6b59c764b30896e7bd9"
+    },
+    {
+      "bytes": 1446,
+      "path": "application/strategizer/index.js",
+      "sha256": "13882d2fd84e6810a8aa53a848482ab31f8e665e0a4ba93324d7a149948421ad"
+    },
+    {
+      "bytes": 47482,
+      "path": "application/strategizer/package-lock.json",
+      "sha256": "dfbfe5171dff935cf9ade61acc08858b1b0035cd53147fdb5cc0aee83027199e"
+    },
+    {
+      "bytes": 234,
+      "path": "application/strategizer/package.json",
+      "sha256": "8bcbc73f10fa12ada0ed815aac6466ff9a25884c6c96b4a612701b4a950ce470"
+    }
+  ],
+  "generated_at_utc": "2026-08-11T19:34:57.474557+00:00",
+  "image": "us-central1-docker.pkg.dev/dominion-ascendant/cloud-run-source-deploy/dominion-strategizer@sha256:ecd699e505cb37ec909ca5ce067469aeb0a468c788923cf0289efeafe939a620",
+  "image_digest": "us-central1-docker.pkg.dev/dominion-ascendant/cloud-run-source-deploy/dominion-strategizer@sha256:ecd699e505cb37ec909ca5ce067469aeb0a468c788923cf0289efeafe939a620",
+  "latest_ready_revision": "dominion-strategizer-00003-8t9",
+  "project": "dominion-ascendant",
+  "region": "us-central1",
+  "schema": "dominion-provenance-repair-145-deployed-source-v1",
+  "secret_scan": {
+    "findings": 0,
+    "rule_names": [
+      "aws_access_key",
+      "github_token",
+      "google_api_key",
+      "hardcoded_secret_assignment",
+      "jwt",
+      "openai_key",
+      "private_key",
+      "slack_token",
+      "stripe_secret"
+    ],
+    "scanned_files": 4,
+    "status": "PASS"
+  },
+  "service": "dominion-strategizer",
+  "source_archive_bytes": 6763703,
+  "source_archive_sha256": "d45182d745add4e6551600c285f2055807accc8de0923e33ddd693a44033b435",
+  "source_location": "gs://run-sources-dominion-ascendant-us-central1/services/dominion-strategizer/1774114093.985325-303349ab55804befa307771c2e6fce99.zip#1774114096084639"
+}

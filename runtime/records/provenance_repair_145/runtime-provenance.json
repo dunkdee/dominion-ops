@@ -1,0 +1,27 @@
+{
+  "generated_at_utc": "2026-08-11T19:34:55.516888+00:00",
+  "health": {
+    "authenticated_http_code": "404",
+    "result": "REACHABLE_RESTRICTED_OR_UNHEALTHY",
+    "unauthenticated_http_code": "404"
+  },
+  "image": "us-central1-docker.pkg.dev/dominion-ascendant/cloud-run-source-deploy/dominion-strategizer@sha256:ecd699e505cb37ec909ca5ce067469aeb0a468c788923cf0289efeafe939a620",
+  "image_digest": "us-central1-docker.pkg.dev/dominion-ascendant/cloud-run-source-deploy/dominion-strategizer@sha256:ecd699e505cb37ec909ca5ce067469aeb0a468c788923cf0289efeafe939a620",
+  "ingress": "all",
+  "latest_ready_revision": "dominion-strategizer-00003-8t9",
+  "mode": "read_only_runtime_collection",
+  "project": "dominion-ascendant",
+  "region": "us-central1",
+  "runtime_mutation": false,
+  "schema": "dominion-provenance-repair-145-runtime-v1",
+  "service": "dominion-strategizer",
+  "service_account": "288811801522-compute@developer.gserviceaccount.com",
+  "source_mapping_hints": {
+    "run.googleapis.com/build-enable-automatic-updates": "false",
+    "run.googleapis.com/build-id": "d3c5442d-ce7b-470d-be58-b387121a55e1",
+    "run.googleapis.com/build-image-uri": "us-central1-docker.pkg.dev/dominion-ascendant/cloud-run-source-deploy/dominion-strategizer",
+    "run.googleapis.com/build-name": "projects/288811801522/locations/us-central1/builds/d3c5442d-ce7b-470d-be58-b387121a55e1",
+    "run.googleapis.com/build-source-location": "{\"dominion-strategizer-1\":\"gs://run-sources-dominion-ascendant-us-central1/services/dominion-strategizer/1774114093.985325-303349ab55804befa307771c2e6fce99.zip#1774114096084639\"}"
+  },
+  "url": "https://dominion-strategizer-cferorebhq-uc.a.run.app"
+}

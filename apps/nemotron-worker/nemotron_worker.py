@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import ip_address, ip_network
 from typing import Any
 from urllib import error, request
 
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "nemotron-3-nano:4b")
-LISTEN_HOST = os.getenv("NEMOTRON_LISTEN_HOST", "127.0.0.1")
+LISTEN_HOST = os.getenv("NEMOTRON_LISTEN_HOST", "0.0.0.0")
 LISTEN_PORT = int(os.getenv("NEMOTRON_LISTEN_PORT", "11435"))
 UPSTREAM_TIMEOUT_SECONDS = int(os.getenv("NEMOTRON_TIMEOUT_SECONDS", "300"))
 
@@ -64,7 +65,14 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("request body must be a JSON object")
         return parsed
 
+    def _client_allowed(self) -> bool:
+        client = ip_address(self.client_address[0])
+        return client.is_loopback or client in ip_network("172.16.0.0/12")
+
     def do_GET(self) -> None:  # noqa: N802
+        if not self._client_allowed():
+            self._send(403, {"error": {"message": "client network not authorized", "type": "forbidden"}})
+            return
         try:
             models = _available_models()
             available = NEMOTRON_MODEL in models
@@ -91,6 +99,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, {"error": {"message": "not found", "type": "not_found"}})
 
     def do_POST(self) -> None:  # noqa: N802
+        if not self._client_allowed():
+            self._send(403, {"error": {"message": "client network not authorized", "type": "forbidden"}})
+            return
         if self.path != "/v1/chat/completions":
             self._send(404, {"error": {"message": "not found", "type": "not_found"}})
             return

@@ -32,7 +32,7 @@
       "budget_usd": 0,
       "owner": "coordinator",
       "allowed_internal_actions": ["read_permitted_sources", "classify_evidence", "draft_strategy", "record_unknowns", "prepare_work_packet"],
-      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation"],
+      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation", "self_modification", "authority_or_budget_expansion"],
       "approval_gate": "human_overseer_recorded_approval",
       "independent_verifier": "sentinel",
       "input_contract": {
@@ -66,7 +66,7 @@
       "budget_usd": 0,
       "owner": "coordinator",
       "allowed_internal_actions": ["analyze_approved_audience_evidence", "draft_content", "prepare_distribution_plan", "measure_approved_metrics", "record_claim_checks"],
-      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation"],
+      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation", "self_modification", "authority_or_budget_expansion"],
       "approval_gate": "human_overseer_recorded_approval",
       "independent_verifier": "sentinel",
       "input_contract": {
@@ -100,7 +100,7 @@
       "budget_usd": 0,
       "owner": "coordinator",
       "allowed_internal_actions": ["analyze_deidentified_operational_patterns", "draft_sop", "draft_response_template", "prepare_triage_plan", "record_failure_pattern"],
-      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation"],
+      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation", "self_modification", "authority_or_budget_expansion"],
       "approval_gate": "human_overseer_recorded_approval",
       "independent_verifier": "sentinel",
       "input_contract": {
@@ -134,7 +134,7 @@
       "budget_usd": 0,
       "owner": "coordinator",
       "allowed_internal_actions": ["analyze_permitted_market_evidence", "score_lead_draft", "draft_offer", "prepare_experiment", "measure_funnel_metrics"],
-      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation"],
+      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation", "self_modification", "authority_or_budget_expansion"],
       "approval_gate": "human_overseer_recorded_approval",
       "independent_verifier": "sentinel",
       "input_contract": {
@@ -168,7 +168,7 @@
       "budget_usd": 0,
       "owner": "coordinator",
       "allowed_internal_actions": ["review_evidence", "run_nonproduction_validation", "challenge_claim", "issue_hold", "record_verification_result"],
-      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation", "approve_own_proposal"],
+      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation", "self_modification", "authority_or_budget_expansion", "approve_own_proposal"],
       "approval_gate": "human_overseer_recorded_approval",
       "independent_verifier": "sentinel",
       "input_contract": {

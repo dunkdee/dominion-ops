@@ -1,0 +1,120 @@
+{
+  "schema_version": "dominion-founder-oversight-contract-v1",
+  "title": "Dominion Founder Oversight and Evidence Control",
+  "purpose": "Give the Founder one evidence-first view of Dominion missions and preserve approval gates while parallel lanes remain bounded.",
+  "authority": {
+    "human_final_authority": "Dewayne Singleton",
+    "default_behavior": "deny",
+    "autonomous_authority_expansion": false,
+    "runtime_authority_granted_by_this_contract": false,
+    "required_reference": "governance/authority_matrix.json"
+  },
+  "truth_states": ["VERIFIED", "INFERRED", "UNKNOWN", "BLOCKED"],
+  "operating_loop": [
+    "intake",
+    "context",
+    "plan",
+    "govern",
+    "execute_within_granted_authority",
+    "independent_verification",
+    "record",
+    "improve"
+  ],
+  "evidence": {
+    "required_fields": [
+      "evidence_id",
+      "mission_id",
+      "timestamp",
+      "actor",
+      "source",
+      "artifact_references",
+      "result",
+      "truth_state",
+      "risks_and_limitations",
+      "next_action",
+      "redaction_status",
+      "policy_version"
+    ],
+    "requirements": [
+      "Evidence must be retrievable by the Founder.",
+      "Assertions without evidence remain INFERRED, UNKNOWN, or BLOCKED.",
+      "Evidence records must distinguish fact, inference, recommendation, and authorization.",
+      "Evidence records must not contain secrets, credentials, private keys, tokens, raw customer records, or raw environment files.",
+      "A proposer may not be the only reviewer for a consequential action."
+    ]
+  },
+  "mission_record": {
+    "schema": "governance/schemas/founder_mission_record.schema.json",
+    "evidence_schema": "governance/schemas/founder_evidence_record.schema.json",
+    "required_gate_fields": [
+      "objective",
+      "verified_facts",
+      "unknowns_and_assumptions",
+      "risk_level",
+      "required_approvals",
+      "verification_gate",
+      "stop_conditions",
+      "rollback_conditions",
+      "memory_destination"
+    ]
+  },
+  "lanes": {
+    "intelligence": {
+      "state": "governed_reasoning_only",
+      "owner": "Nemotron",
+      "allowed": ["plan", "challenge_assumptions", "draft", "recommend_verification"],
+      "prohibited": ["external_execution", "self_approval", "authority_expansion"]
+    },
+    "context_memory": {
+      "state": "governed_memory_only",
+      "owner": "Metatron and Obsidian",
+      "allowed": ["retrieve_governed_context", "prepare_sanitized_memory_records"],
+      "prohibited": ["unreviewed_policy_change", "secret_capture", "runtime_activation"]
+    },
+    "execution": {
+      "state": "dormant_by_default",
+      "owner": "Conductor and specialist agents",
+      "allowed": ["prepare_bounded_work", "simulate", "run_approved_read_only_checks"],
+      "prohibited": ["public_publish", "customer_contact", "payment", "credential_change", "production_change"]
+    },
+    "verification": {
+      "state": "read_only",
+      "owner": "Sentinel and independent reviewers",
+      "allowed": ["collect_health_evidence", "run_tests", "report_drift"],
+      "prohibited": ["approve_own_proposal", "alter_production_state"]
+    },
+    "impact_revenue": {
+      "state": "draft_only",
+      "owner": "vertical operators",
+      "allowed": ["research", "draft", "measure_synthetic_or_permitted_results"],
+      "prohibited": ["revenue_claim_without_evidence", "public_distribution", "customer_contact"]
+    }
+  },
+  "protected_holds": {
+    "tiktok": "DISABLED",
+    "trading_and_markov": "PAPER_ONLY",
+    "wix": "RECORD_ONLY",
+    "payments": "NOT_AUTHORIZED",
+    "publications": "NOT_AUTHORIZED",
+    "customer_contact": "NOT_AUTHORIZED",
+    "credential_changes": "NOT_AUTHORIZED",
+    "production_service_changes": "NOT_AUTHORIZED"
+  },
+  "required_founder_approval_actions": [
+    "merge_to_main",
+    "deploy_production",
+    "publish_external_content",
+    "contact_customer_or_claimant",
+    "spend_or_move_money",
+    "sign_file_or_submit_legal_document",
+    "enable_live_trading",
+    "change_credentials",
+    "reactivate_suspended_or_retired_agent"
+  ],
+  "success_criteria": [
+    "Every mission has a Founder-readable record, lane assignments, evidence, risks, approval state, verification gate, and memory destination.",
+    "No lane acts beyond its recorded authority.",
+    "Parallel work is conflict-checked before any shared or irreversible write.",
+    "A mission closes only after verification evidence and follow-up obligations are recorded."
+  ]
+}

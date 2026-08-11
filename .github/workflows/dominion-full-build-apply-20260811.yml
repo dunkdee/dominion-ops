@@ -247,7 +247,9 @@ jobs:
           command -v curl >/dev/null
           available_kib="$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)"
           disk_available_kib="$(df -Pk / | awk 'NR==2 {print $4}')"
-          test "$available_kib" -ge 2500000
+          # Once the local model is loaded it legitimately occupies several GB; retain
+          # a 768 MiB safety floor while the live health and inference gates verify it.
+          test "$available_kib" -ge 786432
           test "$disk_available_kib" -ge 5000000
           curl --max-time 10 -fsS http://127.0.0.1:11434/api/version >/dev/null
           ollama pull nemotron-3-nano:4b

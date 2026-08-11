@@ -1,5 +1,5 @@
 name: Repair Obsidian Remote
-# Container-only stale-RDP repair with rollback — 2026-08-10 22:54 EDT
+# Isolated browser-native replacement canary — 2026-08-10 22:56 EDT
 
 "on":
   push:
@@ -10,24 +10,17 @@ name: Repair Obsidian Remote
 
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: foundation-vm-production
   cancel-in-progress: false
 
 jobs:
-  repair:
+  canary:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: foundation-vm-production
     steps:
-      - name: Checkout exact main
-        uses: actions/checkout@v5
-        with:
-          ref: main
-          fetch-depth: 0
-
       - name: Require protected secrets
         shell: bash
         env:
@@ -41,9 +34,8 @@ jobs:
           test -n "$VM_USER"
           test -n "$VM_SSH_KEY"
           test -n "$OBSIDIAN_PASSWORD"
-          [[ "$OBSIDIAN_PASSWORD" =~ ^[A-Za-z0-9._~!@%+=:,/-]{16,128}$ ]]
 
-      - name: Prepare SSH and password
+      - name: Prepare SSH and protected password material
         id: stage
         shell: bash
         env:
@@ -62,10 +54,10 @@ jobs:
           remote_file="/tmp/obsidian-password-${GITHUB_RUN_ID}"
           umask 077
           printf '%s' "$OBSIDIAN_PASSWORD" > "$local_file"
-          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$local_file" "$VM_USER@$VM_HOST:$remote_file"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$local_file" "$VM_USER@$VM_HOST:$remote_file"
           echo "remote_file=$remote_file" >> "$GITHUB_OUTPUT"
 
-      - name: Refresh stale remote image with rollback and verify runtime
+      - name: Run isolated LinuxServer Obsidian canary
         shell: bash
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -76,133 +68,82 @@ jobs:
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" \
             "PASSWORD_FILE='$PASSWORD_FILE' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
           set -Eeuo pipefail
-          trap 'rm -f "$PASSWORD_FILE"' EXIT
+          canary="dominion-obsidian-canary-${RUN_ID}"
+          cfg_volume="dominion_obsidian_canary_${RUN_ID}"
+          cleanup() {
+            docker rm -f "$canary" >/dev/null 2>&1 || true
+            docker volume rm "$cfg_volume" >/dev/null 2>&1 || true
+            rm -f "$PASSWORD_FILE"
+          }
+          trap cleanup EXIT
 
-          repo="$HOME/dominion-ops"
-          cd "$repo"
-          test -f docker-compose.yml
-          test -f "$PASSWORD_FILE"
           password="$(cat "$PASSWORD_FILE")"
           test -n "$password"
+          vault_source="$(docker inspect obsidian-remote --format '{{range .Mounts}}{{if eq .Destination "/vaults/Dominion"}}{{.Source}}{{end}}{{end}}')"
+          test -n "$vault_source"
+          test -d "$vault_source"
+          echo "CANARY_VAULT_SOURCE=PASS"
 
-          umask 077
-          touch .env
-          tmp="$(mktemp "$repo/.env.obsidian.XXXXXX")"
-          grep -v '^OBSIDIAN_PASSWORD=' .env > "$tmp" || true
-          printf 'OBSIDIAN_PASSWORD=%s\n' "$password" >> "$tmp"
-          chmod 600 "$tmp"
-          mv "$tmp" .env
-          docker compose config --quiet
-
-          old_id="$(docker inspect --format '{{.Image}}' obsidian-remote)"
-          test -n "$old_id"
-          rollback_tag="dominion/obsidian-remote-rollback:${RUN_ID}"
-          docker image inspect "$old_id" >/dev/null
-          docker tag "$old_id" "$rollback_tag"
-          echo "OBSIDIAN_IMAGE_SNAPSHOT=PASS old_id=$old_id rollback_tag=$rollback_tag"
-
-          switched=0
-          rollback() {
-            if [ "$switched" -ne 1 ]; then
-              return 0
-            fi
-            echo "OBSIDIAN_ROLLBACK=START"
-            docker tag "$rollback_tag" ghcr.io/sytone/obsidian-remote:latest
-            docker compose up -d --no-deps --force-recreate obsidian-remote || true
-            restored=0
-            for _ in $(seq 1 60); do
-              state="$(docker inspect --format '{{.State.Status}}' obsidian-remote 2>/dev/null || true)"
-              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 http://127.0.0.1:8083/ || true)"
-              if [ "$state" = running ] && [[ "$code" =~ ^(200|302|401)$ ]]; then
-                restored=1
-                break
-              fi
-              sleep 3
-            done
-            if [ "$restored" -eq 1 ]; then
-              echo "OBSIDIAN_ROLLBACK=PASS old_id=$old_id"
-            else
-              echo "OBSIDIAN_ROLLBACK=FAIL old_id=$old_id"
-            fi
-          }
-          fail() {
-            reason="$1"
-            echo "OBSIDIAN_REFRESH=FAIL reason=$reason"
-            docker compose ps obsidian-remote || true
-            docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} image={{.Image}} error={{.State.Error}}' obsidian-remote 2>/dev/null || true
-            docker logs --tail 120 obsidian-remote 2>&1 | sed -E 's/(password|passwd|token|secret)=([^ ]+)/\1=REDACTED/Ig' || true
-            rollback
+          docker pull lscr.io/linuxserver/obsidian:latest
+          image_id="$(docker image inspect lscr.io/linuxserver/obsidian:latest --format '{{.Id}}')"
+          test -n "$image_id"
+          exposed="$(docker image inspect lscr.io/linuxserver/obsidian:latest --format '{{json .Config.ExposedPorts}}')"
+          echo "CANARY_IMAGE_PULL=PASS image=$image_id exposed=$exposed"
+          printf '%s' "$exposed" | grep -q '3000/tcp' || { echo 'CANARY=FAIL reason=expected_http_port_missing'; exit 1; }
+          if printf '%s' "$exposed" | grep -q '3389/tcp'; then
+            echo 'CANARY=FAIL reason=legacy_xrdp_port_in_image'
             exit 1
-          }
-
-          docker compose pull obsidian-remote
-          new_id="$(docker image inspect ghcr.io/sytone/obsidian-remote:latest --format '{{.Id}}')"
-          test -n "$new_id"
-          echo "OBSIDIAN_IMAGE_PULL=PASS old_id=$old_id new_id=$new_id"
-          if [ "$new_id" = "$old_id" ]; then
-            echo "OBSIDIAN_REFRESH=FAIL reason=registry_latest_matches_stale_runtime"
-            exit 2
           fi
 
-          docker compose up -d --no-deps --force-recreate obsidian-remote
-          switched=1
+          docker volume create "$cfg_volume" >/dev/null
+          docker run -d \
+            --name "$canary" \
+            --shm-size=1g \
+            --restart=no \
+            -e PUID=1000 \
+            -e PGID=1000 \
+            -e TZ=America/New_York \
+            -e CUSTOM_USER=dominion \
+            -e PASSWORD="$password" \
+            -e TITLE='Dominion Brain Canary' \
+            -e FILE_MANAGER_PATH=/vaults/Dominion \
+            -v "$vault_source:/vaults/Dominion:ro" \
+            -v "$cfg_volume:/config" \
+            -p 127.0.0.1:18083:3000 \
+            lscr.io/linuxserver/obsidian:latest >/dev/null
 
           ready=0
           for _ in $(seq 1 120); do
-            state="$(docker inspect --format '{{.State.Status}}' obsidian-remote 2>/dev/null || true)"
-            code="$(curl -sS -u "dominion:$password" -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8083/ || true)"
+            state="$(docker inspect --format '{{.State.Status}}' "$canary" 2>/dev/null || true)"
+            code="$(curl -sS -u "dominion:$password" -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:18083/ || true)"
             if [ "$state" = running ] && [[ "$code" =~ ^(200|302)$ ]]; then
               ready=1
               break
             fi
             sleep 3
           done
-          [ "$ready" -eq 1 ] || fail local_authenticated_health
-
-          active_id="$(docker inspect --format '{{.Image}}' obsidian-remote)"
-          [ "$active_id" = "$new_id" ] || fail active_image_mismatch
-
-          exposed="$(docker inspect --format '{{json .Config.ExposedPorts}}' obsidian-remote)"
-          echo "OBSIDIAN_EXPOSED_PORTS=$exposed"
-          if printf '%s' "$exposed" | grep -q '3389/tcp'; then
-            fail legacy_xrdp_port_present
+          if [ "$ready" -ne 1 ]; then
+            echo 'CANARY=FAIL reason=authenticated_http_health'
+            docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} error={{.State.Error}}' "$canary" 2>/dev/null || true
+            docker logs --tail 120 "$canary" 2>&1 | sed -E 's/(password|passwd|token|secret)=([^ ]+)/\1=REDACTED/Ig' || true
+            exit 1
           fi
-          printf '%s' "$exposed" | grep -q '8080/tcp' || fail expected_web_port_missing
 
-          legacy_processes="$(docker exec obsidian-remote sh -lc "ps -ef 2>/dev/null | grep -E '[g]uacd|[x]rdp' || true" 2>/dev/null || true)"
-          [ -z "$legacy_processes" ] || fail legacy_rdp_process_present
+          unauth="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:18083/ || true)"
+          test "$unauth" = 401 || { echo "CANARY=FAIL reason=auth_not_enforced status=$unauth"; exit 1; }
 
-          unauth="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8083/ || true)"
-          [ "$unauth" = 401 ] || fail local_auth_not_enforced
+          legacy="$(docker exec "$canary" sh -lc "ps -ef 2>/dev/null | grep -E '[x]rdp|[g]uacd' || true" 2>/dev/null || true)"
+          test -z "$legacy" || { echo 'CANARY=FAIL reason=legacy_rdp_process_present'; exit 1; }
 
-          sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-          getent ahostsv4 vault.dominionhealing.org >/dev/null
+          mount_rw="$(docker inspect "$canary" --format '{{range .Mounts}}{{if eq .Destination "/vaults/Dominion"}}{{.RW}}{{end}}{{end}}')"
+          test "$mount_rw" = false || { echo 'CANARY=FAIL reason=vault_not_read_only'; exit 1; }
+          note_count="$(docker exec "$canary" sh -lc "find /vaults/Dominion -type f -name '*.md' 2>/dev/null | wc -l" | tr -d '[:space:]')"
+          test "${note_count:-0}" -gt 0 || { echo 'CANARY=FAIL reason=vault_notes_not_visible'; exit 1; }
 
-          public=0
-          for _ in $(seq 1 40); do
-            code="$(curl -sS -u "dominion:$password" -o /dev/null -w '%{http_code}' --max-time 15 https://vault.dominionhealing.org || true)"
-            if [[ "$code" =~ ^(200|302)$ ]]; then
-              public=1
-              break
-            fi
-            sleep 3
-          done
-          [ "$public" -eq 1 ] || fail public_authenticated_route
-
-          public_unauth="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 https://vault.dominionhealing.org || true)"
-          [ "$public_unauth" = 401 ] || fail public_auth_not_enforced
-
-          echo "OBSIDIAN_REFRESH=PASS image=$new_id legacy_rdp=absent local_auth=pass public_auth=pass vault=preserved"
+          echo "OBSIDIAN_BROWSER_CANARY=PASS image=$image_id auth=pass legacy_rdp=absent vault_readonly=true notes=$note_count"
           REMOTE
 
-      - name: Record success
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue comment 84 --repo "$GITHUB_REPOSITORY" --body "Obsidian Remote stale-RDP refresh passed. The current upstream image is running; legacy XRDP/guacd runtime is absent; local and public authentication checks passed; the vault mount was preserved. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" || true
-
-      - name: Cleanup
+      - name: Cleanup access material
         if: always()
         shell: bash
         env:

@@ -258,7 +258,8 @@ jobs:
           install -m 644 "$remote_tmp/nemotron_worker.py" "$HOME/dominion/apps/nemotron-worker/nemotron_worker.py"
           sudo install -m 644 "$remote_tmp/dominion-nemotron.service" /etc/systemd/system/dominion-nemotron.service
           sudo systemctl daemon-reload
-          sudo systemctl enable --now dominion-nemotron.service >/dev/null
+          sudo systemctl enable dominion-nemotron.service >/dev/null
+          sudo systemctl restart dominion-nemotron.service
           for attempt in $(seq 1 30); do
             if curl --max-time 10 -fsS http://127.0.0.1:11435/health >/dev/null 2>&1; then break; fi
             test "$attempt" -lt 30

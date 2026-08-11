@@ -1,10 +1,8 @@
 name: Dominion Vault Read-Only Inventory
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/dominion-vault-readonly-inventory-20260811.yml'
+  issues:
+    types: [opened]
 
 permissions:
   contents: read
@@ -12,6 +10,7 @@ permissions:
 
 jobs:
   inventory:
+    if: github.event.issue.title == 'RUN Dominion Vault Read-Only Inventory'
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 10
     steps:

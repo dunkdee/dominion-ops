@@ -1,789 +1,348 @@
-name: Dominion Provenance Repair 145 Collector
+name: Dominion Canonical Parity — GitHub + VM + Laptop
 
 on:
-  push:
+  pull_request:
     branches: [main]
     paths:
+      - 'scripts/sync_dominion_laptop.ps1'
+      - 'scripts/quarantine_dominion_laptop_repo.ps1'
+      - 'scripts/quarantine_vm_repo_state.sh'
+      - 'scripts/render_dominion_brain.py'
+      - 'scripts/check_brain_inputs.py'
+      - 'brain/**'
+      - 'agents/registry.json'
+      - 'governance/**'
       - '.github/workflows/sync-dominion-laptop.yml'
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      confirm:
-        description: Type exactly COLLECT_PROVENANCE_145
-        required: true
-        type: string
 
 permissions:
   contents: read
-  issues: write
 
 concurrency:
-  group: dominion-provenance-repair-145-${{ github.ref }}
+  group: dominion-canonical-parity-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  publish-run-pointer:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
+  validate-scripts:
+    runs-on: windows-latest
+    timeout-minutes: 10
     steps:
-      - name: Record governed run URL on issue 145
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          body="Provenance repair collector run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} (source \`${GITHUB_SHA}\`; read-only collection; no deployment)."
-          BODY="$body" python3 - <<'PY' > "$RUNNER_TEMP/comment.json"
-          import json,os
-          print(json.dumps({'body':os.environ['BODY']}))
-          PY
-          curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "Accept: application/vnd.github+json" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/145/comments" \
-            --data @"$RUNNER_TEMP/comment.json" >/dev/null
-
-  collect-laptop-source:
-    if: ${{ false }}
-    runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 20
-    environment: dominion-laptop-production
-    steps:
-      - name: Collect allowlisted source and scan for secrets
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Parse governed laptop scripts
         shell: powershell
         run: |
-          $ErrorActionPreference = 'Stop'
-          Set-StrictMode -Version Latest
-
-          $archive = 'C:\Users\Dell\Dominion-Archive\foundation-vm\2026-07-30\dominion-strategizer-source.tar.gz'
-          $voltEdgeRoot = 'C:\Users\Dell\buddy_core\voltedge'
-          $stage = Join-Path $env:RUNNER_TEMP ("dominion-provenance-145-{0}-{1}" -f $env:GITHUB_RUN_ID,$env:GITHUB_RUN_ATTEMPT)
-          $payload = Join-Path $stage 'payload'
-          $raw = Join-Path $stage 'strategizer-raw'
-          New-Item -ItemType Directory -Path $payload,$raw -Force | Out-Null
-          "stage=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-          $archiveAccess = 'UNKNOWN'
-          $archiveHash = ''
-          $archiveBytes = 0
-          $members = @()
-          $allowedArchiveFiles = @()
-          try {
-            if (Test-Path -LiteralPath $archive -PathType Leaf) {
-              $archiveAccess = 'PASS'
-            } else {
-              $archiveAccess = 'MISSING'
-            }
-          } catch [System.UnauthorizedAccessException] {
-            $archiveAccess = 'BLOCKED_ACL'
-            Write-Host 'STRATEGIZER_LAPTOP_ARCHIVE=BLOCKED_ACL'
-          }
-          if (-not (Test-Path -LiteralPath $voltEdgeRoot -PathType Container)) { throw 'VoltEdge governed source root missing' }
-
-          $expectedVoltEdge = [ordered]@{
-            've_constants.py' = '56e713fb1c9cadcd4615a6896343c488b07ba3aee8aeb9466d0818aba8899f7d'
-            've_content_engine.py' = '41f0037fd986ef7e0b0cf71f272a7e3ad10df56f0718dbf19df06d4e0444f636'
-            've_orchestrator.py' = '40b6a960d8f388a1f92e03bdcd7aff25127703e10c5cfce0f63d27f24f50ee06'
-            've_product_catalog.py' = '269a9e45e82a47191b222ac6db8f65eead2d6d6cf9f2a86e17188820123a3ef2'
-            've_seo_blog_engine.py' = 'e199906bc81d4e13075714f951930dba13fabf10cd3c2a8e6b75944532955096'
-            've_shopping_feed.py' = '21f0bbc6af2406d14cd98676a1f1fbfad0eb0324b0a823cbdf394033049f8a8b'
-            've_social_distributor.py' = '9c986cae0397f2fc0334a85bb1372f0b5685b48f94ac1238b017e4aebd52d202'
-          }
-
-          $voltDest = Join-Path $payload 'application\voltedge'
-          New-Item -ItemType Directory -Path $voltDest -Force | Out-Null
-          $voltEvidence = @()
-          foreach ($name in $expectedVoltEdge.Keys) {
-            $source = Join-Path $voltEdgeRoot $name
-            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing allowlisted VoltEdge file: $name" }
-            $actual = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actual -ne $expectedVoltEdge[$name]) { throw "VoltEdge hash mismatch: $name" }
-            Copy-Item -LiteralPath $source -Destination (Join-Path $voltDest $name)
-            $voltEvidence += [ordered]@{ path = "application/voltedge/$name"; sha256 = $actual; classification = 'EXPERIMENTAL' }
-          }
-
-          if ($archiveAccess -eq 'PASS') {
-          $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          $archiveBytes = (Get-Item -LiteralPath $archive).Length
-          $memberList = Join-Path $stage 'archive-members.txt'
-          & tar.exe -tf $archive | Out-File -LiteralPath $memberList -Encoding utf8
-          if ($LASTEXITCODE -ne 0) { throw 'Strategizer archive list failed' }
-          $members = @(Get-Content -LiteralPath $memberList)
-          if ($members.Count -eq 0) { throw 'Strategizer archive is empty' }
-          $unsafeMember = $members | Where-Object { $_ -match '(^/|^[A-Za-z]:|(^|[\\/])\.\.([\\/]|$))' } | Select-Object -First 1
-          if ($unsafeMember) { throw 'Strategizer archive path traversal or absolute member detected' }
-          & tar.exe -xf $archive -C $raw
-          if ($LASTEXITCODE -ne 0) { throw 'Strategizer archive extraction failed' }
-
-          $allArchiveFiles = @(Get-ChildItem -LiteralPath $raw -Recurse -File -Force)
-          $unsafeNamePattern = '(?i)(^|[\\/])\.env($|\.)|\.(pem|key|p12|pfx)$|credential|secret|token|oauth|cookie|session'
-          $unsafeNames = @($allArchiveFiles | Where-Object { $_.FullName -match $unsafeNamePattern })
-          if ($unsafeNames.Count -gt 0) {
-            $unsafeNames | ForEach-Object { Write-Host ("SECRET_SCAN_BLOCKED_PATH=" + $_.Name) }
-            throw "Secret-sensitive filenames detected: $($unsafeNames.Count)"
-          }
-
-          $allowedExtensions = @('.py','.js','.ts','.tsx','.jsx','.json','.yaml','.yml','.toml','.ini','.cfg','.md','.txt','.html','.css','.sh','.ps1')
-          $allowedNames = @('Dockerfile','requirements.txt','pyproject.toml','package.json','package-lock.json','.gitignore','.dockerignore')
-          $allowedArchiveFiles = @($allArchiveFiles | Where-Object {
-            ($allowedExtensions -contains $_.Extension.ToLowerInvariant()) -or ($allowedNames -contains $_.Name)
-          })
-          if ($allowedArchiveFiles.Count -eq 0) { throw 'No allowlisted Strategizer source files found' }
-
-          $strategizerDest = Join-Path $payload 'application\strategizer'
-          New-Item -ItemType Directory -Path $strategizerDest -Force | Out-Null
-          foreach ($file in $allowedArchiveFiles) {
-            $relative = $file.FullName.Substring($raw.Length).TrimStart([char[]]@('\','/'))
-            $destination = Join-Path $strategizerDest $relative
-            New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
-            Copy-Item -LiteralPath $file.FullName -Destination $destination
-          }
-          }
-
-          $secretRules = @(
-            [ordered]@{ name='private_key'; regex='-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----' },
-            [ordered]@{ name='aws_access_key'; regex='(?:AKIA|ASIA)[0-9A-Z]{16}' },
-            [ordered]@{ name='github_token'; regex='gh[pousr]_[A-Za-z0-9_]{20,}' },
-            [ordered]@{ name='google_api_key'; regex='AIza[0-9A-Za-z_\-]{30,}' },
-            [ordered]@{ name='stripe_secret'; regex='sk_(?:live|test)_[0-9A-Za-z]{16,}' },
-            [ordered]@{ name='slack_token'; regex='xox[baprs]-[0-9A-Za-z-]{10,}' },
-            [ordered]@{ name='openai_key'; regex='sk-(?:proj-)?[0-9A-Za-z_\-]{20,}' },
-            [ordered]@{ name='jwt'; regex='eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}' },
-            [ordered]@{ name='hardcoded_secret_assignment'; regex='(?i)(api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|refresh[_-]?token)\s*[:=]\s*["''][^"'']{16,}["'']' }
-          )
-          $scanFindings = @()
-          $scanFiles = @(Get-ChildItem -LiteralPath (Join-Path $payload 'application') -Recurse -File -Force)
-          foreach ($file in $scanFiles) {
-            $text = [IO.File]::ReadAllText($file.FullName)
-            foreach ($rule in $secretRules) {
-              if ([regex]::IsMatch($text, $rule.regex)) {
-                $relative = $file.FullName.Substring($payload.Length).TrimStart([char[]]@('\','/')) -replace '\\','/'
-                $scanFindings += [ordered]@{ path=$relative; rule=$rule.name }
-              }
+          foreach ($path in @('scripts/sync_dominion_laptop.ps1','scripts/quarantine_dominion_laptop_repo.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              exit 1
             }
           }
-          if ($scanFindings.Count -gt 0) {
-            $scanFindings | ForEach-Object { Write-Host ("SECRET_SCAN_BLOCKED_FILE={0} RULE={1}" -f $_.path,$_.rule) }
-            throw "Secret scan findings detected: $($scanFindings.Count)"
-          }
+          Write-Host 'LAPTOP_PARITY_SCRIPTS_PARSE=PASS'
+      - name: Validate VM quarantine shell syntax
+        shell: bash
+        run: bash -n scripts/quarantine_vm_repo_state.sh
 
-          $fileHashes = @()
-          foreach ($file in (Get-ChildItem -LiteralPath (Join-Path $payload 'application') -Recurse -File -Force | Sort-Object FullName)) {
-            $relative = $file.FullName.Substring($payload.Length).TrimStart([char[]]@('\','/')) -replace '\\','/'
-            $fileHashes += [ordered]@{
-              path = $relative
-              bytes = $file.Length
-              sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            }
-          }
-
-          $provenanceDir = Join-Path $payload 'provenance'
-          New-Item -ItemType Directory -Path $provenanceDir -Force | Out-Null
-          $manifest = [ordered]@{
-            schema = 'dominion-provenance-repair-145-laptop-v1'
-            generated_at_utc = [DateTime]::UtcNow.ToString('o')
-            mode = 'read_only_source_collection'
-            source_mutation = $false
-            archive = [ordered]@{
-              restore_path = $archive
-              access_status = $archiveAccess
-              sha256 = $archiveHash
-              bytes = $archiveBytes
-              member_count = $members.Count
-              allowlisted_file_count = $allowedArchiveFiles.Count
-            }
-            voltedge = $voltEvidence
-            secret_scan = [ordered]@{
-              status = 'PASS'
-              scanned_files = $scanFiles.Count
-              findings = 0
-              rule_names = @($secretRules | ForEach-Object { $_.name })
-            }
-            files = $fileHashes
-          }
-          $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $provenanceDir 'laptop-source-manifest.json') -Encoding utf8
-          Write-Host ("PROVENANCE_LAPTOP=PASS archive_sha256={0} archive_bytes={1} files={2} secret_findings=0" -f $archiveHash,$archiveBytes,$fileHashes.Count)
-
-      - name: Upload secret-scanned source evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: dominion-provenance-145-laptop-${{ github.run_id }}
-          path: ${{ env.stage }}\payload
-          if-no-files-found: error
-          include-hidden-files: true
-          retention-days: 1
-          compression-level: 9
-
-      - name: Remove temporary laptop staging
-        if: always()
-        shell: powershell
-        run: |
-          $stage = '${{ env.stage }}'
-          if ($stage -and (Test-Path -LiteralPath $stage)) { Remove-Item -LiteralPath $stage -Recurse -Force }
-
-  collect-deployed-strategizer-source:
-    if: ${{ github.event_name == 'push' || inputs.confirm == 'COLLECT_PROVENANCE_145' }}
+  build-canonical-brain:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    environment: foundation-vm-production
+    timeout-minutes: 10
+    outputs:
+      brain_digest: ${{ steps.brain.outputs.digest }}
+      agent_count: ${{ steps.brain.outputs.agent_count }}
     steps:
-      - name: Recover exact Cloud Run build source and scan for secrets
-        shell: bash
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          test -n "$VM_HOST"
-          test -n "$VM_USER"
-          test -n "$VM_SSH_KEY"
-          install -m 700 -d "$HOME/.ssh"
-          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
-          chmod 600 "$HOME/.ssh/foundation_vm_key"
-          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/known_hosts"
-
-          stage="$RUNNER_TEMP/dominion-deployed-source-145-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          install -m 700 -d "$stage"
-          echo "deployed_source_stage=$stage" >> "$GITHUB_ENV"
-          remote_zip="/tmp/dominion-strategizer-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.zip"
-          source_zip="$stage/deployed-source.zip"
-          metadata="$stage/runtime-source-metadata.json"
-
-          ssh -i "$HOME/.ssh/foundation_vm_key" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=20 \
-            "$VM_USER@$VM_HOST" "REMOTE_ZIP='$remote_zip' bash -se" > "$metadata" <<'REMOTE'
-          set -euo pipefail
-          project='dominion-ascendant'
-          region='us-central1'
-          service='dominion-strategizer'
-          service_json="$(mktemp)"
-          revision_json="$(mktemp)"
-          trap 'rm -f "$service_json" "$revision_json"' EXIT
-          chmod 600 "$service_json" "$revision_json"
-          gcloud run services describe "$service" --project "$project" --region "$region" --format=json > "$service_json"
-          revision=$(python3 - "$service_json" <<'PY'
-          import json,sys
-          d=json.load(open(sys.argv[1],encoding='utf-8'))
-          print(d.get('status',{}).get('latestReadyRevisionName',''))
-          PY
-          )
-          test -n "$revision"
-          gcloud run revisions describe "$revision" --project "$project" --region "$region" --format=json > "$revision_json"
-          source_uri=$(python3 - "$service_json" "$revision_json" <<'PY'
-          import json,sys
-          service=json.load(open(sys.argv[1],encoding='utf-8'))
-          revision=json.load(open(sys.argv[2],encoding='utf-8'))
-          raw=''
-          for source in (
-              revision.get('metadata',{}).get('annotations',{}),
-              service.get('spec',{}).get('template',{}).get('metadata',{}).get('annotations',{}),
-              service.get('metadata',{}).get('annotations',{}),
-          ):
-              raw=source.get('run.googleapis.com/build-source-location','')
-              if raw:
-                  break
-          if not raw:
-              raise SystemExit('Cloud Run build source location missing')
-          locations=json.loads(raw)
-          if len(locations)!=1:
-              raise SystemExit('expected exactly one build source object')
-          print(next(iter(locations.values())))
-          PY
-          )
-          test -n "$source_uri"
-          gcloud storage cp "$source_uri" "$REMOTE_ZIP" >/dev/null
-          chmod 600 "$REMOTE_ZIP"
-          python3 - "$service_json" "$revision_json" "$REMOTE_ZIP" <<'PY'
-          import datetime,hashlib,json,os,sys
-          service=json.load(open(sys.argv[1],encoding='utf-8'))
-          revision=json.load(open(sys.argv[2],encoding='utf-8'))
-          archive=sys.argv[3]
-          annotation_sources=[
-              service.get('metadata',{}).get('annotations',{}),
-              service.get('spec',{}).get('template',{}).get('metadata',{}).get('annotations',{}),
-              revision.get('metadata',{}).get('annotations',{}),
-          ]
-          annotations={}
-          for source in annotation_sources:
-              annotations.update(source)
-          locations=json.loads(annotations['run.googleapis.com/build-source-location'])
-          source_uri=next(iter(locations.values()))
-          containers=revision.get('spec',{}).get('containers') or []
-          image=containers[0].get('image','') if containers else ''
-          h=hashlib.sha256()
-          with open(archive,'rb') as f:
-              for chunk in iter(lambda:f.read(1024*1024),b''):
-                  h.update(chunk)
-          out={
-              'schema':'dominion-provenance-repair-145-deployed-source-v1',
-              'generated_at_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),
-              'project':'dominion-ascendant',
-              'region':'us-central1',
-              'service':'dominion-strategizer',
-              'latest_ready_revision':service.get('status',{}).get('latestReadyRevisionName',''),
-              'image':image,
-              'image_digest':revision.get('status',{}).get('imageDigest',''),
-              'build_id':annotations.get('run.googleapis.com/build-id',''),
-              'build_name':annotations.get('run.googleapis.com/build-name',''),
-              'source_location':source_uri,
-              'source_archive_sha256':h.hexdigest(),
-              'source_archive_bytes':os.path.getsize(archive),
-          }
-          print(json.dumps(out,indent=2,sort_keys=True))
-          PY
-          REMOTE
-
-          scp -i "$HOME/.ssh/foundation_vm_key" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=20 \
-            "$VM_USER@$VM_HOST:$remote_zip" "$source_zip"
-          ssh -i "$HOME/.ssh/foundation_vm_key" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=20 \
-            "$VM_USER@$VM_HOST" "rm -f -- '$remote_zip'"
-
-          python3 - "$source_zip" "$metadata" "$stage" <<'PY'
-          import hashlib,json,re,shutil,sys,zipfile
-          from pathlib import Path,PurePosixPath
-
-          archive=Path(sys.argv[1])
-          metadata_path=Path(sys.argv[2])
-          stage=Path(sys.argv[3])
-          metadata=json.loads(metadata_path.read_text(encoding='utf-8'))
-          actual=hashlib.sha256(archive.read_bytes()).hexdigest()
-          if actual != metadata['source_archive_sha256']:
-              raise SystemExit('deployed source archive hash mismatch after transfer')
-          if archive.stat().st_size != metadata['source_archive_bytes']:
-              raise SystemExit('deployed source archive byte mismatch after transfer')
-
-          raw=stage/'raw'
-          payload=stage/'payload'
-          dest=payload/'application'/'strategizer'
-          raw.mkdir(parents=True,exist_ok=True)
-          dest.mkdir(parents=True,exist_ok=True)
-          allowed_ext={'.py','.js','.ts','.tsx','.jsx','.json','.yaml','.yml','.toml','.ini','.cfg','.md','.txt','.html','.css','.sh','.ps1'}
-          allowed_names={'Dockerfile','requirements.txt','pyproject.toml','package.json','package-lock.json','.gitignore','.dockerignore'}
-          blocked_name=re.compile(r'(?i)(^|/)\.env($|\.)|\.(pem|key|p12|pfx)$|(^|/)(credentials|secrets?|tokens?|cookies?|sessions?)\.(json|ya?ml|txt)$')
-          rules={
-              'private_key':re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'),
-              'aws_access_key':re.compile(r'(?:AKIA|ASIA)[0-9A-Z]{16}'),
-              'github_token':re.compile(r'gh[pousr]_[A-Za-z0-9_]{20,}'),
-              'google_api_key':re.compile(r'AIza[0-9A-Za-z_-]{30,}'),
-              'stripe_secret':re.compile(r'sk_(?:live|test)_[0-9A-Za-z]{16,}'),
-              'slack_token':re.compile(r'xox[baprs]-[0-9A-Za-z-]{10,}'),
-              'openai_key':re.compile(r'sk-(?:proj-)?[0-9A-Za-z_-]{20,}'),
-              'jwt':re.compile(r'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'),
-              'hardcoded_secret_assignment':re.compile(r'''(?i)(api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|refresh[_-]?token)\s*[:=]\s*["'][^"']{16,}["']'''),
-          }
-          selected=[]
-          findings=[]
-          total_uncompressed=0
-          with zipfile.ZipFile(archive) as z:
-              for info in z.infolist():
-                  if info.is_dir():
-                      continue
-                  if info.flag_bits & 1:
-                      raise SystemExit('encrypted source archive member detected')
-                  p=PurePosixPath(info.filename.replace('\\','/'))
-                  if p.is_absolute() or '..' in p.parts:
-                      raise SystemExit('source archive path traversal detected')
-                  rel=p.as_posix().lstrip('./')
-                  if not rel or any(x in p.parts for x in ('.git','.venv','venv','node_modules','__pycache__','__MACOSX')):
-                      continue
-                  if blocked_name.search(rel):
-                      findings.append((rel,'blocked_filename'))
-                      continue
-                  if p.suffix.lower() not in allowed_ext and p.name not in allowed_names:
-                      continue
-                  total_uncompressed += info.file_size
-                  if info.file_size > 20*1024*1024 or total_uncompressed > 100*1024*1024:
-                      raise SystemExit('deployed source archive exceeds bounded extraction limit')
-                  data=z.read(info)
-                  try:
-                      text=data.decode('utf-8')
-                  except UnicodeDecodeError:
-                      findings.append((rel,'non_utf8_source'))
-                      continue
-                  for name,rule in rules.items():
-                      if rule.search(text):
-                          findings.append((rel,name))
-                  selected.append((p,data))
-          if findings:
-              for path,rule in findings:
-                  print(f'SECRET_SCAN_BLOCKED_FILE={path} RULE={rule}')
-              raise SystemExit(f'secret scan findings detected: {len(findings)}')
-          if not selected:
-              raise SystemExit('no allowlisted deployed source files found')
-
-          prefixes={p.parts[0] for p,_ in selected if len(p.parts)>1}
-          strip_prefix=next(iter(prefixes)) if len(prefixes)==1 and all(len(p.parts)>1 for p,_ in selected) else None
-          file_records=[]
-          for p,data in selected:
-              parts=p.parts[1:] if strip_prefix and p.parts[0]==strip_prefix else p.parts
-              rel=PurePosixPath(*parts)
-              target=dest.joinpath(*rel.parts)
-              target.parent.mkdir(parents=True,exist_ok=True)
-              target.write_bytes(data)
-              file_records.append({
-                  'path':(PurePosixPath('application/strategizer')/rel).as_posix(),
-                  'bytes':len(data),
-                  'sha256':hashlib.sha256(data).hexdigest(),
-              })
-          metadata['secret_scan']={
-              'status':'PASS',
-              'scanned_files':len(selected),
-              'findings':0,
-              'rule_names':sorted(rules),
-          }
-          metadata['files']=sorted(file_records,key=lambda x:x['path'])
-          provenance=payload/'provenance'
-          provenance.mkdir(parents=True,exist_ok=True)
-          (provenance/'deployed-source-manifest.json').write_text(json.dumps(metadata,indent=2,sort_keys=True)+'\n',encoding='utf-8')
-          print('DEPLOYED_SOURCE=PASS files=%d source_sha256=%s secret_findings=0' % (len(selected),actual))
-          PY
-
-      - name: Upload exact secret-scanned deployed source
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/checkout@v5
         with:
-          name: dominion-provenance-145-deployed-source-${{ github.run_id }}
-          path: ${{ env.deployed_source_stage }}/payload
-          if-no-files-found: error
-          include-hidden-files: true
-          retention-days: 1
-          compression-level: 9
-
-      - name: Remove temporary deployed-source material
-        if: always()
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Render and verify canonical Brain
+        id: brain
         shell: bash
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-        run: |
-          set +e
-          remote_zip="/tmp/dominion-strategizer-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.zip"
-          if [ -f "$HOME/.ssh/foundation_vm_key" ]; then
-            ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" "rm -f -- '$remote_zip'" >/dev/null 2>&1
-          fi
-          rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"
-          stage='${{ env.deployed_source_stage }}'
-          if [ -n "$stage" ] && [ -d "$stage" ]; then rm -rf -- "$stage"; fi
-
-  collect-vm-voltedge-source:
-    if: ${{ github.event_name == 'push' || inputs.confirm == 'COLLECT_PROVENANCE_145' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    environment: foundation-vm-production
-    steps:
-      - name: Recover hash-locked VoltEdge source from Foundation VM
-        shell: bash
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
         run: |
           set -euo pipefail
-          test -n "$VM_HOST"
-          test -n "$VM_USER"
-          test -n "$VM_SSH_KEY"
-          install -m 700 -d "$HOME/.ssh"
-          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
-          chmod 600 "$HOME/.ssh/foundation_vm_key"
-          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/known_hosts"
-
-          stage="$RUNNER_TEMP/dominion-voltedge-source-145-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          raw="$stage/raw"
-          install -m 700 -d "$raw"
-          echo "voltedge_stage=$stage" >> "$GITHUB_ENV"
-          source_root=$(ssh -i "$HOME/.ssh/foundation_vm_key" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=20 \
-            "$VM_USER@$VM_HOST" 'python3 -' <<'PY'
-          import hashlib,os,sys
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          root="$RUNNER_TEMP/canonical-brain"
+          target="$root/Dominion-Brain"
+          python scripts/check_brain_inputs.py
+          python scripts/render_dominion_brain.py "$target"
+          read -r digest agent_count <<EOF
+          $(python - "$target/MANIFEST.json" <<'PY'
+          import json,sys
           from pathlib import Path
-          home=Path.home()
-          expected={
-              've_constants.py':'56e713fb1c9cadcd4615a6896343c488b07ba3aee8aeb9466d0818aba8899f7d',
-              've_content_engine.py':'41f0037fd986ef7e0b0cf71f272a7e3ad10df56f0718dbf19df06d4e0444f636',
-              've_orchestrator.py':'40b6a960d8f388a1f92e03bdcd7aff25127703e10c5cfce0f63d27f24f50ee06',
-              've_product_catalog.py':'269a9e45e82a47191b222ac6db8f65eead2d6d6cf9f2a86e17188820123a3ef2',
-              've_seo_blog_engine.py':'e199906bc81d4e13075714f951930dba13fabf10cd3c2a8e6b75944532955096',
-              've_shopping_feed.py':'21f0bbc6af2406d14cd98676a1f1fbfad0eb0324b0a823cbdf394033049f8a8b',
-              've_social_distributor.py':'9c986cae0397f2fc0334a85bb1372f0b5685b48f94ac1238b017e4aebd52d202',
-          }
-          skip={'.git','.cache','.npm','.local','node_modules','venv','.venv','__pycache__'}
-          matches=[]
-          for root,dirs,files in os.walk(home):
-              rel=Path(root).relative_to(home)
-              if len(rel.parts)>=9:
-                  dirs[:]=[]
-              else:
-                  dirs[:]=[d for d in dirs if d not in skip]
-              if 've_constants.py' not in files:
-                  continue
-              base=Path(root)
-              ok=True
-              for name,want in expected.items():
-                  path=base/name
-                  if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=want:
-                      ok=False
-                      break
-              if ok:
-                  matches.append(base)
-          if len(matches)!=1:
-              raise SystemExit(f'expected one exact VoltEdge source root, found {len(matches)}')
-          print(matches[0])
-          PY
-          )
-          test -n "$source_root"
-          for name in \
-            ve_constants.py \
-            ve_content_engine.py \
-            ve_orchestrator.py \
-            ve_product_catalog.py \
-            ve_seo_blog_engine.py \
-            ve_shopping_feed.py \
-            ve_social_distributor.py
-          do
-            scp -i "$HOME/.ssh/foundation_vm_key" \
-              -o BatchMode=yes \
-              -o IdentitiesOnly=yes \
-              -o StrictHostKeyChecking=yes \
-              -o ConnectTimeout=20 \
-              "$VM_USER@$VM_HOST:$source_root/$name" "$raw/$name"
-          done
-
-          python3 - "$raw" "$stage" <<'PY'
-          import datetime,hashlib,json,re,shutil,sys
-          from pathlib import Path
-          raw=Path(sys.argv[1])
-          stage=Path(sys.argv[2])
-          expected={
-              've_constants.py':'56e713fb1c9cadcd4615a6896343c488b07ba3aee8aeb9466d0818aba8899f7d',
-              've_content_engine.py':'41f0037fd986ef7e0b0cf71f272a7e3ad10df56f0718dbf19df06d4e0444f636',
-              've_orchestrator.py':'40b6a960d8f388a1f92e03bdcd7aff25127703e10c5cfce0f63d27f24f50ee06',
-              've_product_catalog.py':'269a9e45e82a47191b222ac6db8f65eead2d6d6cf9f2a86e17188820123a3ef2',
-              've_seo_blog_engine.py':'e199906bc81d4e13075714f951930dba13fabf10cd3c2a8e6b75944532955096',
-              've_shopping_feed.py':'21f0bbc6af2406d14cd98676a1f1fbfad0eb0324b0a823cbdf394033049f8a8b',
-              've_social_distributor.py':'9c986cae0397f2fc0334a85bb1372f0b5685b48f94ac1238b017e4aebd52d202',
-          }
-          rules={
-              'private_key':re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'),
-              'aws_access_key':re.compile(r'(?:AKIA|ASIA)[0-9A-Z]{16}'),
-              'github_token':re.compile(r'gh[pousr]_[A-Za-z0-9_]{20,}'),
-              'google_api_key':re.compile(r'AIza[0-9A-Za-z_-]{30,}'),
-              'stripe_secret':re.compile(r'sk_(?:live|test)_[0-9A-Za-z]{16,}'),
-              'slack_token':re.compile(r'xox[baprs]-[0-9A-Za-z-]{10,}'),
-              'openai_key':re.compile(r'sk-(?:proj-)?[0-9A-Za-z_-]{20,}'),
-              'jwt':re.compile(r'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'),
-              'hardcoded_secret_assignment':re.compile(r'''(?i)(api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|refresh[_-]?token)\s*[:=]\s*["'][^"']{16,}["']'''),
-          }
-          findings=[]
-          records=[]
-          dest=stage/'payload'/'application'/'voltedge'
-          dest.mkdir(parents=True,exist_ok=True)
-          for name,want in expected.items():
-              path=raw/name
-              if not path.is_file():
-                  raise SystemExit(f'missing VoltEdge source: {name}')
-              data=path.read_bytes()
-              actual=hashlib.sha256(data).hexdigest()
-              if actual != want:
-                  raise SystemExit(f'VoltEdge hash mismatch: {name}')
-              text=data.decode('utf-8')
-              for rule_name,rule in rules.items():
-                  if rule.search(text):
-                      findings.append((name,rule_name))
-              (dest/name).write_bytes(data)
-              records.append({'path':f'application/voltedge/{name}','bytes':len(data),'sha256':actual,'classification':'EXPERIMENTAL'})
-          if findings:
-              for path,rule in findings:
-                  print(f'SECRET_SCAN_BLOCKED_FILE={path} RULE={rule}')
-              raise SystemExit(f'VoltEdge secret scan findings detected: {len(findings)}')
-          manifest={
-              'schema':'dominion-provenance-repair-145-voltedge-v1',
-              'generated_at_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),
-              'mode':'copy_only_from_foundation_vm',
-              'source_root':'~/buddy_core/voltedge',
-              'runtime_mutation':False,
-              'hash_relation':'exact match to laptop registry evidence in issue 145',
-              'secret_scan':{'status':'PASS','scanned_files':len(records),'findings':0,'rule_names':sorted(rules)},
-              'files':records,
-          }
-          provenance=stage/'payload'/'provenance'
-          provenance.mkdir(parents=True,exist_ok=True)
-          (provenance/'voltedge-source-manifest.json').write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n',encoding='utf-8')
-          print('VOLTEDGE_SOURCE=PASS files=7 hash_match=7 secret_findings=0')
-          PY
-
-      - name: Upload exact secret-scanned VoltEdge source
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: dominion-provenance-145-voltedge-${{ github.run_id }}
-          path: ${{ env.voltedge_stage }}/payload
-          if-no-files-found: error
-          retention-days: 1
-          compression-level: 9
-
-      - name: Remove temporary VoltEdge material
-        if: always()
-        shell: bash
-        run: |
-          rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"
-          stage='${{ env.voltedge_stage }}'
-          if [ -n "$stage" ] && [ -d "$stage" ]; then rm -rf -- "$stage"; fi
-
-  collect-runtime-provenance:
-    if: ${{ github.event_name == 'push' || inputs.confirm == 'COLLECT_PROVENANCE_145' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    environment: foundation-vm-production
-    steps:
-      - name: Collect allowlisted Cloud Run runtime identity
-        shell: bash
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          test -n "$VM_HOST"
-          test -n "$VM_USER"
-          test -n "$VM_SSH_KEY"
-          install -m 700 -d "$HOME/.ssh"
-          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
-          chmod 600 "$HOME/.ssh/foundation_vm_key"
-          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/known_hosts"
-
-          stage="$RUNNER_TEMP/dominion-provenance-145-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          install -m 700 -d "$stage"
-          echo "stage=$stage" >> "$GITHUB_ENV"
-          output="$stage/runtime-provenance.json"
-
-          ssh -i "$HOME/.ssh/foundation_vm_key" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=20 \
-            "$VM_USER@$VM_HOST" 'bash -se' > "$output" <<'REMOTE'
-          set -euo pipefail
-          project='dominion-ascendant'
-          region='us-central1'
-          service='dominion-strategizer'
-          service_json="$(mktemp)"
-          revision_json="$(mktemp)"
-          token_file="$(mktemp)"
-          trap 'rm -f "$service_json" "$revision_json" "$token_file"' EXIT
-          chmod 600 "$service_json" "$revision_json" "$token_file"
-
-          gcloud run services describe "$service" --project "$project" --region "$region" --format=json > "$service_json"
-          read -r revision url <<EOF
-          $(python3 - "$service_json" <<'PY'
-          import json,sys
-          d=json.load(open(sys.argv[1], encoding='utf-8'))
-          print(d.get('status',{}).get('latestReadyRevisionName',''), d.get('status',{}).get('url',''))
+          m=json.loads(Path(sys.argv[1]).read_text())
+          assert m['schema']=='dominion-brain-manifest-v2'
+          assert int(m['agent_count']) > 0
+          assert isinstance(m.get('files'), list) and m['files']
+          d=m['source_revision']['sha256'].lower()
+          assert len(d)==64 and all(c in '0123456789abcdef' for c in d)
+          print(d, int(m['agent_count']))
           PY
           )
           EOF
-          test -n "$revision"
-          test -n "$url"
-          gcloud run revisions describe "$revision" --project "$project" --region "$region" --format=json > "$revision_json"
-
-          public_code="$(curl --max-time 12 --silent --show-error --output /dev/null --write-out '%{http_code}' "$url" || true)"
-          auth_code='not_attempted'
-          if ! printf '%s' "$public_code" | grep -Eq '^(2|3)[0-9][0-9]$'; then
-            if gcloud auth print-identity-token > "$token_file" 2>/dev/null && test -s "$token_file"; then
-              auth_code="$(curl --max-time 12 --silent --show-error --output /dev/null --write-out '%{http_code}' -H "Authorization: Bearer $(cat "$token_file")" "$url" || true)"
-              : > "$token_file"
-            fi
-          fi
-
-          PUBLIC_CODE="$public_code" AUTH_CODE="$auth_code" PROJECT="$project" REGION="$region" SERVICE="$service" \
-          python3 - "$service_json" "$revision_json" <<'PY'
-          import datetime,json,os,sys
-          service=json.load(open(sys.argv[1], encoding='utf-8'))
-          revision=json.load(open(sys.argv[2], encoding='utf-8'))
-          sm=service.get('metadata',{})
-          ss=service.get('spec',{}).get('template',{}).get('spec',{})
-          st=service.get('status',{})
-          rm=revision.get('metadata',{})
-          rs=revision.get('spec',{})
-          rst=revision.get('status',{})
-          containers=rs.get('containers') or ss.get('containers') or []
-          image=containers[0].get('image','') if containers else ''
-          hints={}
-          for source in (sm.get('labels',{}),sm.get('annotations',{}),rm.get('labels',{}),rm.get('annotations',{})):
-              for k,v in source.items():
-                  low=k.lower()
-                  if any(term in low for term in ('source','commit','build','revision','sha')) and 'secret' not in low and 'token' not in low:
-                      hints[k]=v
-          public=os.environ.get('PUBLIC_CODE','000')
-          auth=os.environ.get('AUTH_CODE','not_attempted')
-          healthy=any(code[:1] in ('2','3') for code in (public,auth) if len(code)==3)
-          reachable=any(code not in ('000','not_attempted','') for code in (public,auth))
-          result='HEALTHY' if healthy else ('REACHABLE_RESTRICTED_OR_UNHEALTHY' if reachable else 'UNREACHABLE')
-          out={
-              'schema':'dominion-provenance-repair-145-runtime-v1',
-              'generated_at_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),
-              'mode':'read_only_runtime_collection',
-              'runtime_mutation':False,
-              'project':os.environ['PROJECT'],
-              'region':os.environ['REGION'],
-              'service':os.environ['SERVICE'],
-              'url':st.get('url',''),
-              'latest_ready_revision':st.get('latestReadyRevisionName',''),
-              'image':image,
-              'image_digest':rst.get('imageDigest',''),
-              'service_account':rs.get('serviceAccountName') or ss.get('serviceAccountName',''),
-              'ingress':sm.get('annotations',{}).get('run.googleapis.com/ingress',''),
-              'health':{
-                  'result':result,
-                  'unauthenticated_http_code':public,
-                  'authenticated_http_code':auth,
-              },
-              'source_mapping_hints':hints,
-          }
-          print(json.dumps(out,indent=2,sort_keys=True))
-          PY
-          REMOTE
-
-          python3 -m json.tool "$output" >/dev/null
-          chmod 600 "$output"
-          python3 - "$output" <<'PY'
-          import json,sys
-          d=json.load(open(sys.argv[1],encoding='utf-8'))
-          required=('service','region','url','latest_ready_revision','image','service_account','health')
-          missing=[k for k in required if not d.get(k)]
-          if missing: raise SystemExit('missing runtime fields: '+','.join(missing))
-          print('PROVENANCE_RUNTIME=PASS service=%s revision=%s health=%s' % (d['service'],d['latest_ready_revision'],d['health']['result']))
-          PY
-
-      - name: Upload sanitized runtime evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "agent_count=$agent_count" >> "$GITHUB_OUTPUT"
+          echo "GITHUB_BRAIN_DIGEST=$digest"
+          echo "GITHUB_AGENT_COUNT=$agent_count"
+      - uses: actions/upload-artifact@v4
         with:
-          name: dominion-provenance-145-runtime-${{ github.run_id }}
-          path: ${{ env.stage }}/runtime-provenance.json
+          name: dominion-canonical-brain-${{ github.run_id }}
+          path: ${{ runner.temp }}/canonical-brain/Dominion-Brain
           if-no-files-found: error
           retention-days: 1
-          compression-level: 9
 
+  sync-canonical-laptop:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [validate-scripts, build-canonical-brain]
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    environment: dominion-laptop-production
+    outputs:
+      git_sha: ${{ steps.receipt.outputs.git_sha }}
+      brain_digest: ${{ steps.receipt.outputs.brain_digest }}
+      agent_count: ${{ steps.receipt.outputs.agent_count }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: dominion-canonical-brain-${{ github.run_id }}
+          path: ${{ runner.temp }}\dominion-canonical-brain
+      - name: Verify workflow checkout and stage exact release inputs
+        id: stage
+        shell: powershell
+        run: |
+          $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          $expected = '${{ github.sha }}'.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "workflow checkout mismatch: $actual != $expected" }
+          Write-Host "GITHUB_CANONICAL_SHA=$actual"
+          Write-Host "GITHUB_BRAIN_DIGEST=${{ needs.build-canonical-brain.outputs.brain_digest }}"
+
+          git update-ref refs/heads/dominion-release $expected
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $bundle = Join-Path $env:RUNNER_TEMP ("dominion-laptop-{0}-{1}.bundle" -f $env:GITHUB_RUN_ID,$env:GITHUB_RUN_ATTEMPT)
+          git bundle create $bundle refs/heads/dominion-release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git bundle verify $bundle
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $artifactRoot = Join-Path $env:RUNNER_TEMP 'dominion-canonical-brain'
+          $manifest = Get-ChildItem -LiteralPath $artifactRoot -Filter MANIFEST.json -File -Recurse | Select-Object -First 1
+          if (-not $manifest) { throw 'canonical Brain artifact manifest missing' }
+          $brainRoot = $manifest.Directory.FullName
+          "bundle=$bundle" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "brain_root=$brainRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - name: Preserve laptop Git-visible drift locally
+        shell: powershell
+        run: |
+          & ./scripts/quarantine_dominion_laptop_repo.ps1 -RepoPath 'C:\Users\Dell\dominion-ops'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Synchronize canonical laptop repo and Brain
+        shell: powershell
+        run: |
+          & ./scripts/sync_dominion_laptop.ps1 `
+            -ExpectedSha '${{ github.sha }}' `
+            -ExpectedBrainDigest '${{ needs.build-canonical-brain.outputs.brain_digest }}' `
+            -BundlePath '${{ steps.stage.outputs.bundle }}' `
+            -BrainSourcePath '${{ steps.stage.outputs.brain_root }}'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host 'LAPTOP_SYNC_STAGE=PASS'
+      - name: Read non-secret laptop parity receipt
+        id: receipt
+        shell: powershell
+        run: |
+          $path = 'C:\Users\Dell\Documents\Dominion Command Vault\Dominion-Release-State\laptop-latest.json'
+          if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'laptop parity receipt missing' }
+          $receipt = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+          if ($receipt.schema -ne 'dominion-three-node-parity-v1') { throw 'laptop receipt schema mismatch' }
+          $gitSha = ([string]$receipt.git_sha).ToLowerInvariant()
+          $digest = ([string]$receipt.brain_source_digest).ToLowerInvariant()
+          $agentCount = [int]$receipt.agent_count
+          if ($gitSha -ne '${{ github.sha }}'.ToLowerInvariant()) { throw 'laptop receipt SHA mismatch' }
+          if ($digest -ne '${{ needs.build-canonical-brain.outputs.brain_digest }}'.ToLowerInvariant()) { throw 'laptop receipt Brain digest mismatch' }
+          if ($agentCount -ne [int]'${{ needs.build-canonical-brain.outputs.agent_count }}') { throw 'laptop receipt agent count mismatch' }
+          "git_sha=$gitSha" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "brain_digest=$digest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "agent_count=$agentCount" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "LAPTOP_PARITY=PASS git_sha=$gitSha brain_digest=$digest agents=$agentCount"
+      - name: Remove temporary release inputs
+        if: always()
+        shell: powershell
+        run: |
+          $bundle = '${{ steps.stage.outputs.bundle }}'
+          if ($bundle -and (Test-Path -LiteralPath $bundle)) { Remove-Item -LiteralPath $bundle -Force }
+          $artifact = Join-Path $env:RUNNER_TEMP 'dominion-canonical-brain'
+          if (Test-Path -LiteralPath $artifact) { Remove-Item -LiteralPath $artifact -Recurse -Force }
+
+  sync-canonical-vm-repo:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [validate-scripts, build-canonical-brain]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    outputs:
+      git_sha: ${{ steps.remote.outputs.git_sha }}
+      brain_digest: ${{ steps.remote.outputs.brain_digest }}
+      agent_count: ${{ steps.remote.outputs.agent_count }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Require protected VM connection
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+      - name: Stage exact Git bundle and drift-quarantine helper
+        id: stage
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          bundle="$RUNNER_TEMP/dominion-parity-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bundle"
+          remote_bundle="/tmp/dominion-parity-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bundle"
+          git update-ref refs/heads/dominion-release "$GITHUB_SHA"
+          git bundle create "$bundle" refs/heads/dominion-release
+          git bundle verify "$bundle"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
+
+          quarantine="$RUNNER_TEMP/quarantine-vm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.sh"
+          remote_quarantine="/tmp/quarantine-vm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.sh"
+          cp scripts/quarantine_vm_repo_state.sh "$quarantine"
+          chmod 700 "$quarantine"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$quarantine" "$VM_USER@$VM_HOST:$remote_quarantine"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "chmod 600 '$remote_bundle'; chmod 700 '$remote_quarantine'"
+          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
+          echo "remote_quarantine=$remote_quarantine" >> "$GITHUB_OUTPUT"
+      - name: Synchronize VM repo and verify canonical Brain digest
+        id: remote
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_BRAIN_DIGEST: ${{ needs.build-canonical-brain.outputs.brain_digest }}
+          EXPECTED_AGENT_COUNT: ${{ needs.build-canonical-brain.outputs.agent_count }}
+          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+          REMOTE_QUARANTINE: ${{ steps.stage.outputs.remote_quarantine }}
+        run: |
+          set -euo pipefail
+          set +e
+          result="$(ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
+            "EXPECTED_SHA='$EXPECTED_SHA' EXPECTED_BRAIN_DIGEST='$EXPECTED_BRAIN_DIGEST' EXPECTED_AGENT_COUNT='$EXPECTED_AGENT_COUNT' BUNDLE='$REMOTE_BUNDLE' QUARANTINE='$REMOTE_QUARANTINE' RUN_ID='parity-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' bash -s" 2>&1 <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f "$BUNDLE" "$QUARANTINE"; [ -z "${stage:-}" ] || rm -rf "$stage"' EXIT
+          repo="$HOME/dominion-ops"
+          test -d "$repo/.git" || { echo 'VM_PARITY=FAIL reason=repo_missing'; exit 1; }
+          RUN_ID="$RUN_ID" DOMINION_REPO="$repo" bash "$QUARANTINE" || { echo 'VM_PARITY=FAIL reason=drift_quarantine'; exit 1; }
+          cd "$repo" || { echo 'VM_PARITY=FAIL reason=repo_cd'; exit 1; }
+          git fetch "$BUNDLE" dominion-release:refs/remotes/dominion-release/main >/dev/null 2>&1 || { echo 'VM_PARITY=FAIL reason=bundle_fetch'; exit 1; }
+          git cat-file -e "${EXPECTED_SHA}^{commit}" || { echo 'VM_PARITY=FAIL reason=expected_commit_missing'; exit 1; }
+          git checkout main >/dev/null 2>&1 || { echo 'VM_PARITY=FAIL reason=checkout_main'; exit 1; }
+          git merge-base --is-ancestor HEAD "$EXPECTED_SHA" || { echo 'VM_PARITY=FAIL reason=non_fast_forward'; exit 1; }
+          git merge --ff-only "$EXPECTED_SHA" >/dev/null 2>&1 || { echo 'VM_PARITY=FAIL reason=fast_forward'; exit 1; }
+          actual_sha="$(git rev-parse HEAD)" || { echo 'VM_PARITY=FAIL reason=head_unreadable'; exit 1; }
+          test "$actual_sha" = "$EXPECTED_SHA" || { echo 'VM_PARITY=FAIL reason=sha_mismatch'; exit 1; }
+          test -z "$(git status --porcelain=v1 --untracked-files=no)" || { echo 'VM_PARITY=FAIL reason=post_sync_tracked_dirty'; exit 1; }
+
+          python3 scripts/check_brain_inputs.py >/dev/null 2>&1 || { echo 'VM_PARITY=FAIL reason=brain_input_gate'; exit 1; }
+          stage="$(mktemp -d /tmp/dominion-parity-brain.XXXXXX)" || { echo 'VM_PARITY=FAIL reason=brain_stage_create'; exit 1; }
+          python3 scripts/render_dominion_brain.py "$stage/Dominion-Brain" >/dev/null 2>&1 || { echo 'VM_PARITY=FAIL reason=brain_render'; exit 1; }
+          read -r digest agent_count <<EOF
+          $(python3 - "$stage/Dominion-Brain/MANIFEST.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          try:
+              m=json.loads(Path(sys.argv[1]).read_text())
+              assert m['schema']=='dominion-brain-manifest-v2'
+              assert isinstance(m.get('files'), list) and m['files']
+              digest=m['source_revision']['sha256'].lower()
+              agents=int(m['agent_count'])
+              assert len(digest)==64 and all(c in '0123456789abcdef' for c in digest)
+              assert agents > 0
+              print(digest, agents)
+          except Exception:
+              sys.exit(1)
+          PY
+          )
+          EOF
+          test -n "${digest:-}" && test -n "${agent_count:-}" || { echo 'VM_PARITY=FAIL reason=brain_manifest'; exit 1; }
+          test "$digest" = "$EXPECTED_BRAIN_DIGEST" || { echo 'VM_PARITY=FAIL reason=brain_digest_mismatch'; exit 1; }
+          test "$agent_count" = "$EXPECTED_AGENT_COUNT" || { echo 'VM_PARITY=FAIL reason=agent_count_mismatch'; exit 1; }
+          printf 'VM_PARITY=PASS git_sha=%s brain_digest=%s agents=%s\n' "$actual_sha" "$digest" "$agent_count"
+          REMOTE
+          )"
+          remote_rc=$?
+          set -e
+          printf '%s\n' "$result"
+          if [ "$remote_rc" -ne 0 ]; then
+            echo "VM_PARITY_REMOTE=FAIL rc=$remote_rc"
+            exit "$remote_rc"
+          fi
+          git_sha="$(printf '%s\n' "$result" | sed -n 's/^VM_PARITY=PASS git_sha=\([0-9a-f]\{40\}\) brain_digest=.*/\1/p' | tail -1)"
+          brain_digest="$(printf '%s\n' "$result" | sed -n 's/^VM_PARITY=PASS git_sha=[0-9a-f]\{40\} brain_digest=\([0-9a-f]\{64\}\) agents=.*/\1/p' | tail -1)"
+          agent_count="$(printf '%s\n' "$result" | sed -n 's/^VM_PARITY=PASS .* agents=\([0-9][0-9]*\)$/\1/p' | tail -1)"
+          test "$git_sha" = "$EXPECTED_SHA"
+          test "$brain_digest" = "$EXPECTED_BRAIN_DIGEST"
+          test "$agent_count" = "$EXPECTED_AGENT_COUNT"
+          echo "git_sha=$git_sha" >> "$GITHUB_OUTPUT"
+          echo "brain_digest=$brain_digest" >> "$GITHUB_OUTPUT"
+          echo "agent_count=$agent_count" >> "$GITHUB_OUTPUT"
       - name: Remove temporary VM access material
         if: always()
-        shell: bash
         run: |
-          rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"
-          stage='${{ env.stage }}'
-          if [ -n "$stage" ] && [ -d "$stage" ]; then rm -rf -- "$stage"; fi
+          rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/dominion-parity-*.bundle "$RUNNER_TEMP"/quarantine-vm-*.sh
+
+  verify-three-node-parity:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [build-canonical-brain, sync-canonical-laptop, sync-canonical-vm-repo]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require exact Git and Brain parity
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_DIGEST: ${{ needs.build-canonical-brain.outputs.brain_digest }}
+          EXPECTED_AGENTS: ${{ needs.build-canonical-brain.outputs.agent_count }}
+          LAPTOP_SHA: ${{ needs.sync-canonical-laptop.outputs.git_sha }}
+          LAPTOP_DIGEST: ${{ needs.sync-canonical-laptop.outputs.brain_digest }}
+          LAPTOP_AGENTS: ${{ needs.sync-canonical-laptop.outputs.agent_count }}
+          VM_SHA: ${{ needs.sync-canonical-vm-repo.outputs.git_sha }}
+          VM_DIGEST: ${{ needs.sync-canonical-vm-repo.outputs.brain_digest }}
+          VM_AGENTS: ${{ needs.sync-canonical-vm-repo.outputs.agent_count }}
+        run: |
+          set -euo pipefail
+          test "$LAPTOP_SHA" = "$EXPECTED_SHA"
+          test "$VM_SHA" = "$EXPECTED_SHA"
+          test "$LAPTOP_DIGEST" = "$EXPECTED_DIGEST"
+          test "$VM_DIGEST" = "$EXPECTED_DIGEST"
+          test "$LAPTOP_AGENTS" = "$EXPECTED_AGENTS"
+          test "$VM_AGENTS" = "$EXPECTED_AGENTS"
+          echo "THREE_NODE_PARITY=PASS github_sha=$EXPECTED_SHA vm_sha=$VM_SHA laptop_sha=$LAPTOP_SHA brain_digest=$EXPECTED_DIGEST agents=$EXPECTED_AGENTS"

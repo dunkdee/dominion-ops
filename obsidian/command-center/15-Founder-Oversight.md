@@ -7,12 +7,12 @@
 
 - objective and beneficiary
 - facts, unknowns, assumptions, risks, and truth state
-- lane owner, scope, conflict check, and current bounded state
+- lane owner, scope, conflict check, and bounded state
 - required approval and independent review
 - evidence references, verification gate, stop conditions, and rollback conditions
 - Dominion memory destination and follow-up obligations
 
-## Current governed lane states
+## Governed lane states
 
 | Lane | State | Boundary |
 |---|---|---|

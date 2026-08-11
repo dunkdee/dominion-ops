@@ -65,12 +65,36 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Verify runner Python
+      - name: Resolve existing runner Python without tool-cache install
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $python = (Get-Command python -ErrorAction Stop).Source
+          $candidates = [System.Collections.Generic.List[string]]::new()
+          foreach ($name in @('python.exe', 'py.exe')) {
+            $command = Get-Command $name -ErrorAction SilentlyContinue
+            if ($command) { [void]$candidates.Add($command.Source) }
+          }
+          foreach ($pattern in @(
+            'C:\\Users\\Dell\\AppData\\Local\\Programs\\Python\\Python*\\python.exe',
+            'C:\\Program Files\\Python*\\python.exe',
+            'C:\\Python*\\python.exe'
+          )) {
+            Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending |
+              ForEach-Object { [void]$candidates.Add($_.FullName) }
+          }
+          $python = $null
+          foreach ($candidate in $candidates | Select-Object -Unique) {
+            $version = & $candidate -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+            if ($LASTEXITCODE -eq 0 -and [version]$version -ge [version]'3.9') {
+              $python = $candidate
+              break
+            }
+          }
+          if (-not $python) { throw 'No usable Python 3.9+ was found for the runner service.' }
+          "DOMINION_PYTHON=$python" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           & $python --version
+          Write-Host "DOMINION_RUNNER_PYTHON=$python"
 
       - name: Build, dry-run, and apply the exact governed overlay
         id: apply
@@ -84,7 +108,8 @@ jobs:
           $out = Join-Path $env:RUNNER_TEMP "dominion-full-build-apply-$env:GITHUB_RUN_ID"
           New-Item -ItemType Directory -Path $out -Force | Out-Null
           'FULL_BUILD_APPLY_STARTED=true' | Set-Content -LiteralPath (Join-Path $out 'workflow-started.txt') -Encoding utf8
-          $python = (Get-Command python -ErrorAction Stop).Source
+          $python = $env:DOMINION_PYTHON
+          if (-not $python) { throw 'Resolved runner Python path is unavailable.' }
           $overlay = Join-Path $out 'canonical_manifest_v3_overlay_full_build.json'
           $founder = (Resolve-Path 'governance/registry/phase4e_founder_decisions_144.json').Path
           $strategizer = (Resolve-Path 'runtime/records/provenance_repair_145/deployed-source-manifest.json').Path

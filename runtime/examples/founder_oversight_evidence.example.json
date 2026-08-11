@@ -1,0 +1,15 @@
+{
+  "schema_version": "dominion-founder-evidence-record-v1",
+  "evidence_id": "EVD-OVERSIGHT-EXAMPLE-001",
+  "mission_id": "DOM-OVERSIGHT-EXAMPLE-001",
+  "timestamp": "2026-08-11T00:00:00Z",
+  "actor": "verification-lane",
+  "source": "runtime/examples/founder_oversight_mission.example.json",
+  "artifact_references": ["governance/founder_oversight_contract.json"],
+  "result": "Example only; no runtime validation or activation was performed.",
+  "truth_state": "UNKNOWN",
+  "risks_and_limitations": ["This record is a schema example and cannot prove live system state."],
+  "next_action": "Use a fresh, sanitized evidence record for any real mission.",
+  "redaction_status": "NOT_APPLICABLE",
+  "policy_version": "dominion-founder-oversight-contract-v1"
+}

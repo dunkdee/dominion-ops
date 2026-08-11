@@ -55,8 +55,6 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 20
     environment: dominion-laptop-production
-    env:
-      REGISTRY_EVIDENCE_DIR: ${{ runner.temp }}\\dominion-full-build-apply-${{ github.run_id }}
     outputs:
       result: ${{ steps.verify.outputs.result }}
       component_count: ${{ steps.verify.outputs.component_count }}
@@ -83,7 +81,7 @@ jobs:
           if ($actual -ne '${{ github.sha }}'.ToLowerInvariant()) { throw 'workflow checkout SHA mismatch' }
           $vault = 'C:\Users\Dell\Documents\Dominion Command Vault'
           $system = Join-Path $vault '_system'
-          $out = $env:REGISTRY_EVIDENCE_DIR
+          $out = Join-Path $env:RUNNER_TEMP "dominion-full-build-apply-$env:GITHUB_RUN_ID"
           New-Item -ItemType Directory -Path $out -Force | Out-Null
           'FULL_BUILD_APPLY_STARTED=true' | Set-Content -LiteralPath (Join-Path $out 'workflow-started.txt') -Encoding utf8
           $python = (Get-Command python -ErrorAction Stop).Source
@@ -176,7 +174,8 @@ jobs:
             '- `_system/division_registry.json`'
           )
           $note | Set-Content -LiteralPath $notePath -Encoding utf8
-          Copy-Item -LiteralPath $notePath -Destination (Join-Path $env:REGISTRY_EVIDENCE_DIR 'Dominion Full Build Registry Closure 2026-08-11.md') -Force
+          $out = Join-Path $env:RUNNER_TEMP "dominion-full-build-apply-$env:GITHUB_RUN_ID"
+          Copy-Item -LiteralPath $notePath -Destination (Join-Path $out 'Dominion Full Build Registry Closure 2026-08-11.md') -Force
 
           "result=PASS" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "component_count=$($registry.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -189,7 +188,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dominion-full-build-registry-${{ github.run_id }}
-          path: ${{ env.REGISTRY_EVIDENCE_DIR }}
+          path: ${{ runner.temp }}\\dominion-full-build-apply-${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 1
 

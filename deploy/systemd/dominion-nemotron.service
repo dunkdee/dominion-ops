@@ -2,7 +2,6 @@
 Description=Dominion Nemotron Primary Intelligence Worker
 After=network-online.target ollama.service
 Wants=network-online.target
-Requires=ollama.service
 
 [Service]
 Type=simple

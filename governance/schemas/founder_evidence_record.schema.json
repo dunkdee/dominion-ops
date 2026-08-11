@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dominion.local/schemas/founder_evidence_record.schema.json",
+  "title": "Dominion Founder Evidence Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "evidence_id", "mission_id", "timestamp", "actor", "source",
+    "artifact_references", "result", "truth_state", "risks_and_limitations",
+    "next_action", "redaction_status", "policy_version"
+  ],
+  "properties": {
+    "schema_version": {"const": "dominion-founder-evidence-record-v1"},
+    "evidence_id": {"type": "string", "pattern": "^EVD-[A-Z0-9-]+$"},
+    "mission_id": {"type": "string", "pattern": "^DOM-[A-Z0-9-]+$"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "actor": {"type": "string", "minLength": 1},
+    "source": {"type": "string", "minLength": 1},
+    "artifact_references": {"type": "array", "items": {"type": "string"}},
+    "result": {"type": "string", "minLength": 1},
+    "truth_state": {"enum": ["VERIFIED", "INFERRED", "UNKNOWN", "BLOCKED"]},
+    "risks_and_limitations": {"type": "array", "items": {"type": "string"}},
+    "next_action": {"type": "string", "minLength": 1},
+    "redaction_status": {"enum": ["SANITIZED", "NOT_APPLICABLE", "BLOCKED_FOR_SENSITIVE_CONTENT"]},
+    "policy_version": {"type": "string", "minLength": 1}
+  }
+}

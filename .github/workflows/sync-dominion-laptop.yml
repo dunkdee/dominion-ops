@@ -279,18 +279,18 @@ jobs:
           import json,sys
           service=json.load(open(sys.argv[1],encoding='utf-8'))
           revision=json.load(open(sys.argv[2],encoding='utf-8'))
-          candidates=[]
+          raw=''
           for source in (
-              service.get('metadata',{}).get('annotations',{}),
-              service.get('spec',{}).get('template',{}).get('metadata',{}).get('annotations',{}),
               revision.get('metadata',{}).get('annotations',{}),
+              service.get('spec',{}).get('template',{}).get('metadata',{}).get('annotations',{}),
+              service.get('metadata',{}).get('annotations',{}),
           ):
               raw=source.get('run.googleapis.com/build-source-location','')
               if raw:
-                  candidates.append(raw)
-          if len(set(candidates))!=1:
-              raise SystemExit('expected exactly one unique Cloud Run build source location')
-          locations=json.loads(candidates[0])
+                  break
+          if not raw:
+              raise SystemExit('Cloud Run build source location missing')
+          locations=json.loads(raw)
           if len(locations)!=1:
               raise SystemExit('expected exactly one build source object')
           print(next(iter(locations.values())))
@@ -505,6 +505,49 @@ jobs:
           raw="$stage/raw"
           install -m 700 -d "$raw"
           echo "voltedge_stage=$stage" >> "$GITHUB_ENV"
+          source_root=$(ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            "$VM_USER@$VM_HOST" 'python3 -' <<'PY'
+          import hashlib,os,sys
+          from pathlib import Path
+          home=Path.home()
+          expected={
+              've_constants.py':'56e713fb1c9cadcd4615a6896343c488b07ba3aee8aeb9466d0818aba8899f7d',
+              've_content_engine.py':'41f0037fd986ef7e0b0cf71f272a7e3ad10df56f0718dbf19df06d4e0444f636',
+              've_orchestrator.py':'40b6a960d8f388a1f92e03bdcd7aff25127703e10c5cfce0f63d27f24f50ee06',
+              've_product_catalog.py':'269a9e45e82a47191b222ac6db8f65eead2d6d6cf9f2a86e17188820123a3ef2',
+              've_seo_blog_engine.py':'e199906bc81d4e13075714f951930dba13fabf10cd3c2a8e6b75944532955096',
+              've_shopping_feed.py':'21f0bbc6af2406d14cd98676a1f1fbfad0eb0324b0a823cbdf394033049f8a8b',
+              've_social_distributor.py':'9c986cae0397f2fc0334a85bb1372f0b5685b48f94ac1238b017e4aebd52d202',
+          }
+          skip={'.git','.cache','.npm','.local','node_modules','venv','.venv','__pycache__'}
+          matches=[]
+          for root,dirs,files in os.walk(home):
+              rel=Path(root).relative_to(home)
+              if len(rel.parts)>=9:
+                  dirs[:]=[]
+              else:
+                  dirs[:]=[d for d in dirs if d not in skip]
+              if 've_constants.py' not in files:
+                  continue
+              base=Path(root)
+              ok=True
+              for name,want in expected.items():
+                  path=base/name
+                  if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=want:
+                      ok=False
+                      break
+              if ok:
+                  matches.append(base)
+          if len(matches)!=1:
+              raise SystemExit(f'expected one exact VoltEdge source root, found {len(matches)}')
+          print(matches[0])
+          PY
+          )
+          test -n "$source_root"
           for name in \
             ve_constants.py \
             ve_content_engine.py \
@@ -519,7 +562,7 @@ jobs:
               -o IdentitiesOnly=yes \
               -o StrictHostKeyChecking=yes \
               -o ConnectTimeout=20 \
-              "$VM_USER@$VM_HOST:buddy_core/voltedge/$name" "$raw/$name"
+              "$VM_USER@$VM_HOST:$source_root/$name" "$raw/$name"
           done
 
           python3 - "$raw" "$stage" <<'PY'

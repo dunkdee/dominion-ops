@@ -50,7 +50,7 @@ Run:
 
 ```bash
 python3 scripts/validate_ethical_revenue_impact_pipeline.py
-python3 -m unittest tests/test_ethical_revenue_impact_pipeline.py
+python3 -m unittest discover -s tests -p 'test_ethical_revenue_impact_pipeline.py'
 ```
 
 The validator fails closed if the pipeline is marked active, if its allowed modes drift from the vertical registry, if an external authority is enabled, if a prohibited action is omitted, or if the human approval boundary is weakened.

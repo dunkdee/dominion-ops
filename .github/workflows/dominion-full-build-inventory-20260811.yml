@@ -1,0 +1,235 @@
+name: Dominion Full Build - Read-Only Inventory Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dominion-full-build-inventory-20260811.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dominion-full-build-inventory
+  cancel-in-progress: false
+
+jobs:
+  laptop-inventory:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 15
+    environment: dominion-laptop-production
+    outputs:
+      inventory_status: ${{ steps.inventory.outputs.inventory_status }}
+      component_count: ${{ steps.inventory.outputs.component_count }}
+      unknown_count: ${{ steps.inventory.outputs.unknown_count }}
+      overlay_match_count: ${{ steps.inventory.outputs.overlay_match_count }}
+    steps:
+      - name: Collect allowlisted Vault build inputs without mutation
+        id: inventory
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vault = 'C:\Users\Dell\Documents\Dominion Command Vault'
+          $system = Join-Path $vault '_system'
+          if (-not (Test-Path -LiteralPath $system -PathType Container)) {
+            throw "Vault system directory missing: $system"
+          }
+
+          $out = Join-Path $env:RUNNER_TEMP "dominion-full-build-inventory-$env:GITHUB_RUN_ID"
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          $allowlist = @(
+            'build_canonical_manifest.py',
+            'build_canonical_manifest_v2.py',
+            'build_canonical_manifest_v3.py',
+            'canonical_manifest_candidates.json',
+            'canonical_manifest_exclusions.json',
+            'canonical_manifest_v3_reconciliation.json',
+            'canonical_manifest_v3_review_queue.json',
+            'canonical_manifest_v3_overlay_phase5b.json',
+            'component_registry.json',
+            'division_registry.json',
+            'unknown_133_decision_queue.json',
+            'unknown_133_evidence.json',
+            'unknown_133_summary.txt',
+            'vault_manifest.json'
+          )
+
+          $copied = @()
+          foreach ($name in $allowlist) {
+            $source = Join-Path $system $name
+            if (Test-Path -LiteralPath $source -PathType Leaf) {
+              Copy-Item -LiteralPath $source -Destination (Join-Path $out $name) -Force
+              $copied += $name
+            }
+          }
+
+          foreach ($required in @(
+            'build_canonical_manifest_v3.py',
+            'canonical_manifest_v3_overlay_phase5b.json',
+            'component_registry.json',
+            'division_registry.json',
+            'unknown_133_decision_queue.json',
+            'unknown_133_evidence.json'
+          )) {
+            if ($required -notin $copied) { throw "Required build input missing: $required" }
+          }
+
+          $registry = @(Get-Content -LiteralPath (Join-Path $out 'component_registry.json') -Raw | ConvertFrom-Json)
+          $overlay = Get-Content -LiteralPath (Join-Path $out 'canonical_manifest_v3_overlay_phase5b.json') -Raw | ConvertFrom-Json
+          $unknown = @($registry | Where-Object { $_.component_class -eq 'UNKNOWN' }).Count
+          $oldMatches = 0
+          foreach ($decision in @($overlay.decisions)) {
+            $record = $registry | Where-Object { $_.rel_path -eq $decision.rel_path } | Select-Object -First 1
+            if (-not $record) { continue }
+            $matches = $true
+            foreach ($property in $decision.old_values.PSObject.Properties) {
+              if ([string]$record.($property.Name) -ne [string]$property.Value) {
+                $matches = $false
+                break
+              }
+            }
+            if ($matches) { $oldMatches++ }
+          }
+
+          $manifest = foreach ($name in $copied | Sort-Object) {
+            $path = Join-Path $out $name
+            $item = Get-Item -LiteralPath $path
+            $hash = Get-FileHash -LiteralPath $path -Algorithm SHA256
+            [pscustomobject]@{
+              name = $name
+              bytes = $item.Length
+              sha256 = $hash.Hash.ToLowerInvariant()
+            }
+          }
+          [pscustomobject]@{
+            schema = 'dominion-full-build-inventory-v1'
+            run_id = $env:GITHUB_RUN_ID
+            vault_mutated = $false
+            copied_files = $manifest
+            component_count = $registry.Count
+            unknown_count = $unknown
+            phase5b_old_value_matches = $oldMatches
+          } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'INVENTORY.json') -Encoding utf8
+
+          "inventory_status=PASS" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "component_count=$($registry.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "unknown_count=$unknown" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "overlay_match_count=$oldMatches" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_path=$out" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "FULL_BUILD_LAPTOP_INVENTORY=PASS components=$($registry.Count) unknown=$unknown phase5b_old_value_matches=$oldMatches vault_mutated=false"
+
+      - name: Upload exact allowlisted build inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: dominion-full-build-inventory-${{ github.run_id }}
+          path: ${{ steps.inventory.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 1
+
+  vm-readiness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: foundation-vm-production
+    outputs:
+      vm_status: ${{ steps.audit.outputs.vm_status }}
+      tiktok_state: ${{ steps.audit.outputs.tiktok_state }}
+      wix_health: ${{ steps.audit.outputs.wix_health }}
+    steps:
+      - name: Audit governed VM state without mutation
+        id: audit
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          report="$RUNNER_TEMP/vm-readiness.txt"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > "$report" <<'REMOTE'
+          set -u
+          echo 'schema=dominion-vm-full-build-readiness-v1'
+          echo 'mutation=false'
+          printf 'git_sha='; git -C "$HOME/dominion-ops" rev-parse HEAD 2>/dev/null || echo MISSING
+          for service in conductor-worker.service conductor-scheduler.service dominion-alpha.service dominion-markov.service dominion-nemotron.service dominion-tiktok.service; do
+            printf 'service.%s=' "$service"
+            systemctl is-active "$service" 2>/dev/null || true
+          done
+          printf 'wix.container='; docker inspect -f '{{.State.Status}}' wix-agent 2>/dev/null || echo MISSING
+          printf 'wix.health='; curl --max-time 5 -fsS http://127.0.0.1:8082/health >/dev/null 2>&1 && echo PASS || echo FAIL
+          printf 'wix.ready='; curl --max-time 5 -fsS http://127.0.0.1:8082/ready >/dev/null 2>&1 && echo PASS || echo FAIL
+          if docker inspect wix-agent >/dev/null 2>&1; then
+            docker exec wix-agent sh -lc 'for name in WIX_API_KEY WIX_SITE_ID WIX_AGENT_OPERATOR_TOKEN ZENDROP_API_KEY WIX_AGENT_DB WIX_FULFILLMENT_MODE; do if printenv "$name" >/dev/null 2>&1; then echo "wix.env.$name=SET"; else echo "wix.env.$name=UNSET"; fi; done' 2>/dev/null || echo 'wix.env_audit=FAILED'
+          fi
+          REMOTE
+          cat "$report"
+
+          tiktok_state="$(sed -n 's/^service.dominion-tiktok.service=//p' "$report" | tail -1)"
+          wix_health="$(sed -n 's/^wix.health=//p' "$report" | tail -1)"
+          test -n "$tiktok_state" || tiktok_state=unknown
+          test -n "$wix_health" || wix_health=FAIL
+          echo "vm_status=PASS" >> "$GITHUB_OUTPUT"
+          echo "tiktok_state=$tiktok_state" >> "$GITHUB_OUTPUT"
+          echo "wix_health=$wix_health" >> "$GITHUB_OUTPUT"
+          echo "report_path=$report" >> "$GITHUB_OUTPUT"
+          rm -f "$HOME/.ssh/foundation_vm_key"
+
+      - name: Verify public Strategizer health
+        run: |
+          set -euo pipefail
+          body="$(curl --max-time 10 -fsS https://dominion-strategizer-cferorebhq-uc.a.run.app/health)"
+          test "$body" = '{"status":"ok","ecosystem":"dominion-ascendant"}'
+          echo 'STRATEGIZER_PUBLIC_HEALTH=PASS'
+
+      - name: Upload VM readiness report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dominion-vm-readiness-${{ github.run_id }}
+          path: ${{ steps.audit.outputs.report_path }}
+          if-no-files-found: error
+          retention-days: 1
+
+  record-gate:
+    if: always()
+    needs: [laptop-inventory, vm-readiness]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Record immutable inventory gate on issue 145
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const laptop = '${{ needs.laptop-inventory.result }}';
+            const vm = '${{ needs.vm-readiness.result }}';
+            const body = [
+              '## Full-build read-only inventory gate',
+              '',
+              `- Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `- Laptop job: **${laptop}**`,
+              `- VM job: **${vm}**`,
+              `- Laptop inventory: **${{ needs.laptop-inventory.outputs.inventory_status || 'FAIL' }}**`,
+              `- Components: ${{ needs.laptop-inventory.outputs.component_count || 'unknown' }}`,
+              `- Current UNKNOWN: ${{ needs.laptop-inventory.outputs.unknown_count || 'unknown' }}`,
+              `- Existing Phase 5B old-value matches: ${{ needs.laptop-inventory.outputs.overlay_match_count || 'unknown' }}/8`,
+              `- TikTok service state: ${{ needs.vm-readiness.outputs.tiktok_state || 'unknown' }}`,
+              `- Wix health: ${{ needs.vm-readiness.outputs.wix_health || 'unknown' }}`,
+              '- Mutation: **false**',
+              '',
+              `Artifacts: \`dominion-full-build-inventory-${context.runId}\` and \`dominion-vm-readiness-${context.runId}\` (one-day retention).`
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 145,
+              body
+            });
+            if (laptop !== 'success' || vm !== 'success') {
+              core.setFailed(`Read-only gate failed: laptop=${laptop} vm=${vm}`);
+            }

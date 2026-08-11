@@ -1,0 +1,62 @@
+{
+  "schema": "dominion-voltedge-quarantine-v1",
+  "recorded_at_utc": "2026-08-11T19:37:25Z",
+  "authority": "Founder approval in dominion-ops issue #145",
+  "disposition": "LAPTOP_ONLY_EXPERIMENTAL",
+  "reason": "Exact source was absent from GitHub and the Foundation VM. The laptop runner is ACL-blocked from the source root. Source was not bypassed, guessed, or uploaded.",
+  "activation": "PROHIBITED",
+  "wix_mutation": false,
+  "registry_mutation": false,
+  "artifacts": [
+    {
+      "path": "voltedge/ve_constants.py",
+      "sha256": "56e713fb1c9cadcd4615a6896343c488b07ba3aee8aeb9466d0818aba8899f7d",
+      "class": "UNKNOWN",
+      "division": "M",
+      "status": "EXPERIMENTAL"
+    },
+    {
+      "path": "voltedge/ve_content_engine.py",
+      "sha256": "41f0037fd986ef7e0b0cf71f272a7e3ad10df56f0718dbf19df06d4e0444f636",
+      "class": "UNKNOWN",
+      "division": "M",
+      "status": "EXPERIMENTAL"
+    },
+    {
+      "path": "voltedge/ve_orchestrator.py",
+      "sha256": "40b6a960d8f388a1f92e03bdcd7aff25127703e10c5cfce0f63d27f24f50ee06",
+      "class": "ORCHESTRATOR_ROUTER",
+      "division": "M",
+      "status": "EXPERIMENTAL"
+    },
+    {
+      "path": "voltedge/ve_product_catalog.py",
+      "sha256": "269a9e45e82a47191b222ac6db8f65eead2d6d6cf9f2a86e17188820123a3ef2",
+      "class": "UNKNOWN",
+      "division": "M",
+      "status": "EXPERIMENTAL"
+    },
+    {
+      "path": "voltedge/ve_seo_blog_engine.py",
+      "sha256": "e199906bc81d4e13075714f951930dba13fabf10cd3c2a8e6b75944532955096",
+      "class": "UNKNOWN",
+      "division": "M",
+      "status": "EXPERIMENTAL"
+    },
+    {
+      "path": "voltedge/ve_shopping_feed.py",
+      "sha256": "21f0bbc6af2406d14cd98676a1f1fbfad0eb0324b0a823cbdf394033049f8a8b",
+      "class": "UNKNOWN",
+      "division": "M",
+      "status": "EXPERIMENTAL"
+    },
+    {
+      "path": "voltedge/ve_social_distributor.py",
+      "sha256": "9c986cae0397f2fc0334a85bb1372f0b5685b48f94ac1238b017e4aebd52d202",
+      "class": "UNKNOWN",
+      "division": "M",
+      "status": "EXPERIMENTAL"
+    }
+  ],
+  "release_gate": "Separate Founder approval plus exact source recovery, secret scan, hash revalidation, and governed test are required before any canonicalization or execution."
+}

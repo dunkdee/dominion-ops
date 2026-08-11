@@ -250,7 +250,8 @@ jobs:
           # Once the local model is loaded it legitimately occupies several GB; retain
           # a 768 MiB safety floor while the live health and inference gates verify it.
           test "$available_kib" -ge 786432
-          test "$disk_available_kib" -ge 5000000
+          # The model is already stored locally; keep a 1 GiB operational reserve.
+          test "$disk_available_kib" -ge 1048576
           curl --max-time 10 -fsS http://127.0.0.1:11434/api/version >/dev/null
           ollama pull nemotron-3-nano:4b
           install -d -m 755 "$HOME/dominion/apps/nemotron-worker"

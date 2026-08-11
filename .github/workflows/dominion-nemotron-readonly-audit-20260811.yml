@@ -1,0 +1,96 @@
+name: Dominion Nemotron - Read-only Runtime Audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-nemotron:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: foundation-vm-production
+    steps:
+      - name: Collect non-secret Nemotron runtime evidence
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          report="$RUNNER_TEMP/nemotron-readonly-audit.txt"
+
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' > "$report" <<'REMOTE'
+          set -euo pipefail
+          service=dominion-nemotron.service
+          echo 'schema=dominion-nemotron-readonly-audit-v1'
+          echo 'mutation=false'
+          echo "host=$(hostname)"
+          echo "cpu_count=$(nproc)"
+          awk '/MemTotal:/ {print "memory_kib=" $2}' /proc/meminfo
+          if command -v nvidia-smi >/dev/null 2>&1; then
+            echo 'gpu_runtime=present'
+            nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | sed 's/^/gpu=/'
+          else
+            echo 'gpu_runtime=absent'
+          fi
+
+          load="$(systemctl show "$service" -p LoadState --value 2>/dev/null || true)"
+          active="$(systemctl is-active "$service" 2>/dev/null || true)"
+          enabled="$(systemctl is-enabled "$service" 2>/dev/null || true)"
+          echo "service.load_state=${load:-not-found}"
+          echo "service.active_state=${active:-not-found}"
+          echo "service.enabled_state=${enabled:-not-found}"
+          if [ "$load" = loaded ]; then
+            for property in Type User Group WorkingDirectory FragmentPath Restart; do
+              value="$(systemctl show "$service" -p "$property" --value 2>/dev/null || true)"
+              printf 'service.%s=%s\n' "$(printf '%s' "$property" | tr '[:upper:]' '[:lower:]')" "$value"
+            done
+            exec_raw="$(systemctl show "$service" -p ExecStart --value 2>/dev/null || true)"
+            echo "service.execstart_sha256=$(printf '%s' "$exec_raw" | sha256sum | awk '{print $1}')"
+            printf '%s' "$exec_raw" | grep -oE '/[^ ;}]+' | head -1 | sed 's/^/service.execstart_path=/' || true
+            fragment="$(systemctl show "$service" -p FragmentPath --value)"
+            if [ -f "$fragment" ]; then
+              echo "service.fragment_sha256=$(sha256sum "$fragment" | awk '{print $1}')"
+              sed -n -E 's/^[[:space:]]*EnvironmentFile=-?([^[:space:]]+).*$/\1/p' "$fragment" | while IFS= read -r env_file; do
+                env_file="${env_file%\"}"; env_file="${env_file#\"}"
+                echo "service.environment_file=$env_file"
+                if [ -f "$env_file" ]; then
+                  echo "service.environment_file_sha256=$(sha256sum "$env_file" | awk '{print $1}')"
+                  sed -n -E 's/^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/service.environment_key=\2/p' "$env_file" | sort -u
+                else
+                  echo 'service.environment_file_state=missing'
+                fi
+              done
+            fi
+          fi
+
+          echo 'candidate_files_begin'
+          find "$HOME/dominion" "$HOME/conductor" /opt -maxdepth 5 -type f \( -iname '*nemotron*' -o -iname '*nemo*' \) -printf '%p|%s\n' 2>/dev/null | sort | head -200
+          echo 'candidate_files_end'
+          echo 'candidate_containers_begin'
+          docker ps -a --format '{{.Names}}|{{.Image}}|{{.Status}}' 2>/dev/null | grep -Ei 'nemo|nim|vllm|ollama|triton' || true
+          echo 'candidate_containers_end'
+          echo 'listening_ports_begin'
+          sudo ss -lntp 2>/dev/null | grep -Ei 'python|nemo|nim|vllm|ollama|triton' || true
+          echo 'listening_ports_end'
+          REMOTE
+
+          cat "$report"
+          rm -f "$HOME/.ssh/foundation_vm_key"
+
+      - name: Upload read-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dominion-nemotron-readonly-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/nemotron-readonly-audit.txt
+          if-no-files-found: error
+          retention-days: 1

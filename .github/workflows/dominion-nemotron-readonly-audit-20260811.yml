@@ -78,7 +78,7 @@ jobs:
           fi
 
           echo 'candidate_files_begin'
-          find "$HOME/dominion" "$HOME/conductor" /opt -maxdepth 5 -type f \( -iname '*nemotron*' -o -iname '*nemo*' \) -printf '%p|%s\n' 2>/dev/null | sort | head -200
+          find "$HOME/dominion" "$HOME/conductor" /opt -maxdepth 5 -type f \( -iname '*nemotron*' -o -iname '*nemo*' \) -printf '%p|%s\n' 2>/dev/null | sort | head -200 || true
           echo 'candidate_files_end'
           echo 'candidate_containers_begin'
           docker ps -a --format '{{.Names}}|{{.Image}}|{{.Status}}' 2>/dev/null | grep -Ei 'nemo|nim|vllm|ollama|triton' || true

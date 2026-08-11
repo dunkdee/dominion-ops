@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "contract_id": "ethical_revenue_impact_pipeline",
+  "title": "Dominion Ethical Revenue and Impact Pipeline",
+  "status": "STAGED_NOT_ACTIVATED",
+  "purpose": "Turn permitted measurement into reviewable internal drafts and truthful outcome records without autonomous external effects.",
+  "authority": {
+    "human_final_authority": "human_overseer",
+    "default_behavior": "deny",
+    "external_execution_authorized": false,
+    "money_movement_authorized": false,
+    "publication_authorized": false,
+    "customer_or_prospect_contact_authorized": false,
+    "pricing_authorized": false,
+    "credential_change_authorized": false
+  },
+  "scope": {
+    "allowed_vertical_modes": {
+      "commerce_fulfillment": "record_only",
+      "content_traffic": "draft_only",
+      "analytics_services": "shadow_only"
+    },
+    "allowed_outputs": [
+      "measurement_record",
+      "internal_draft",
+      "approval_docket",
+      "outcome_record",
+      "learning_record"
+    ],
+    "forbidden_actions": [
+      "publish_external_content",
+      "schedule_external_content",
+      "contact_prospect_or_customer",
+      "accept_client_data",
+      "send_proposal",
+      "set_or_change_price",
+      "enable_checkout",
+      "process_or_move_money",
+      "create_paid_spend",
+      "change_credentials",
+      "change_production_configuration",
+      "claim_unverified_revenue_or_impact"
+    ]
+  },
+  "workflow": [
+    {
+      "stage": "measure",
+      "purpose": "Capture permitted, minimized, provenance-linked evidence and label its truth state.",
+      "requires": [
+        "mission_id",
+        "vertical_id",
+        "source_kind",
+        "source_reference",
+        "captured_at",
+        "truth_state",
+        "data_classification"
+      ],
+      "produces": [
+        "measurement_record",
+        "evidence_references",
+        "unknowns",
+        "limitations"
+      ],
+      "external_effects": false
+    },
+    {
+      "stage": "draft",
+      "purpose": "Create an internal, reviewable hypothesis, content draft, analytics draft, or operational recommendation.",
+      "requires": [
+        "measurement_record_id",
+        "facts",
+        "assumptions",
+        "unknowns",
+        "claims_boundary",
+        "success_metric",
+        "stop_condition"
+      ],
+      "produces": [
+        "internal_draft",
+        "approval_docket"
+      ],
+      "external_effects": false
+    },
+    {
+      "stage": "human_approval",
+      "purpose": "Record a human decision; no agent may infer, create, or reuse approval.",
+      "requires": [
+        "docket_id",
+        "decision",
+        "approver_id",
+        "decision_timestamp",
+        "scope",
+        "expiration_or_single_use_limit"
+      ],
+      "produces": [
+        "approval_record_or_hold"
+      ],
+      "external_effects": false,
+      "agent_may_approve": false
+    },
+    {
+      "stage": "record_outcomes",
+      "purpose": "Record verified result, failure, or learning after a separately authorized action or a no-action review.",
+      "requires": [
+        "mission_id",
+        "docket_id",
+        "truth_state",
+        "evidence_references",
+        "result",
+        "limitations",
+        "follow_up_owner"
+      ],
+      "produces": [
+        "outcome_record",
+        "learning_record"
+      ],
+      "external_effects": false,
+      "revenue_claim_rule": "Revenue is VERIFIED only with posted-funds, obligation, delivery, and reconciliation evidence."
+    }
+  ],
+  "truth_states": [
+    "VERIFIED",
+    "INFERRED",
+    "UNKNOWN",
+    "BLOCKED"
+  ],
+  "minimum_record_fields": [
+    "mission_id",
+    "vertical_id",
+    "record_id",
+    "created_at",
+    "truth_state",
+    "evidence_references",
+    "facts",
+    "assumptions",
+    "unknowns",
+    "limitations",
+    "approval_reference",
+    "external_effects",
+    "result",
+    "follow_up_owner"
+  ],
+  "safety_invariants": {
+    "external_actions_must_be_empty": true,
+    "paid_spend_must_be_zero": true,
+    "money_moved_must_be_false": true,
+    "published_content_must_be_false": true,
+    "prospects_or_customers_contacted_must_be_false": true,
+    "credentials_changed_must_be_false": true,
+    "production_changed_must_be_false": true,
+    "raw_sensitive_data_forbidden": true,
+    "unreviewed_self_modification_forbidden": true
+  },
+  "activation_requirements": [
+    "separate human approval record for the requested external action",
+    "applicable vertical launch gates pass",
+    "applicable authority matrix action is approved",
+    "independent review is recorded where required",
+    "rollback and verification plan are documented"
+  ],
+  "promotion_status": "No pipeline stage promotes a vertical, authorizes an action, or changes a runtime setting."
+}

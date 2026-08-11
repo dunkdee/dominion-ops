@@ -7,6 +7,7 @@ on:
     paths:
       - 'scripts/build_dominion_final_overlay.py'
       - 'scripts/apply_dominion_registry_overlay.py'
+      - 'scripts/verify_dominion_existing_registry_closure.py'
       - 'governance/registry/phase4e_founder_decisions_144.json'
       - 'apps/nemotron-worker/nemotron_worker.py'
       - 'apps/nemotron-worker/test_nemotron_worker.py'
@@ -32,7 +33,7 @@ jobs:
       - name: Validate governed release inputs
         run: |
           set -euo pipefail
-          python -m py_compile scripts/build_dominion_final_overlay.py scripts/apply_dominion_registry_overlay.py apps/nemotron-worker/nemotron_worker.py
+          python -m py_compile scripts/build_dominion_final_overlay.py scripts/apply_dominion_registry_overlay.py scripts/verify_dominion_existing_registry_closure.py apps/nemotron-worker/nemotron_worker.py
           python apps/nemotron-worker/test_nemotron_worker.py -v
           python - <<'PY'
           import json
@@ -113,6 +114,23 @@ jobs:
           $overlay = Join-Path $out 'canonical_manifest_v3_overlay_full_build.json'
           $founder = (Resolve-Path 'governance/registry/phase4e_founder_decisions_144.json').Path
           $strategizer = (Resolve-Path 'runtime/records/provenance_repair_145/deployed-source-manifest.json').Path
+          $existingOverlay = Join-Path $system 'canonical_manifest_v3_overlay_full_build.json'
+          $existingReceipt = Join-Path $system 'full_build_registry_receipt.json'
+          if ((Test-Path -LiteralPath $existingOverlay) -or (Test-Path -LiteralPath $existingReceipt)) {
+            if (-not ((Test-Path -LiteralPath $existingOverlay) -and (Test-Path -LiteralPath $existingReceipt))) {
+              throw 'Partial prior closure evidence found; refusing any replay.'
+            }
+            & $python scripts/verify_dominion_existing_registry_closure.py `
+              --system-dir $system `
+              --founder-decisions $founder `
+              --strategizer-manifest $strategizer `
+              --output (Join-Path $out 'existing-closure-verification.json')
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Copy-Item -LiteralPath $existingReceipt -Destination (Join-Path $out 'full_build_registry_receipt.json') -Force
+            Copy-Item -LiteralPath $existingOverlay -Destination (Join-Path $out 'canonical_manifest_v3_overlay_full_build.json') -Force
+            Write-Host 'FULL_BUILD_APPLY=ALREADY_APPLIED_VERIFIED'
+            exit 0
+          }
 
           & $python scripts/build_dominion_final_overlay.py `
             --component-registry (Join-Path $system 'component_registry.json') `

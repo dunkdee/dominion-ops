@@ -1,0 +1,198 @@
+{
+  "schema_version": "1.0.0",
+  "authority": "human_overseer",
+  "activation_default": "DORMANT",
+  "budget_default_usd": 0,
+  "truth_states": ["VERIFIED", "INFERRED", "UNKNOWN", "BLOCKED"],
+  "shared_memory": {
+    "policy_source": "GitHub versioned governance and contracts",
+    "operational_memory": "Obsidian Dominion-Brain",
+    "evidence_destination": "Dominion-Brain/08-Evidence/",
+    "decision_destination": "Dominion-Brain/12-Decisions/",
+    "learning_destination": "Dominion-Brain/13-Learning/"
+  },
+  "global_prohibitions": [
+    "independent_external_action",
+    "external_publication",
+    "customer_or_claimant_contact",
+    "spend_or_move_money",
+    "credential_or_secret_access",
+    "production_deployment",
+    "live_trading",
+    "self_activation",
+    "self_modification",
+    "authority_or_budget_expansion"
+  ],
+  "lanes": [
+    {
+      "id": "research_strategy",
+      "purpose": "Produce source-grounded problem framing, alternatives, and bounded strategy proposals for real-world impact and revenue missions.",
+      "lifecycle_state": "REGISTERED",
+      "activation_state": "DORMANT",
+      "budget_usd": 0,
+      "owner": "coordinator",
+      "allowed_internal_actions": ["read_permitted_sources", "classify_evidence", "draft_strategy", "record_unknowns", "prepare_work_packet"],
+      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation"],
+      "approval_gate": "human_overseer_recorded_approval",
+      "independent_verifier": "sentinel",
+      "input_contract": {
+        "required_fields": ["mission_id", "objective", "beneficiary", "scope", "constraints", "evidence_refs", "approval_reference"],
+        "truth_state_required": true,
+        "secrets_permitted": false
+      },
+      "output_contract": {
+        "required_fields": ["verified_facts", "inferences", "unknowns", "alternatives", "recommendation", "risks", "verification_plan", "memory_refs"],
+        "truth_state_required": true,
+        "secrets_permitted": false
+      },
+      "shared_memory": {
+        "agent_home": "Dominion-Brain/04-Agents/research-strategy/",
+        "evidence": "Dominion-Brain/08-Evidence/",
+        "decisions": "Dominion-Brain/12-Decisions/",
+        "learning": "Dominion-Brain/13-Learning/",
+        "current_state": "Dominion-Brain/14-Daily-State/"
+      },
+      "kpi_interface": [
+        {"id": "evidence_coverage", "definition": "Share of consequential claims with retrievable evidence references.", "evidence_source": "mission evidence packet", "truth_state": "UNKNOWN", "baseline_required": true, "target_state": "BASELINE_REQUIRED", "cadence": "per_mission"},
+        {"id": "assumption_resolution_rate", "definition": "Share of material assumptions resolved, retained as explicit, or escalated before handoff.", "evidence_source": "mission decision record", "truth_state": "UNKNOWN", "baseline_required": true, "target_state": "BASELINE_REQUIRED", "cadence": "weekly"}
+      ],
+      "promotion_requirements": ["registered owner and verifier", "simulation evidence", "independent review", "recorded human approval", "rollback and stop conditions"]
+    },
+    {
+      "id": "content_distribution",
+      "purpose": "Prepare accurate, useful, platform-appropriate content and distribution drafts that serve a verified audience need without deceptive algorithm manipulation.",
+      "lifecycle_state": "REGISTERED",
+      "activation_state": "DORMANT",
+      "budget_usd": 0,
+      "owner": "coordinator",
+      "allowed_internal_actions": ["analyze_approved_audience_evidence", "draft_content", "prepare_distribution_plan", "measure_approved_metrics", "record_claim_checks"],
+      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation"],
+      "approval_gate": "human_overseer_recorded_approval",
+      "independent_verifier": "sentinel",
+      "input_contract": {
+        "required_fields": ["mission_id", "audience", "platform", "purpose", "claim_evidence_refs", "brand_constraints", "approval_reference"],
+        "truth_state_required": true,
+        "secrets_permitted": false
+      },
+      "output_contract": {
+        "required_fields": ["draft_asset", "claim_inventory", "source_refs", "accessibility_check", "distribution_proposal", "measurement_plan", "memory_refs"],
+        "truth_state_required": true,
+        "secrets_permitted": false
+      },
+      "shared_memory": {
+        "agent_home": "Dominion-Brain/04-Agents/content-distribution/",
+        "evidence": "Dominion-Brain/08-Evidence/",
+        "decisions": "Dominion-Brain/12-Decisions/",
+        "learning": "Dominion-Brain/13-Learning/",
+        "current_state": "Dominion-Brain/14-Daily-State/"
+      },
+      "kpi_interface": [
+        {"id": "claim_support_rate", "definition": "Share of material factual claims tied to retrievable evidence or explicitly marked as opinion.", "evidence_source": "claim inventory", "truth_state": "UNKNOWN", "baseline_required": true, "target_state": "BASELINE_REQUIRED", "cadence": "per_mission"},
+        {"id": "useful_engagement_rate", "definition": "Verified meaningful engagement relative to approved reach measurement, excluding deceptive or purchased engagement.", "evidence_source": "approved platform analytics export", "truth_state": "UNKNOWN", "baseline_required": true, "target_state": "BASELINE_REQUIRED", "cadence": "weekly"}
+      ],
+      "promotion_requirements": ["private or unlisted simulation", "claims and rights review", "independent verification", "recorded human publication approval", "platform-compliant rollback plan"]
+    },
+    {
+      "id": "operations_customer_support",
+      "purpose": "Prepare internal operations and customer-support drafts that improve reliability and service quality without sending, changing records, or handling protected customer data autonomously.",
+      "lifecycle_state": "REGISTERED",
+      "activation_state": "DORMANT",
+      "budget_usd": 0,
+      "owner": "coordinator",
+      "allowed_internal_actions": ["analyze_deidentified_operational_patterns", "draft_sop", "draft_response_template", "prepare_triage_plan", "record_failure_pattern"],
+      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation"],
+      "approval_gate": "human_overseer_recorded_approval",
+      "independent_verifier": "sentinel",
+      "input_contract": {
+        "required_fields": ["mission_id", "service_scope", "deidentified_evidence_refs", "service_policy_refs", "risk_flags", "approval_reference"],
+        "truth_state_required": true,
+        "secrets_permitted": false
+      },
+      "output_contract": {
+        "required_fields": ["triage_recommendation", "draft_sop_or_template", "escalation_conditions", "quality_checks", "rollback_plan", "memory_refs"],
+        "truth_state_required": true,
+        "secrets_permitted": false
+      },
+      "shared_memory": {
+        "agent_home": "Dominion-Brain/04-Agents/operations-customer-support/",
+        "evidence": "Dominion-Brain/08-Evidence/",
+        "decisions": "Dominion-Brain/12-Decisions/",
+        "learning": "Dominion-Brain/13-Learning/",
+        "current_state": "Dominion-Brain/14-Daily-State/"
+      },
+      "kpi_interface": [
+        {"id": "triage_accuracy", "definition": "Share of proposed classifications independently confirmed by an authorized reviewer.", "evidence_source": "review sample", "truth_state": "UNKNOWN", "baseline_required": true, "target_state": "BASELINE_REQUIRED", "cadence": "weekly"},
+        {"id": "repeat_incident_rate", "definition": "Rate of repeated operational failure categories after a reviewed corrective action.", "evidence_source": "incident and learning records", "truth_state": "UNKNOWN", "baseline_required": true, "target_state": "BASELINE_REQUIRED", "cadence": "monthly"}
+      ],
+      "promotion_requirements": ["deidentified simulation", "privacy and policy review", "independent verification", "recorded human approval for any contact or record mutation", "escalation and rollback test"]
+    },
+    {
+      "id": "revenue_lead_workflow",
+      "purpose": "Prepare ethical, evidence-based lead qualification and offer proposals for Founder review; it never contacts prospects, submits proposals, prices services, or processes payments autonomously.",
+      "lifecycle_state": "REGISTERED",
+      "activation_state": "DORMANT",
+      "budget_usd": 0,
+      "owner": "coordinator",
+      "allowed_internal_actions": ["analyze_permitted_market_evidence", "score_lead_draft", "draft_offer", "prepare_experiment", "measure_funnel_metrics"],
+      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation"],
+      "approval_gate": "human_overseer_recorded_approval",
+      "independent_verifier": "sentinel",
+      "input_contract": {
+        "required_fields": ["mission_id", "offer_hypothesis", "permitted_sources", "qualification_criteria", "compliance_constraints", "approval_reference"],
+        "truth_state_required": true,
+        "secrets_permitted": false
+      },
+      "output_contract": {
+        "required_fields": ["qualified_lead_draft", "offer_draft", "pricing_assumptions", "risk_flags", "measurement_plan", "human_action_required", "memory_refs"],
+        "truth_state_required": true,
+        "secrets_permitted": false
+      },
+      "shared_memory": {
+        "agent_home": "Dominion-Brain/04-Agents/revenue-lead-workflow/",
+        "evidence": "Dominion-Brain/08-Evidence/",
+        "decisions": "Dominion-Brain/12-Decisions/",
+        "learning": "Dominion-Brain/13-Learning/",
+        "current_state": "Dominion-Brain/14-Daily-State/"
+      },
+      "kpi_interface": [
+        {"id": "qualification_precision", "definition": "Share of suggested leads accepted by the authorized human reviewer under recorded criteria.", "evidence_source": "review decision record", "truth_state": "UNKNOWN", "baseline_required": true, "target_state": "BASELINE_REQUIRED", "cadence": "weekly"},
+        {"id": "proposal_to_outcome_traceability", "definition": "Share of approved experiments with an evidence-linked outcome or explicitly recorded unknown.", "evidence_source": "funnel evidence record", "truth_state": "UNKNOWN", "baseline_required": true, "target_state": "BASELINE_REQUIRED", "cadence": "monthly"}
+      ],
+      "promotion_requirements": ["controlled dry-run with no submission", "compliance review", "independent verification", "recorded human approval for contact, pricing, proposal, or payment", "measured funnel baseline"]
+    },
+    {
+      "id": "security_quality_verification",
+      "purpose": "Independently challenge evidence, tests, safety holds, quality claims, and regression risks before any specialist-lane promotion.",
+      "lifecycle_state": "REGISTERED",
+      "activation_state": "DORMANT",
+      "budget_usd": 0,
+      "owner": "coordinator",
+      "allowed_internal_actions": ["review_evidence", "run_nonproduction_validation", "challenge_claim", "issue_hold", "record_verification_result"],
+      "prohibited_actions": ["independent_external_action", "external_publication", "customer_or_claimant_contact", "spend_or_move_money", "credential_or_secret_access", "production_deployment", "live_trading", "self_activation", "approve_own_proposal"],
+      "approval_gate": "human_overseer_recorded_approval",
+      "independent_verifier": "sentinel",
+      "input_contract": {
+        "required_fields": ["mission_id", "proposal_hash", "evidence_refs", "test_refs", "risk_classification", "approval_reference"],
+        "truth_state_required": true,
+        "secrets_permitted": false
+      },
+      "output_contract": {
+        "required_fields": ["verification_result", "truth_state", "failed_gates", "residual_risks", "required_remediation", "independent_evidence_refs", "memory_refs"],
+        "truth_state_required": true,
+        "secrets_permitted": false
+      },
+      "shared_memory": {
+        "agent_home": "Dominion-Brain/04-Agents/security-quality-verification/",
+        "evidence": "Dominion-Brain/08-Evidence/",
+        "decisions": "Dominion-Brain/12-Decisions/",
+        "learning": "Dominion-Brain/13-Learning/",
+        "current_state": "Dominion-Brain/14-Daily-State/"
+      },
+      "kpi_interface": [
+        {"id": "verification_coverage", "definition": "Share of promotion gates independently checked with retrievable evidence.", "evidence_source": "verification packet", "truth_state": "UNKNOWN", "baseline_required": true, "target_state": "BASELINE_REQUIRED", "cadence": "per_mission"},
+        {"id": "escaped_regression_rate", "definition": "Rate of verified regressions discovered after a lane passed its validation gate.", "evidence_source": "incident records", "truth_state": "UNKNOWN", "baseline_required": true, "target_state": "BASELINE_REQUIRED", "cadence": "monthly"}
+      ],
+      "promotion_requirements": ["independent reviewer assignment", "nonproduction regression evidence", "security and governance veto check", "recorded human approval", "post-promotion monitoring plan"]
+    }
+  ]
+}

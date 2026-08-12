@@ -1,0 +1,185 @@
+name: Wix Zendrop Variant Audit (Read-Only)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/wix-zendrop-variant-audit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wix-zendrop-variant-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    steps:
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Audit live Wix and Zendrop variants without writes
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
+            "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          ready="$(curl -fsS --max-time 10 http://127.0.0.1:8082/ready)"
+          READY_JSON="$ready" python3 - <<'PY'
+          import json, os
+          d=json.loads(os.environ['READY_JSON'])
+          assert d['ready'] is True
+          assert d['catalog']['status']=='ok'
+          assert str(d['catalog']['version']).lower()=='v3'
+          assert d['integrations']['wix_api_key'] is True
+          assert d['integrations']['zendrop_api_key'] is True
+          assert d['fulfillment']['mode']=='record_only'
+          print('VARIANT_AUDIT_PREFLIGHT=PASS catalog=v3 zendrop=present fulfillment=record_only')
+          PY
+
+          docker exec -i wix-agent python - <<'PY'
+          import json
+          import wix_client as wix
+          import zendrop_client as zendrop
+
+          def compact_wix_product(p):
+              return {
+                  'id': p.get('id'),
+                  'name': p.get('name'),
+                  'sku': p.get('sku'),
+                  'productType': p.get('productType'),
+                  'variantsInfo': p.get('variantsInfo'),
+                  'productOptions': p.get('productOptions'),
+                  'physicalProperties': p.get('physicalProperties'),
+              }
+
+          def compact_inv(i):
+              keys=('id','productId','variantId','sku','quantity','trackQuantity','availabilityStatus','variants')
+              return {k:i.get(k) for k in keys if k in i}
+
+          def extract_sku_nodes(obj, path='root'):
+              out=[]
+              if isinstance(obj, dict):
+                  sku=obj.get('sku') or obj.get('SKU')
+                  ident=obj.get('variantId') or obj.get('id') or obj.get('_id')
+                  if sku and ident:
+                      out.append({'sku':str(sku),'id':str(ident),'path':path})
+                  for k,v in obj.items():
+                      out.extend(extract_sku_nodes(v, f'{path}.{k}'))
+              elif isinstance(obj, list):
+                  for n,v in enumerate(obj):
+                      out.extend(extract_sku_nodes(v, f'{path}[{n}]'))
+              return out
+
+          products=wix.get_all_products('v3')
+          inventory=wix.get_all_inventory_items('v3')
+          zd_products=zendrop.get_all_products()
+
+          print(f'WIX_PRODUCTS={len(products)}')
+          print(f'WIX_INVENTORY_ITEMS={len(inventory)}')
+          print(f'ZENDROP_PRODUCTS={len(zd_products)}')
+
+          wix_nodes=[]
+          for p in products:
+              for node in extract_sku_nodes(p, f"product:{p.get('id')}"):
+                  node['product_id']=str(p.get('id') or '')
+                  node['product_name']=p.get('name') or ''
+                  wix_nodes.append(node)
+
+          zd_variants=[]
+          zd_errors=[]
+          for p in zd_products:
+              pid=str(p.get('id') or p.get('product_id') or '')
+              if not pid:
+                  continue
+              try:
+                  detail=zendrop.get_product_stock(pid)
+                  for v in detail.get('variants',[]):
+                      sku=v.get('sku') or v.get('SKU')
+                      vid=v.get('id') or v.get('variant_id')
+                      if sku and vid:
+                          zd_variants.append({
+                              'product_id':pid,
+                              'product_name':p.get('name') or '',
+                              'variant_id':str(vid),
+                              'sku':str(sku),
+                              'quantity':v.get('inventory_quantity',v.get('quantity')),
+                              'in_stock':v.get('in_stock'),
+                          })
+              except Exception as exc:
+                  zd_errors.append({'product_id':pid,'error_type':exc.__class__.__name__})
+
+          by_sku={}
+          for z in zd_variants:
+              by_sku.setdefault(z['sku'].strip().lower(),[]).append(z)
+
+          exact=[]; ambiguous=[]; unmatched=[]
+          for w in wix_nodes:
+              matches=by_sku.get(w['sku'].strip().lower(),[])
+              if len(matches)==1:
+                  z=matches[0]
+                  exact.append({
+                      'mapping_key':f"{w['product_id']}:{w['id']}",
+                      'wix_product_id':w['product_id'],
+                      'wix_variant_id':w['id'],
+                      'wix_sku':w['sku'],
+                      'wix_name':w['product_name'],
+                      'zendrop_product_id':z['product_id'],
+                      'zendrop_variant_id':z['variant_id'],
+                      'zendrop_name':z['product_name'],
+                  })
+              elif len(matches)>1:
+                  ambiguous.append({'wix':w,'matches':matches})
+              else:
+                  unmatched.append(w)
+
+          report={
+              'wix_products':len(products),
+              'wix_inventory_items':len(inventory),
+              'wix_sku_variant_nodes':len(wix_nodes),
+              'zendrop_products':len(zd_products),
+              'zendrop_variants_with_sku':len(zd_variants),
+              'exact_sku_matches':len(exact),
+              'ambiguous_sku_matches':len(ambiguous),
+              'unmatched_wix_variants':len(unmatched),
+              'zendrop_detail_errors':zd_errors,
+              'exact_matches':exact,
+              'ambiguous':ambiguous,
+              'unmatched':unmatched,
+              'wix_products_compact':[compact_wix_product(p) for p in products],
+              'wix_inventory_compact':[compact_inv(i) for i in inventory],
+          }
+          print('VARIANT_AUDIT_REPORT=' + json.dumps(report, separators=(',',':'), default=str))
+          if not exact:
+              print('VARIANT_AUDIT=HOLD reason=no_exact_sku_matches')
+          elif ambiguous or unmatched:
+              print(f"VARIANT_AUDIT=PARTIAL exact={len(exact)} ambiguous={len(ambiguous)} unmatched={len(unmatched)}")
+          else:
+              print(f"VARIANT_AUDIT=PASS exact={len(exact)} all_wix_variants_mapped=true")
+          PY
+          REMOTE
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

@@ -14,10 +14,13 @@ OUTPUT = Path("/tmp/wix-pricing-audit.json")
 
 CHILD = r'''
 import json
+from datetime import datetime, timezone
+
 import httpx
 import wix_client as wix
 
-VARIANTS_URL = "https://www.wixapis.com/stores/v3/products/query-variants"
+PRODUCTS_URL = "https://www.wixapis.com/stores/v3/products/query"
+PRODUCT_FIELDS = ["MERCHANT_DATA", "CURRENCY", "MIN_PRICE_VARIANT"]
 
 
 def first(mapping, *keys):
@@ -39,98 +42,111 @@ def amount(value):
         return None
 
 
-def price_from_product(product):
-    price_range = product.get("actualPriceRange") or product.get("actual_price_range") or {}
-    minimum = amount(first(price_range, "minValue", "min", "minimum"))
-    maximum = amount(first(price_range, "maxValue", "max", "maximum"))
-    if minimum is None and maximum is None:
-        direct = amount(first(product, "price", "actualPrice", "actual_price"))
-        minimum = maximum = direct
-    return minimum, maximum
-
-
-def query_variants():
-    rows = []
+def query_products():
+    products = []
     cursor = None
     while True:
-        paging = {"limit": 1000}
+        paging = {"limit": 100}
         if cursor:
             paging["cursor"] = cursor
         response = httpx.post(
-            VARIANTS_URL,
+            PRODUCTS_URL,
             headers={
                 "Authorization": wix.WIX_API_KEY,
                 "wix-site-id": wix.WIX_SITE_ID,
                 "Content-Type": "application/json",
             },
-            json={"fields": [], "query": {"cursorPaging": paging}},
+            json={
+                "fields": PRODUCT_FIELDS,
+                "query": {"cursorPaging": paging},
+            },
             timeout=30.0,
         )
         response.raise_for_status()
         payload = response.json()
-        page = payload.get("variants") or []
-        rows.extend(item for item in page if isinstance(item, dict))
+        page = payload.get("products") or []
+        products.extend(item for item in page if isinstance(item, dict))
         metadata = payload.get("pagingMetadata") or {}
-        cursors = metadata.get("cursors") or {}
-        cursor = cursors.get("next")
+        cursor = (metadata.get("cursors") or {}).get("next")
         if not metadata.get("hasNext") or not cursor:
             break
-    return rows
+    return products
+
+
+def price_range(product):
+    value = product.get("actualPriceRange") or product.get("actual_price_range") or {}
+    return (
+        amount(first(value, "minValue", "min", "minimum")),
+        amount(first(value, "maxValue", "max", "maximum")),
+    )
+
+
+def min_variant(product):
+    return (product.get("variantSummary") or {}).get("minPriceVariant") or {}
+
+
+def item_cost(product, variant):
+    revenue = variant.get("revenueDetails") or {}
+    return amount(revenue.get("cost")) or amount(
+        first(product.get("costRange") or {}, "minValue", "min", "minimum")
+    )
 
 
 version = wix.detect_catalog_version()
-products = wix.get_all_products(version)
-variants = query_variants() if version == "v3" else []
-variants_by_product = {}
-for variant in variants:
-    product_data = variant.get("productData") or {}
-    product_id = first(product_data, "productId", "product_id")
-    if product_id:
-        variants_by_product.setdefault(str(product_id), []).append(variant)
+if version != "v3":
+    raise SystemExit(f"unsupported catalog version for cost-evidenced pricing audit: {version}")
 
 rows = []
-for product in products:
-    if not isinstance(product, dict):
-        continue
-    product_id = first(product, "id", "_id")
-    minimum, maximum = price_from_product(product)
-    product_variants = variants_by_product.get(str(product_id), [])
-    variant_prices = []
-    for variant in product_variants:
-        price = variant.get("price") or {}
-        actual = price.get("actualPrice") or price.get("actual_price") or {}
-        value = amount(actual)
-        if value is not None:
-            variant_prices.append(value)
-    if variant_prices:
-        minimum = min(variant_prices)
-        maximum = max(variant_prices)
+for product in query_products():
+    variant = min_variant(product)
+    minimum, maximum = price_range(product)
+    cost = item_cost(product, variant)
+    current_margin = first(variant.get("revenueDetails") or {}, "profitMargin")
+    try:
+        current_margin = round(float(current_margin), 4)
+    except (TypeError, ValueError):
+        current_margin = None
+    count = (product.get("variantSummary") or {}).get("variantCount") or 0
+    try:
+        count = int(count)
+    except (TypeError, ValueError):
+        count = 0
+    if minimum is None:
+        status = "PRICE_MISSING"
+    elif cost is None:
+        status = "COST_INPUT_REQUIRED"
+    else:
+        status = "SHIPPING_AND_PAYMENT_COSTS_REQUIRED"
     rows.append({
-        "id": product_id,
+        "id": first(product, "id", "_id"),
         "name": first(product, "name", "title"),
         "slug": first(product, "slug", "urlSlug"),
         "visible": first(product, "visible", "isVisible"),
         "currency": first(product, "currency", "currencyCode") or "USD",
         "current_min_price": minimum,
         "current_max_price": maximum,
-        "variant_count": len(product_variants),
-        "supplier_cost": None,
+        "variant_count": count,
+        "item_cost": cost,
+        "supplier_cost": cost,
+        "current_gross_margin": current_margin,
         "shipping_cost": None,
+        "payment_processing_cost": None,
         "recommended_price": None,
-        "pricing_status": "COST_INPUT_REQUIRED" if minimum is not None else "PRICE_MISSING",
+        "pricing_status": status,
     })
 
 print(json.dumps({
-    "generated_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+    "generated_at": datetime.now(timezone.utc).isoformat(),
     "catalog_version": version,
     "product_count": len(rows),
-    "variant_count": len(variants),
+    "variant_count": sum(row["variant_count"] for row in rows),
     "currency_default": "USD",
     "policy": {
-        "target_gross_margin": 0.35,
         "price_changes_performed": False,
-        "requires_supplier_cost": True,
         "requires_human_approval": True,
+        "requires_shipping_cost": True,
+        "requires_payment_processing_cost": True,
+        "no_price_recommendation_without_all_cost_inputs": True,
     },
     "products": sorted(rows, key=lambda item: str(item.get("name") or "").lower()),
 }, indent=2, sort_keys=True))

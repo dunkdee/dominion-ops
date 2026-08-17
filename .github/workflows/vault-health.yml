@@ -1,12 +1,24 @@
 name: Vault Health Check
 
 on:
-  schedule:
-    - cron: '0 6 * * *'   # daily at 6am UTC
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type RUN VAULT DOCTOR"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 jobs:
   doctor:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'RUN VAULT DOCTOR' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Run vault doctor on VM

@@ -13,6 +13,7 @@ from validate_buddy_authority_policy import (  # noqa: E402
     PolicyError,
     _missing_founder_gate,
     _pattern_hits,
+    _unpinned_actions,
     autonomy_workflow_errors,
     validate,
     workflow_triggers,
@@ -109,6 +110,19 @@ class BuddyAuthorityPolicyTests(unittest.TestCase):
         hits = _pattern_hits("sudo systemctl restart example.service",
                              OBSERVER_FORBIDDEN_PATTERNS)
         self.assertIn("systemd mutation", hits)
+
+    def test_automatic_action_reference_must_be_commit_pinned(self):
+        self.assertEqual(
+            _unpinned_actions("    uses: appleboy/ssh-action@v1.2.0\\n"),
+            ["appleboy/ssh-action@v1.2.0"],
+        )
+        self.assertEqual(
+            _unpinned_actions(
+                "    uses: appleboy/ssh-action@"
+                "7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0\\n"
+            ),
+            [],
+        )
 
 
 if __name__ == "__main__":

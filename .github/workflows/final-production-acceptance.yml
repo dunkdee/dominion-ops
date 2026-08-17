@@ -26,6 +26,15 @@ on:
       - 'web/**'
       - 'docker-compose.yml'
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type RUN PRODUCTION ACCEPTANCE"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -110,7 +119,11 @@ jobs:
           check_url surplus https://surplus.dominionhealing.org/
 
   runtime-acceptance:
-    if: github.event_name != 'pull_request'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'RUN PRODUCTION ACCEPTANCE' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     needs: validate-release
     runs-on: ubuntu-24.04
     timeout-minutes: 20

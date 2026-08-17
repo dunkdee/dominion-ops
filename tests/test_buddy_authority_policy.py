@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from validate_buddy_authority_policy import (  # noqa: E402
     OBSERVER_FORBIDDEN_PATTERNS,
     PolicyError,
+    _on_has_exact_path,
     _missing_founder_gate,
     _pattern_hits,
     _unpinned_actions,
@@ -95,6 +96,19 @@ class BuddyAuthorityPolicyTests(unittest.TestCase):
     def test_trigger_parser_handles_quoted_on_key(self):
         text = 'name: test\n"on":\n  push:\n  workflow_dispatch:\njobs:\n  x:\n    runs-on: ubuntu-latest\n'
         self.assertEqual(workflow_triggers(text), {"push", "workflow_dispatch"})
+
+    def test_push_path_must_match_the_workflow_exactly(self):
+        text = """on:
+  push:
+    paths:
+      - '.github/workflows/example.yml'
+"""
+        self.assertTrue(
+            _on_has_exact_path(text, ".github/workflows/example.yml")
+        )
+        self.assertFalse(
+            _on_has_exact_path(text, ".github/workflows/other.yml")
+        )
 
     def test_founder_gate_without_exact_sha_is_rejected(self):
         block = """  apply:

@@ -1,10 +1,23 @@
 name: Sync Netlify Env from GitHub Secrets
 on:
   workflow_dispatch:
-  push:
-    paths: [".github/workflows/netlify_sync_env.yml"]
+    inputs:
+      confirm:
+        description: "Type SYNC NETLIFY ENV"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
+
 jobs:
   sync:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'SYNC NETLIFY ENV' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -34,13 +34,13 @@ Runs on pull requests and selected pushes. It receives no production credentials
 
 ### 2. Runtime observation
 
-`.github/workflows/watchdog.yml` runs on a schedule and by manual request. It may use the VM connection only to read service state, listeners, HTTP health contracts, containment holds, and firewall-rule absence. It may not restart, rebuild, deploy, write configuration, or repair.
+`.github/workflows/watchdog.yml` runs on a schedule, by manual request, and immediately after a push that changes only its own workflow file. It may use the VM connection only to read service state, listeners, HTTP health contracts, containment holds, and firewall-rule absence. It may not restart, rebuild, deploy, write configuration, or repair.
 
 An observer failure is evidence, not permission to improvise a fix.
 
 ### 3. Buddy bounded self-repair
 
-`.github/workflows/fix-buddy-brains.yml` is repurposed as the bounded self-heal lane and may restart only:
+`.github/workflows/fix-buddy-brains.yml` is repurposed as the bounded self-heal lane. It runs on schedule, by manual request, and immediately after a push that changes only its own workflow file. It may restart only:
 
 - `dominion-buddy-web.service`
 - `dominion-proposal-queue.service`

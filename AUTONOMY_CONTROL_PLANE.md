@@ -1,7 +1,7 @@
 # Dominion Autonomy Control Plane
 
 **Authority:** Dewayne Singleton, Founder and final decision-maker  
-**Policy:** `automation_control_policy.json`  
+**Policy:** `governance/buddy/buddy_authority_policy.json` (`autonomy_control`)  
 **Default:** if evidence, authority, identity, or scope is uncertain, stop and report `BLOCKED`.
 
 ## Outcome

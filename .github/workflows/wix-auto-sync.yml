@@ -1,9 +1,16 @@
 name: Wix inventory and fulfillment monitor
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type RUN WIX AUTO SYNC"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -14,6 +21,11 @@ concurrency:
 
 jobs:
   sync:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'RUN WIX AUTO SYNC' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

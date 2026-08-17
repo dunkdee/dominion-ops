@@ -2,12 +2,17 @@ name: Finish Dominion Production Activation
 # Governed production activation orchestrator
 # Retriggered after Obsidian runtime verification was hardened to use the real authenticated service response.
 
-"on":
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/finish-production-activation.yml'
-  workflow_dispatch: {}
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type FINISH PRODUCTION ACTIVATION"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   actions: write
@@ -20,6 +25,11 @@ concurrency:
 
 jobs:
   activate:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'FINISH PRODUCTION ACTIVATION' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

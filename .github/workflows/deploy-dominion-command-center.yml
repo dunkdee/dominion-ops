@@ -1,13 +1,16 @@
 name: Deploy Dominion Command Center
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'obsidian/**'
-      - 'scripts/deploy_dominion_command_center.sh'
-      - '.github/workflows/deploy-dominion-command-center.yml'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY DOMINION COMMAND CENTER"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -18,6 +21,11 @@ concurrency:
 
 jobs:
   deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'DEPLOY DOMINION COMMAND CENTER' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: foundation-vm-production

@@ -1,13 +1,17 @@
 name: Repair Obsidian Remote
 # Governed browser-native production cutover — canary proven 2026-08-10
 
-"on":
-  push:
-    branches: [main]
-    paths:
-      - 'docker-compose.yml'
-      - '.github/workflows/repair-obsidian-remote.yml'
-  workflow_dispatch: {}
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type REPAIR OBSIDIAN REMOTE"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -19,6 +23,11 @@ concurrency:
 
 jobs:
   cutover:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'REPAIR OBSIDIAN REMOTE' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment: foundation-vm-production

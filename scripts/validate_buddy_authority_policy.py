@@ -90,6 +90,10 @@ OBSERVER_FORBIDDEN_PATTERNS = {
         re.IGNORECASE,
     ),
 }
+ACTION_USES_RE = re.compile(
+    r"^\\s*uses:\\s*([^@\\s]+)@([^\\s#]+)",
+    re.MULTILINE,
+)
 
 
 class PolicyError(ValueError):
@@ -280,6 +284,14 @@ def _pattern_hits(text: str, patterns: dict[str, re.Pattern[str]]) -> list[str]:
     return [name for name, pattern in patterns.items() if pattern.search(text)]
 
 
+def _unpinned_actions(text: str) -> list[str]:
+    return [
+        f"{action}@{reference}"
+        for action, reference in ACTION_USES_RE.findall(text)
+        if re.fullmatch(r"[0-9a-fA-F]{40}", reference) is None
+    ]
+
+
 def _service_names(text: str) -> set[str]:
     return set(re.findall(r"\b[A-Za-z0-9_-]+\.service\b", text))
 
@@ -348,6 +360,8 @@ def autonomy_workflow_errors(root: Path, policy: dict[str, Any]) -> list[str]:
             errors.append(f"{observer_path}: observer triggers changed")
         for hit in _pattern_hits(text, OBSERVER_FORBIDDEN_PATTERNS):
             errors.append(f"{observer_path}: forbidden observer {hit}")
+        for action in _unpinned_actions(text):
+            errors.append(f"{observer_path}: unpinned action {action}")
         for marker in (
             "RUNTIME_OBSERVER=", "CONTAINMENT_HOLD=", "allow-ops-dashboard",
             "allow-twilio-router", "127.0.0.1:5070/buddy",
@@ -412,7 +426,11 @@ def autonomy_workflow_errors(root: Path, policy: dict[str, Any]) -> list[str]:
         text = path.read_text(encoding="utf-8")
         if not workflow_triggers(text).intersection(AUTOMATIC_TRIGGERS):
             continue
-        if relative in approved or relative in guarded or relative in manual:
+        if relative in approved:
+            for action in _unpinned_actions(text):
+                errors.append(f"{relative}: unpinned approved automatic action {action}")
+            continue
+        if relative in guarded or relative in manual:
             continue
         hits = _pattern_hits(text, HIGH_RISK_AUTOMATIC_PATTERNS)
         production = any(marker in text for marker in PRODUCTION_MARKERS)

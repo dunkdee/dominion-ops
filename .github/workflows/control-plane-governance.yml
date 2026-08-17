@@ -31,6 +31,10 @@ on:
       - "scripts/validate_control_plane_stage6.py"
       - "scripts/validate_control_plane_stage7.py"
       - "scripts/validate_control_plane_stage8.py"
+      - ".github/workflows/**"
+      - "AUTONOMY_CONTROL_PLANE.md"
+      - "scripts/validate_buddy_authority_policy.py"
+      - "tests/test_buddy_authority_policy.py"
       - ".github/workflows/control-plane-governance.yml"
   push:
     branches: [main]
@@ -63,6 +67,10 @@ on:
       - "scripts/validate_control_plane_stage6.py"
       - "scripts/validate_control_plane_stage7.py"
       - "scripts/validate_control_plane_stage8.py"
+      - ".github/workflows/**"
+      - "AUTONOMY_CONTROL_PLANE.md"
+      - "scripts/validate_buddy_authority_policy.py"
+      - "tests/test_buddy_authority_policy.py"
       - ".github/workflows/control-plane-governance.yml"
   workflow_dispatch:
 
@@ -98,6 +106,8 @@ jobs:
             scripts/validate_control_plane_stage6.py \
             scripts/validate_control_plane_stage7.py \
             scripts/validate_control_plane_stage8.py \
+            scripts/validate_buddy_authority_policy.py \
+            tests/test_buddy_authority_policy.py \
             tests/test_control_plane_runtime.py \
             tests/test_control_plane_stage3.py \
             tests/test_control_plane_stage4.py \
@@ -132,6 +142,12 @@ jobs:
 
       - name: Validate Stage 8 final Council release
         run: python3 scripts/validate_control_plane_stage8.py
+
+      - name: Validate Buddy authority and autonomy boundaries
+        run: python3 scripts/validate_buddy_authority_policy.py governance/buddy/buddy_authority_policy.json
+
+      - name: Run Buddy and autonomy policy tests
+        run: python3 -m unittest -v tests/test_buddy_authority_policy.py
 
       - name: Run deterministic control-plane tests
         run: python3 -m unittest discover -s tests -p 'test_control_plane_*.py' -v

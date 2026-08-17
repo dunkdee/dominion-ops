@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Observe and repair only the approved Buddy services
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}

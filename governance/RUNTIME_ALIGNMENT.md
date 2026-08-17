@@ -1,3 +1,6 @@
+> [!WARNING]
+> **Superseded as an active runtime declaration on 2026-08-15.** This historical Stage-2 narrative is not authorization to run deployments or to re-enable any service. The verified recovery checkpoint is [2026-08-15-containment-record.md](runtime/2026-08-15-containment-record.md). Live state must be re-proven before action.
+
 # Dominion Production Runtime Alignment
 
 **Initial snapshot:** 2026-07-21 19:32 UTC  

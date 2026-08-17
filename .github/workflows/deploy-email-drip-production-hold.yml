@@ -1,14 +1,16 @@
 name: Deploy Email Drip — Production HOLD
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'services/email_drip/**'
-      - 'scripts/set_email_drip_runtime.py'
-      - 'scripts/deploy_email_drip_hold_remote.sh'
-      - 'scripts/quarantine_vm_repo_state.sh'
-      - '.github/workflows/deploy-email-drip-production-hold.yml'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY EMAIL DRIP HOLD"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -19,6 +21,11 @@ concurrency:
 
 jobs:
   validate:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'DEPLOY EMAIL DRIP HOLD' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     outputs:
       deploy_sha: ${{ steps.sha.outputs.value }}
@@ -51,6 +58,11 @@ jobs:
           echo "EMAIL_DRIP_RELEASE_PREFLIGHT=PASS sha=$GITHUB_SHA"
 
   deploy_hold:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'DEPLOY EMAIL DRIP HOLD' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 20

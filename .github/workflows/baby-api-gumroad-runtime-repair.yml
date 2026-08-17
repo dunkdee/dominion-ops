@@ -11,6 +11,16 @@ on:
     paths:
       - 'scripts/repair_baby_api_gumroad.sh'
       - '.github/workflows/baby-api-gumroad-runtime-repair.yml'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type REPAIR BABY API GUMROAD"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -50,7 +60,11 @@ jobs:
           echo 'BABY_API_GUMROAD_VALIDATE=PASS'
 
   repair:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'REPAIR BABY API GUMROAD' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 30

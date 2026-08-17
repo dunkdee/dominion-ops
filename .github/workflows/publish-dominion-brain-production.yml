@@ -2,20 +2,16 @@ name: Publish Dominion Brain — Production
 # Authorized vault password rotation trigger — 2026-08-10T22:28-04:00
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'brain/**'
-      - 'agents/registry.json'
-      - 'governance/**'
-      - 'architecture/CONTROL_PLANE.md'
-      - 'STATE.md'
-      - 'README.md'
-      - 'scripts/render_dominion_brain.py'
-      - 'scripts/check_brain_inputs.py'
-      - 'scripts/deploy_dominion_brain_remote.sh'
-      - 'scripts/quarantine_vm_repo_state.sh'
-      - '.github/workflows/publish-dominion-brain-production.yml'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type PUBLISH DOMINION BRAIN"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -26,6 +22,11 @@ concurrency:
 
 jobs:
   validate:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'PUBLISH DOMINION BRAIN' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     outputs:
       deploy_sha: ${{ steps.sha.outputs.value }}
@@ -60,6 +61,11 @@ jobs:
           PY
 
   publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'PUBLISH DOMINION BRAIN' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 20

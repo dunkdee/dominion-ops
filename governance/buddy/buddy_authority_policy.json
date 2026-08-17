@@ -124,5 +124,127 @@
       "DEPLOYED_HASH_RECEIPT",
       "INDEPENDENT_RUNTIME_ACCEPTANCE"
     ]
+  },
+  "autonomy_control": {
+    "schema": "dominion-autonomy-control-v1",
+    "version": "1.0.0",
+    "authority": {
+      "principal": "Dewayne Singleton",
+      "final_decision_maker": "FOUNDER",
+      "default_on_uncertainty": "STOP_AND_REPORT_BLOCKED"
+    },
+    "lanes": {
+      "ci_validation": {
+        "automatic": true,
+        "production_credentials": false,
+        "production_mutation": false
+      },
+      "runtime_observation": {
+        "automatic": true,
+        "workflow": ".github/workflows/watchdog.yml",
+        "production_mutation": false,
+        "evidence_required": true
+      },
+      "buddy_bounded_self_repair": {
+        "automatic": true,
+        "workflow": ".github/workflows/fix-buddy-brains.yml",
+        "allowed_services": [
+          "dominion-buddy-web.service",
+          "dominion-proposal-queue.service",
+          "dominion-sentinel.service"
+        ],
+        "allowed_mutation": "RESTART_ONLY",
+        "max_attempts": 2,
+        "cooldown_seconds": 300,
+        "on_exhaustion": "OPEN_CIRCUIT_AND_REPORT_BLOCKED"
+      },
+      "founder_approved_apply": {
+        "automatic": false,
+        "required_inputs": [
+          "confirm",
+          "commit_sha"
+        ],
+        "requires_exact_main_sha": true,
+        "requires_typed_confirmation": true,
+        "receipt_required": true,
+        "rollback_required": true
+      }
+    },
+    "manual_only_workflows": {
+      ".github/workflows/activate-email-drip-production.yml": "ACTIVATE EMAIL DRIP LIVE",
+      ".github/workflows/deploy-command-center.yml": "DEPLOY COMMAND CENTER",
+      ".github/workflows/deploy-dominion-command-center.yml": "DEPLOY DOMINION COMMAND CENTER",
+      ".github/workflows/deploy-email-drip-production-hold.yml": "DEPLOY EMAIL DRIP HOLD",
+      ".github/workflows/email-drip-readonly-planner.yml": "RUN EMAIL DRIP PLANNER",
+      ".github/workflows/finish-production-activation.yml": "FINISH PRODUCTION ACTIVATION",
+      ".github/workflows/netlify_sync_env.yml": "SYNC NETLIFY ENV",
+      ".github/workflows/one-time-harden-baby-api.yml": "HARDEN BABY API",
+      ".github/workflows/publish-dominion-brain-production.yml": "PUBLISH DOMINION BRAIN",
+      ".github/workflows/repair-email-drip-suppression-and-hold.yml": "REPAIR EMAIL DRIP HOLD",
+      ".github/workflows/repair-obsidian-remote.yml": "REPAIR OBSIDIAN REMOTE",
+      ".github/workflows/vault-health.yml": "RUN VAULT DOCTOR",
+      ".github/workflows/wix-agent-preflight.yml": "RUN WIX PREFLIGHT",
+      ".github/workflows/wix-auto-sync.yml": "RUN WIX AUTO SYNC",
+      ".github/workflows/wix-zendrop-secret-wire.yml": "WIRE ZENDROP SECRET"
+    },
+    "guarded_jobs": {
+      ".github/workflows/baby-api-gumroad-runtime-repair.yml": {
+        "repair": "REPAIR BABY API GUMROAD"
+      },
+      ".github/workflows/final-production-acceptance.yml": {
+        "runtime-acceptance": "RUN PRODUCTION ACCEPTANCE"
+      },
+      ".github/workflows/sync-dominion-laptop.yml": {
+        "sync-canonical-laptop": "APPLY CANONICAL PARITY",
+        "sync-canonical-vm-repo": "APPLY CANONICAL PARITY",
+        "verify-three-node-parity": "APPLY CANONICAL PARITY"
+      },
+      ".github/workflows/wix-agent-runtime-repair.yml": {
+        "repair": "REPAIR WIX RUNTIME"
+      }
+    },
+    "approved_automatic_mutators": {
+      ".github/workflows/fix-buddy-brains.yml": "BUDDY_BOUNDED_RESTART",
+      ".github/workflows/buddy-production-repair.yml": "TEMPORARY_LEGACY_BUDDY_EXCEPTION"
+    },
+    "legacy_buddy_exception": {
+      "workflow": ".github/workflows/buddy-production-repair.yml",
+      "trigger_must_be_limited_to_own_path": true,
+      "scope_must_not_expand": true,
+      "removal_condition": "BUDDY_LIVE_SOURCE_RECONCILED_AND_CANONICAL_REPAIR_PROMOTED"
+    },
+    "external_action_classes": [
+      "PUBLISH",
+      "OUTREACH_OR_MESSAGE",
+      "SPEND_OR_MOVE_MONEY",
+      "LIVE_TRADE",
+      "SIGN_OR_FILE",
+      "CHANGE_CREDENTIALS",
+      "CHANGE_FIREWALL",
+      "OPEN_PUBLIC_INGRESS",
+      "ACTIVATE_QUARANTINED_AGENT",
+      "CANONICAL_STATE_CHANGE"
+    ],
+    "state_vocabulary": [
+      "VERIFIED_ONLINE",
+      "RUNNING_HEALTH_UNVERIFIED",
+      "DEGRADED",
+      "BLOCKED",
+      "EXTERNAL_ACTION_HOLD",
+      "QUARANTINED",
+      "RETIRED",
+      "UNKNOWN"
+    ],
+    "online_evidence_fields": [
+      "canonical_source",
+      "owner",
+      "process",
+      "port",
+      "route",
+      "health_contract",
+      "logs",
+      "persistence_and_restart",
+      "rollback"
+    ]
   }
 }

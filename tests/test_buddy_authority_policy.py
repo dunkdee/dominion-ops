@@ -8,7 +8,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_buddy_authority_policy import PolicyError, validate  # noqa: E402
+from validate_buddy_authority_policy import (  # noqa: E402
+    OBSERVER_FORBIDDEN_PATTERNS,
+    PolicyError,
+    _missing_founder_gate,
+    _pattern_hits,
+    autonomy_workflow_errors,
+    validate,
+    workflow_triggers,
+)
 
 
 POLICY_PATH = ROOT / "governance" / "buddy" / "buddy_authority_policy.json"
@@ -61,6 +69,46 @@ class BuddyAuthorityPolicyTests(unittest.TestCase):
         candidate["representation"]["may_claim_founder_legal_identity"] = True
         with self.assertRaises(PolicyError):
             validate(candidate)
+
+    def test_autonomy_policy_has_four_canonical_lanes(self):
+        lanes = self.policy["autonomy_control"]["lanes"]
+        self.assertEqual(set(lanes), {
+            "ci_validation",
+            "runtime_observation",
+            "buddy_bounded_self_repair",
+            "founder_approved_apply",
+        })
+
+    def test_bounded_healer_scope_matches_buddy_policy(self):
+        bounded = set(self.policy["autonomy_control"]["lanes"]
+                      ["buddy_bounded_self_repair"]["allowed_services"])
+        canonical = set(self.policy["self_repair"]["allowed_services"])
+        self.assertEqual(bounded, canonical)
+
+    def test_repository_workflows_match_autonomy_policy(self):
+        observer = self.policy["autonomy_control"]["lanes"]["runtime_observation"]["workflow"]
+        if not (ROOT / observer).is_file():
+            self.skipTest("workflow tree not present in local policy-only fixture")
+        self.assertEqual(autonomy_workflow_errors(ROOT, self.policy), [])
+
+    def test_trigger_parser_handles_quoted_on_key(self):
+        text = 'name: test\n"on":\n  push:\n  workflow_dispatch:\njobs:\n  x:\n    runs-on: ubuntu-latest\n'
+        self.assertEqual(workflow_triggers(text), {"push", "workflow_dispatch"})
+
+    def test_founder_gate_without_exact_sha_is_rejected(self):
+        block = """  apply:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'APPLY TEST' &&
+      github.ref == 'refs/heads/main'
+"""
+        self.assertIn("inputs.commit_sha == github.sha",
+                      _missing_founder_gate(block, "APPLY TEST"))
+
+    def test_observer_restart_command_is_forbidden(self):
+        hits = _pattern_hits("sudo systemctl restart example.service",
+                             OBSERVER_FORBIDDEN_PATTERNS)
+        self.assertIn("systemd mutation", hits)
 
 
 if __name__ == "__main__":

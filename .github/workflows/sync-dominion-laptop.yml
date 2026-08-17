@@ -16,6 +16,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type APPLY CANONICAL PARITY"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -104,7 +113,11 @@ jobs:
           retention-days: 1
 
   sync-canonical-laptop:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'APPLY CANONICAL PARITY' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     needs: [validate-scripts, build-canonical-brain]
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 20
@@ -189,7 +202,11 @@ jobs:
           if (Test-Path -LiteralPath $artifact) { Remove-Item -LiteralPath $artifact -Recurse -Force }
 
   sync-canonical-vm-repo:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'APPLY CANONICAL PARITY' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     needs: [validate-scripts, build-canonical-brain]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -321,7 +338,11 @@ jobs:
           rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/dominion-parity-*.bundle "$RUNNER_TEMP"/quarantine-vm-*.sh
 
   verify-three-node-parity:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'APPLY CANONICAL PARITY' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     needs: [build-canonical-brain, sync-canonical-laptop, sync-canonical-vm-repo]
     runs-on: ubuntu-24.04
     timeout-minutes: 5

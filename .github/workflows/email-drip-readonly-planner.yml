@@ -2,10 +2,15 @@ name: Email Drip — Read-Only Production Planner
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/email-drip-readonly-planner.yml'
+    inputs:
+      confirm:
+        description: "Type RUN EMAIL DRIP PLANNER"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -16,6 +21,11 @@ concurrency:
 
 jobs:
   planner:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'RUN EMAIL DRIP PLANNER' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: foundation-vm-production

@@ -107,20 +107,20 @@ jobs:
                     raise SystemExit('FastAPI app declaration not found in proposal_queue.py')
                 guard = r'''
 
-# DOMINION_PROPOSAL_AUTH_V1
-@app.middleware("http")
-async def _protect_proposal_mutations(request, call_next):
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/proposals/"):
-        import hmac
-        from fastapi.responses import JSONResponse
-        expected = os.getenv("CONDUCTOR_API_KEY", "")
-        supplied = request.headers.get("X-Conductor-Key", "")
-        if not expected:
-            return JSONResponse(status_code=503, content={"detail": "Proposal authentication is not configured"})
-        if not supplied or not hmac.compare_digest(supplied, expected):
-            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-    return await call_next(request)
-'''
+            # DOMINION_PROPOSAL_AUTH_V1
+            @app.middleware("http")
+            async def _protect_proposal_mutations(request, call_next):
+                if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/proposals/"):
+                    import hmac
+                    from fastapi.responses import JSONResponse
+                    expected = os.getenv("CONDUCTOR_API_KEY", "")
+                    supplied = request.headers.get("X-Conductor-Key", "")
+                    if not expected:
+                        return JSONResponse(status_code=503, content={"detail": "Proposal authentication is not configured"})
+                    if not supplied or not hmac.compare_digest(supplied, expected):
+                        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+                return await call_next(request)
+            '''
                 p = p[:app_match.end()] + guard + p[app_match.end():]
                 proposal.write_text(p)
             if marker not in proposal.read_text():

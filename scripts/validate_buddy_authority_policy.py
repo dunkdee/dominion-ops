@@ -249,6 +249,14 @@ def workflow_triggers(text: str) -> set[str]:
     return triggers
 
 
+def _on_has_exact_path(text: str, relative: str) -> bool:
+    return re.search(
+        rf"^\s*-\s*['\"]?{re.escape(relative)}['\"]?\s*$",
+        _on_block(text),
+        flags=re.MULTILINE,
+    ) is not None
+
+
 def workflow_job_blocks(text: str) -> dict[str, str]:
     lines = text.splitlines()
     start = next((i for i, line in enumerate(lines) if re.match(r"^jobs\s*:\s*$", line)), None)
@@ -356,8 +364,10 @@ def autonomy_workflow_errors(root: Path, policy: dict[str, Any]) -> list[str]:
         errors.append(f"{observer_path}: observer missing")
     else:
         text = observer.read_text(encoding="utf-8")
-        if workflow_triggers(text) != {"schedule", "workflow_dispatch"}:
+        if workflow_triggers(text) != {"push", "schedule", "workflow_dispatch"}:
             errors.append(f"{observer_path}: observer triggers changed")
+        if not _on_has_exact_path(text, observer_path.as_posix()):
+            errors.append(f"{observer_path}: push not limited to own path")
         for hit in _pattern_hits(text, OBSERVER_FORBIDDEN_PATTERNS):
             errors.append(f"{observer_path}: forbidden observer {hit}")
         for action in _unpinned_actions(text):
@@ -377,8 +387,10 @@ def autonomy_workflow_errors(root: Path, policy: dict[str, Any]) -> list[str]:
         errors.append(f"{buddy_path}: bounded Buddy workflow missing")
     else:
         text = buddy.read_text(encoding="utf-8")
-        if workflow_triggers(text) != {"schedule", "workflow_dispatch"}:
+        if workflow_triggers(text) != {"push", "schedule", "workflow_dispatch"}:
             errors.append(f"{buddy_path}: Buddy self-heal triggers changed")
+        if not _on_has_exact_path(text, buddy_path.as_posix()):
+            errors.append(f"{buddy_path}: push not limited to own path")
         expected = set(bounded["allowed_services"])
         if _service_names(text) != expected:
             errors.append(f"{buddy_path}: Buddy service scope changed")
@@ -415,7 +427,7 @@ def autonomy_workflow_errors(root: Path, policy: dict[str, Any]) -> list[str]:
     else:
         if workflow_triggers(legacy_text) != {"push", "workflow_dispatch"}:
             errors.append(f"{legacy_path}: legacy trigger scope changed")
-        if f"- '{legacy_path.as_posix()}'" not in _on_block(legacy_text):
+        if not _on_has_exact_path(legacy_text, legacy_path.as_posix()):
             errors.append(f"{legacy_path}: push not limited to own path")
         if _service_names(legacy_text) != REQUIRED_REPAIR_SERVICES:
             errors.append(f"{legacy_path}: legacy Buddy service scope expanded")

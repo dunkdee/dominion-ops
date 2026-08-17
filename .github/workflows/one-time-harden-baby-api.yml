@@ -1,11 +1,16 @@
 name: One-time harden Baby API reconciliation
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/one-time-harden-baby-api.yml'
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type HARDEN BABY API"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -13,6 +18,11 @@ permissions:
 
 jobs:
   patch:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'HARDEN BABY API' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

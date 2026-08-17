@@ -1,63 +1,169 @@
-name: Empire Watchdog — Auto-Restart Down Containers
+name: Dominion Runtime Observer — Read Only
 
 on:
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: dominion-runtime-observer
+  cancel-in-progress: true
+
 jobs:
-  watchdog:
-    runs-on: ubuntu-latest
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
     steps:
-      - name: Check containers and restart any that are down
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Require protected VM connection
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Collect runtime and containment evidence without mutation
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/runtime-observer-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
+          set +e
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
+            "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE' | tee "$report"
+          set -u
+          failures=0
+
+          fail() {
+            printf 'CHECK=FAIL %s\n' "$*"
+            failures=$((failures + 1))
+          }
+
+          pass() {
+            printf 'CHECK=PASS %s\n' "$*"
+          }
+
+          check_http() {
+            name="$1"
+            expected="$2"
+            url="$3"
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 8 "$url" 2>/dev/null || true)"
+            if [ "$code" = "$expected" ]; then
+              pass "health=$name status=$code url=$url"
+            else
+              fail "health=$name expected=$expected actual=${code:-000} url=$url"
+            fi
+          }
+
+          check_active() {
+            unit="$1"
+            state="$(systemctl is-active "$unit" 2>/dev/null || true)"
+            if [ "$state" = 'active' ]; then
+              pass "unit=$unit active=$state"
+            else
+              fail "unit=$unit expected=active actual=${state:-unknown}"
+            fi
+          }
+
+          check_held() {
+            unit="$1"
+            active="$(systemctl is-active "$unit" 2>/dev/null || true)"
+            enabled="$(systemctl is-enabled "$unit" 2>/dev/null || true)"
+            if [ "$active" = 'inactive' ] && [ "$enabled" = 'disabled' ]; then
+              pass "CONTAINMENT_HOLD=ENFORCED unit=$unit active=$active enabled=$enabled"
+            else
+              fail "CONTAINMENT_HOLD=BROKEN unit=$unit active=${active:-unknown} enabled=${enabled:-unknown}"
+            fi
+          }
+
+          check_firewall_absent() {
+            rule="$1"
+            if ! command -v gcloud >/dev/null 2>&1; then
+              fail "firewall=$rule state=UNKNOWN reason=gcloud_unavailable"
+              return
+            fi
+            output="$(gcloud compute firewall-rules describe "$rule" --project=dominion-ascendant 2>&1)"
+            rc=$?
+            if [ "$rc" -eq 0 ]; then
+              fail "firewall=$rule state=PRESENT"
+            elif printf '%s' "$output" | grep -qiE 'was not found|not found'; then
+              pass "firewall=$rule state=ABSENT"
+            else
+              fail "firewall=$rule state=UNKNOWN reason=describe_failed"
+            fi
+          }
+
+          echo '=== CORE RUNTIME ==='
+          check_http baby_api 200 http://127.0.0.1:8080/
+          check_http dominion_web 200 http://127.0.0.1:8090/
+          check_http wix_agent 200 http://127.0.0.1:8082/ready
+          check_http n8n 200 http://127.0.0.1:5678/healthz
+          check_http alpha_engine 200 http://127.0.0.1:8787/health
+          check_http conductor 200 http://127.0.0.1:5060/health
+
+          echo '=== BUDDY RUNTIME ==='
+          check_active dominion-buddy-web.service
+          check_active dominion-proposal-queue.service
+          check_active dominion-sentinel.service
+          check_http buddy_auth_boundary 401 http://127.0.0.1:5070/buddy
+          check_http proposal_queue 200 http://127.0.0.1:5101/api/proposals
+
+          echo '=== CONTAINMENT ==='
+          check_held dominion-nemotron.service
+          check_held dominion-email-monitor.service
+          check_held dominion-affiliate.timer
+          check_held dominion-scout.timer
+          check_held dominion-wholesale.timer
+
+          if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq '(^|:)11435$'; then
+            fail 'CONTAINMENT_HOLD=BROKEN port=11435 listener=PRESENT'
+          else
+            pass 'CONTAINMENT_HOLD=ENFORCED port=11435 listener=ABSENT'
+          fi
+
+          check_firewall_absent allow-ops-dashboard
+          check_firewall_absent allow-twilio-router
+
+          echo '=== GOVERNANCE STATE ==='
+          echo 'OBSIDIAN_CANONICAL=BLOCKED reason=four_store_reconciliation_not_accepted'
+          echo 'BUDDY_LIVE_CONFORMANCE=UNVERIFIED reason=vm_only_source_unreconciled'
+          echo 'EXTERNAL_ACTIONS_AUTHORIZED=false'
+
+          if [ "$failures" -eq 0 ]; then
+            echo 'RUNTIME_OBSERVER=PASS system_online=VERIFIED_FOR_CHECKED_CONTRACTS'
+            exit 0
+          fi
+          echo "RUNTIME_OBSERVER=FAIL failures=$failures"
+          exit 1
+          REMOTE
+          rc=${PIPESTATUS[0]}
+          set -e
+          printf 'observer_exit=%s\n' "$rc" >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+      - name: Upload sanitized observer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          command_timeout: 3m
-          script: |
-            cd ~/dominion-ops
-            RESTART_NEEDED=0
+          name: runtime-observer-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runtime-observer-${{ github.run_id }}-${{ github.run_attempt }}.txt
+          if-no-files-found: error
+          retention-days: 14
 
-            # Check baby-api
-            if curl -sf http://localhost:8080/ 2>/dev/null | grep -q "LIVE"; then
-              echo "baby-api UP"
-            else
-              echo "baby-api DOWN - flagging for restart"
-              RESTART_NEEDED=1
-            fi
-
-            # Check dominion-web
-            if curl -sf http://localhost:8090/ > /dev/null 2>/dev/null; then
-              echo "dominion-web UP"
-            else
-              echo "dominion-web DOWN - flagging for restart"
-              RESTART_NEEDED=1
-            fi
-
-            if [ "$RESTART_NEEDED" = "1" ]; then
-              echo "Starting down containers via docker compose up -d"
-              docker compose up -d 2>/dev/null
-              sleep 15
-
-              echo ""
-              echo "=== POST-RESTART STATUS ==="
-              if curl -sf http://localhost:8080/ | grep -q "LIVE" 2>/dev/null; then
-                echo "baby-api RECOVERED"
-                curl -sf http://localhost:8080/ | python3 -m json.tool 2>/dev/null || true
-              else
-                echo "baby-api STILL DOWN - running full rebuild"
-                docker compose up -d --build 2>/dev/null
-              fi
-
-              if curl -sf http://localhost:8090/ > /dev/null 2>/dev/null; then
-                echo "dominion-web RECOVERED"
-              else
-                echo "dominion-web STILL DOWN"
-              fi
-            fi
-
-            echo ""
-            echo "=== CONTAINER STATUS ==="
-            docker ps --format "{{.Names}}: {{.Status}}" | sort
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

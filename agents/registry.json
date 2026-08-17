@@ -1,25 +1,76 @@
 {
   "version": "1.0.0",
   "default_state": "REGISTERED",
-  "allowed_lifecycle_states": ["REGISTERED", "SPEC_REVIEW", "SIMULATION", "SHADOW", "CANARY", "LIMITED_PRODUCTION", "PRODUCTION", "SUSPENDED", "RETIRED"],
+  "allowed_lifecycle_states": [
+    "REGISTERED",
+    "SPEC_REVIEW",
+    "SIMULATION",
+    "SHADOW",
+    "CANARY",
+    "LIMITED_PRODUCTION",
+    "PRODUCTION",
+    "SUSPENDED",
+    "RETIRED"
+  ],
   "agents": [
     {
       "id": "human_overseer",
       "role": "human_overseer",
       "purpose": "Final accountable authority for critical and irreversible actions.",
       "state": "PRODUCTION",
-      "permissions": ["approve_policy", "approve_merge", "approve_production", "approve_financial", "approve_external_contact"],
+      "permissions": [
+        "approve_policy",
+        "approve_merge",
+        "approve_production",
+        "approve_financial",
+        "approve_external_contact"
+      ],
       "prohibited_actions": [],
       "evidence_required": true,
       "escalates_to": null
+    },
+    {
+      "id": "buddy",
+      "role": "primary_personal_ai",
+      "purpose": "Learn the Founder's confirmed preferences and decision patterns, coordinate approved work, self-repair allowlisted internal services, and execute actions under direct or standing Founder authorization.",
+      "state": "REGISTERED",
+      "permissions": [
+        "learn_founder_preferences",
+        "propose_versioned_evolution",
+        "coordinate_agents",
+        "delegate_approved_work",
+        "self_repair_allowlisted_services",
+        "execute_founder_authorized_action",
+        "record_action_receipt"
+      ],
+      "prohibited_actions": [
+        "infer_founder_authorization",
+        "self_expand_authority",
+        "claim_founder_legal_identity",
+        "alter_audit_log",
+        "report_unverified_completion"
+      ],
+      "evidence_required": true,
+      "escalates_to": "human_overseer",
+      "authority_policy": "governance/buddy/buddy_authority_policy.json",
+      "runtime_conformance": "UNVERIFIED",
+      "runtime_source_state": "VM_ONLY_UNRECONCILED"
     },
     {
       "id": "coordinator",
       "role": "coordinator",
       "purpose": "Sequence work, reconcile evidence, and prevent conflicting changes.",
       "state": "LIMITED_PRODUCTION",
-      "permissions": ["read_operational_state", "prepare_change", "route_review"],
-      "prohibited_actions": ["approve_own_critical_change", "deploy_production", "spend_or_move_money"],
+      "permissions": [
+        "read_operational_state",
+        "prepare_change",
+        "route_review"
+      ],
+      "prohibited_actions": [
+        "approve_own_critical_change",
+        "deploy_production",
+        "spend_or_move_money"
+      ],
       "evidence_required": true,
       "escalates_to": "human_overseer"
     },
@@ -28,8 +79,15 @@
       "role": "conductor",
       "purpose": "Route approved jobs and maintain deterministic execution state.",
       "state": "LIMITED_PRODUCTION",
-      "permissions": ["dispatch_approved_job", "record_execution_state"],
-      "prohibited_actions": ["publish_external_content", "deploy_unapproved_change", "expand_own_permissions"],
+      "permissions": [
+        "dispatch_approved_job",
+        "record_execution_state"
+      ],
+      "prohibited_actions": [
+        "publish_external_content",
+        "deploy_unapproved_change",
+        "expand_own_permissions"
+      ],
       "evidence_required": true,
       "escalates_to": "coordinator"
     },
@@ -38,8 +96,16 @@
       "role": "governor",
       "purpose": "Evaluate policy, permissions, risk, and approval requirements before execution.",
       "state": "REGISTERED",
-      "permissions": ["evaluate_policy", "deny_action", "request_approval"],
-      "prohibited_actions": ["grant_new_permission", "override_human_gate", "alter_audit_log"],
+      "permissions": [
+        "evaluate_policy",
+        "deny_action",
+        "request_approval"
+      ],
+      "prohibited_actions": [
+        "grant_new_permission",
+        "override_human_gate",
+        "alter_audit_log"
+      ],
       "evidence_required": true,
       "escalates_to": "human_overseer"
     },
@@ -48,8 +114,15 @@
       "role": "guardian",
       "purpose": "Detect service drift, regressions, and unhealthy runtime conditions.",
       "state": "LIMITED_PRODUCTION",
-      "permissions": ["observe_runtime", "open_incident", "recommend_containment"],
-      "prohibited_actions": ["reactivate_retired_service", "modify_production_without_approval"],
+      "permissions": [
+        "observe_runtime",
+        "open_incident",
+        "recommend_containment"
+      ],
+      "prohibited_actions": [
+        "reactivate_retired_service",
+        "modify_production_without_approval"
+      ],
       "evidence_required": true,
       "escalates_to": "coordinator"
     },
@@ -58,8 +131,15 @@
       "role": "sentinel",
       "purpose": "Independently verify runtime, security, and claimed completion evidence.",
       "state": "LIMITED_PRODUCTION",
-      "permissions": ["observe_runtime", "challenge_claim", "veto_on_missing_evidence"],
-      "prohibited_actions": ["approve_own_proposal", "modify_audit_log"],
+      "permissions": [
+        "observe_runtime",
+        "challenge_claim",
+        "veto_on_missing_evidence"
+      ],
+      "prohibited_actions": [
+        "approve_own_proposal",
+        "modify_audit_log"
+      ],
       "evidence_required": true,
       "escalates_to": "human_overseer"
     },
@@ -68,8 +148,17 @@
       "role": "juris",
       "purpose": "Retrieve and organize legal and compliance evidence within documentary boundaries.",
       "state": "SHADOW",
-      "permissions": ["research_legal_authority", "draft_legal_issue_record", "issue_hold"],
-      "prohibited_actions": ["claim_licensed_counsel", "sign_or_file", "represent_company", "approve_unresolved_legal_action"],
+      "permissions": [
+        "research_legal_authority",
+        "draft_legal_issue_record",
+        "issue_hold"
+      ],
+      "prohibited_actions": [
+        "claim_licensed_counsel",
+        "sign_or_file",
+        "represent_company",
+        "approve_unresolved_legal_action"
+      ],
       "evidence_required": true,
       "escalates_to": "human_overseer"
     },
@@ -78,8 +167,15 @@
       "role": "truth_evidence",
       "purpose": "Verify source quality, factual support, contradictions, and uncertainty.",
       "state": "REGISTERED",
-      "permissions": ["review_evidence", "issue_hold", "vote"],
-      "prohibited_actions": ["approve_own_proposal", "alter_source_evidence"],
+      "permissions": [
+        "review_evidence",
+        "issue_hold",
+        "vote"
+      ],
+      "prohibited_actions": [
+        "approve_own_proposal",
+        "alter_source_evidence"
+      ],
       "evidence_required": true,
       "escalates_to": "human_overseer"
     },
@@ -88,8 +184,17 @@
       "role": "law_governance",
       "purpose": "Verify jurisdiction, law, contracts, privacy, regulation, and internal authority.",
       "state": "REGISTERED",
-      "permissions": ["review_legal_governance", "issue_hold", "veto", "vote"],
-      "prohibited_actions": ["claim_licensed_counsel", "sign_or_file", "approve_unresolved_legal_action"],
+      "permissions": [
+        "review_legal_governance",
+        "issue_hold",
+        "veto",
+        "vote"
+      ],
+      "prohibited_actions": [
+        "claim_licensed_counsel",
+        "sign_or_file",
+        "approve_unresolved_legal_action"
+      ],
       "evidence_required": true,
       "escalates_to": "human_overseer"
     },
@@ -98,8 +203,16 @@
       "role": "security_risk",
       "purpose": "Verify least privilege, security, data exposure, fraud risk, and reversibility.",
       "state": "REGISTERED",
-      "permissions": ["review_security", "issue_hold", "veto", "vote"],
-      "prohibited_actions": ["expose_secret", "approve_unknown_data_classification"],
+      "permissions": [
+        "review_security",
+        "issue_hold",
+        "veto",
+        "vote"
+      ],
+      "prohibited_actions": [
+        "expose_secret",
+        "approve_unknown_data_classification"
+      ],
       "evidence_required": true,
       "escalates_to": "human_overseer"
     },
@@ -108,8 +221,15 @@
       "role": "engineering_reliability",
       "purpose": "Verify architecture, tests, dependencies, observability, capacity, and rollback.",
       "state": "REGISTERED",
-      "permissions": ["review_engineering", "issue_hold", "vote"],
-      "prohibited_actions": ["approve_own_change", "bypass_tests"],
+      "permissions": [
+        "review_engineering",
+        "issue_hold",
+        "vote"
+      ],
+      "prohibited_actions": [
+        "approve_own_change",
+        "bypass_tests"
+      ],
       "evidence_required": true,
       "escalates_to": "human_overseer"
     },
@@ -118,8 +238,15 @@
       "role": "business_human_impact",
       "purpose": "Verify business value, customer outcome, ethics, reputation, and strategic alignment.",
       "state": "REGISTERED",
-      "permissions": ["review_business_impact", "issue_hold", "vote"],
-      "prohibited_actions": ["override_legal_veto", "override_security_veto"],
+      "permissions": [
+        "review_business_impact",
+        "issue_hold",
+        "vote"
+      ],
+      "prohibited_actions": [
+        "override_legal_veto",
+        "override_security_veto"
+      ],
       "evidence_required": true,
       "escalates_to": "human_overseer"
     },
@@ -128,8 +255,18 @@
       "role": "revenue_operations",
       "purpose": "Design and measure approved lead-to-revenue loops without autonomous external contact or spending.",
       "state": "SIMULATION",
-      "permissions": ["analyze_funnel", "draft_offer", "prepare_experiment", "measure_metrics"],
-      "prohibited_actions": ["publish_external_content", "contact_customer", "spend_or_move_money", "claim_guaranteed_income"],
+      "permissions": [
+        "analyze_funnel",
+        "draft_offer",
+        "prepare_experiment",
+        "measure_metrics"
+      ],
+      "prohibited_actions": [
+        "publish_external_content",
+        "contact_customer",
+        "spend_or_move_money",
+        "claim_guaranteed_income"
+      ],
       "evidence_required": true,
       "escalates_to": "coordinator"
     },
@@ -138,8 +275,17 @@
       "role": "engineering",
       "purpose": "Implement approved changes in protected nonproduction branches.",
       "state": "LIMITED_PRODUCTION",
-      "permissions": ["read_repository", "modify_nonproduction_branch", "run_tests", "open_pull_request"],
-      "prohibited_actions": ["merge_to_main", "deploy_production", "expose_secret"],
+      "permissions": [
+        "read_repository",
+        "modify_nonproduction_branch",
+        "run_tests",
+        "open_pull_request"
+      ],
+      "prohibited_actions": [
+        "merge_to_main",
+        "deploy_production",
+        "expose_secret"
+      ],
       "evidence_required": true,
       "escalates_to": "coordinator"
     },
@@ -148,8 +294,16 @@
       "role": "research",
       "purpose": "Gather source-grounded public and approved private information.",
       "state": "LIMITED_PRODUCTION",
-      "permissions": ["read_public_information", "record_sources", "mark_uncertainty"],
-      "prohibited_actions": ["invent_citation", "claim_unverified_fact", "execute_external_action"],
+      "permissions": [
+        "read_public_information",
+        "record_sources",
+        "mark_uncertainty"
+      ],
+      "prohibited_actions": [
+        "invent_citation",
+        "claim_unverified_fact",
+        "execute_external_action"
+      ],
       "evidence_required": true,
       "escalates_to": "coordinator"
     }

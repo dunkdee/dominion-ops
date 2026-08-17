@@ -1,11 +1,16 @@
 name: Deploy Dominion Command Center
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/deploy-command-center.yml'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY COMMAND CENTER"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   actions: write
@@ -13,6 +18,11 @@ permissions:
 
 jobs:
   dispatch:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'DEPLOY COMMAND CENTER' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

@@ -1,0 +1,30 @@
+name: Buddy Canonical Policy Check
+
+on:
+  pull_request:
+    paths:
+      - 'governance/buddy/**'
+      - 'scripts/validate_buddy_authority_policy.py'
+      - 'tests/test_buddy_authority_policy.py'
+      - '.github/workflows/buddy-policy-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'governance/buddy/**'
+      - 'scripts/validate_buddy_authority_policy.py'
+      - 'tests/test_buddy_authority_policy.py'
+      - '.github/workflows/buddy-policy-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate policy
+        run: python scripts/validate_buddy_authority_policy.py governance/buddy/buddy_authority_policy.json
+      - name: Run policy tests
+        run: python -m unittest tests/test_buddy_authority_policy.py -v

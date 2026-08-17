@@ -1,69 +1,185 @@
-name: Fix Buddy Brains
+name: Buddy — Bounded Self-Heal
+
 on:
+  schedule:
+    - cron: "*/10 * * * *"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: buddy-bounded-self-heal
+  cancel-in-progress: false
+
 jobs:
-  fix:
-    runs-on: ubuntu-latest
+  bounded-repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - name: Patch gemini port and restart
+      - name: Observe and repair only the approved Buddy services
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
+          command_timeout: 8m
           script: |
-            set -e
-            echo "====== STEP 1: BACKUP ======"
-            cp /opt/ai_agents/gemini/server.py /opt/ai_agents/gemini/server.py.bak
-            cp ~/buddy_core/jarvis/jarvis_core.py ~/buddy_core/jarvis/jarvis_core.py.bak
-            cp ~/buddy_core/port_manifest.json ~/buddy_core/port_manifest.json.bak
-            echo "Backups done"
+            set -euo pipefail
 
-            echo "====== STEP 2: PATCH GEMINI SERVER PORT 5055 to 5056 ======"
-            sed -i 's/app.run(host="127.0.0.1", port=5055)/app.run(host="127.0.0.1", port=5056)/' /opt/ai_agents/gemini/server.py
-            grep 'app.run' /opt/ai_agents/gemini/server.py
+            MAX_ATTEMPTS=2
+            COOLDOWN_SECONDS=300
+            STATE_DIR="$HOME/.local/state/dominion"
+            STATE_FILE="$STATE_DIR/buddy-self-heal.state"
+            LOCK_FILE="$STATE_DIR/buddy-self-heal.lock"
+            mkdir -p "$STATE_DIR"
+            chmod 700 "$STATE_DIR"
 
-            echo "====== STEP 3: PATCH JARVIS_CORE.PY ======"
-            sed -i 's/"gemini_server": 5055/"gemini_server": 5056/' ~/buddy_core/jarvis/jarvis_core.py
-            grep -n 'gemini_server' ~/buddy_core/jarvis/jarvis_core.py | head -5
+            exec 9>"$LOCK_FILE"
+            if ! flock -n 9; then
+              echo 'BUDDY_SELF_HEAL=BLOCKED reason=repair_already_running'
+              exit 30
+            fi
 
-            echo "====== STEP 4: PATCH PORT MANIFEST ======"
-            python3 -c "
-import json, pathlib
-path = pathlib.Path.home() / 'buddy_core' / 'port_manifest.json'
-data = json.loads(path.read_text())
-if data.get('5055') == 'gemini-server':
-    del data['5055']
-data['5056'] = 'gemini-server'
-path.write_text(json.dumps(data, indent=2))
-print('port_manifest updated:', json.dumps(data, indent=2))
-"
+            read_number() {
+              key="$1"
+              default="$2"
+              value="$(awk -F= -v key="$key" '$1 == key {print $2}' "$STATE_FILE" 2>/dev/null | tail -1)"
+              case "$value" in
+                ''|*[!0-9]*) printf '%s' "$default" ;;
+                *) printf '%s' "$value" ;;
+              esac
+            }
 
-            echo "====== STEP 5: CHECK BUDDY_WEB FOR PORT 5055 REFS ======"
-            grep -n '5055' ~/buddy_core/buddy_web.py 2>/dev/null || echo "No 5055 refs in buddy_web.py"
-            grep -n '5055' ~/buddy_core/buddy_bridge_api.py 2>/dev/null || echo "No 5055 refs in buddy_bridge_api.py"
+            write_state() {
+              failures="$1"
+              attempt_epoch="$2"
+              result="$3"
+              tmp="$STATE_FILE.tmp.$$"
+              umask 077
+              {
+                printf 'consecutive_failures=%s\n' "$failures"
+                printf 'last_attempt_epoch=%s\n' "$attempt_epoch"
+                printf 'last_result=%s\n' "$result"
+              } > "$tmp"
+              mv "$tmp" "$STATE_FILE"
+            }
 
-            echo "====== STEP 6: RESTART GEMINI-SERVER ======"
-            sudo systemctl restart gemini-server
-            sleep 4
-            systemctl status gemini-server --no-pager | head -15
+            failed_units=()
 
-            echo "====== STEP 7: VERIFY PORT 5056 IS NOW LISTENING ======"
-            ss -tlnp | grep 5056 || echo "5056 not yet bound - gemini may still be starting"
-            echo "Port 5055 (juris still there, untouched):"
-            ss -tlnp | grep 5055 | head -3
+            add_failed() {
+              candidate="$1"
+              for existing in "${failed_units[@]:-}"; do
+                [ "$existing" = "$candidate" ] && return 0
+              done
+              failed_units+=("$candidate")
+            }
 
-            echo "====== STEP 8: RESTART BUDDY SERVICES ======"
-            sudo systemctl restart buddy-bridge
-            sudo systemctl restart dominion-buddy-web
-            sleep 3
-            systemctl status buddy-bridge --no-pager | head -8
-            systemctl status dominion-buddy-web --no-pager | head -8
+            check_unit() {
+              unit="$1"
+              if ! systemctl is-active --quiet "$unit"; then
+                add_failed "$unit"
+              fi
+            }
 
-            echo "====== STEP 9: QUICK BRAIN TEST ======"
-            curl -s -X POST http://127.0.0.1:5056/orchestrate \
-              -H 'Content-Type: application/json' \
-              -d '{"prompt": "Reply with one word: ONLINE"}' \
-              --max-time 15 && echo "" || echo "Gemini endpoint did not respond in time"
+            check_runtime() {
+              failed_units=()
+              check_unit dominion-buddy-web.service
+              check_unit dominion-proposal-queue.service
+              check_unit dominion-sentinel.service
 
-            echo "====== DONE ======"
+              buddy_code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 6 http://127.0.0.1:5070/buddy 2>/dev/null || true)"
+              [ "$buddy_code" = '401' ] || add_failed dominion-buddy-web.service
+
+              proposal_code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 6 http://127.0.0.1:5101/api/proposals 2>/dev/null || true)"
+              [ "$proposal_code" = '200' ] || add_failed dominion-proposal-queue.service
+
+              if ! ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq '(^|:)5070$'; then
+                add_failed dominion-buddy-web.service
+              fi
+              if ! ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq '(^|:)5101$'; then
+                add_failed dominion-proposal-queue.service
+              fi
+            }
+
+            echo '=== OBSERVE ==='
+            check_runtime
+            now="$(date +%s)"
+            consecutive_failures="$(read_number consecutive_failures 0)"
+            last_attempt_epoch="$(read_number last_attempt_epoch 0)"
+
+            if [ "${#failed_units[@]}" -eq 0 ]; then
+              write_state 0 "$last_attempt_epoch" HEALTHY
+              echo 'BUDDY_SELF_HEAL=NO_ACTION_HEALTHY'
+              for unit in dominion-buddy-web.service dominion-proposal-queue.service dominion-sentinel.service; do
+                restarts="$(systemctl show "$unit" -p NRestarts --value 2>/dev/null || true)"
+                echo "SERVICE=$unit active=active restarts=${restarts:-unknown}"
+              done
+              exit 0
+            fi
+
+            printf 'BUDDY_SELF_HEAL=UNHEALTHY services=%s\n' "${failed_units[*]}"
+
+            if [ "$consecutive_failures" -ge "$MAX_ATTEMPTS" ]; then
+              echo "BUDDY_SELF_HEAL=BLOCKED_CIRCUIT_OPEN failures=$consecutive_failures"
+              exit 31
+            fi
+
+            elapsed=$((now - last_attempt_epoch))
+            if [ "$last_attempt_epoch" -gt 0 ] && [ "$elapsed" -lt "$COOLDOWN_SECONDS" ]; then
+              remaining=$((COOLDOWN_SECONDS - elapsed))
+              echo "BUDDY_SELF_HEAL=BLOCKED cooldown_remaining_seconds=$remaining"
+              exit 32
+            fi
+
+            echo '=== PRE-REPAIR EVIDENCE ==='
+            for unit in "${failed_units[@]}"; do
+              systemctl show "$unit" -p ActiveState -p SubState -p NRestarts -p ExecMainStatus --no-pager 2>/dev/null || true
+            done
+
+            attempt_number=$((consecutive_failures + 1))
+            # Count the attempt before the first restart so an interrupted command
+            # cannot create an unlimited retry loop.
+            write_state "$attempt_number" "$now" ATTEMPTING
+
+            echo "=== BOUNDED RESTART attempt=$attempt_number/$MAX_ATTEMPTS ==="
+            for unit in "${failed_units[@]}"; do
+              case "$unit" in
+                dominion-buddy-web.service|dominion-proposal-queue.service|dominion-sentinel.service)
+                  sudo systemctl restart "$unit"
+                  ;;
+                *)
+                  echo "BUDDY_SELF_HEAL=BLOCKED reason=service_not_allowlisted unit=$unit"
+                  exit 33
+                  ;;
+              esac
+            done
+
+            sleep 6
+            check_runtime
+            log_failure=0
+            since="$(date -u --date="@$now" '+%Y-%m-%d %H:%M:%S')"
+
+            echo '=== POST-REPAIR EVIDENCE ==='
+            for unit in dominion-buddy-web.service dominion-proposal-queue.service dominion-sentinel.service; do
+              systemctl show "$unit" -p ActiveState -p SubState -p NRestarts -p ExecMainStatus --no-pager 2>/dev/null || true
+              if journalctl -u "$unit" --since "$since" --no-pager 2>/dev/null | grep -Eqi 'traceback|uncaught exception|failed with result|segmentation fault'; then
+                echo "ERROR_LOG_CHECK=FAIL unit=$unit"
+                log_failure=1
+              else
+                echo "ERROR_LOG_CHECK=PASS unit=$unit"
+              fi
+            done
+
+            if [ "${#failed_units[@]}" -eq 0 ] && [ "$log_failure" -eq 0 ]; then
+              write_state 0 "$now" RECOVERED
+              echo "BUDDY_SELF_HEAL=RECOVERED attempt=$attempt_number"
+              exit 0
+            fi
+
+            write_state "$attempt_number" "$now" FAILED
+            printf 'BUDDY_SELF_HEAL=FAILED attempt=%s remaining_services=%s\n' "$attempt_number" "${failed_units[*]:-none}"
+            if [ "$attempt_number" -ge "$MAX_ATTEMPTS" ]; then
+              echo "BUDDY_SELF_HEAL=BLOCKED_CIRCUIT_OPEN failures=$attempt_number"
+            fi
+            exit 34

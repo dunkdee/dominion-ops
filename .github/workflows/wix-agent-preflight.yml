@@ -1,17 +1,16 @@
 name: Wix Agent Production Preflight
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "apps/wix-agent/**"
-      - ".github/workflows/wix-agent-preflight.yml"
   workflow_dispatch:
     inputs:
       confirm:
-        description: "Type RUN_WIX_PREFLIGHT"
+        description: "Type RUN WIX PREFLIGHT"
         required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -23,9 +22,10 @@ concurrency:
 jobs:
   preflight:
     if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' ||
-      github.event.inputs.confirm == 'RUN_WIX_PREFLIGHT')
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'RUN WIX PREFLIGHT' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

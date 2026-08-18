@@ -1,14 +1,30 @@
 name: Empire Status Snapshot
 
 on:
-  schedule: [{ cron: "*/30 * * * *" }]
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type RUN EMPIRE STATUS SNAPSHOT"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
+permissions:
+  contents: read
 
 jobs:
   snapshot:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'RUN EMPIRE STATUS SNAPSHOT' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Smoke test gateway
         env:

@@ -1,6 +1,6 @@
 {
   "schema": "dominion-buddy-authority-v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identity": {
     "agent_id": "buddy",
     "role": "PRIMARY_PERSONAL_AI",
@@ -127,7 +127,7 @@
   },
   "autonomy_control": {
     "schema": "dominion-autonomy-control-v1",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "authority": {
       "principal": "Dewayne Singleton",
       "final_decision_maker": "FOUNDER",
@@ -142,12 +142,22 @@
       "runtime_observation": {
         "automatic": true,
         "workflow": ".github/workflows/watchdog.yml",
+        "workflow_mode": "MANUAL_FALLBACK_ONLY",
+        "script": "scripts/runtime_observer.sh",
+        "service_unit": "operations/systemd/dominion-runtime-observer.service",
+        "timer_unit": "operations/systemd/dominion-runtime-observer.timer",
+        "interval_seconds": 900,
         "production_mutation": false,
         "evidence_required": true
       },
       "buddy_bounded_self_repair": {
         "automatic": true,
         "workflow": ".github/workflows/fix-buddy-brains.yml",
+        "workflow_mode": "MANUAL_FALLBACK_ONLY",
+        "script": "scripts/buddy_bounded_self_heal.sh",
+        "service_unit": "operations/systemd/dominion-buddy-self-heal.service",
+        "timer_unit": "operations/systemd/dominion-buddy-self-heal.timer",
+        "interval_seconds": 600,
         "allowed_services": [
           "dominion-buddy-web.service",
           "dominion-proposal-queue.service",
@@ -170,8 +180,22 @@
         "rollback_required": true
       }
     },
+    "local_runtime_install": {
+      "script": "scripts/install_local_runtime_automation.sh",
+      "requires_root": true,
+      "requires_exact_git_sha": true,
+      "typed_confirmation": "INSTALL LOCAL RUNTIME AUTOMATION",
+      "receipt_required": true,
+      "automatic": false
+    },
+    "github_hosted_schedule_policy": {
+      "automatic_schedules_allowed": false,
+      "runtime_scheduler": "SYSTEMD_ON_FOUNDATION_VM",
+      "reason": "PRIVATE_REPOSITORY_HOSTED_MINUTES_ARE_FOR_CI_NOT_RUNTIME_LOOPS"
+    },
     "manual_only_workflows": {
       ".github/workflows/activate-email-drip-production.yml": "ACTIVATE EMAIL DRIP LIVE",
+      ".github/workflows/cron-status.yml": "RUN EMPIRE STATUS SNAPSHOT",
       ".github/workflows/deploy-command-center.yml": "DEPLOY COMMAND CENTER",
       ".github/workflows/deploy-dominion-command-center.yml": "DEPLOY DOMINION COMMAND CENTER",
       ".github/workflows/deploy-email-drip-production-hold.yml": "DEPLOY EMAIL DRIP HOLD",
@@ -204,7 +228,7 @@
       }
     },
     "approved_automatic_mutators": {
-      ".github/workflows/fix-buddy-brains.yml": "BUDDY_BOUNDED_RESTART",
+      "operations/systemd/dominion-buddy-self-heal.service": "BUDDY_BOUNDED_RESTART",
       ".github/workflows/buddy-production-repair.yml": "TEMPORARY_LEGACY_BUDDY_EXCEPTION"
     },
     "legacy_buddy_exception": {

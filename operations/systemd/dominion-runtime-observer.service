@@ -1,0 +1,32 @@
+[Unit]
+Description=Dominion local runtime observer (read only)
+Documentation=https://github.com/dunkdee/dominion-ops/blob/main/AUTONOMY_CONTROL_PLANE.md
+Wants=network-online.target
+After=network-online.target
+ConditionFileIsExecutable=/usr/local/lib/dominion/runtime_observer.sh
+
+[Service]
+Type=oneshot
+User=malachisingleton8
+Group=malachisingleton8
+ExecStart=/usr/local/lib/dominion/runtime_observer.sh
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+StandardOutput=journal
+StandardError=journal

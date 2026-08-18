@@ -91,7 +91,7 @@ OBSERVER_FORBIDDEN_PATTERNS = {
     ),
 }
 ACTION_USES_RE = re.compile(
-    r"^\\s*uses:\\s*([^@\\s]+)@([^\\s#]+)",
+    r"^\s*uses:\s*([^@\s]+)@([^\s#]+)",
     re.MULTILINE,
 )
 
@@ -208,6 +208,46 @@ def validate(policy: dict[str, Any]) -> None:
              "autonomy and Buddy max attempts disagree")
     _require(bounded.get("cooldown_seconds") == repair.get("cooldown_seconds"),
              "autonomy and Buddy cooldown disagree")
+    observer = _mapping(lanes.get("runtime_observation"),
+                        "autonomy_control.lanes.runtime_observation")
+    expected_local_fields = {
+        "workflow_mode": "MANUAL_FALLBACK_ONLY",
+        "script": "scripts/runtime_observer.sh",
+        "service_unit": "operations/systemd/dominion-runtime-observer.service",
+        "timer_unit": "operations/systemd/dominion-runtime-observer.timer",
+        "interval_seconds": 900,
+    }
+    for key, value in expected_local_fields.items():
+        _require(observer.get(key) == value,
+                 f"runtime observer {key} must be {value}")
+    expected_buddy_fields = {
+        "workflow_mode": "MANUAL_FALLBACK_ONLY",
+        "script": "scripts/buddy_bounded_self_heal.sh",
+        "service_unit": "operations/systemd/dominion-buddy-self-heal.service",
+        "timer_unit": "operations/systemd/dominion-buddy-self-heal.timer",
+        "interval_seconds": 600,
+    }
+    for key, value in expected_buddy_fields.items():
+        _require(bounded.get(key) == value,
+                 f"Buddy local self-heal {key} must be {value}")
+
+    local_install = _mapping(autonomy.get("local_runtime_install"),
+                             "autonomy_control.local_runtime_install")
+    _require(local_install == {
+        "script": "scripts/install_local_runtime_automation.sh",
+        "requires_root": True,
+        "requires_exact_git_sha": True,
+        "typed_confirmation": "INSTALL LOCAL RUNTIME AUTOMATION",
+        "receipt_required": True,
+        "automatic": False,
+    }, "local runtime installation policy changed")
+
+    schedule_policy = _mapping(autonomy.get("github_hosted_schedule_policy"),
+                               "autonomy_control.github_hosted_schedule_policy")
+    _require(schedule_policy.get("automatic_schedules_allowed") is False,
+             "GitHub-hosted schedules must remain disabled")
+    _require(schedule_policy.get("runtime_scheduler") == "SYSTEMD_ON_FOUNDATION_VM",
+             "runtime scheduler must remain local systemd")
     evidence = autonomy.get("online_evidence_fields")
     _require(isinstance(evidence, list) and len(evidence) == 9 and len(set(evidence)) == 9,
              "online evidence definition must contain nine unique fields")
@@ -364,10 +404,8 @@ def autonomy_workflow_errors(root: Path, policy: dict[str, Any]) -> list[str]:
         errors.append(f"{observer_path}: observer missing")
     else:
         text = observer.read_text(encoding="utf-8")
-        if workflow_triggers(text) != {"push", "schedule", "workflow_dispatch"}:
+        if workflow_triggers(text) != {"workflow_dispatch"}:
             errors.append(f"{observer_path}: observer triggers changed")
-        if not _on_has_exact_path(text, observer_path.as_posix()):
-            errors.append(f"{observer_path}: push not limited to own path")
         for hit in _pattern_hits(text, OBSERVER_FORBIDDEN_PATTERNS):
             errors.append(f"{observer_path}: forbidden observer {hit}")
         for action in _unpinned_actions(text):
@@ -387,10 +425,8 @@ def autonomy_workflow_errors(root: Path, policy: dict[str, Any]) -> list[str]:
         errors.append(f"{buddy_path}: bounded Buddy workflow missing")
     else:
         text = buddy.read_text(encoding="utf-8")
-        if workflow_triggers(text) != {"push", "schedule", "workflow_dispatch"}:
+        if workflow_triggers(text) != {"workflow_dispatch"}:
             errors.append(f"{buddy_path}: Buddy self-heal triggers changed")
-        if not _on_has_exact_path(text, buddy_path.as_posix()):
-            errors.append(f"{buddy_path}: push not limited to own path")
         expected = set(bounded["allowed_services"])
         if _service_names(text) != expected:
             errors.append(f"{buddy_path}: Buddy service scope changed")
@@ -418,6 +454,139 @@ def autonomy_workflow_errors(root: Path, policy: dict[str, Any]) -> list[str]:
             if marker not in text:
                 errors.append(f"{buddy_path}: repair marker missing {marker}")
 
+    observer_script_path = Path(_mapping(lanes.get("runtime_observation"),
+                                         "runtime_observation")["script"])
+    observer_script = root / observer_script_path
+    if not observer_script.is_file():
+        errors.append(f"{observer_script_path}: local observer script missing")
+    else:
+        text = observer_script.read_text(encoding="utf-8")
+        for hit in _pattern_hits(text, OBSERVER_FORBIDDEN_PATTERNS):
+            errors.append(f"{observer_script_path}: forbidden observer {hit}")
+        for marker in (
+            "RUNTIME_OBSERVER=", "CONTAINMENT_HOLD=", "allow-ops-dashboard",
+            "allow-twilio-router", "127.0.0.1:5070/buddy",
+        ):
+            if marker not in text:
+                errors.append(f"{observer_script_path}: evidence marker missing {marker}")
+
+    observer_service_path = Path(_mapping(lanes.get("runtime_observation"),
+                                          "runtime_observation")["service_unit"])
+    observer_service = root / observer_service_path
+    if not observer_service.is_file():
+        errors.append(f"{observer_service_path}: observer service unit missing")
+    else:
+        text = observer_service.read_text(encoding="utf-8")
+        for marker in (
+            "User=malachisingleton8",
+            "ExecStart=/usr/local/lib/dominion/runtime_observer.sh",
+            "NoNewPrivileges=true",
+            "ProtectSystem=strict",
+            "CapabilityBoundingSet=",
+        ):
+            if marker not in text:
+                errors.append(f"{observer_service_path}: hardening marker missing {marker}")
+
+    observer_timer_path = Path(_mapping(lanes.get("runtime_observation"),
+                                        "runtime_observation")["timer_unit"])
+    observer_timer = root / observer_timer_path
+    if not observer_timer.is_file():
+        errors.append(f"{observer_timer_path}: observer timer missing")
+    else:
+        text = observer_timer.read_text(encoding="utf-8")
+        for marker in (
+            "OnUnitActiveSec=15min",
+            "Persistent=false",
+            "Unit=dominion-runtime-observer.service",
+        ):
+            if marker not in text:
+                errors.append(f"{observer_timer_path}: timer marker missing {marker}")
+
+    buddy_script_path = Path(bounded["script"])
+    buddy_script = root / buddy_script_path
+    if not buddy_script.is_file():
+        errors.append(f"{buddy_script_path}: local Buddy self-heal script missing")
+    else:
+        text = buddy_script.read_text(encoding="utf-8")
+        expected = set(bounded["allowed_services"])
+        if _service_names(text) != expected:
+            errors.append(f"{buddy_script_path}: Buddy service scope changed")
+        if f"MAX_ATTEMPTS={bounded['max_attempts']}" not in text:
+            errors.append(f"{buddy_script_path}: max attempts mismatch")
+        if f"COOLDOWN_SECONDS={bounded['cooldown_seconds']}" not in text:
+            errors.append(f"{buddy_script_path}: cooldown mismatch")
+        if 'systemctl restart "$unit"' not in text:
+            errors.append(f"{buddy_script_path}: bounded restart missing")
+        local_buddy_forbidden = {
+            "source patching": re.compile(r"buddy_core|\bsed\s+-i\b|write_text\s*\(", re.I),
+            "container control": re.compile(r"\bdocker\b", re.I),
+            "cloud control": re.compile(r"\bgcloud\b", re.I),
+            "Git mutation": re.compile(r"\bgit\s+(?:push|merge|reset|checkout|pull)\b", re.I),
+            "non-local HTTP": re.compile(r"\bcurl\b[^\n]*https?://(?!127\.0\.0\.1|localhost)", re.I),
+            "systemd scope expansion": re.compile(
+                r"\bsystemctl\s+(?:enable|disable|mask|unmask|daemon-reload)\b", re.I),
+        }
+        for hit in _pattern_hits(text, local_buddy_forbidden):
+            errors.append(f"{buddy_script_path}: forbidden Buddy operation {hit}")
+        for marker in (
+            "BUDDY_SELF_HEAL=NO_ACTION_HEALTHY", "BUDDY_SELF_HEAL=RECOVERED",
+            "BUDDY_SELF_HEAL=BLOCKED_CIRCUIT_OPEN", "flock -n 9",
+        ):
+            if marker not in text:
+                errors.append(f"{buddy_script_path}: repair marker missing {marker}")
+
+    buddy_service_path = Path(bounded["service_unit"])
+    buddy_service = root / buddy_service_path
+    if not buddy_service.is_file():
+        errors.append(f"{buddy_service_path}: Buddy service unit missing")
+    else:
+        text = buddy_service.read_text(encoding="utf-8")
+        for marker in (
+            "User=root",
+            "ExecStart=/usr/local/lib/dominion/buddy_bounded_self_heal.sh",
+            "UnsetEnvironment=DOMINION_STATE_DIR DOMINION_REPAIR_SETTLE_SECONDS",
+            "ReadWritePaths=/var/lib/dominion",
+            "NoNewPrivileges=true",
+            "ProtectSystem=strict",
+            "CapabilityBoundingSet=",
+        ):
+            if marker not in text:
+                errors.append(f"{buddy_service_path}: hardening marker missing {marker}")
+
+    buddy_timer_path = Path(bounded["timer_unit"])
+    buddy_timer = root / buddy_timer_path
+    if not buddy_timer.is_file():
+        errors.append(f"{buddy_timer_path}: Buddy timer missing")
+    else:
+        text = buddy_timer.read_text(encoding="utf-8")
+        for marker in (
+            "OnUnitActiveSec=10min",
+            "Persistent=false",
+            "Unit=dominion-buddy-self-heal.service",
+        ):
+            if marker not in text:
+                errors.append(f"{buddy_timer_path}: timer marker missing {marker}")
+
+    install_policy = _mapping(autonomy.get("local_runtime_install"),
+                              "autonomy_control.local_runtime_install")
+    installer_path = Path(install_policy["script"])
+    installer = root / installer_path
+    if not installer.is_file():
+        errors.append(f"{installer_path}: local runtime installer missing")
+    else:
+        text = installer.read_text(encoding="utf-8")
+        for marker in (
+            "INSTALL LOCAL RUNTIME AUTOMATION",
+            "expected_sha",
+            "git -C \"$repo_root\" rev-parse HEAD",
+            "tracked_worktree_dirty",
+            "systemd-analyze verify",
+            "LOCAL_RUNTIME_ACCEPTANCE=PASS",
+            "ROLLBACK LOCAL RUNTIME AUTOMATION",
+        ):
+            if marker not in text:
+                errors.append(f"{installer_path}: installer marker missing {marker}")
+
     legacy = _mapping(autonomy.get("legacy_buddy_exception"),
                       "autonomy_control.legacy_buddy_exception")
     legacy_path = Path(legacy["workflow"])
@@ -436,6 +605,8 @@ def autonomy_workflow_errors(root: Path, policy: dict[str, Any]) -> list[str]:
     for path in sorted(workflow_dir.glob("*.y*ml")):
         relative = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8")
+        if "schedule" in workflow_triggers(text):
+            errors.append(f"{relative}: GitHub-hosted schedule prohibited; use local systemd timer")
         if not workflow_triggers(text).intersection(AUTOMATIC_TRIGGERS):
             continue
         if relative in approved:

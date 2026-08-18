@@ -1,0 +1,36 @@
+[Unit]
+Description=Dominion bounded Buddy self-healer
+Documentation=https://github.com/dunkdee/dominion-ops/blob/main/AUTONOMY_CONTROL_PLANE.md
+Wants=network-online.target
+After=network-online.target
+ConditionFileIsExecutable=/usr/local/lib/dominion/buddy_bounded_self_heal.sh
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/lib/dominion/buddy_bounded_self_heal.sh
+UnsetEnvironment=DOMINION_STATE_DIR DOMINION_REPAIR_SETTLE_SECONDS
+StateDirectory=dominion
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/dominion
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+StandardOutput=journal
+StandardError=journal

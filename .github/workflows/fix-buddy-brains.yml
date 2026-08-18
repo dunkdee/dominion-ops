@@ -1,14 +1,7 @@
 name: Buddy — Bounded Self-Heal
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/fix-buddy-brains.yml'
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch:
-
 permissions:
   contents: read
 

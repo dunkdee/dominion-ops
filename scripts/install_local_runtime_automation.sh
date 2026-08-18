@@ -213,15 +213,25 @@ for timer in "${timers[@]}"; do
   systemctl is-active --quiet "$timer"
 done
 
-committed=1
-trap - ERR
+heal_rc=0
+systemctl start dominion-buddy-self-heal.service || heal_rc=$?
+observer_rc=0
+systemctl start dominion-runtime-observer.service || observer_rc=$?
 
-set +e
-systemctl start dominion-buddy-self-heal.service
-heal_rc=$?
-systemctl start dominion-runtime-observer.service
-observer_rc=$?
-set -e
+if [[ "$observer_rc" -ne 0 || "$heal_rc" -ne 0 ]]; then
+  printf 'observer_acceptance_exit=%s\nhealer_acceptance_exit=%s\n' \
+    "$observer_rc" "$heal_rc" >"$backup/acceptance-failure"
+  chmod 0600 "$backup/acceptance-failure"
+  trap - ERR
+  if ! restore_backup "$backup"; then
+    echo "LOCAL_RUNTIME_ACCEPTANCE=ROLLBACK_FAILED backup=$backup" >&2
+    exit 4
+  fi
+  echo "LOCAL_RUNTIME_ACCEPTANCE=ROLLED_BACK backup=$backup"
+  echo "OBSERVER_ACCEPTANCE_EXIT=$observer_rc"
+  echo "HEALER_ACCEPTANCE_EXIT=$heal_rc"
+  exit 3
+fi
 
 observer_hash="$(sha256sum "$LIB_DIR/runtime_observer.sh" | awk '{print $1}')"
 healer_hash="$(sha256sum "$LIB_DIR/buddy_bounded_self_heal.sh" | awk '{print $1}')"
@@ -253,15 +263,13 @@ os.chmod(tmp, 0o600)
 os.replace(tmp, path)
 PY
 
+committed=1
+trap - ERR
+
 echo "INSTALL_LOCAL_AUTOMATION=PASS sha=$expected_sha backup=$backup"
 echo "OBSERVER_ACCEPTANCE_EXIT=$observer_rc"
 echo "HEALER_ACCEPTANCE_EXIT=$heal_rc"
 echo "RECEIPT=$receipt"
 echo "ROLLBACK=sudo $repo_root/scripts/install_local_runtime_automation.sh --rollback $backup --confirm '$ROLLBACK_CONFIRM'"
-
-if [[ "$observer_rc" -ne 0 || "$heal_rc" -ne 0 ]]; then
-  echo 'LOCAL_RUNTIME_ACCEPTANCE=BLOCKED reason=one_or_more_initial_checks_failed'
-  exit 3
-fi
 
 echo 'LOCAL_RUNTIME_ACCEPTANCE=PASS'

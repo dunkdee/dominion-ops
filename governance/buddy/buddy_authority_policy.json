@@ -186,6 +186,7 @@
       "requires_exact_git_sha": true,
       "typed_confirmation": "INSTALL LOCAL RUNTIME AUTOMATION",
       "receipt_required": true,
+      "rollback_on_acceptance_failure": true,
       "automatic": false
     },
     "github_hosted_schedule_policy": {

@@ -106,6 +106,13 @@ class BuddyAuthorityPolicyTests(unittest.TestCase):
         self.assertEqual(observer["workflow_mode"], "MANUAL_FALLBACK_ONLY")
         self.assertEqual(healer["workflow_mode"], "MANUAL_FALLBACK_ONLY")
 
+    def test_installer_rolls_back_when_initial_acceptance_fails(self):
+        install = self.policy["autonomy_control"]["local_runtime_install"]
+        self.assertTrue(install["rollback_on_acceptance_failure"])
+        text = (ROOT / install["script"]).read_text(encoding="utf-8")
+        self.assertIn("LOCAL_RUNTIME_ACCEPTANCE=ROLLED_BACK", text)
+        self.assertIn('restore_backup "$backup"', text)
+
     def test_repository_workflows_match_autonomy_policy(self):
         observer = self.policy["autonomy_control"]["lanes"]["runtime_observation"]["workflow"]
         if not (ROOT / observer).is_file():

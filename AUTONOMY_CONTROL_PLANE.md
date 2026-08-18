@@ -64,7 +64,7 @@ The older `buddy-production-repair.yml` is a temporary legacy exception because 
 
 Consequential workflows require a manual dispatch, the exact main-branch commit SHA, a workflow-specific typed confirmation, protected-environment controls where configured, post-change health evidence, and a rollback path. A merge is not an authorization to publish, send, spend, trade, change credentials, open ingress, or activate a held agent.
 
-The local runtime installer also requires root, a clean `main` worktree at an exact 40-character commit SHA, and the typed confirmation `INSTALL LOCAL RUNTIME AUTOMATION`. It preserves prior files and timer states under `/var/backups/dominion-runtime-automation/`, writes a non-secret receipt, and emits an exact rollback command.
+The local runtime installer also requires root, a clean `main` worktree at an exact 40-character commit SHA, and the typed confirmation `INSTALL LOCAL RUNTIME AUTOMATION`. It preserves prior files and timer states under `/var/backups/dominion-runtime-automation/`, writes a non-secret receipt, and emits an exact rollback command. If either initial observer or healer acceptance fails, it automatically restores the backed-up files and prior timer state before returning failure.
 
 ## State vocabulary
 

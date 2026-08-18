@@ -239,6 +239,7 @@ def validate(policy: dict[str, Any]) -> None:
         "requires_exact_git_sha": True,
         "typed_confirmation": "INSTALL LOCAL RUNTIME AUTOMATION",
         "receipt_required": True,
+        "rollback_on_acceptance_failure": True,
         "automatic": False,
     }, "local runtime installation policy changed")
 
@@ -582,6 +583,8 @@ def autonomy_workflow_errors(root: Path, policy: dict[str, Any]) -> list[str]:
             "tracked_worktree_dirty",
             "systemd-analyze verify",
             "LOCAL_RUNTIME_ACCEPTANCE=PASS",
+            "LOCAL_RUNTIME_ACCEPTANCE=ROLLED_BACK",
+            'restore_backup "$backup"',
             "ROLLBACK LOCAL RUNTIME AUTOMATION",
         ):
             if marker not in text:

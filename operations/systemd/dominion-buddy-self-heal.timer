@@ -1,0 +1,13 @@
+[Unit]
+Description=Run Dominion bounded Buddy self-healer every 10 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+AccuracySec=30s
+RandomizedDelaySec=30s
+Persistent=false
+Unit=dominion-buddy-self-heal.service
+
+[Install]
+WantedBy=timers.target

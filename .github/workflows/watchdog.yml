@@ -1,10 +1,7 @@
 name: Dominion Runtime Observer — Read Only
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"
   workflow_dispatch:
-
 permissions:
   contents: read
 

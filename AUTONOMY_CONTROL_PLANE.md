@@ -26,6 +26,12 @@ A component is `VERIFIED_ONLINE` only when current evidence identifies all nine 
 
 A file existing, a process running, a port listening, or a self-reported `status: ok` is not enough by itself.
 
+## Scheduler boundary
+
+GitHub-hosted runners are CI capacity, not the production scheduler. This private repository has a finite monthly runner allowance, so no workflow may use a `schedule` trigger. Runtime loops execute locally on the Foundation VM through hardened systemd timers. GitHub workflows remain available only as manual fallbacks and release-time validation.
+
+This removes the former minimum demand of approximately 8,670 hosted-runner minutes per month from the 10-minute Buddy healer, 15-minute observer, 30-minute status snapshot, and daily inventory audit schedules.
+
 ## Canonical lanes
 
 ### 1. CI validation
@@ -34,25 +40,31 @@ Runs on pull requests and selected pushes. It receives no production credentials
 
 ### 2. Runtime observation
 
-`.github/workflows/watchdog.yml` runs on a schedule and by manual request. It may use the VM connection only to read service state, listeners, HTTP health contracts, containment holds, and firewall-rule absence. It may not restart, rebuild, deploy, write configuration, or repair.
+`dominion-runtime-observer.timer` runs `scripts/runtime_observer.sh` locally every 15 minutes through `dominion-runtime-observer.service`. The service is read-only, unprivileged, and hardened by systemd. It reads service state, listeners, HTTP health contracts, containment holds, and firewall-rule absence. It may not restart, rebuild, deploy, write configuration, or repair.
+
+`.github/workflows/watchdog.yml` is a manual fallback only. It has no push or schedule trigger.
 
 An observer failure is evidence, not permission to improvise a fix.
 
 ### 3. Buddy bounded self-repair
 
-`.github/workflows/fix-buddy-brains.yml` is repurposed as the bounded self-heal lane and may restart only:
+`dominion-buddy-self-heal.timer` runs `scripts/buddy_bounded_self_heal.sh` locally every 10 minutes through `dominion-buddy-self-heal.service`. It may restart only:
 
 - `dominion-buddy-web.service`
 - `dominion-proposal-queue.service`
 - `dominion-sentinel.service`
 
-It first observes, then waits for the configured cooldown, performs no more than two failed repair attempts, verifies the runtime again, and opens a circuit when recovery is not proven. It cannot patch source, rebuild containers, touch credentials, change networking, invoke external actions, or restart any other service.
+It first observes, then enforces the configured cooldown, performs no more than two failed repair attempts, verifies the runtime again, and opens a circuit when recovery is not proven. It cannot patch source, rebuild containers, touch credentials, change networking, invoke external actions, or restart any other service.
+
+`.github/workflows/fix-buddy-brains.yml` is a manual fallback only. It has no push or schedule trigger.
 
 The older `buddy-production-repair.yml` is a temporary legacy exception because live Buddy source is still VM-only and unreconciled. Its scope must not expand. It is removed only after Buddy source is canonical, reproducible, tested outside the live path, deployed by hash, and independently accepted.
 
 ### 4. Founder-approved apply
 
 Consequential workflows require a manual dispatch, the exact main-branch commit SHA, a workflow-specific typed confirmation, protected-environment controls where configured, post-change health evidence, and a rollback path. A merge is not an authorization to publish, send, spend, trade, change credentials, open ingress, or activate a held agent.
+
+The local runtime installer also requires root, a clean `main` worktree at an exact 40-character commit SHA, and the typed confirmation `INSTALL LOCAL RUNTIME AUTOMATION`. It preserves prior files and timer states under `/var/backups/dominion-runtime-automation/`, writes a non-secret receipt, and emits an exact rollback command. If either initial observer or healer acceptance fails, it automatically restores the backed-up files and prior timer state before returning failure.
 
 ## State vocabulary
 
@@ -76,7 +88,7 @@ Nothing `UNKNOWN`, `QUARANTINED`, `RETIRED`, or `EXTERNAL_ACTION_HOLD` may be st
 5. Never treat a successful command exit as acceptance evidence by itself.
 6. Stop after the attempt limit; do not loop forever.
 7. Record the attempted action, before/after state, result, and rollback or remediation.
-8. Never print secrets or personal data in workflow output.
+8. Never print secrets or personal data in workflow or journal output.
 
 ## System health versus external authorization
 
@@ -89,12 +101,16 @@ The first does not imply the second.
 
 ## Acceptance sequence
 
-1. Merge policy and workflow changes only after CI passes.
-2. Run the observer manually and preserve its output.
-3. Confirm all known containment holds remain enforced.
-4. Run Buddy self-heal once while healthy; it must make no restart.
-5. Conduct a controlled failure test for one allowlisted Buddy service, confirm one bounded restart and recovery, then restore the pre-test state.
-6. Confirm the circuit breaker blocks a repeated unresolved failure after two attempts.
-7. Reconcile Buddy live source before claiming canonical self-evolution or full live conformance.
+1. Merge policy and scheduler changes only after independent syntax and policy tests pass.
+2. Fast-forward the Foundation VM repository to the accepted exact `main` SHA.
+3. Run `scripts/install_local_runtime_automation.sh` with that SHA and the exact typed confirmation.
+4. Preserve the install receipt and rollback command.
+5. Confirm both timers are active and enabled, and no GitHub workflow retains a `schedule` trigger.
+6. Run the observer once and preserve its journal output.
+7. Confirm all known containment holds remain enforced.
+8. Run Buddy self-heal once while healthy; it must make no restart.
+9. Conduct a controlled failure test for one allowlisted Buddy service, confirm one bounded restart and recovery, then restore the pre-test state.
+10. Confirm the circuit breaker blocks a repeated unresolved failure after two attempts.
+11. Reconcile Buddy live source before claiming canonical self-evolution or full live conformance.
 
 Until those runtime steps pass, the repository contains the control plane, but production autonomy remains `UNVERIFIED`.

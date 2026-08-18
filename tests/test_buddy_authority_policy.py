@@ -1,6 +1,8 @@
 import copy
 import json
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,6 +13,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from validate_buddy_authority_policy import (  # noqa: E402
     OBSERVER_FORBIDDEN_PATTERNS,
     PolicyError,
+    _on_has_exact_path,
     _missing_founder_gate,
     _pattern_hits,
     _unpinned_actions,
@@ -86,6 +89,30 @@ class BuddyAuthorityPolicyTests(unittest.TestCase):
         canonical = set(self.policy["self_repair"]["allowed_services"])
         self.assertEqual(bounded, canonical)
 
+    def test_runtime_loops_use_local_systemd_not_hosted_schedules(self):
+        autonomy = self.policy["autonomy_control"]
+        self.assertFalse(
+            autonomy["github_hosted_schedule_policy"]
+            ["automatic_schedules_allowed"]
+        )
+        self.assertEqual(
+            autonomy["github_hosted_schedule_policy"]["runtime_scheduler"],
+            "SYSTEMD_ON_FOUNDATION_VM",
+        )
+        observer = autonomy["lanes"]["runtime_observation"]
+        healer = autonomy["lanes"]["buddy_bounded_self_repair"]
+        self.assertEqual(observer["interval_seconds"], 900)
+        self.assertEqual(healer["interval_seconds"], 600)
+        self.assertEqual(observer["workflow_mode"], "MANUAL_FALLBACK_ONLY")
+        self.assertEqual(healer["workflow_mode"], "MANUAL_FALLBACK_ONLY")
+
+    def test_installer_rolls_back_when_initial_acceptance_fails(self):
+        install = self.policy["autonomy_control"]["local_runtime_install"]
+        self.assertTrue(install["rollback_on_acceptance_failure"])
+        text = (ROOT / install["script"]).read_text(encoding="utf-8")
+        self.assertIn("LOCAL_RUNTIME_ACCEPTANCE=ROLLED_BACK", text)
+        self.assertIn('restore_backup "$backup"', text)
+
     def test_repository_workflows_match_autonomy_policy(self):
         observer = self.policy["autonomy_control"]["lanes"]["runtime_observation"]["workflow"]
         if not (ROOT / observer).is_file():
@@ -95,6 +122,19 @@ class BuddyAuthorityPolicyTests(unittest.TestCase):
     def test_trigger_parser_handles_quoted_on_key(self):
         text = 'name: test\n"on":\n  push:\n  workflow_dispatch:\njobs:\n  x:\n    runs-on: ubuntu-latest\n'
         self.assertEqual(workflow_triggers(text), {"push", "workflow_dispatch"})
+
+    def test_push_path_must_match_the_workflow_exactly(self):
+        text = """on:
+  push:
+    paths:
+      - '.github/workflows/example.yml'
+"""
+        self.assertTrue(
+            _on_has_exact_path(text, ".github/workflows/example.yml")
+        )
+        self.assertFalse(
+            _on_has_exact_path(text, ".github/workflows/other.yml")
+        )
 
     def test_founder_gate_without_exact_sha_is_rejected(self):
         block = """  apply:
@@ -113,16 +153,122 @@ class BuddyAuthorityPolicyTests(unittest.TestCase):
 
     def test_automatic_action_reference_must_be_commit_pinned(self):
         self.assertEqual(
-            _unpinned_actions("    uses: appleboy/ssh-action@v1.2.0\\n"),
+            _unpinned_actions("    uses: appleboy/ssh-action@v1.2.0\n"),
             ["appleboy/ssh-action@v1.2.0"],
         )
         self.assertEqual(
             _unpinned_actions(
                 "    uses: appleboy/ssh-action@"
-                "7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0\\n"
+                "7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0\n"
             ),
             [],
         )
+
+    def test_hosted_schedule_is_rejected_even_without_production_markers(self):
+        candidate = copy.deepcopy(self.policy)
+        autonomy = candidate["autonomy_control"]
+        autonomy["manual_only_workflows"] = {}
+        autonomy["guarded_jobs"] = {}
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+
+            observer = autonomy["lanes"]["runtime_observation"]
+            healer = autonomy["lanes"]["buddy_bounded_self_repair"]
+
+            (root / observer["workflow"]).write_text(
+                """name: observer
+on:
+  workflow_dispatch:
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          echo RUNTIME_OBSERVER=
+          echo CONTAINMENT_HOLD=
+          echo allow-ops-dashboard
+          echo allow-twilio-router
+          echo 127.0.0.1:5070/buddy
+""",
+                encoding="utf-8",
+            )
+            (root / healer["workflow"]).write_text(
+                """name: healer
+on:
+  workflow_dispatch:
+jobs:
+  bounded-repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          MAX_ATTEMPTS=2
+          COOLDOWN_SECONDS=300
+          echo dominion-buddy-web.service
+          echo dominion-proposal-queue.service
+          echo dominion-sentinel.service
+          flock -n 9
+          sudo systemctl restart "$unit"
+          echo BUDDY_SELF_HEAL=NO_ACTION_HEALTHY
+          echo BUDDY_SELF_HEAL=RECOVERED
+          echo BUDDY_SELF_HEAL=BLOCKED_CIRCUIT_OPEN
+""",
+                encoding="utf-8",
+            )
+
+            legacy = autonomy["legacy_buddy_exception"]["workflow"]
+            (root / legacy).write_text(
+                f"""name: legacy
+on:
+  push:
+    paths:
+      - '{legacy}'
+  workflow_dispatch:
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo dominion-buddy-web.service dominion-proposal-queue.service dominion-sentinel.service
+""",
+                encoding="utf-8",
+            )
+
+            for relative in (
+                observer["script"],
+                observer["service_unit"],
+                observer["timer_unit"],
+                healer["script"],
+                healer["service_unit"],
+                healer["timer_unit"],
+                autonomy["local_runtime_install"]["script"],
+            ):
+                source = ROOT / relative
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+
+            self.assertEqual(autonomy_workflow_errors(root, candidate), [])
+
+            (workflows / "rogue-schedule.yml").write_text(
+                """name: rogue
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo read-only
+""",
+                encoding="utf-8",
+            )
+            errors = autonomy_workflow_errors(root, candidate)
+            self.assertTrue(any(
+                "GitHub-hosted schedule prohibited" in error
+                for error in errors
+            ), errors)
 
 
 if __name__ == "__main__":

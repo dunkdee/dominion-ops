@@ -229,7 +229,9 @@ jobs:
           require_200 conductor http://127.0.0.1:5060/health
           require_200 email_drip http://127.0.0.1:8099/health
           require_200 ollama http://127.0.0.1:11434/api/tags
-          require_200 obsidian_backend http://127.0.0.1:8083/
+          obsidian_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8083/ || true)"
+          [ "$obsidian_code" = '401' ] || { echo "FINAL_ACCEPTANCE=HOLD reason=http_health name=obsidian_backend expected=401 actual=${obsidian_code:-000}"; exit 1; }
+          echo "RUNTIME_HTTP=PASS name=obsidian_backend status=401 auth=required"
 
           email_health="$(curl -fsS --max-time 10 http://127.0.0.1:8099/health)"
           email_status="$(curl -fsS --max-time 10 http://127.0.0.1:8099/api/drip-status)"

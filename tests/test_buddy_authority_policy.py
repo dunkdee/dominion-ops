@@ -112,17 +112,107 @@ class BuddyAuthorityPolicyTests(unittest.TestCase):
         self.assertIn("systemd mutation", hits)
 
     def test_automatic_action_reference_must_be_commit_pinned(self):
+        # \\n was a defect: backslash is not whitespace so [^\s#]+ consumed it.
+        # Actual newline terminates the capture correctly.
         self.assertEqual(
-            _unpinned_actions("    uses: appleboy/ssh-action@v1.2.0\\n"),
+            _unpinned_actions("    uses: appleboy/ssh-action@v1.2.0\n"),
             ["appleboy/ssh-action@v1.2.0"],
         )
         self.assertEqual(
             _unpinned_actions(
                 "    uses: appleboy/ssh-action@"
-                "7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0\\n"
+                "7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0\n"
             ),
             [],
         )
+
+
+class ActionUsesRegexRegressionTests(unittest.TestCase):
+    """Regression suite for ACTION_USES_RE double-escape + list-marker defect.
+
+    Recognition tests come first.  SHA acceptance is proved only after
+    recognition is independently established — otherwise a regex that
+    matches nothing would produce [] and falsely pass the acceptance test.
+    """
+
+    # --- Positive recognition (must return non-empty) ---
+
+    def test_mapping_form_uses_is_recognized(self):
+        """8-space mapping-form uses: must be matched and reported."""
+        # Broken regex returns [] — this test catches non-recognition.
+        result = _unpinned_actions("        uses: actions/checkout@v3\n")
+        self.assertEqual(result, ["actions/checkout@v3"])
+
+    def test_list_item_uses_is_recognized(self):
+        """6-space list-item - uses: must be matched and reported."""
+        result = _unpinned_actions("      - uses: actions/checkout@v3\n")
+        self.assertEqual(result, ["actions/checkout@v3"])
+
+    def test_multiple_uses_lines_all_scanned(self):
+        """Every uses: line in a multi-step block must be evaluated."""
+        sha = "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+        text = (
+            "    steps:\n"
+            "      - uses: actions/checkout@v4\n"
+            f"        uses: actions/setup-python@{sha}\n"
+            "      - uses: docker/build-push-action@v5\n"
+        )
+        result = _unpinned_actions(text)
+        self.assertIn("actions/checkout@v4", result)
+        self.assertIn("docker/build-push-action@v5", result)
+        self.assertNotIn(f"actions/setup-python@{sha}", result)
+        self.assertEqual(len(result), 2)
+
+    # --- Detection ---
+
+    def test_unpinned_version_tag_is_detected(self):
+        """Semver tag reference must appear in the unpinned list."""
+        result = _unpinned_actions("      - uses: appleboy/ssh-action@v1.2.0\n")
+        self.assertEqual(result, ["appleboy/ssh-action@v1.2.0"])
+
+    # --- SHA acceptance (valid only after recognition is proven above) ---
+
+    def test_40_char_sha_accepted_mapping_form(self):
+        """Pinned 40-char SHA in mapping form must not be reported."""
+        sha = "7eaf76671a0d7eec5d98ee897acda4f968735a17"
+        result = _unpinned_actions(f"        uses: appleboy/ssh-action@{sha}\n")
+        self.assertEqual(result, [])
+
+    def test_40_char_sha_accepted_list_item_form(self):
+        """Pinned 40-char SHA in list-item form must not be reported."""
+        sha = "7eaf76671a0d7eec5d98ee897acda4f968735a17"
+        result = _unpinned_actions(f"      - uses: appleboy/ssh-action@{sha}\n")
+        self.assertEqual(result, [])
+
+    # --- Comments / whitespace ---
+
+    def test_trailing_comment_on_pinned_sha_does_not_break_acceptance(self):
+        """# version comment after a SHA must not prevent pinning acceptance."""
+        sha = "7eaf76671a0d7eec5d98ee897acda4f968735a17"
+        result = _unpinned_actions(
+            f"        uses: appleboy/ssh-action@{sha} # v1.2.0\n"
+        )
+        self.assertEqual(result, [])
+
+    def test_trailing_whitespace_after_unpinned_tag_does_not_suppress_detection(self):
+        """Spaces after an unpinned version tag must not prevent detection."""
+        result = _unpinned_actions("      - uses: actions/checkout@v3   \n")
+        self.assertIn("actions/checkout@v3", result)
+
+    # --- Local actions ---
+
+    def test_local_action_without_at_sign_is_not_flagged(self):
+        """Local ./path actions have no @ and must not appear in results."""
+        result = _unpinned_actions("      - uses: ./.github/actions/my-action\n")
+        self.assertEqual(result, [])
+
+    # --- Boundary ---
+
+    def test_39_char_hex_is_treated_as_unpinned(self):
+        """A 39-character hex string is not a valid commit SHA and must be flagged."""
+        short = "a" * 39
+        result = _unpinned_actions(f"      - uses: actions/checkout@{short}\n")
+        self.assertEqual(len(result), 1)
 
 
 if __name__ == "__main__":

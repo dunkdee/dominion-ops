@@ -91,7 +91,7 @@ OBSERVER_FORBIDDEN_PATTERNS = {
     ),
 }
 ACTION_USES_RE = re.compile(
-    r"^\\s*uses:\\s*([^@\\s]+)@([^\\s#]+)",
+    r"^[ \t]*(?:-[ \t]+)?uses:[ \t]*([^@\s]+)@([^\s#]+)",
     re.MULTILINE,
 )
 

@@ -405,7 +405,7 @@ async def chat(request: Request):
     full_prompt = "\n".join(context_lines)
 
     try:
-        operator_result = get_operator().handle(message, session_id=session_id)
+        operator_result = get_operator().handle(message, session_id=session_id, conversation_context=full_prompt)
         response = operator_result.get("response") or "Buddy completed the request without a text summary."
     except Exception as e:
         operator_result = {"status": "BLOCKED", "error": type(e).__name__}

@@ -13,13 +13,13 @@
   "capacity": {
     "disk": [
       {
-        "available_kb": "7893584",
+        "available_kb": "1791652",
         "blocks_kb": "51358424",
         "filesystem": "/dev/sda1",
         "mount": "/",
         "type": "ext4",
-        "use_percent": "84%",
-        "used_kb": "41253144"
+        "use_percent": "97%",
+        "used_kb": "47355076"
       },
       {
         "available_kb": "114614",
@@ -34,16 +34,16 @@
     "memory": {
       "mem": [
         "8336908288",
-        "2552848384",
-        "1164505088",
-        "24997888",
-        "4957089792",
-        "5784059904"
+        "2525315072",
+        "1381326848",
+        "72658944",
+        "4815462400",
+        "5811593216"
       ],
       "swap": [
         "2147479552",
-        "808714240",
-        "1338765312"
+        "920535040",
+        "1226944512"
       ]
     }
   },
@@ -62,7 +62,7 @@
     },
     {
       "available": true,
-      "entry_count": 47,
+      "entry_count": 45,
       "scope": "current_user"
     }
   ],
@@ -73,6 +73,7 @@
         "DOMINION_VAULT.b64",
         "agents",
         "alpha_engine",
+        "apps",
         "backup.sh",
         "backups",
         "bin",
@@ -98,11 +99,14 @@
     },
     {
       "children": [
+        ".coderabbit.yaml",
         ".env",
         ".env.example",
         ".env.production.example",
+        ".env.wix",
         ".github",
         ".gitignore",
+        "AUTONOMY_CONTROL_PLANE.md",
         "CNAME",
         "Keep Alive Workflow",
         "OPS",
@@ -112,18 +116,26 @@
         "README_NETLIFY.md",
         "SECURITY.md",
         "STATE.md",
+        "agents",
         "alpha_engine",
         "api",
         "apps",
+        "architecture",
         "baby",
+        "brain",
+        "buddy_core",
         "build-doctor.sh",
         "caddy",
+        "config",
+        "control_plane",
         "daily_content.sh",
         "deploy",
+        "docker-compose.command-center.yml",
         "docker-compose.yml",
         "docs",
         "dominion",
         "dominion_log.txt",
+        "governance",
         "index.html",
         "landing.html",
         "n8n workflow",
@@ -132,8 +144,17 @@
         "n8n-workflows",
         "netlify",
         "netlify.toml",
+        "obsidian",
+        "operations",
         "ops",
+        "prompt-os",
+        "revenue",
+        "revenue_products",
+        "runtime",
         "scripts",
+        "services",
+        "strategy",
+        "tests",
         "web"
       ],
       "exists": true,
@@ -204,7 +225,12 @@
         "Caddyfile.bak.20260601",
         "Caddyfile.bak.20260706_162604",
         "Caddyfile.bak.20260715_021131",
+        "Caddyfile.bak_d1b_20260807T140555Z",
+        "Caddyfile.bak_d1b_20260807T142704Z",
+        "Caddyfile.bak_d2a_20260807T105355Z",
         "Caddyfile.bak_tiktok",
+        "Caddyfile.brain-31324950586.bak",
+        "Caddyfile.brain-31327636174.bak",
         "Caddyfile.last_known_good"
       ],
       "exists": true,
@@ -261,6 +287,7 @@
         "dominion-kdp.timer",
         "dominion-monitor.service",
         "dominion-n8n-watchdog.service",
+        "dominion-nemotron.service",
         "dominion-ops-dashboard.service",
         "dominion-overseer.service",
         "dominion-overseer.timer",
@@ -268,6 +295,7 @@
         "dominion-paper-trade.timer",
         "dominion-port-healer.service",
         "dominion-proposal-queue.service",
+        "dominion-proposal-queue.service.d",
         "dominion-publish.service",
         "dominion-publish.timer",
         "dominion-report.service",
@@ -323,36 +351,71 @@
   "docker": {
     "compose_projects": [
       {
-        "config_files": "/home/malachisingleton8/desktop-tutorial/docker-compose.yml",
-        "name": "desktop-tutorial",
-        "status": "running(2)"
-      },
-      {
-        "config_files": "/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a/docker-compose.yml,/var/lib/dominion/cutovers/stage2f-baby-recovery-29885228305-1/baby-recovery.override.yml",
+        "config_files": "/home/malachisingleton8/dominion-ops/docker-compose.yml",
         "name": "dominion-ops",
-        "status": "running(1)"
+        "status": "running(6)"
       }
     ],
     "containers": [
       {
-        "id": "7ef942392b61",
-        "image": "dominion-stage2d-r4-baby-api:latest",
-        "mounts": "/home/malachisingleton8/dominion-releases/dominion-ops-10646094aa3a/api,/home/malachisingleton8/vault",
-        "name": "baby-api",
-        "networks": "desktop-tutorial_default",
-        "ports": "0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp",
+        "id": "01c050fc5362",
+        "image": "alpine:latest",
+        "mounts": "",
+        "name": "baby-logger",
+        "networks": "dominion-ops_default",
+        "ports": "",
         "state": "running",
-        "status": "Up 3 days (healthy)"
+        "status": "Up 28 minutes"
       },
       {
-        "id": "f0319cf37704",
-        "image": "dominion/wix-agent:a33ce2044d95d1aa63a9429ee4be532f457952bf",
-        "mounts": "wix_agent_logs_a33ce2044d95-29785123140-1,wix_agent_data_a33ce2044d95-29785123140-1",
+        "id": "f70458705cb7",
+        "image": "dominion-ops-dominion-web",
+        "mounts": "",
+        "name": "dominion-web",
+        "networks": "dominion-ops_default",
+        "ports": "0.0.0.0:8090->80/tcp, [::]:8090->80/tcp",
+        "state": "running",
+        "status": "Up 28 minutes"
+      },
+      {
+        "id": "040707b69b3f",
+        "image": "dominion/wix-agent:local",
+        "mounts": "dominion-ops_wix_agent_data,dominion-ops_wix_agent_logs",
         "name": "wix-agent",
-        "networks": "desktop-tutorial_default",
+        "networks": "dominion-ops_default",
         "ports": "127.0.0.1:8082->8000/tcp",
         "state": "running",
-        "status": "Up 3 days (healthy)"
+        "status": "Up 28 minutes (healthy)"
+      },
+      {
+        "id": "22073c2194b0",
+        "image": "dominion-ops-browser-agents",
+        "mounts": "",
+        "name": "browser-agents",
+        "networks": "dominion-ops_default",
+        "ports": "0.0.0.0:8081->8000/tcp, [::]:8081->8000/tcp",
+        "state": "running",
+        "status": "Up 28 minutes (healthy)"
+      },
+      {
+        "id": "e55f94e2e8fc",
+        "image": "dominion-ops-baby-api",
+        "mounts": "/home/malachisingleton8/dominion-ops/api,/home/malachisingleton8/vault",
+        "name": "baby-api",
+        "networks": "dominion-ops_default",
+        "ports": "0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp",
+        "state": "running",
+        "status": "Up 28 minutes (healthy)"
+      },
+      {
+        "id": "804a76e4ded0",
+        "image": "lscr.io/linuxserver/obsidian:latest",
+        "mounts": "dominion-ops_obsidian_remote_config_v2,/home/malachisingleton8/vault",
+        "name": "obsidian-remote",
+        "networks": "dominion-ops_default",
+        "ports": "3001/tcp, 127.0.0.1:8083->3000/tcp",
+        "state": "running",
+        "status": "Up 8 days (healthy)"
       },
       {
         "id": "86e87f703aa9",
@@ -362,47 +425,7 @@
         "networks": "bridge",
         "ports": "0.0.0.0:8001->8000/tcp, [::]:8001->8000/tcp",
         "state": "running",
-        "status": "Up 8 days"
-      },
-      {
-        "id": "26755ef48f40",
-        "image": "desktop-tutorial-wix-agent",
-        "mounts": "/home/malachisingleton8/desktop-tutorial/apps/wix-agent/logs,/home/malachisingleton8/desktop-tutorial/apps/wix-agent/wix_agent.db",
-        "name": "wix-agent-rollback-20260720T224801Z",
-        "networks": "desktop-tutorial_default",
-        "ports": "",
-        "state": "exited",
-        "status": "Exited (0) 4 days ago"
-      },
-      {
-        "id": "601c53884801",
-        "image": "sha256:a319b3721a52e31c166c5a311301f656affef7f4acaeb4ff047c2cc971af000d",
-        "mounts": "/home/malachisingleton8/desktop-tutorial/api,/home/malachisingleton8/vault",
-        "name": "baby-api-failed-stage2f-29885228305-1",
-        "networks": "",
-        "ports": "",
-        "state": "exited",
-        "status": "Exited (2) 3 days ago"
-      },
-      {
-        "id": "cf8294541b1a",
-        "image": "sha256:3224bfc43c02ab75c9a651cd3b8988e8778cae57006a96da16a03d9b730d9810",
-        "mounts": "",
-        "name": "dominion-web",
-        "networks": "desktop-tutorial_default",
-        "ports": "0.0.0.0:8090->80/tcp, [::]:8090->80/tcp",
-        "state": "running",
-        "status": "Up 3 days"
-      },
-      {
-        "id": "c3d390494b90",
-        "image": "alpine:latest",
-        "mounts": "",
-        "name": "baby-logger",
-        "networks": "desktop-tutorial_default",
-        "ports": "",
-        "state": "running",
-        "status": "Up 5 weeks"
+        "status": "Up 2 weeks"
       },
       {
         "id": "cea991529d34",
@@ -412,7 +435,7 @@
         "networks": "host",
         "ports": "",
         "state": "running",
-        "status": "Up 8 days"
+        "status": "Up 2 weeks"
       },
       {
         "id": "5e1fa54aa9e6",
@@ -422,7 +445,7 @@
         "networks": "bridge",
         "ports": "0.0.0.0:5678->5678/tcp, [::]:5678->5678/tcp",
         "state": "running",
-        "status": "Up 5 weeks"
+        "status": "Up 2 weeks"
       },
       {
         "id": "438e09685cd3",
@@ -432,558 +455,96 @@
         "networks": "bridge",
         "ports": "127.0.0.1:5432->5432/tcp",
         "state": "running",
-        "status": "Up 6 weeks"
+        "status": "Up 2 weeks"
       }
     ],
     "images": [
       {
-        "created": "16 hours ago",
-        "id": "9875db04ee8d",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-f1aa67f7478bd8add391bd1314881c6c0aab81c6"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "37409f5a4135",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-33c0691a70406e0a3dbed295294d0d9cfdad75ec"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "bb8a145198c3",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-f196bf762a66e05fb6e15ff146b5973a0bbdd2b3"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "9a244a60c66d",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-5d75249174016fb1364a86aa2c0e967f49334454"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "254d101c91dc",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-cb1cf5c92ad582b620d5300c30d0d07466f3961e"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "3ea2c7173535",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-e048131ee27dfe2c8c487eab837f2a52568d57cb"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "9fbb50a2c324",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-240f36aa850ef9eef05ad2b653f738763e3a59eb"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "057bb17d36ce",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-9814d3fb8940f79f72fdfc20a2d616375fe8bbea"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "929966de9fb8",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-a325c0475df5b57134c24272929d623c6b73748e"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "9c98b870fef8",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-2238c8c1b0c1e21ac28dc7131256af3d44fd5e52"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "3f6a26f9049b",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-5d75249174016fb1364a86aa2c0e967f49334454"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "1ed069a10abc",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-5cff7e46b58af849de202cbc5056354a423aca05"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "276dd71d1f73",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-059cf381583f34b83eaf7bd0f7a16331b31ddf2c"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "9f63701703b4",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-059cf381583f34b83eaf7bd0f7a16331b31ddf2c"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "f8eab3a018a7",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-8e7f266f429ac10da39911b8d70089b100e3686d"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "ac39ac1b6574",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-8e7f266f429ac10da39911b8d70089b100e3686d"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "bc50dbb57e60",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-e692f77434ca89190a235a358eea6b4c62b17f41"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "96e02533d115",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-e048131ee27dfe2c8c487eab837f2a52568d57cb"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "17c227969966",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-240f36aa850ef9eef05ad2b653f738763e3a59eb"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "c3ec58728d27",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-33682d5848712cda875b5cc4bceb74860ac3e3e1"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "5c427331cf4b",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-9a5c6d85cb7cfa8ea6be2a03e32cb012954a9d66"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "b5f84a44f79d",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-9814d3fb8940f79f72fdfc20a2d616375fe8bbea"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "eb05703fe774",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-a325c0475df5b57134c24272929d623c6b73748e"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "628e1a2690ae",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-c63f91b30c854d0eb549222d396111ed9463572b"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "4b0aefd98a32",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-5a504d93b0a31286bdfa143fb32456f838bdf7f1"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "640dd0dee3b6",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-4b2260e33bf825edb33f22096822397a2ab3e9e5"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "277867b4f3c7",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-e6836bc3b8cceac62e695914544d067a7e8d1f4f"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "6d078128e9b0",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-7efc258547f77837ac48783739a27d9908c25114"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "76f4eb76d8c0",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-e6836bc3b8cceac62e695914544d067a7e8d1f4f"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "6b43d84459d3",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-b74ae750bb7c91723d79ad8ba8c81af368bbf540"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "462cfbf2f085",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-b74ae750bb7c91723d79ad8ba8c81af368bbf540"
-      },
-      {
-        "created": "16 hours ago",
-        "id": "3f735170ebd7",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-279d78d0360e408b7e7a27ba193f97b689492d25"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "4a8f9eb73980",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-0fca93d238eab9c7812937304fb3b7c15409b5be"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "e3b195802d23",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-e8014673663fb072f425fed77cacf31d228a2a5e"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "3a423b15739c",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-2713ac4f4b7c908702a38191b307d45246cbd410"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "454562f87f30",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-ee87b1a7fe2ddb9c4fb8841d2880cfe877d1487f"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "8a9fba252b51",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-c6e4e3d51dac410ed8d8c06e7657b6fc96fd17d7"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "ff8c2664be04",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-a51de4b781b4c384a1d17161c495223418733b58"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "7ff1eb1769aa",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-6ca98c442b5f9c244c9864a1112cf7d2537a3172"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "d40969ddf5c8",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-ee87b1a7fe2ddb9c4fb8841d2880cfe877d1487f"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "f43be8c8b1f1",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-5a37b1c445d8396404ae3b8c069ed19f29ae0bde"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "9fe31574d389",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-2d54f99db4f852a5457108fa7b76e0f1fb0cd13b"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "14f20f3c5c2a",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-0fca93d238eab9c7812937304fb3b7c15409b5be"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "21cac783cbfe",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-c9952f6bc1f47bd2edb0a5cbdaa54e739d02844e"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "1fac8fc4e3f4",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-56bb6d1cc0938ca584997cd7e1b7e5b0bea52955"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "90ffb0927b9a",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-02028c183397dee46ca162d917e8798bb628ff42"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "c55fa4100b32",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-98fecb309a35c42259c54278fd1d04ffde9a2733"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "8c19a0e5233b",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-e8014673663fb072f425fed77cacf31d228a2a5e"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "f5d1694ca33f",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-1d66e11fb9d179fed6ba0f6a4af79eb55624ace1"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "91cc7ee2f0f6",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-56bb6d1cc0938ca584997cd7e1b7e5b0bea52955"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "4abb89a63e0c",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-afb19fd93bb61213c6cffc8625283d2a23f3170c"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "8664c2b8d4ea",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-db74fb307ccb98cd9c29539d3f0ea29db926dc2f"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "60b90d194d2a",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-6ca98c442b5f9c244c9864a1112cf7d2537a3172"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "30c72091bde3",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-15c05c8c01180ec170f72443982c9009c8e64ba2"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "81ba76eafb65",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-949dd6d321d6f25ffcd2c80ccfe27436a66a4093"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "a6a79d00e5a0",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-15c05c8c01180ec170f72443982c9009c8e64ba2"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "b925c3631df7",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-9c1dc34cc53881d25e7494b748d2cf3279d6d8f9"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "bf9a5590e42a",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-a51de4b781b4c384a1d17161c495223418733b58"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "5b68b524f7e7",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-b4f30de47cb0b928b34ac1ce9807343a3c62fb65"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "57d9a3282d13",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-afb19fd93bb61213c6cffc8625283d2a23f3170c"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "14be665a255f",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-pr-db74fb307ccb98cd9c29539d3f0ea29db926dc2f"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "b31f8a2122da",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-c9952f6bc1f47bd2edb0a5cbdaa54e739d02844e"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "7822ce47e574",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "preflight-fdbb00d570b13ba493d5355fe03c8ab2584eac40"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "10bb4f0e7eb3",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-b4f30de47cb0b928b34ac1ce9807343a3c62fb65"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "270ebb3d2525",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-98fecb309a35c42259c54278fd1d04ffde9a2733"
-      },
-      {
-        "created": "17 hours ago",
-        "id": "cd1fa7b28958",
-        "repository": "dominion/video-studio",
-        "size": "879MB",
-        "tag": "build-diagnostic-949dd6d321d6f25ffcd2c80ccfe27436a66a4093"
-      },
-      {
-        "created": "3 days ago",
-        "id": "089445475d96",
-        "repository": "dominion-stage2d-r4-baby-api",
-        "size": "270MB",
+        "created": "29 minutes ago",
+        "id": "7c9604bfa656",
+        "repository": "dominion-ops-browser-agents",
+        "size": "4.29GB",
         "tag": "latest"
       },
       {
-        "created": "3 days ago",
-        "id": "ef792a2ac991",
+        "created": "30 minutes ago",
+        "id": "77ed0701c303",
         "repository": "dominion/wix-agent",
-        "size": "240MB",
-        "tag": "stage2d-r4-10646094aa3a"
+        "size": "241MB",
+        "tag": "local"
       },
       {
-        "created": "3 days ago",
-        "id": "77583ed35a75",
-        "repository": "dominion-stage2d-r4-dominion-web",
-        "size": "92.8MB",
+        "created": "30 minutes ago",
+        "id": "d3f2527725a5",
+        "repository": "dominion-ops-dominion-web",
+        "size": "93.4MB",
         "tag": "latest"
       },
       {
-        "created": "4 days ago",
-        "id": "5d93b67075fe",
+        "created": "44 hours ago",
+        "id": "2b739e3be27a",
+        "repository": "dominion-ops-baby-api",
+        "size": "271MB",
+        "tag": "latest"
+      },
+      {
+        "created": "8 days ago",
+        "id": "f47b0ceb0bf9",
+        "repository": "lscr.io/linuxserver/obsidian",
+        "size": "5.17GB",
+        "tag": "latest"
+      },
+      {
+        "created": "10 days ago",
+        "id": "929b1029f380",
         "repository": "dominion/wix-agent",
-        "size": "240MB",
-        "tag": "7eba601b1a4f3e66719a5ca87ce2268c97af5bd6"
+        "size": "241MB",
+        "tag": "2430b3bf23710f1497dda64f37afa261b5fa0385"
       },
       {
-        "created": "4 days ago",
-        "id": "a5a7deff7623",
+        "created": "10 days ago",
+        "id": "0aeb40e138c2",
         "repository": "dominion/wix-agent",
-        "size": "240MB",
-        "tag": "a33ce2044d95d1aa63a9429ee4be532f457952bf"
+        "size": "241MB",
+        "tag": "423a95c075077819e248d266c8ce9499b4c42dc4"
       },
       {
-        "created": "2 weeks ago",
-        "id": "b529b1ffa052",
-        "repository": "desktop-tutorial-wix-agent",
-        "size": "256MB",
-        "tag": "latest"
+        "created": "10 days ago",
+        "id": "30dc786853eb",
+        "repository": "dominion/obsidian-remote-rollback",
+        "size": "5.17GB",
+        "tag": "31614986675"
       },
       {
-        "created": "4 weeks ago",
-        "id": "35113a3b431c",
-        "repository": "desktop-tutorial-baby-api",
-        "size": "268MB",
-        "tag": "latest"
-      },
-      {
-        "created": "4 weeks ago",
-        "id": "3f222cd8deea",
-        "repository": "desktop-tutorial-dominion-web",
-        "size": "92.5MB",
-        "tag": "latest"
-      },
-      {
-        "created": "5 weeks ago",
+        "created": "2 months ago",
         "id": "3d3c26e5d29d",
         "repository": "movie-generator",
         "size": "906MB",
         "tag": "latest"
       },
       {
-        "created": "6 weeks ago",
+        "created": "2 months ago",
         "id": "a2d49ea686c2",
         "repository": "alpine",
         "size": "13.1MB",
         "tag": "latest"
       },
       {
-        "created": "2 months ago",
+        "created": "3 months ago",
         "id": "fd8d9aa63ba2",
         "repository": "busybox",
         "size": "6.81MB",
         "tag": "latest"
       },
       {
-        "created": "2 months ago",
+        "created": "3 months ago",
         "id": "41b49fac3231",
         "repository": "dominion-seo",
         "size": "330MB",
         "tag": "latest"
       },
       {
-        "created": "4 months ago",
+        "created": "5 months ago",
         "id": "866264fb9764",
         "repository": "postgres",
         "size": "633MB",
@@ -994,6 +555,27 @@
         "id": "fdf1e22bc04a",
         "repository": "n8nio/n8n",
         "size": "1.95GB",
+        "tag": "latest"
+      },
+      {
+        "created": "3 years ago",
+        "id": "0494ea57446e",
+        "repository": "dominion/obsidian-remote-rollback",
+        "size": "2.01GB",
+        "tag": "31453781795"
+      },
+      {
+        "created": "3 years ago",
+        "id": "0494ea57446e",
+        "repository": "dominion/obsidian-remote-rollback",
+        "size": "2.01GB",
+        "tag": "31454167640"
+      },
+      {
+        "created": "3 years ago",
+        "id": "0494ea57446e",
+        "repository": "ghcr.io/sytone/obsidian-remote",
+        "size": "2.01GB",
         "tag": "latest"
       }
     ]
@@ -1280,6 +862,22 @@
         {
           "name": "AMAZON_PHONE",
           "sensitive_name": false
+        },
+        {
+          "name": "EMAIL_PASSWORD",
+          "sensitive_name": true
+        },
+        {
+          "name": "DRIP_SEND_MODE",
+          "sensitive_name": false
+        },
+        {
+          "name": "DRIP_LIVE_PREFLIGHT_OK",
+          "sensitive_name": false
+        },
+        {
+          "name": "DRIP_LIVE_AUTHORIZED_AT",
+          "sensitive_name": true
         }
       ],
       "path": "/home/malachisingleton8/.env"
@@ -1848,60 +1446,32 @@
     {
       "keys": [
         {
-          "name": "ANTHROPIC_API_KEY",
+          "name": "WIX_API_KEY",
           "sensitive_name": true
+        },
+        {
+          "name": "WIX_SITE_ID",
+          "sensitive_name": false
+        },
+        {
+          "name": "WIX_AGENT_OPERATOR_TOKEN",
+          "sensitive_name": true
+        },
+        {
+          "name": "WIX_FULFILLMENT_MODE",
+          "sensitive_name": false
         },
         {
           "name": "GUMROAD_TOKEN",
           "sensitive_name": true
         },
         {
-          "name": "YOUTUBE_API_KEY",
+          "name": "ZENDROP_API_KEY",
           "sensitive_name": true
         },
         {
-          "name": "YOUTUBE_CLIENT_ID",
-          "sensitive_name": false
-        },
-        {
-          "name": "YOUTUBE_CLIENT_SECRET",
+          "name": "OBSIDIAN_PASSWORD",
           "sensitive_name": true
-        },
-        {
-          "name": "OANDA_API_KEY",
-          "sensitive_name": true
-        },
-        {
-          "name": "OANDA_ACCOUNT_ID",
-          "sensitive_name": false
-        },
-        {
-          "name": "BINANCE_API_KEY",
-          "sensitive_name": true
-        },
-        {
-          "name": "BINANCE_API_SECRET",
-          "sensitive_name": true
-        },
-        {
-          "name": "TIKTOK_CLIENT_ID",
-          "sensitive_name": false
-        },
-        {
-          "name": "TIKTOK_CLIENT_SECRET",
-          "sensitive_name": true
-        },
-        {
-          "name": "GCP_PROJECT_ID",
-          "sensitive_name": false
-        },
-        {
-          "name": "GCP_REGION",
-          "sensitive_name": false
-        },
-        {
-          "name": "GOOGLE_SERVICE_ACCOUNT_JSON",
-          "sensitive_name": false
         }
       ],
       "path": "/home/malachisingleton8/dominion-ops/.env"
@@ -2099,7 +1669,7 @@
       "path": "/opt/dominion/dominion-store/.env"
     }
   ],
-  "generated_at": "2026-07-25T20:31:19.955055+00:00",
+  "generated_at": "2026-08-20T19:54:07.763589+00:00",
   "git_repositories": [
     {
       "branch": "master",
@@ -2109,9 +1679,9 @@
       "path": "/home/malachisingleton8"
     },
     {
-      "branch": "claude/movie-generator-youtube-b50wx2",
-      "dirty": true,
-      "head": "aa2d7d2e9e92124a3ebc131d4f0d326b5b1c872b",
+      "branch": "DETACHED",
+      "dirty": false,
+      "head": "c2511940cf5d0a195baffc771df76f13f9a1f20a",
       "origin": "git@github-dominion:dunkdee/dominion-ops.git",
       "path": "/home/malachisingleton8/dominion-ops"
     }
@@ -2121,7 +1691,7 @@
     "kernel": "Linux foundation-vm 6.1.0-49-cloud-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.1.174-1 (2026-05-26) x86_64 GNU/Linux",
     "platform": "Linux-6.1.0-49-cloud-amd64-x86_64-with-glibc2.36",
     "python": "3.11.2",
-    "uptime": "up 6 weeks, 6 days, 6 hours, 46 minutes"
+    "uptime": "up 10 weeks, 4 days, 6 hours, 8 minutes"
   },
   "listening_ports": [
     {
@@ -2221,6 +1791,18 @@
       "state": "LISTEN"
     },
     {
+      "local": "127.0.0.1:8099",
+      "process": "users:((\"python\",pid=1589000,fd=15))",
+      "protocol": "tcp",
+      "state": "LISTEN"
+    },
+    {
+      "local": "127.0.0.1:8083",
+      "process": null,
+      "protocol": "tcp",
+      "state": "LISTEN"
+    },
+    {
       "local": "127.0.0.1:8082",
       "process": null,
       "protocol": "tcp",
@@ -2263,8 +1845,8 @@
       "state": "LISTEN"
     },
     {
-      "local": "0.0.0.0:8099",
-      "process": "users:((\"python\",pid=3089646,fd=13))",
+      "local": "0.0.0.0:8081",
+      "process": null,
       "protocol": "tcp",
       "state": "LISTEN"
     },
@@ -2300,7 +1882,7 @@
     },
     {
       "local": "0.0.0.0:5000",
-      "process": "users:((\"python3\",pid=399,fd=3))",
+      "process": "users:((\"python3\",pid=1100241,fd=3))",
       "protocol": "tcp",
       "state": "LISTEN"
     },
@@ -2324,7 +1906,7 @@
     },
     {
       "local": "0.0.0.0:5070",
-      "process": "users:((\"python3\",pid=3604584,fd=13))",
+      "process": "users:((\"python3\",pid=305402,fd=13))",
       "protocol": "tcp",
       "state": "LISTEN"
     },
@@ -2354,13 +1936,13 @@
     },
     {
       "local": "0.0.0.0:5101",
-      "process": "users:((\"python\",pid=872368,fd=13))",
+      "process": "users:((\"python\",pid=455521,fd=13))",
       "protocol": "tcp",
       "state": "LISTEN"
     },
     {
       "local": "0.0.0.0:5090",
-      "process": "users:((\"python3\",pid=426,fd=13))",
+      "process": "users:((\"python3\",pid=1100320,fd=13))",
       "protocol": "tcp",
       "state": "LISTEN"
     },
@@ -2389,32 +1971,26 @@
       "state": "LISTEN"
     },
     {
-      "local": "0.0.0.0:5120",
-      "process": "users:((\"python\",pid=1515843,fd=13))",
-      "protocol": "tcp",
-      "state": "LISTEN"
-    },
-    {
       "local": "127.0.0.1:5060",
-      "process": "users:((\"python\",pid=4070265,fd=6))",
+      "process": "users:((\"python\",pid=2144959,fd=6))",
       "protocol": "tcp",
       "state": "LISTEN"
     },
     {
       "local": "127.0.0.1:5056",
-      "process": "users:((\"python3\",pid=3604500,fd=3))",
+      "process": "users:((\"python3\",pid=2199875,fd=3))",
       "protocol": "tcp",
       "state": "LISTEN"
     },
     {
       "local": "0.0.0.0:9380",
-      "process": "users:((\"python\",pid=383,fd=13))",
+      "process": "users:((\"python\",pid=2201712,fd=13))",
       "protocol": "tcp",
       "state": "LISTEN"
     },
     {
       "local": "127.0.0.1:5050",
-      "process": "users:((\"python\",pid=2308281,fd=3))",
+      "process": "users:((\"python\",pid=2287851,fd=3))",
       "protocol": "tcp",
       "state": "LISTEN"
     },
@@ -2462,6 +2038,12 @@
     },
     {
       "local": "[::]:8080",
+      "process": null,
+      "protocol": "tcp",
+      "state": "LISTEN"
+    },
+    {
+      "local": "[::]:8081",
       "process": null,
       "protocol": "tcp",
       "state": "LISTEN"
@@ -2614,12 +2196,6 @@
     },
     {
       "path": "/healthz",
-      "port": 5120,
-      "reachable": true,
-      "status": 404
-    },
-    {
-      "path": "/healthz",
       "port": 5678,
       "reachable": true,
       "status": 200
@@ -2638,7 +2214,19 @@
     },
     {
       "path": "/healthz",
+      "port": 8081,
+      "reachable": true,
+      "status": 404
+    },
+    {
+      "path": "/healthz",
       "port": 8082,
+      "reachable": true,
+      "status": 401
+    },
+    {
+      "path": "/healthz",
+      "port": 8083,
       "reachable": true,
       "status": 401
     },
@@ -2869,13 +2457,6 @@
         "unit": "dominion-3d-dashboard.service"
       },
       {
-        "active": "inactive",
-        "description": "Dominion Affiliate Content Engine",
-        "load": "loaded",
-        "sub": "dead",
-        "unit": "dominion-affiliate.service"
-      },
-      {
         "active": "active",
         "description": "Dominion Alchemist Health AI",
         "load": "loaded",
@@ -2930,13 +2511,6 @@
         "load": "loaded",
         "sub": "running",
         "unit": "dominion-email-drip.service"
-      },
-      {
-        "active": "active",
-        "description": "Dominion Email Monitor — SMS alerts for new emails",
-        "load": "loaded",
-        "sub": "running",
-        "unit": "dominion-email-monitor.service"
       },
       {
         "active": "inactive",
@@ -3037,13 +2611,6 @@
         "unit": "dominion-review-queue.service"
       },
       {
-        "active": "inactive",
-        "description": "Dominion Real Estate Scout - Daily Lead Sourcing",
-        "load": "loaded",
-        "sub": "dead",
-        "unit": "dominion-scout.service"
-      },
-      {
         "active": "active",
         "description": "Dominion Sentinel — Autonomous Guardian (phi=1.618)",
         "load": "loaded",
@@ -3065,13 +2632,6 @@
         "unit": "dominion-surplus-dashboard.service"
       },
       {
-        "active": "active",
-        "description": "Dominion TikTok OAuth and Auto-Poster (port 5120)",
-        "load": "loaded",
-        "sub": "running",
-        "unit": "dominion-tiktok.service"
-      },
-      {
         "active": "inactive",
         "description": "Dominion Weekly Trade Report Email",
         "load": "loaded",
@@ -3091,13 +2651,6 @@
         "load": "loaded",
         "sub": "dead",
         "unit": "dominion-watchdog.service"
-      },
-      {
-        "active": "inactive",
-        "description": "Dominion Wholesale Pipeline (scout > analyze > outreach > buyers > blast)",
-        "load": "loaded",
-        "sub": "dead",
-        "unit": "dominion-wholesale.service"
       },
       {
         "active": "inactive",
@@ -3324,10 +2877,10 @@
         "unit": "kmod-static-nodes.service"
       },
       {
-        "active": "failed",
+        "active": "inactive",
         "description": "Rotate log files",
         "load": "loaded",
-        "sub": "failed",
+        "sub": "dead",
         "unit": "logrotate.service"
       },
       {
@@ -3843,10 +3396,24 @@
       },
       {
         "active": "active",
+        "description": "User Runtime Directory /run/user/1001",
+        "load": "loaded",
+        "sub": "exited",
+        "unit": "user-runtime-dir@1001.service"
+      },
+      {
+        "active": "active",
         "description": "User Manager for UID 1000",
         "load": "loaded",
         "sub": "running",
         "unit": "user@1000.service"
+      },
+      {
+        "active": "active",
+        "description": "User Manager for UID 1001",
+        "load": "loaded",
+        "sub": "running",
+        "unit": "user@1001.service"
       },
       {
         "active": "inactive",
@@ -3857,35 +3424,32 @@
       }
     ],
     "timers": [
-      "Sat 2026-07-25 20:32:00 UTC 37s left Sat 2026-07-25 20:31:00 UTC 22s ago dominion-executor.timer dominion-executor.service",
-      "Sat 2026-07-25 20:35:18 UTC 3min 56s left Sat 2026-07-25 20:30:18 UTC 1min 3s ago dominion-healthcheck.timer dominion-healthcheck.service",
-      "Sun 2026-07-26 00:00:00 UTC 3h 28min left Sat 2026-07-25 00:00:01 UTC 20h ago dpkg-db-backup.timer dpkg-db-backup.service",
-      "Sun 2026-07-26 00:00:00 UTC 3h 28min left Sat 2026-07-25 00:00:01 UTC 20h ago exim4-base.timer exim4-base.service",
-      "Sun 2026-07-26 00:00:00 UTC 3h 28min left Sat 2026-07-25 00:00:01 UTC 20h ago logrotate.timer logrotate.service",
-      "Sun 2026-07-26 01:50:50 UTC 5h 19min left Sat 2026-07-25 19:50:50 UTC 40min ago google-oslogin-cache.timer google-oslogin-cache.service",
-      "Sun 2026-07-26 02:00:00 UTC 5h 28min left Sat 2026-07-25 02:00:08 UTC 18h ago dominion-affiliate.timer dominion-affiliate.service",
-      "Sun 2026-07-26 02:02:24 UTC 5h 31min left Sat 2026-07-25 07:04:24 UTC 13h ago man-db.timer man-db.service",
-      "Sun 2026-07-26 03:10:23 UTC 6h left Sun 2026-07-19 03:10:06 UTC 6 days ago e2scrub_all.timer e2scrub_all.service",
-      "Sun 2026-07-26 03:25:00 UTC 6h left Sat 2026-07-25 03:25:08 UTC 17h ago dominion-backup.timer dominion-backup.service",
-      "Sun 2026-07-26 05:00:43 UTC 8h left Sat 2026-07-25 20:01:04 UTC 30min ago dominion-intel.timer dominion-intel.service",
-      "Sun 2026-07-26 05:19:30 UTC 8h left Sat 2026-07-25 13:44:20 UTC 6h ago apt-daily.timer apt-daily.service",
-      "Sun 2026-07-26 06:00:00 UTC 9h left Sat 2026-07-25 06:00:00 UTC 14h ago dominion-scout.timer dominion-scout.service",
-      "Sun 2026-07-26 06:06:15 UTC 9h left Sat 2026-07-25 06:01:43 UTC 14h ago apt-daily-upgrade.timer apt-daily-upgrade.service",
-      "Sun 2026-07-26 07:00:00 UTC 10h left Sat 2026-07-25 07:00:08 UTC 13h ago dominion-wholesale.timer dominion-wholesale.service",
-      "Sun 2026-07-26 08:00:00 UTC 11h left Sun 2026-07-19 08:00:00 UTC 6 days ago dominion-trade-report.timer dominion-trade-report.service",
-      "Sun 2026-07-26 14:02:20 UTC 17h left Sat 2026-07-25 14:02:20 UTC 6h ago systemd-tmpfiles-clean.timer systemd-tmpfiles-clean.service",
-      "Sun 2026-07-26 14:05:02 UTC 17h left Sat 2026-07-25 14:08:08 UTC 6h ago dominion-paper-trade.timer dominion-paper-trade.service",
-      "Mon 2026-07-27 01:00:55 UTC 1 day 4h left Mon 2026-07-20 00:08:26 UTC 5 days ago fstrim.timer fstrim.service",
+      "Thu 2026-08-20 19:54:23 UTC 14s left Thu 2026-08-20 19:53:23 UTC 45s ago dominion-executor.timer dominion-executor.service",
+      "Thu 2026-08-20 19:54:35 UTC 25s left Thu 2026-08-20 19:49:35 UTC 4min 34s ago dominion-healthcheck.timer dominion-healthcheck.service",
+      "Thu 2026-08-20 19:54:48 UTC 38s left Thu 2026-08-20 19:52:48 UTC 1min 21s ago dominion-watchdog.timer dominion-watchdog.service",
+      "Thu 2026-08-20 20:00:49 UTC 6min left Thu 2026-08-20 15:00:08 UTC 4h 54min ago dominion-intel.timer dominion-intel.service",
+      "Thu 2026-08-20 20:08:52 UTC 14min left Thu 2026-08-20 14:08:52 UTC 5h 45min ago google-oslogin-cache.timer google-oslogin-cache.service",
+      "Fri 2026-08-21 00:00:00 UTC 4h 5min left Thu 2026-08-20 00:00:01 UTC 19h ago dpkg-db-backup.timer dpkg-db-backup.service",
+      "Fri 2026-08-21 00:00:00 UTC 4h 5min left Thu 2026-08-20 00:00:01 UTC 19h ago exim4-base.timer exim4-base.service",
+      "Fri 2026-08-21 00:00:00 UTC 4h 5min left Thu 2026-08-20 00:00:01 UTC 19h ago logrotate.timer logrotate.service",
+      "Fri 2026-08-21 03:25:00 UTC 7h left Thu 2026-08-20 03:25:08 UTC 16h ago dominion-backup.timer dominion-backup.service",
+      "Fri 2026-08-21 05:59:11 UTC 10h left Thu 2026-08-20 10:27:40 UTC 9h ago apt-daily.timer apt-daily.service",
+      "Fri 2026-08-21 06:57:10 UTC 11h left Thu 2026-08-20 06:36:20 UTC 13h ago apt-daily-upgrade.timer apt-daily-upgrade.service",
+      "Fri 2026-08-21 08:03:29 UTC 12h left Thu 2026-08-20 05:12:36 UTC 14h ago man-db.timer man-db.service",
+      "Fri 2026-08-21 14:06:13 UTC 18h left Thu 2026-08-20 14:00:40 UTC 5h 53min ago dominion-paper-trade.timer dominion-paper-trade.service",
+      "Fri 2026-08-21 14:06:20 UTC 18h left Thu 2026-08-20 14:06:20 UTC 5h 47min ago systemd-tmpfiles-clean.timer systemd-tmpfiles-clean.service",
+      "Sun 2026-08-23 03:10:58 UTC 2 days left Sun 2026-08-16 03:10:20 UTC 4 days ago e2scrub_all.timer e2scrub_all.service",
+      "Sun 2026-08-23 08:00:00 UTC 2 days left Sun 2026-08-16 08:00:01 UTC 4 days ago dominion-trade-report.timer dominion-trade-report.service",
+      "Mon 2026-08-24 01:38:25 UTC 3 days left Mon 2026-08-17 00:59:00 UTC 3 days ago fstrim.timer fstrim.service",
       "- - - - dominion-growth-engine.timer",
-      "- - - - dominion-overseer.timer dominion-overseer.service",
-      "- - Sat 2026-07-25 20:31:22 UTC 43ms ago dominion-watchdog.timer dominion-watchdog.service"
+      "- - - - dominion-overseer.timer dominion-overseer.service"
     ]
   },
   "workflow": {
-    "run_id": 30173746489,
-    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/30173746489",
+    "run_id": 32411157333,
+    "run_url": "https://github.com/dunkdee/dominion-ops/actions/runs/32411157333",
     "status": "success",
-    "source_sha": "99e3c2c8bae3f70278e147843aac8c914630ad73",
+    "source_sha": "c2511940cf5d0a195baffc771df76f13f9a1f20a",
     "artifact_name": "dominion-production-ecosystem-audit"
   }
 }

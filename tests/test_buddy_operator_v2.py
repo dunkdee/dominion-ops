@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import pytest
@@ -34,6 +33,17 @@ def fake_research(query, max_sources=5):
     }
 
 
+def fake_learning_cycle():
+    return {
+        "learned": 1,
+        "results": [{
+            "status": "LEARNED",
+            "record_hash": "auto123",
+            "sources": [{"url": "https://example.com/learn", "title": "Learn"}],
+        }],
+    }
+
+
 @pytest.fixture
 def op(tmp_path, monkeypatch):
     fake = FakeBrain()
@@ -44,7 +54,12 @@ def op(tmp_path, monkeypatch):
         "buddy_core.core.operator.record_lesson",
         lambda *a, **k: {"record_hash": "lesson123"},
     )
-    return BuddyOperator(researcher=fake_research, brain_call=fake, state_dir=tmp_path)
+    return BuddyOperator(
+        researcher=fake_research,
+        brain_call=fake,
+        state_dir=tmp_path,
+        learning_cycle=fake_learning_cycle,
+    )
 
 
 def test_voltedge_mission_executes_internal_then_holds_publish(op):
@@ -58,6 +73,12 @@ def test_voltedge_mission_executes_internal_then_holds_publish(op):
     assert any(op.staged_dir.glob("*revenue-mission.md"))
 
 
+def test_revenue_analysis_does_not_invent_publish_boundary(op):
+    result = op.handle("Analyze revenue performance and prepare recommendations")
+    assert result["status"] == "COMPLETE"
+    assert result["held"] is None
+
+
 def test_grant_work_is_autonomous_until_submit(op):
     result = op.handle("Find grants for Dominion, score them, draft the best application, and submit it")
     assert result["status"] == "HELD"
@@ -65,6 +86,13 @@ def test_grant_work_is_autonomous_until_submit(op):
     assert result["receipts"][0]["status"] == "VERIFIED"
     assert result["held"]["capability"] == "external.submit"
     assert any(op.staged_dir.glob("*grant-package.md"))
+
+
+def test_grant_research_and_drafting_complete_without_submission_hold(op):
+    result = op.handle("Find grants for Dominion, score them, and draft the best application")
+    assert result["status"] == "COMPLETE"
+    assert result["held"] is None
+    assert result["receipts"][0]["capability"] == "grant.research_prepare"
 
 
 def test_video_creation_is_internal_without_publish_verb(op):
@@ -86,6 +114,14 @@ def test_internet_learning_researches_synthesizes_and_records(op):
     assert caps == ["web.research", "brain.reason", "learn.record"]
 
 
+def test_autonomous_learning_cycle_is_internal_and_evidence_backed(op):
+    result = op.handle("Go learn on your own and keep improving")
+    assert result["status"] == "COMPLETE"
+    assert result["receipts"][0]["capability"] == "learn.autonomous_cycle"
+    assert result["receipts"][0]["status"] == "VERIFIED"
+    assert result["receipts"][0]["evidence"][0]["url"] == "https://example.com/learn"
+
+
 def test_message_is_drafted_then_held(op):
     result = op.handle("Send an outreach email to these prospects")
     assert result["status"] == "HELD"
@@ -98,6 +134,25 @@ def test_spend_is_analyzed_then_held(op):
     result = op.handle("Spend $500 on ads for VoltEdge")
     assert result["status"] == "HELD"
     assert result["held"]["capability"] == "external.spend"
+
+
+def test_conversation_context_reaches_non_mission_brain(op):
+    result = op.handle(
+        "what do you think?",
+        conversation_context="Dewayne: Grow VoltEdge\nBuddy: campaign staged",
+    )
+    assert result["status"] == "ANSWERED"
+    assert "Grow VoltEdge" in op.brain_call.calls[-1]["prompt"]
+
+
+def test_conversation_context_is_preserved_for_mission_steps(op):
+    result = op.handle(
+        "Grow VoltEdge traffic",
+        conversation_context="Dewayne: prioritize the charger and free traffic first",
+    )
+    assert result["status"] == "HELD"
+    revenue_call = next(c for c in op.brain_call.calls if c["task_type"] == "complex_planning")
+    assert "prioritize the charger" in revenue_call["prompt"]
 
 
 def test_unknown_capability_fails_closed(op):

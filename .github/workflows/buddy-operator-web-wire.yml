@@ -1,11 +1,11 @@
-name: Buddy Operator Web Wire (Branch Only)
+name: Buddy Operator Final Wire (Branch Only)
 
 on:
   push:
     branches:
       - buddy/operator-complete-20260820
     paths:
-      - 'scripts/wire_buddy_operator_web.py'
+      - 'scripts/finalize_buddy_operator_wiring.py'
       - '.github/workflows/buddy-operator-web-wire.yml'
 
 permissions:
@@ -24,21 +24,45 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Apply exact canonical markers only
-        run: python scripts/wire_buddy_operator_web.py
-      - name: Compile wired web and operator
+      - name: Apply exact final wiring markers only
+        run: python scripts/finalize_buddy_operator_wiring.py
+      - name: Compile final Buddy operator surface
         env:
           PYTHONPATH: .:buddy_core
         run: |
-          python -m py_compile buddy_core/buddy_web.py buddy_core/core/operator.py buddy_core/core/brain_router.py
+          python -m py_compile \
+            buddy_core/buddy_web.py \
+            buddy_core/core/operator.py \
+            buddy_core/core/autonomous_learning.py \
+            buddy_core/core/brain_router.py
+      - name: Run focused final acceptance
+        env:
+          PYTHONPATH: .:buddy_core
+          BUDDY_STATE_DIR: /tmp/buddy-final-wire-state
+        run: python -m pytest -q tests/test_buddy_operator_v2.py tests/test_buddy_web_research.py
       - name: Verify diff scope
         run: |
-          test "$(git diff --name-only | tr '\n' ' ')" = "buddy_core/buddy_web.py "
+          python - <<'PY'
+          import subprocess
+          allowed = {
+              'buddy_core/buddy_web.py',
+              'buddy_core/core/operator.py',
+              'buddy_core/config/capability_registry.json',
+              'tests/test_buddy_operator_v2.py',
+          }
+          changed = set(subprocess.check_output(['git','diff','--name-only'], text=True).splitlines())
+          extra = changed - allowed
+          if extra:
+              raise SystemExit(f'unexpected changed files: {sorted(extra)}')
+          if not changed:
+              raise SystemExit('final wiring produced no changes')
+          print('FINAL_WIRE_DIFF_SCOPE=PASS', sorted(changed))
+          PY
           git diff --check
-      - name: Commit wired web on this nonproduction branch
+      - name: Commit final wiring on this nonproduction branch
         run: |
           git config user.name 'dominion-buddy-build'
           git config user.email 'buddy-build@users.noreply.github.com'
-          git add buddy_core/buddy_web.py
-          git commit -m 'feat(buddy): route web chat through governed operator'
+          git add buddy_core/buddy_web.py buddy_core/core/operator.py buddy_core/config/capability_registry.json tests/test_buddy_operator_v2.py
+          git commit -m 'feat(buddy): complete conversation-aware autonomous operator wiring'
           git push origin HEAD:buddy/operator-complete-20260820

@@ -34,10 +34,12 @@ try:
 except ImportError:
     pass
 
-from core.brain import ask, status as brain_status, BUDDY_SYSTEM
+from core.brain import status as brain_status
+from core.operator import get_operator
 
 # ── Auth token ──
-BUDDY_WEB_TOKEN = os.getenv("BUDDY_WEB_TOKEN", "")
+BUDDY_WEB_TOKEN = os.getenv("BUDDY_WEB_TOKEN", "").strip()
+BUDDY_ALLOW_OPEN_DEV = os.getenv("BUDDY_ALLOW_OPEN_DEV", "0").strip().lower() in {"1", "true", "yes"}
 
 # Conversation memory (last 20 messages per session, in-memory)
 conversations = {}
@@ -52,7 +54,11 @@ from fastapi import Header, HTTPException
 def verify_token(request: Request):
     """Check bearer token or query param for auth."""
     if not BUDDY_WEB_TOKEN:
-        return  # No token configured = open (dev mode)
+        # Fail closed by default. Explicit open-dev is loopback only.
+        host = request.client.host if request.client else ""
+        if BUDDY_ALLOW_OPEN_DEV and host in {"127.0.0.1", "::1", "localhost"}:
+            return
+        raise HTTPException(status_code=503, detail="Buddy authentication is not configured")
     # Check Authorization header
     auth = request.headers.get("Authorization", "")
     if hmac.compare_digest(auth, f"Bearer {BUDDY_WEB_TOKEN}"):
@@ -399,9 +405,11 @@ async def chat(request: Request):
     full_prompt = "\n".join(context_lines)
 
     try:
-        response = ask(full_prompt)
+        operator_result = get_operator().handle(message, session_id=session_id)
+        response = operator_result.get("response") or "Buddy completed the request without a text summary."
     except Exception as e:
-        response = f"Brain error: {e}"
+        operator_result = {"status": "BLOCKED", "error": type(e).__name__}
+        response = f"Operator blocked: {type(e).__name__}"
 
     history.append({"role": "buddy", "text": response, "ts": datetime.utcnow().isoformat()})
 
@@ -409,12 +417,20 @@ async def chat(request: Request):
     if len(history) > MAX_HISTORY * 2:
         conversations[session_id] = history[-MAX_HISTORY:]
 
-    return JSONResponse({"response": response, "session_id": session_id})
+    payload = {"response": response, "session_id": session_id}
+    for key in ("status", "mission_id", "held", "receipts", "evidence"):
+        if key in operator_result:
+            payload[key] = operator_result[key]
+    return JSONResponse(payload)
 
 
 @app.get("/buddy/api/status")
-def buddy_status():
-    return JSONResponse(brain_status())
+def buddy_status(request: Request):
+    verify_token(request)
+    data = brain_status()
+    data["operator"] = "v2"
+    data["capability_count"] = len(get_operator().capabilities)
+    return JSONResponse(data)
 
 
 @app.get("/buddy/download/{filename}")

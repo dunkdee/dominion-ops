@@ -1,0 +1,44 @@
+name: Buddy Operator Web Wire (Branch Only)
+
+on:
+  push:
+    branches:
+      - buddy/operator-complete-20260820
+    paths:
+      - 'scripts/wire_buddy_operator_web.py'
+      - '.github/workflows/buddy-operator-web-wire.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.ref == 'refs/heads/buddy/operator-complete-20260820'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: buddy/operator-complete-20260820
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply exact canonical markers only
+        run: python scripts/wire_buddy_operator_web.py
+      - name: Compile wired web and operator
+        env:
+          PYTHONPATH: .:buddy_core
+        run: |
+          python -m py_compile buddy_core/buddy_web.py buddy_core/core/operator.py buddy_core/core/brain_router.py
+      - name: Verify diff scope
+        run: |
+          test "$(git diff --name-only | tr '\n' ' ')" = "buddy_core/buddy_web.py "
+          git diff --check
+      - name: Commit wired web on this nonproduction branch
+        run: |
+          git config user.name 'dominion-buddy-build'
+          git config user.email 'buddy-build@users.noreply.github.com'
+          git add buddy_core/buddy_web.py
+          git commit -m 'feat(buddy): route web chat through governed operator'
+          git push origin HEAD:buddy/operator-complete-20260820

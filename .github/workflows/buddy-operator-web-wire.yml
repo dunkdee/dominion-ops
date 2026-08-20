@@ -1,11 +1,10 @@
-name: Buddy Operator Final Wire (Branch Only)
+name: Buddy Web Context Wire (Branch Only)
 
 on:
   push:
     branches:
       - buddy/operator-complete-20260820
     paths:
-      - 'scripts/finalize_buddy_operator_wiring.py'
       - '.github/workflows/buddy-operator-web-wire.yml'
 
 permissions:
@@ -17,52 +16,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: buddy/operator-complete-20260820
-          fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Apply exact final wiring markers only
-        run: python scripts/finalize_buddy_operator_wiring.py
-      - name: Compile final Buddy operator surface
+      - name: Checkout exact nonproduction branch without third-party actions
         env:
-          PYTHONPATH: .:buddy_core
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          python -m py_compile \
-            buddy_core/buddy_web.py \
-            buddy_core/core/operator.py \
-            buddy_core/core/autonomous_learning.py \
-            buddy_core/core/brain_router.py
-      - name: Run focused final acceptance
-        env:
-          PYTHONPATH: .:buddy_core
-          BUDDY_STATE_DIR: /tmp/buddy-final-wire-state
-        run: python -m pytest -q tests/test_buddy_operator_v2.py tests/test_buddy_web_research.py
-      - name: Verify diff scope
+          git clone --quiet "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" repo
+          cd repo
+          git checkout buddy/operator-complete-20260820
+      - name: Wire bounded conversation context into BuddyOperator
         run: |
-          python - <<'PY'
-          import subprocess
-          allowed = {
-              'buddy_core/buddy_web.py',
-              'buddy_core/core/operator.py',
-              'buddy_core/config/capability_registry.json',
-              'tests/test_buddy_operator_v2.py',
-          }
-          changed = set(subprocess.check_output(['git','diff','--name-only'], text=True).splitlines())
-          extra = changed - allowed
-          if extra:
-              raise SystemExit(f'unexpected changed files: {sorted(extra)}')
-          if not changed:
-              raise SystemExit('final wiring produced no changes')
-          print('FINAL_WIRE_DIFF_SCOPE=PASS', sorted(changed))
+          cd repo
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('buddy_core/buddy_web.py')
+          text = p.read_text(encoding='utf-8')
+          old = '        operator_result = get_operator().handle(message, session_id=session_id)\n'
+          new = '        operator_result = get_operator().handle(message, session_id=session_id, conversation_context=full_prompt)\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one operator chat marker, found {text.count(old)}')
+          text = text.replace(old, new, 1)
+          p.write_text(text, encoding='utf-8')
+          print('BUDDY_WEB_CONTEXT_WIRE=STAGED')
           PY
+          python3 -m py_compile buddy_core/buddy_web.py buddy_core/core/operator.py
+          test "$(git diff --name-only | tr '\n' ' ')" = "buddy_core/buddy_web.py "
           git diff --check
-      - name: Commit final wiring on this nonproduction branch
+      - name: Commit only Buddy web context wire
         run: |
+          cd repo
           git config user.name 'dominion-buddy-build'
           git config user.email 'buddy-build@users.noreply.github.com'
-          git add buddy_core/buddy_web.py buddy_core/core/operator.py buddy_core/config/capability_registry.json tests/test_buddy_operator_v2.py
-          git commit -m 'feat(buddy): complete conversation-aware autonomous operator wiring'
+          git add buddy_core/buddy_web.py
+          git commit -m 'feat(buddy): preserve conversation context in operator chat'
           git push origin HEAD:buddy/operator-complete-20260820

@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 
-from core import brain
+try:  # VM runtime commonly has buddy_core itself on sys.path.
+    from core import brain
+except ImportError:  # Repository/package execution used by CI/tests.
+    from buddy_core.core import brain
 
 
 @dataclass

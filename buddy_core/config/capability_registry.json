@@ -1,6 +1,6 @@
 {
-  "version": "2.0.0",
-  "updated_at": "2026-08-20T22:20:00Z",
+  "version": "2.1.0",
+  "updated_at": "2026-08-20T22:45:00Z",
   "capabilities": [
     {
       "id": "brain.reason",
@@ -46,6 +46,21 @@
       "evidence": "append-only lesson record and source references",
       "enabled": true,
       "tags": ["memory", "learning", "evolution"]
+    },
+    {
+      "id": "learn.autonomous_cycle",
+      "name": "Autonomous internet learning cycle",
+      "description": "Select high-value knowledge gaps, search and read the public internet, corroborate sources, synthesize lessons, and store evidence-backed memory. Never changes authority or external state.",
+      "executor": "native:autonomous_learning",
+      "classification": "write",
+      "auth_required": false,
+      "health_check": "web_and_brain",
+      "timeout_seconds": 300,
+      "max_retries": 1,
+      "fallback": "web.research",
+      "evidence": "learning-cycle receipt, source URLs, independent-domain count, lesson hashes, and provider provenance",
+      "enabled": true,
+      "tags": ["internet", "learning", "self_directed", "evolution", "read_only_remote"]
     },
     {
       "id": "artifact.stage",
@@ -200,7 +215,7 @@
     {
       "id": "external.credential_or_network",
       "name": "Credential or network change",
-      "description": "Change credentials, firewall rules, public ingress, or activate quarantined services/agents.",
+      "description": "Change credentials, firewall rules, public ingress, or activate quarantined services or agents.",
       "executor": "external:credential_or_network",
       "classification": "destructive",
       "auth_required": true,

@@ -1,22 +1,50 @@
 #!/usr/bin/env python3
 from flask import Flask, request, jsonify
+import hmac
 import json
+import os
 import threading
 from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path=Path.home() / "buddy_core" / ".env")
+    load_dotenv(dotenv_path=Path.home() / "conductor" / ".env")
+    load_dotenv(dotenv_path=Path.home() / ".env")
+except ImportError:
+    pass
+
+from core.operator import get_operator
 
 app = Flask(__name__)
 
 BASE = Path("/home/malachisingleton8/buddy_core")
 LOG = BASE / "buddy_bridge.log"
 DEALS = BASE / "scored_deals.json"
+BUDDY_WEB_TOKEN = os.getenv("BUDDY_WEB_TOKEN", "").strip()
+
 
 def log(x):
     with LOG.open("a", encoding="utf-8") as f:
         f.write(str(x) + "\n")
 
+
+def _authorized(req) -> bool:
+    """Fail closed. Accept the same bearer token as Buddy web or X-Buddy-Token."""
+    if not BUDDY_WEB_TOKEN:
+        return False
+    supplied = req.headers.get("X-Buddy-Token", "").strip()
+    if supplied and hmac.compare_digest(supplied, BUDDY_WEB_TOKEN):
+        return True
+    auth = req.headers.get("Authorization", "")
+    expected = f"Bearer {BUDDY_WEB_TOKEN}"
+    return bool(auth) and hmac.compare_digest(auth, expected)
+
+
 @app.get("/health")
 def health():
-    return jsonify(ok=True, service="buddy_bridge", port=5052)
+    return jsonify(ok=True, service="buddy_bridge", port=5052, operator="v2")
+
 
 @app.post("/webhook/wholesale/trigger")
 def wholesale_trigger():
@@ -30,11 +58,11 @@ def wholesale_trigger():
     threading.Thread(target=run_log, daemon=True).start()
     return jsonify(status="started", states=states, dry_run=dry_run)
 
+
 @app.get("/webhook/wholesale/deals")
 def wholesale_deals():
     if not DEALS.exists():
         return jsonify(deals=[], count=0)
-
     try:
         rows = json.loads(DEALS.read_text(encoding="utf-8"))
     except Exception as e:
@@ -48,8 +76,8 @@ def wholesale_deals():
             fee = 0
         if fee >= 10000:
             hot.append(d)
-
     return jsonify(deals=hot, count=len(hot))
+
 
 @app.post("/webhook/wholesale/notify")
 def wholesale_notify():
@@ -58,20 +86,32 @@ def wholesale_notify():
     log("[N8N] " + str(message))
     return jsonify(status="ok")
 
+
 @app.post("/webhook/buddy/command")
 def buddy_command():
+    if not _authorized(request):
+        return jsonify(error="unauthorized"), 401
     data = request.get_json(silent=True) or {}
     command = (data.get("command") or "").strip()
     if not command:
         return jsonify(error="no command"), 400
-    log("[COMMAND] " + command)
-    return jsonify(status="received", command=command)
+    session_id = (data.get("session_id") or "bridge").strip()[:120]
+    simulate = bool(data.get("simulate", False))
+    try:
+        result = get_operator().handle(command, session_id=session_id, simulate=simulate)
+        log(f"[COMMAND] status={result.get('status')} mission={result.get('mission_id','none')}")
+        return jsonify(result)
+    except Exception as exc:
+        log(f"[COMMAND_ERROR] {type(exc).__name__}")
+        return jsonify(status="BLOCKED", error=type(exc).__name__), 500
+
 
 @app.post("/webhook/conductor")
 def conductor_webhook():
     data = request.get_json(silent=True) or {}
     log("[CONDUCTOR] " + json.dumps(data, ensure_ascii=False))
     return jsonify(status="received", service="buddy_bridge", route="conductor")
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5052)

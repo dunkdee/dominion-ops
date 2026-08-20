@@ -1,0 +1,47 @@
+name: Buddy Operator V2 Check
+
+on:
+  pull_request:
+    paths:
+      - 'buddy_core/**'
+      - 'tests/test_buddy_operator_v2.py'
+      - 'tests/test_buddy_web_research.py'
+      - '.github/workflows/buddy-operator-v2-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  operator-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install bounded test dependencies
+        run: python -m pip install --disable-pip-version-check pytest requests python-dotenv
+      - name: Compile new Buddy operator modules
+        env:
+          PYTHONPATH: .:buddy_core
+        run: |
+          python -m py_compile \
+            buddy_core/core/web_research.py \
+            buddy_core/core/learning_engine.py \
+            buddy_core/core/brain_router.py \
+            buddy_core/core/operator.py \
+            buddy_core/buddy_bridge_api.py
+      - name: Run Buddy operator acceptance tests
+        env:
+          PYTHONPATH: .:buddy_core
+          BUDDY_STATE_DIR: /tmp/buddy-operator-test-state
+        run: |
+          python -m pytest -q \
+            tests/test_buddy_operator_v2.py \
+            tests/test_buddy_web_research.py
+      - name: Run existing Buddy authority tests
+        env:
+          PYTHONPATH: .:buddy_core
+        run: python -m pytest -q tests/test_buddy_authority_policy.py

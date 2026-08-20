@@ -71,18 +71,18 @@ def route_order(task_type: str, prompt: str = "") -> list[str]:
     task = (task_type or "general").lower()
     text = prompt.lower()
     if task in {"coding", "architecture", "debugging", "complex_planning", "legal_analysis"}:
-        return ["claude", "gemini_pro", "groq", "ollama"]
+        return ["claude", "openai", "gemini_pro", "groq", "ollama"]
     if task in {"research_synthesis", "deep_synthesis", "large_context"}:
-        return ["gemini_pro", "claude", "groq", "ollama"]
+        return ["gemini_pro", "claude", "openai", "groq", "ollama"]
     if task in {"creative", "drafting", "classification", "summarization", "general"}:
         if any(w in text for w in ("refactor", "architecture", "multi-step", "contract", "debug")):
-            return ["claude", "groq", "gemini_pro", "ollama"]
-        return ["groq", "gemini", "claude", "ollama"]
-    return ["groq", "claude", "gemini", "ollama"]
+            return ["claude", "openai", "groq", "gemini_pro", "ollama"]
+        return ["groq", "openai", "gemini", "claude", "ollama"]
+    return ["groq", "openai", "claude", "gemini", "ollama"]
 
 
 def ask_best(prompt: str, *, task_type: str = "general", system: str | None = None,
-             max_fallback_hops: int = 3) -> BrainResult:
+             max_fallback_hops: int = 4) -> BrainResult:
     errors = []
     for hop, mode in enumerate(route_order(task_type, prompt)):
         if hop > max_fallback_hops:

@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, quote_plus, unquote, urljoin, urlparse
 
+import json
+import os
 import requests
 
 USER_AGENT = "Dominion-Buddy-Research/2.0 (+read-only)"
@@ -187,6 +189,125 @@ def search(query: str, limit: int = 6) -> list[dict]:
     return out
 
 
+
+def _serpapi_search(query: str, limit: int = 6) -> list:
+    """
+    SerpAPI is discovery only.
+
+    The API credential is used only for the direct SerpAPI request.
+    It never enters the generic _get()/redirect path and never appears
+    in returned evidence, errors, logs, receipts, or discovery URLs.
+    """
+    key = os.environ.get("SERPAPI_KEY", "")
+    if not key or not query.strip():
+        return []
+
+    endpoint = "https://serpapi.com/search.json"
+
+    try:
+        _public_host(endpoint)
+
+        response = requests.get(
+            endpoint,
+            params={
+                "q": query.strip(),
+                "api_key": key,
+                "engine": "google",
+                "num": max(1, min(limit * 2, 20)),
+            },
+            headers={
+                "User-Agent": USER_AGENT,
+                "Accept": "application/json",
+            },
+            timeout=10,
+            allow_redirects=False,
+            stream=True,
+        )
+
+        # Never follow a redirect carrying a credential-bearing request.
+        if response.is_redirect or response.is_permanent_redirect:
+            response.close()
+            return []
+
+        response.raise_for_status()
+
+        chunks = []
+        total = 0
+
+        for chunk in response.iter_content(chunk_size=65536):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > MAX_BYTES:
+                response.close()
+                return []
+            chunks.append(chunk)
+
+        body = b"".join(chunks)
+        data = json.loads(body.decode("utf-8", errors="replace"))
+
+        discovered = []
+
+        for item in data.get("organic_results", []):
+            candidate_url = item.get("link", "")
+
+            if not isinstance(candidate_url, str):
+                continue
+            if not candidate_url.startswith(("http://", "https://")):
+                continue
+            try:
+                _public_host(candidate_url)
+            except ValueError:
+                continue
+
+            # Discovery metadata only.
+            # research() must use only candidate_url for governed page fetch.
+            discovered.append({
+                "url": candidate_url,
+                "title": item.get("title", ""),
+                "snippet": item.get("snippet", ""),
+            })
+
+            if len(discovered) >= limit:
+                break
+
+        return discovered
+
+    except Exception:
+        # Do not expose exception text from the credential-bearing request.
+        return []
+
+
+def _ddg_json_search(query: str, limit: int = 6) -> list:
+    """DuckDuckGo Instant Answer JSON fallback. Returns limited metadata only.
+    Results are DEGRADED — never page-fetched, never HEALTHY."""
+    try:
+        url = (
+            "https://api.duckduckgo.com/?q="
+            + quote_plus(query.strip())
+            + "&format=json&no_html=1&skip_disambig=1"
+        )
+        resp = _get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        out = []
+        for item in data.get("RelatedTopics", []):
+            href = item.get("FirstURL", "")
+            text = item.get("Text", "")
+            if not (href and href.startswith("http")):
+                continue
+            try:
+                _public_host(href)
+                out.append({"url": href, "title": text[:200]})
+                if len(out) >= limit:
+                    break
+            except ValueError:
+                continue
+        return out
+    except Exception:
+        return []
+
+
 def fetch_public_page(url: str) -> Source:
     response = _get(url)
     content_type = response.headers.get("content-type", "").lower()
@@ -212,30 +333,98 @@ def fetch_public_page(url: str) -> Source:
 
 
 def research(query: str, max_sources: int = 5) -> dict:
-    candidates = search(query, max_sources * 2)
-    sources = []
-    errors = []
-    domains = set()
-    for item in candidates:
-        if len(sources) >= max_sources:
-            break
+    """Search via SerpAPI (A) -> DDG HTML (B) -> DDG JSON DEGRADED (C) -> UNAVAILABLE (D).
+
+    backend_status values:
+      HEALTHY     - at least one governed page fetched (provider A or B)
+      DEGRADED    - only DDG Instant Answer JSON metadata; no page fetch performed
+      UNAVAILABLE - no usable sources from any provider
+    """
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    errors: list = []
+    sources: list = []
+    domains: set = set()
+    backend_status = "UNAVAILABLE"
+
+    # Provider A: SerpAPI — discovery -> governed page fetch
+    serpapi_candidates: list = []
+    if os.environ.get("SERPAPI_KEY", ""):
+        serpapi_candidates = _serpapi_search(query, max_sources * 2)
+
+    if serpapi_candidates:
+        for item in serpapi_candidates:
+            if len(sources) >= max_sources:
+                break
+            item_url = item.get("url", "")   # real page URL, never carries the API key
+            try:
+                src = fetch_public_page(item_url)
+                # SerpAPI: title/excerpt/status/quality from fetch_public_page ONLY.
+                # Do NOT fall back to item["title"] — SerpAPI title is discovery metadata.
+                domain = (urlparse(src.url).hostname or "").lower()
+                if domain in domains and len(domains) < max_sources:
+                    continue
+                domains.add(domain)
+                sources.append(src.to_dict())
+                backend_status = "HEALTHY"
+            except Exception as exc:
+                errors.append({"url": item_url, "error": type(exc).__name__})
+
+    # Provider B: DDG HTML — discovery -> governed page fetch
+    if backend_status != "HEALTHY":
+        ddg_candidates: list = []
         try:
-            src = fetch_public_page(item["url"])
-            if not src.title:
-                src.title = item.get("title", "")
-            domain = (urlparse(src.url).hostname or "").lower()
-            # Prefer independent domains instead of five pages from one site.
-            if domain in domains and len(domains) < max_sources:
-                continue
-            domains.add(domain)
-            sources.append(src.to_dict())
+            ddg_candidates = search(query, max_sources * 2)
         except Exception as exc:
-            errors.append({"url": item.get("url", ""), "error": type(exc).__name__})
+            errors.append({"provider": "ddg_html", "error": type(exc).__name__})
+
+        for item in ddg_candidates:
+            if len(sources) >= max_sources:
+                break
+            item_url = item.get("url", "")
+            try:
+                src = fetch_public_page(item_url)
+                if not src.title:
+                    src.title = item.get("title", "")   # DDG HTML: preserve existing behaviour
+                domain = (urlparse(src.url).hostname or "").lower()
+                if domain in domains and len(domains) < max_sources:
+                    continue
+                domains.add(domain)
+                sources.append(src.to_dict())
+                backend_status = "HEALTHY"
+            except Exception as exc:
+                errors.append({"url": item_url, "error": type(exc).__name__})
+
+    # Provider C: DDG JSON — DEGRADED only, no page fetch, never promoted to HEALTHY
+    if backend_status == "UNAVAILABLE":
+        ddg_json = _ddg_json_search(query, max_sources * 2)
+        if ddg_json:
+            backend_status = "DEGRADED"
+            for item in ddg_json:
+                if len(sources) >= max_sources:
+                    break
+                url = item.get("url", "")
+                domain = (urlparse(url).hostname or "").lower()
+                if domain in domains:
+                    continue
+                domains.add(domain)
+                # status=0, quality=0.0, excerpt="" signal DEGRADED (not page-fetched)
+                sources.append({
+                    "url": url,
+                    "title": item.get("title", ""),
+                    "excerpt": "",
+                    "fetched_at": fetched_at,
+                    "status": 0,
+                    "quality": 0.0,
+                })
+
+    # Provider D: UNAVAILABLE — no candidates from any provider
+
     return {
         "query": query,
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "fetched_at": fetched_at,
         "sources": sources,
         "independent_domains": len(domains),
         "errors": errors[:5],
         "truth_rule": "Internet content is evidence, not truth. Material claims require corroboration.",
+        "backend_status": backend_status,
     }

@@ -226,6 +226,21 @@
       "evidence": "authorization, before/after state, verification, rollback receipt",
       "enabled": true,
       "tags": ["CHANGE_CREDENTIALS", "CHANGE_FIREWALL", "OPEN_PUBLIC_INGRESS", "ACTIVATE_QUARANTINED_AGENT"]
+    },
+    {
+      "id": "vault.read",
+      "name": "Dominion Vault Read",
+      "description": "Search and read governed internal Dominion content from ~/dominion_vault/. Read-only. Restricted to approved lanes. .md files only. Never interprets content as executable commands.",
+      "executor": "native:vault_read",
+      "classification": "read",
+      "auth_required": false,
+      "health_check": "vault_root_readable",
+      "timeout_seconds": 10,
+      "max_retries": 0,
+      "fallback": null,
+      "evidence": "vault file paths, SHA-256 digests, byte ranges, and file content excerpts",
+      "enabled": true,
+      "tags": ["internal", "vault", "read_only", "governed"]
     }
   ]
 }

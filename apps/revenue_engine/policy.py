@@ -11,10 +11,6 @@ ALLOWED_SIMULATION_ACTIONS = frozenset(
         "draft_offer",
         "prepare_experiment",
         "measure_metrics",
-        "rank_opportunities",
-        "build_site_plan",
-        "review_content",
-        "propose_learning_change",
     }
 )
 

@@ -89,6 +89,89 @@ OPERATOR_BRIDGE_FILES = frozenset(
     {"08-Incidents-and-Lessons.md", "09-Current-State.md", "10-Change-Log.md"}
 )
 OPERATOR_NOTES_ROOT = "Dominion-Operator-Notes"
+
+
+COMMAND_STATE_NOTES = (
+    ("Today.md", "Current governed priorities and the next exact operational action."),
+    ("Executive-Dashboard.md", "Executive summary of verified, blocked, and unknown operating state."),
+    ("Current-Blockers.md", "Blockers that prevent governed execution or truthful completion claims."),
+    ("Founder-Approvals.md", "Pending and completed Founder approval checkpoints without secret material."),
+    ("Change-Queue.md", "Ordered governed changes awaiting evidence, review, or execution authority."),
+    ("Evidence-Freshness.md", "Freshness register for evidence used in operational decisions."),
+)
+
+ARCHITECTURE_NOTES = (
+    (
+        "10-Architecture/Foundation-VM.md",
+        "Foundation VM",
+        "Production runtime authority. Current service state must come from timestamped VM evidence.",
+    ),
+    (
+        "10-Architecture/GCP-Storage.md",
+        "GCP Storage",
+        "Storage inventory, retention, and restore claims require current Google Cloud evidence.",
+    ),
+    (
+        "10-Architecture/GitHub-Control-Source.md",
+        "GitHub Control Source",
+        "GitHub is authoritative for versioned law, policy, code, contracts, and deployment records.",
+    ),
+    (
+        "10-Architecture/Obsidian-Boundary.md",
+        "Obsidian Boundary",
+        "Obsidian is the operational context mirror; it does not replace GitHub or live runtime evidence.",
+    ),
+)
+
+EVIDENCE_NOTES = (
+    (
+        "08-Evidence/PR-90-Ecosystem-Reconciliation.md",
+        "PR 90 — Ecosystem Reconciliation",
+        "https://github.com/dunkdee/dominion-ops/pull/90",
+    ),
+    (
+        "08-Evidence/PR-91-One-Percent-Blueprint.md",
+        "PR 91 — One-Percent Blueprint",
+        "https://github.com/dunkdee/dominion-ops/pull/91",
+    ),
+    (
+        "08-Evidence/Issue-92-Execution-Packet-001.md",
+        "Issue 92 — Execution Packet 001",
+        "https://github.com/dunkdee/dominion-ops/issues/92",
+    ),
+    (
+        "08-Evidence/Issue-93-Archive-Repair.md",
+        "Issue 93 — Archive Repair",
+        "https://github.com/dunkdee/dominion-ops/issues/93",
+    ),
+)
+
+OPERATIONS_NOTES = (
+    (
+        "06-Operations/Storage-Capacity.md",
+        "Storage Capacity",
+        "Capacity values are live-runtime facts and remain UNKNOWN until a timestamped inventory is attached.",
+    ),
+    (
+        "06-Operations/Backup-Restore-Register.md",
+        "Backup and Restore Register",
+        "Backup existence is not a restore claim; each entry requires retrievable verification evidence.",
+    ),
+)
+
+SERVICE_NOTES = (
+    ("Foundation-VM-Host.md", "Foundation VM host", "Production compute host and runtime boundary."),
+    ("Caddy-Edge.md", "Caddy edge", "Authenticated public edge and reverse-proxy boundary."),
+    ("Dominion-Web.md", "Dominion Web", "Primary Dominion web application service."),
+    ("Wix-Agent.md", "Wix Agent", "Wix integration and storefront-control service."),
+    ("Baby-API.md", "Baby API", "Baby API application service."),
+    ("Browser-Agents.md", "Browser Agents", "Governed browser-automation services."),
+    ("Obsidian-Remote.md", "Obsidian Remote", "Phone-first and laptop-accessible operational memory interface."),
+    ("Movie-Video-Studio.md", "Movie / Video Studio", "Governed movie and video production service."),
+    ("n8n.md", "n8n", "Workflow-orchestration service."),
+    ("PostgreSQL.md", "PostgreSQL", "Relational persistence service."),
+    ("Dominion-Alpha-Paper-Trading.md", "Dominion Alpha / paper trading", "Paper-only trading research and evidence service."),
+)
 _AGENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
@@ -285,6 +368,120 @@ def _agent_doc(agent: dict, filename: str, authority: dict) -> str:
     return common + body
 
 
+
+def _source_boundary() -> str:
+    return (
+        "## Source-of-truth boundary\n\n"
+        "- GitHub: versioned law, policy, code, contracts, and deployment records.\n"
+        "- Foundation VM: current runtime state, only when supported by timestamped evidence.\n"
+        "- Obsidian: operational context, coordination, decisions, and evidence links.\n"
+        "- Stop on conflict, stale evidence, secret exposure, or an unauthorized production action.\n"
+    )
+
+
+def _command_state_doc(title: str, purpose: str) -> str:
+    return (
+        f"# {title[:-3]}\n\n"
+        f"{purpose}\n\n"
+        "## Command state\n\n"
+        "- Last verified timestamp: UNKNOWN — populate only from current retrievable evidence.\n"
+        "- Responsible role: Obsidian Scribe, with the accountable runtime owner for verification.\n"
+        "- State: UNKNOWN\n"
+        "- Source-of-truth links: [[03-Control-Plane/DOMINION_OPERATING_MAP]], "
+        "[[03-Control-Plane/RUNTIME_ALIGNMENT]], "
+        "[Execution Packet 001](https://github.com/dunkdee/dominion-ops/issues/92)\n"
+        "- Next exact action: attach a current evidence reference, timestamp, and accountable owner.\n"
+        "- Stop condition: stale or contradictory evidence, unclear authority, secret material, "
+        "or a production mutation without separate approval.\n\n"
+        + _source_boundary()
+    )
+
+
+def _architecture_doc(title: str, statement: str) -> str:
+    return (
+        f"# {title}\n\n"
+        f"{statement}\n\n"
+        "- State: UNKNOWN until reconciled with current evidence.\n"
+        "- Last verified timestamp: UNKNOWN\n"
+        "- Responsible role: Infrastructure Operator and QA and Evidence Auditor\n"
+        "- Next exact action: link a timestamped inventory or verification record.\n"
+        "- Stop condition: any conflict with GitHub governance or current runtime evidence.\n\n"
+        + _source_boundary()
+    )
+
+
+def _evidence_doc(title: str, url: str) -> str:
+    return (
+        f"# {title}\n\n"
+        f"- Canonical evidence link: [{title}]({url})\n"
+        "- Snapshot state: UNKNOWN — retrieve the current GitHub state before relying on it.\n"
+        "- Last verified timestamp: UNKNOWN\n"
+        "- Responsible role: QA and Evidence Auditor\n"
+        "- Next exact action: record the immutable commit, run, manifest, or issue evidence used.\n"
+        "- Stop condition: changed head SHA, stale status, missing artifact, or contradictory runtime evidence.\n\n"
+        + _source_boundary()
+    )
+
+
+def _operations_doc(title: str, statement: str) -> str:
+    return (
+        f"# {title}\n\n"
+        f"{statement}\n\n"
+        "- State: UNKNOWN\n"
+        "- Last verified timestamp: UNKNOWN\n"
+        "- Responsible role: Infrastructure Operator\n"
+        "- Evidence links: [Execution Packet 001](https://github.com/dunkdee/dominion-ops/issues/92), "
+        "[Archive Repair](https://github.com/dunkdee/dominion-ops/issues/93)\n"
+        "- Next exact action: attach a current inventory, checksum, restore test, or capacity record.\n"
+        "- Stop condition: count, size, checksum, path, authority, or freshness mismatch.\n\n"
+        + _source_boundary()
+    )
+
+
+def _service_doc(name: str, purpose: str) -> str:
+    return (
+        f"# {name}\n\n"
+        f"- Canonical service name: {name}\n"
+        f"- Purpose: {purpose}\n"
+        "- Accountable owner: UNKNOWN\n"
+        "- Lifecycle state: UNKNOWN\n"
+        "- Repository path: UNKNOWN\n"
+        "- VM path: UNKNOWN\n"
+        "- Deployment identity and exact SHA: UNKNOWN\n"
+        "- Container or systemd identity: UNKNOWN\n"
+        "- Ports, routes, and health checks: UNKNOWN\n"
+        "- Dependencies and dependents: UNKNOWN\n"
+        "- Secrets boundary: secret values are prohibited; record only protected-secret identifiers.\n"
+        "- Monitoring and alert path: UNKNOWN\n"
+        "- Backup and restore method: UNKNOWN\n"
+        "- Rollback method: UNKNOWN\n"
+        "- Last verified date: UNKNOWN\n"
+        "- Current incidents or blockers: UNKNOWN\n"
+        "- Next exact action: attach current runtime inventory and accountable-owner evidence.\n"
+        "- Evidence links: [[03-Control-Plane/RUNTIME_ALIGNMENT]], "
+        "[Execution Packet 001](https://github.com/dunkdee/dominion-ops/issues/92)\n\n"
+        + _source_boundary()
+    )
+
+
+def _render_operational_notes(target: Path) -> None:
+    for filename, purpose in COMMAND_STATE_NOTES:
+        _atomic_write(
+            target / "14-Daily-State" / filename,
+            _command_state_doc(filename, purpose),
+        )
+    for relative, title, statement in ARCHITECTURE_NOTES:
+        _atomic_write(target / relative, _architecture_doc(title, statement))
+    for relative, title, url in EVIDENCE_NOTES:
+        _atomic_write(target / relative, _evidence_doc(title, url))
+    for relative, title, statement in OPERATIONS_NOTES:
+        _atomic_write(target / relative, _operations_doc(title, statement))
+    for filename, name, purpose in SERVICE_NOTES:
+        _atomic_write(
+            target / "06-Operations" / "Services" / filename,
+            _service_doc(name, purpose),
+        )
+
 def _iter_output_files(target: Path) -> Iterable[Path]:
     for path in sorted(target.rglob("*")):
         if path.is_file() and not path.is_symlink():
@@ -334,6 +531,8 @@ def render(target: Path) -> dict:
         _copy_governed(target, "03-Control-Plane/RUNTIME_ALIGNMENT.md", RUNTIME_ALIGNMENT)
         _copy_governed(target, "03-Control-Plane/BRAIN_README.md", BRAIN_README)
         _copy_governed(target, "04-Agents/TEAM_CURRENT_STATE.md", TEAM_STATE)
+
+        _render_operational_notes(target)
 
         for agent in registry["agents"]:
             aid = _validate_agent_id(agent.get("id"))

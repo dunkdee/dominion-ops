@@ -33,4 +33,7 @@ jobs:
           output="$(python scripts/seed_vault.py 2>&1 || true)"
           printf '%s\n' "$output"
           grep -Fq 'LEGACY_VAULT_SEEDER=RETIRED' <<<"$output"
+          setup_output="$(bash scripts/setup_vault.sh 2>&1 || true)"
+          printf '%s\n' "$setup_output"
+          grep -Fq 'LEGACY_VAULT_SETUP=RETIRED mutation=none' <<<"$setup_output"
           echo "LEGACY_SEED_GUARD=PASS"

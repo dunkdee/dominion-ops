@@ -1,130 +1,25 @@
-name: Vault + n8n Fix
+name: Vault and n8n Fix (RETIRED)
+
+# This one-time direct-SSH repair is intentionally retired. Runtime changes must
+# use the governed, exact-SHA Foundation VM release path.
 
 on:
   workflow_dispatch:
+    inputs:
+      acknowledge:
+        description: "Type RETIRED to acknowledge this workflow is disabled"
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
-  fix:
-    runs-on: ubuntu-latest
+  retired:
+    if: ${{ inputs.acknowledge == 'RETIRED' }}
+    runs-on: ubuntu-24.04
     steps:
-      - name: Check vault mount + fix n8n URL
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          script: |
-            echo "=============================="
-            echo "  BABY-API VAULT HEALTH"
-            echo "=============================="
-            curl -sf http://localhost:8080/vault/health 2>/dev/null | python3 -m json.tool || echo "NOT RESPONDING"
-
-            echo ""
-            echo "=============================="
-            echo "  BABY-API LOGS (last 30 lines)"
-            echo "=============================="
-            docker logs baby-api --tail=30 2>/dev/null
-
-            echo ""
-            echo "=============================="
-            echo "  DOCKER GATEWAY IP (for n8n to reach host)"
-            echo "=============================="
-            GATEWAY=$(docker inspect baby-api --format='{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' 2>/dev/null || echo "172.17.0.1")
-            echo "Docker gateway: $GATEWAY"
-
-            echo ""
-            echo "=============================="
-            echo "  FIX N8N WORKFLOW URL"
-            echo "=============================="
-            GATEWAY=$(docker inspect baby-api --format='{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' 2>/dev/null || echo "172.17.0.1")
-            NEW_URL="http://${GATEWAY}:8080/gumroad/ping"
-            echo "Updating n8n workflow to use: $NEW_URL"
-
-            # Write updated workflow JSON with correct URL
-            python3 -c "
-import json, os
-wf = {
-  'id': 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
-  'name': 'Gumroad Sale Handler',
-  'nodes': [
-    {
-      'parameters': {
-        'httpMethod': 'POST',
-        'path': 'gumroad-sale',
-        'responseMode': 'onReceived',
-        'responseCode': '200',
-        'options': {}
-      },
-      'id': 'a1b2c3d4-0001-0001-0001-000000000001',
-      'name': 'Gumroad Ping',
-      'type': 'n8n-nodes-base.webhook',
-      'typeVersion': 2,
-      'position': [240, 300],
-      'webhookId': 'gumroad-sale'
-    },
-    {
-      'parameters': {
-        'method': 'POST',
-        'url': 'http://GATEWAY:8080/gumroad/ping',
-        'sendBody': True,
-        'contentType': 'json',
-        'specifyBody': 'json',
-        'jsonBody': '={{ JSON.stringify(\$json) }}',
-        'options': {}
-      },
-      'id': 'a1b2c3d4-0001-0001-0001-000000000002',
-      'name': 'Log Sale to Vault',
-      'type': 'n8n-nodes-base.httpRequest',
-      'typeVersion': 4.2,
-      'position': [460, 300]
-    }
-  ],
-  'connections': {
-    'Gumroad Ping': {
-      'main': [[{'node': 'Log Sale to Vault', 'type': 'main', 'index': 0}]]
-    }
-  },
-  'active': True,
-  'settings': {'executionOrder': 'v1'}
-}
-gw = os.environ.get('GATEWAY', '172.17.0.1')
-wf['nodes'][1]['parameters']['url'] = f'http://{gw}:8080/gumroad/ping'
-with open('/tmp/gw_fixed.json', 'w') as f:
-    json.dump(wf, f, indent=2)
-print('Written /tmp/gw_fixed.json with URL: ' + wf['nodes'][1]['parameters']['url'])
-" GATEWAY="$GATEWAY"
-
-            echo "Importing updated workflow..."
-            docker exec dominion-n8n n8n import:workflow --input=/tmp/gw_fixed.json 2>/dev/null && echo "Imported" || echo "Import failed"
-            docker cp /tmp/gw_fixed.json dominion-n8n:/tmp/gw_fixed.json
-            docker exec dominion-n8n n8n import:workflow --input=/tmp/gw_fixed.json
-            docker exec dominion-n8n n8n publish:workflow --id="f47ac10b-58cc-4372-a567-0e02b2c3d479"
-            docker restart dominion-n8n
-            sleep 20
-
-            echo ""
-            echo "=============================="
-            echo "  TEST END-TO-END VIA N8N"
-            echo "=============================="
-            RESULT=$(curl -sf -X POST https://n8n.dominionhealing.org/webhook/gumroad-sale \
-              -H 'Content-Type: application/json' \
-              -d '{"sale_id":"e2e-test-001","product_name":"Divine Sovereignty Blueprint","email":"e2etest@test.com","price":4700,"full_name":"E2E Test","test":"true"}' \
-              2>/dev/null || echo "WEBHOOK FAILED")
-            echo "n8n response: $RESULT"
-            sleep 3
-
-            echo ""
-            echo "=============================="
-            echo "  VAULT AFTER E2E TEST"
-            echo "=============================="
-            VAULT=$(grep '^VAULT_PATH=' ~/dominion-ops/.env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'")
-            VAULT=${VAULT:-/home/malachisingleton8/vault}
-            ls -lt "${VAULT}/20-deals" 2>/dev/null | head -10
-            LATEST=$(ls -t "${VAULT}/20-deals" 2>/dev/null | head -1)
-            [ -n "$LATEST" ] && cat "${VAULT}/20-deals/${LATEST}" || echo "Still empty — vault write failing"
-
-            echo ""
-            echo "=============================="
-            echo "  BABY-API LOGS AFTER E2E TEST"
-            echo "=============================="
-            docker logs baby-api --tail=20 2>/dev/null
+      - name: Confirm governed replacement
+        run: |
+          echo "This legacy repair is retired."
+          echo "Use the governed exact-SHA repair or Foundation VM deployment workflow."

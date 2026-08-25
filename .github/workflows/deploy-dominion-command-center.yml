@@ -47,6 +47,7 @@ jobs:
           test -s obsidian/command-center/00-HOME.md
           test -s obsidian/command-center/14-Daily-State.md
           test -s obsidian/command-center/09-Revenue.md
+          python tests/test_dominion_command_center_ui.py
           echo 'DOMINION_UI_ASSETS=PASS'
 
       - name: Require protected VM access

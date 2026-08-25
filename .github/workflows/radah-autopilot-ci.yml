@@ -4,18 +4,32 @@ on:
   pull_request:
     paths:
       - 'scripts/autopilot/**'
+      - 'scripts/deploy_dominion_command_center.sh'
       - 'governance/radah_memshalah_autopilot_policy.json'
+      - 'governance/buddy/buddy_authority_policy.json'
       - 'governance/verticals.json'
+      - 'obsidian/command-center/**'
+      - 'obsidian/dominion*.css'
       - 'tests/test_radah_autopilot.py'
+      - 'tests/test_dominion_command_center_ui.py'
       - '.github/workflows/radah-autopilot-*.yml'
+      - '.github/workflows/activate-radah-memshalah-autopilot.yml'
+      - '.github/workflows/deactivate-radah-memshalah-autopilot.yml'
   push:
     branches:
       - 'feature/radah-memshalah-autopilot-v1'
     paths:
       - 'scripts/autopilot/**'
+      - 'scripts/deploy_dominion_command_center.sh'
       - 'governance/radah_memshalah_autopilot_policy.json'
+      - 'governance/buddy/buddy_authority_policy.json'
+      - 'obsidian/command-center/**'
+      - 'obsidian/dominion*.css'
       - 'tests/test_radah_autopilot.py'
+      - 'tests/test_dominion_command_center_ui.py'
       - '.github/workflows/radah-autopilot-*.yml'
+      - '.github/workflows/activate-radah-memshalah-autopilot.yml'
+      - '.github/workflows/deactivate-radah-memshalah-autopilot.yml'
   workflow_dispatch:
 
 permissions:
@@ -24,7 +38,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -34,11 +48,22 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Compile supervisor
-        run: python -m py_compile scripts/autopilot/lane_supervisor.py tests/test_radah_autopilot.py
+      - name: Syntax and compile gates
+        run: |
+          set -euo pipefail
+          bash -n scripts/autopilot/install_autopilot.sh
+          bash -n scripts/autopilot/disable_autopilot.sh
+          bash -n scripts/deploy_dominion_command_center.sh
+          python -m py_compile scripts/autopilot/lane_supervisor.py tests/test_radah_autopilot.py tests/test_dominion_command_center_ui.py
 
       - name: Run authority and rotation tests
         run: python -m unittest tests.test_radah_autopilot -v
+
+      - name: Run elite Command Center visual contract
+        run: python tests/test_dominion_command_center_ui.py
+
+      - name: Validate canonical Buddy authority control
+        run: python scripts/validate_buddy_authority_policy.py governance/buddy/buddy_authority_policy.json --root .
 
       - name: Prove plan-only mode is inert
         env:
@@ -58,6 +83,8 @@ jobs:
           from pathlib import Path
           p = json.loads(Path('governance/radah_memshalah_autopilot_policy.json').read_text())
           assert p['max_primary_revenue_verticals'] == 2
+          assert len(p['primary_wave']) == 2
+          assert p['all_lanes_must_progress'] is True
           assert p['rules']['external_actions_automatic'] is False
           assert p['rules']['no_live_trading'] is True
           assert p['rules']['no_permission_self_expansion'] is True
@@ -65,3 +92,12 @@ jobs:
           assert all(not c.startswith('external.') for c in p['allowed_automatic_capabilities'])
           print('RADAH_AUTOPILOT_AUTHORITY=PASS')
           PY
+
+      - name: Production gate contract
+        run: |
+          set -euo pipefail
+          grep -Fq "inputs.confirm == 'ACTIVATE RADAH MEMSHALAH AUTOPILOT'" .github/workflows/activate-radah-memshalah-autopilot.yml
+          grep -Fq "inputs.confirm == 'DEACTIVATE RADAH MEMSHALAH AUTOPILOT'" .github/workflows/deactivate-radah-memshalah-autopilot.yml
+          grep -Fq 'inputs.commit_sha == github.sha' .github/workflows/activate-radah-memshalah-autopilot.yml
+          grep -Fq 'inputs.commit_sha == github.sha' .github/workflows/deactivate-radah-memshalah-autopilot.yml
+          echo 'RADAH_AUTOPILOT_PRODUCTION_GATES=PASS'

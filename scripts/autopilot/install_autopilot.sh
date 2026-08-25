@@ -17,6 +17,28 @@ service_path="/etc/systemd/system/$service_name"
 timer_path="/etc/systemd/system/$timer_name"
 success=0
 
+# Reuse the exact Python entrypoint already proven by the healthy Buddy service.
+# This avoids creating a second dependency universe for the same operator.
+buddy_exec="$(systemctl show dominion-buddy-web.service -p ExecStart --value 2>/dev/null || true)"
+buddy_python="$(printf '%s\n' "$buddy_exec" | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)"
+test -n "$buddy_python" || { echo 'RADAH_AUTOPILOT=HOLD reason=buddy_python_unresolved'; exit 20; }
+case "$buddy_python" in
+  *[[:space:]]*) echo 'RADAH_AUTOPILOT=HOLD reason=buddy_python_invalid'; exit 21 ;;
+esac
+test -x "$buddy_python" || { echo 'RADAH_AUTOPILOT=HOLD reason=buddy_python_not_executable'; exit 22; }
+
+# Prove this interpreter can load the live Buddy operator before any unit change.
+DOMINION_BUDDY_ROOT="$user_home/buddy_core" "$buddy_python" - <<'PY'
+import os, sys
+from pathlib import Path
+root = Path(os.environ["DOMINION_BUDDY_ROOT"])
+sys.path.insert(0, str(root))
+from core.operator import get_operator
+operator = get_operator()
+assert operator.capabilities
+print(f"BUDDY_RUNTIME_IMPORT=PASS capabilities={len(operator.capabilities)}")
+PY
+
 mkdir -p "$state_root" "$state_root/backups"
 chmod 700 "$state_root" "$state_root/backups"
 rm -rf "$new_runtime"
@@ -27,8 +49,8 @@ install -m 700 "$asset_root/scripts/autopilot/lane_supervisor.py" "$new_runtime/
 install -m 600 "$asset_root/governance/radah_memshalah_autopilot_policy.json" "$new_runtime/governance/radah_memshalah_autopilot_policy.json"
 install -m 600 "$asset_root/governance/verticals.json" "$new_runtime/governance/verticals.json"
 
-python3 -m py_compile "$new_runtime/scripts/autopilot/lane_supervisor.py"
-plan_output="$(RADAH_AUTOPILOT_ENABLED=0 python3 "$new_runtime/scripts/autopilot/lane_supervisor.py" --plan-only --state-dir "$state_root/preflight")"
+"$buddy_python" -m py_compile "$new_runtime/scripts/autopilot/lane_supervisor.py"
+plan_output="$(RADAH_AUTOPILOT_ENABLED=0 "$buddy_python" "$new_runtime/scripts/autopilot/lane_supervisor.py" --plan-only --state-dir "$state_root/preflight")"
 printf '%s\n' "$plan_output"
 printf '%s' "$plan_output" | grep -q 'RADAH_AUTOPILOT=PLANNED'
 test ! -e "$state_root/preflight/state.json"
@@ -53,6 +75,8 @@ rollback() {
   if [ "$success" -eq 1 ]; then
     exit "$rc"
   fi
+  # Disarm traps before rollback so one failure produces exactly one rollback.
+  trap - ERR INT TERM EXIT
   set +e
   echo "RADAH_AUTOPILOT_ROLLBACK=BEGIN rc=$rc"
   sudo systemctl disable --now "$timer_name" >/dev/null 2>&1 || true
@@ -87,13 +111,13 @@ chmod 700 "$state_root/receipts" "$user_home/.dominion/buddy"
 
 service_tmp="$(mktemp)"
 timer_tmp="$(mktemp)"
-trap 'rm -f "$service_tmp" "$timer_tmp"' RETURN
 cat > "$service_tmp" <<EOF
 [Unit]
 Description=RADAH MEMSHALAH Dominion Production Lane Supervisor
-After=network-online.target
+After=network-online.target dominion-buddy-web.service
 Wants=network-online.target
 ConditionPathExists=$runtime_root/scripts/autopilot/lane_supervisor.py
+ConditionPathExists=$buddy_python
 
 [Service]
 Type=oneshot
@@ -104,7 +128,7 @@ Environment=DOMINION_BUDDY_ROOT=$user_home/buddy_core
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-$user_home/buddy_core/.env
 EnvironmentFile=-$user_home/conductor/.env
-ExecStart=/usr/bin/python3 $runtime_root/scripts/autopilot/lane_supervisor.py --execute --state-dir $state_root
+ExecStart=$buddy_python $runtime_root/scripts/autopilot/lane_supervisor.py --execute --state-dir $state_root
 TimeoutStartSec=20min
 UMask=0077
 NoNewPrivileges=true
@@ -140,13 +164,14 @@ sudo systemctl daemon-reload
 sudo systemctl enable "$timer_name" >/dev/null
 
 # Acceptance requires one real bounded internal mission before the timer is armed.
+sudo systemctl reset-failed "$service_name" >/dev/null 2>&1 || true
 sudo systemctl start "$service_name"
 result="$(sudo systemctl show "$service_name" -p Result --value)"
 [ "$result" = "success" ] || { echo "RADAH_AUTOPILOT=HOLD service_result=$result"; exit 40; }
 
 latest_receipt="$(find "$state_root/receipts" -maxdepth 1 -type f -name '*.json' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
 test -n "$latest_receipt" && test -s "$latest_receipt"
-python3 - "$latest_receipt" <<'PY'
+"$buddy_python" - "$latest_receipt" <<'PY'
 import json, sys
 p = json.load(open(sys.argv[1], encoding='utf-8'))
 assert p['status'] in {'COMPLETE', 'HELD'}
@@ -179,6 +204,7 @@ printf 'RADAH_AUTOPILOT=ACTIVE\n'
 printf 'AUTOPILOT_RUNTIME_SHA256=%s\n' "$runtime_sha"
 printf 'AUTOPILOT_POLICY_FILE_SHA256=%s\n' "$policy_sha"
 printf 'AUTOPILOT_TIMER=PASS cadence=30m\n'
+printf 'AUTOPILOT_BUDDY_RUNTIME=PASS interpreter=%s\n' "$buddy_python"
 
 success=1
 trap - ERR INT TERM EXIT

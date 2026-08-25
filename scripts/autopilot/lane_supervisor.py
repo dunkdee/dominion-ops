@@ -7,6 +7,12 @@ Buddy operator to perform the lane's bounded internal mission, verifies that
 all planned capabilities are either explicitly allowed internal capabilities or
 Founder-held external capabilities, and writes an auditable receipt.
 
+A policy/evidence blocker is a valid governed cycle when Buddy created a real
+mission and returned auditable step receipts without a supervisor exception.
+That lane records the blocker and yields to the next due lane. Infrastructure,
+import, planning, authority-validation, or unexpected-status failures remain
+service failures and fail closed.
+
 Activation is separate from code deployment. The runner is inert unless
 RADAH_AUTOPILOT_ENABLED=1 is present in its runtime environment.
 """
@@ -249,6 +255,27 @@ def policy_digest(policy: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def bounded_cycle_ok(receipt: dict[str, Any]) -> bool:
+    """Return True when the scheduler completed a valid governed cycle.
+
+    COMPLETE and HELD are valid terminal mission outcomes. BLOCKED is also a
+    valid cycle only when Buddy actually created a mission and returned step
+    receipts, with no supervisor exception. This lets evidence/policy blockers
+    rotate without disguising infrastructure or orchestration failures as green.
+    """
+    status = str(receipt.get("status", ""))
+    if status == "PLANNED":
+        return True
+    if receipt.get("supervisor_error"):
+        return False
+    if status in {"COMPLETE", "HELD"}:
+        return bool(receipt.get("mission_id"))
+    if status == "BLOCKED":
+        receipts = receipt.get("receipts")
+        return bool(receipt.get("mission_id")) and isinstance(receipts, list) and bool(receipts)
+    return False
+
+
 def persist_cycle(
     *,
     state_dir: Path,
@@ -261,6 +288,8 @@ def persist_cycle(
     lane_state["last_attempt_at"] = iso(now)
     lane_state["last_status"] = receipt["status"]
     lane_state["last_mission_id"] = receipt.get("mission_id")
+    if bounded_cycle_ok(receipt):
+        lane_state["last_progress_at"] = iso(now)
     if receipt["status"] in {"COMPLETE", "HELD"}:
         lane_state["last_productive_at"] = iso(now)
     state["cycles"] = int(state.get("cycles", 0)) + 1
@@ -357,9 +386,13 @@ def main() -> int:
         print(json.dumps({"RADAH_AUTOPILOT": "BLOCKED", "reason": type(exc).__name__}, sort_keys=True))
         return 3
 
+    healthy_cycle = bounded_cycle_ok(receipt)
     print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
-    print(f"RADAH_AUTOPILOT={receipt['status']} lane={receipt['lane']}")
-    return 0 if receipt["status"] in {"PLANNED", "COMPLETE", "HELD"} else 4
+    print(
+        f"RADAH_AUTOPILOT={receipt['status']} lane={receipt['lane']} "
+        f"bounded_cycle={'true' if healthy_cycle else 'false'}"
+    )
+    return 0 if healthy_cycle else 4
 
 
 if __name__ == "__main__":

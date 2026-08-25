@@ -1,0 +1,67 @@
+name: RADAH MEMSHALAH Autopilot CI
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/autopilot/**'
+      - 'governance/radah_memshalah_autopilot_policy.json'
+      - 'governance/verticals.json'
+      - 'tests/test_radah_autopilot.py'
+      - '.github/workflows/radah-autopilot-*.yml'
+  push:
+    branches:
+      - 'feature/radah-memshalah-autopilot-v1'
+    paths:
+      - 'scripts/autopilot/**'
+      - 'governance/radah_memshalah_autopilot_policy.json'
+      - 'tests/test_radah_autopilot.py'
+      - '.github/workflows/radah-autopilot-*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile supervisor
+        run: python -m py_compile scripts/autopilot/lane_supervisor.py tests/test_radah_autopilot.py
+
+      - name: Run authority and rotation tests
+        run: python -m unittest tests.test_radah_autopilot -v
+
+      - name: Prove plan-only mode is inert
+        env:
+          RADAH_AUTOPILOT_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          output="$(python scripts/autopilot/lane_supervisor.py --plan-only --state-dir "$RUNNER_TEMP/autopilot-state")"
+          printf '%s\n' "$output"
+          printf '%s' "$output" | grep -q 'RADAH_AUTOPILOT=PLANNED'
+          test ! -e "$RUNNER_TEMP/autopilot-state/state.json"
+
+      - name: Static authority guard
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('governance/radah_memshalah_autopilot_policy.json').read_text())
+          assert p['max_primary_revenue_verticals'] == 2
+          assert p['rules']['external_actions_automatic'] is False
+          assert p['rules']['no_live_trading'] is True
+          assert p['rules']['no_permission_self_expansion'] is True
+          assert p['enabled'] is False, 'repository policy must remain inert; runtime activation is separate'
+          assert all(not c.startswith('external.') for c in p['allowed_automatic_capabilities'])
+          print('RADAH_AUTOPILOT_AUTHORITY=PASS')
+          PY

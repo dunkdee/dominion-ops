@@ -1,0 +1,177 @@
+/* RADAH MEMSHALAH Command Center — restrained natural motion layer */
+
+/* Ambient depth: slow enough to read as atmosphere, not animation. */
+.dominion-hero__glow {
+  animation: dominion-ambient-drift 18s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+
+.dominion-seal__ring {
+  animation: dominion-orbit 42s linear infinite;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.dominion-seal::before {
+  animation: dominion-geometry-breathe 13s ease-in-out infinite alternate;
+  transform-origin: 50% 50%;
+}
+
+.dominion-seal::after {
+  animation: dominion-geometry-breathe-alt 17s ease-in-out infinite alternate;
+  transform-origin: 50% 50%;
+}
+
+.dominion-status__dot {
+  animation: dominion-status-breathe 3.4s ease-in-out infinite;
+}
+
+/* Production-state cards can opt into a quiet signal sweep. */
+.dominion-card--active,
+.dominion-card--productive {
+  position: relative;
+  overflow: hidden;
+}
+
+.dominion-card--active::after,
+.dominion-card--productive::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 -42%;
+  width: 34%;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(240, 203, 114, 0.015) 22%,
+    rgba(240, 203, 114, 0.10) 50%,
+    rgba(114, 209, 154, 0.055) 68%,
+    transparent 100%
+  );
+  transform: skewX(-12deg);
+  animation: dominion-production-sweep 9.5s ease-in-out infinite;
+}
+
+.dominion-pill--live,
+.dominion-pill--productive {
+  position: relative;
+  isolation: isolate;
+}
+
+.dominion-pill--live::before,
+.dominion-pill--productive::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--dominion-green);
+  box-shadow: 0 0 0 0 rgba(114, 209, 154, 0.42);
+  animation: dominion-live-pulse 3s ease-out infinite;
+}
+
+/* Small activity rail used by the production matrix. */
+.dominion-flow {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  margin-top: 14px;
+  border-radius: 999px;
+  background: rgba(240, 203, 114, 0.08);
+}
+
+.dominion-flow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 38%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgba(240, 203, 114, 0.82), rgba(114, 209, 154, 0.68), transparent);
+  transform: translateX(-120%);
+  animation: dominion-flow-pass 5.8s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+
+/* Interaction remains physical and restrained. */
+@media (hover: hover) and (pointer: fine) {
+  .dominion-card {
+    transition: transform 220ms cubic-bezier(.2,.8,.2,1), border-color 220ms ease, box-shadow 220ms ease, background-color 220ms ease;
+  }
+
+  .dominion-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 38px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.03);
+  }
+
+  .dominion-card:active {
+    transform: translateY(-1px) scale(.995);
+  }
+}
+
+@keyframes dominion-ambient-drift {
+  0% { transform: translate3d(-2%, -1%, 0) scale(.96); opacity: .72; }
+  45% { transform: translate3d(3%, 2%, 0) scale(1.04); opacity: .96; }
+  100% { transform: translate3d(-1%, 5%, 0) scale(1); opacity: .80; }
+}
+
+@keyframes dominion-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dominion-geometry-breathe {
+  from { transform: rotate(43deg) scale(.985); opacity: .64; }
+  to { transform: rotate(47deg) scale(1.025); opacity: .95; }
+}
+
+@keyframes dominion-geometry-breathe-alt {
+  from { transform: rotate(-2deg) scale(1.02); opacity: .58; }
+  to { transform: rotate(2deg) scale(.98); opacity: .88; }
+}
+
+@keyframes dominion-status-breathe {
+  0%, 100% { transform: scale(.92); opacity: .68; box-shadow: 0 0 8px rgba(114,209,154,.30); }
+  50% { transform: scale(1.08); opacity: 1; box-shadow: 0 0 18px rgba(114,209,154,.72); }
+}
+
+@keyframes dominion-production-sweep {
+  0%, 18% { left: -42%; opacity: 0; }
+  26% { opacity: .72; }
+  48% { left: 118%; opacity: 0; }
+  100% { left: 118%; opacity: 0; }
+}
+
+@keyframes dominion-live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(114,209,154,.42); }
+  65% { box-shadow: 0 0 0 7px rgba(114,209,154,0); }
+  100% { box-shadow: 0 0 0 0 rgba(114,209,154,0); }
+}
+
+@keyframes dominion-flow-pass {
+  0%, 12% { transform: translateX(-120%); opacity: 0; }
+  24% { opacity: .9; }
+  68% { opacity: .85; }
+  82%, 100% { transform: translateX(300%); opacity: 0; }
+}
+
+/* Motion is enhancement only. Accessibility and battery use win. */
+@media (prefers-reduced-motion: reduce) {
+  .dominion-hero__glow,
+  .dominion-seal__ring,
+  .dominion-seal::before,
+  .dominion-seal::after,
+  .dominion-status__dot,
+  .dominion-card--active::after,
+  .dominion-card--productive::after,
+  .dominion-pill--live::before,
+  .dominion-pill--productive::before,
+  .dominion-flow::after {
+    animation: none !important;
+  }
+
+  .dominion-card {
+    transition: none !important;
+  }
+}

@@ -6,6 +6,7 @@ on:
       - "governance/**"
       - "scripts/validate_ecosystem_alignment.py"
       - "apps/**"
+      - "tests/test_revenue*.py"
       - "alpha_engine/**"
       - "api/**"
       - "web/**"
@@ -19,6 +20,7 @@ on:
       - "governance/**"
       - "scripts/validate_ecosystem_alignment.py"
       - "apps/**"
+      - "tests/test_revenue*.py"
       - "alpha_engine/**"
       - "api/**"
       - "web/**"
@@ -45,3 +47,8 @@ jobs:
 
       - name: Validate vertical registry and repository contracts
         run: python3 scripts/validate_ecosystem_alignment.py
+
+      - name: Validate RADAH MEMSHALAH revenue engine
+        run: |
+          python3 -m compileall -q apps/revenue_engine tests/test_revenue_engine.py tests/test_revenue_lanes.py
+          python3 -m unittest discover -s tests -p 'test_revenue*.py' -v

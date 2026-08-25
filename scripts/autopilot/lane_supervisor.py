@@ -249,13 +249,35 @@ def policy_digest(policy: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def persist_cycle(
+    *,
+    state_dir: Path,
+    state: dict[str, Any],
+    lane: Lane,
+    receipt: dict[str, Any],
+    now: datetime,
+) -> None:
+    lane_state = state.setdefault("lanes", {}).setdefault(lane.lane_id, {})
+    lane_state["last_attempt_at"] = iso(now)
+    lane_state["last_status"] = receipt["status"]
+    lane_state["last_mission_id"] = receipt.get("mission_id")
+    if receipt["status"] in {"COMPLETE", "HELD"}:
+        lane_state["last_productive_at"] = iso(now)
+    state["cycles"] = int(state.get("cycles", 0)) + 1
+    state["updated_at"] = iso(now)
+
+    receipt_dir = state_dir / "receipts"
+    receipt_name = now.strftime("%Y%m%dT%H%M%SZ") + f"-{lane.lane_id}.json"
+    atomic_json_write(receipt_dir / receipt_name, receipt)
+    atomic_json_write(state_dir / "state.json", state)
+
+
 def run_cycle(*, execute: bool, state_dir: Path) -> dict[str, Any]:
     policy = load_json(POLICY_PATH)
     verticals = load_json(VERTICALS_PATH)
     lanes = validate_policy(policy, verticals)
     now = utc_now()
-    state_path = state_dir / "state.json"
-    state = load_state(state_path)
+    state = load_state(state_dir / "state.json")
     lane = select_lane(lanes, state, now)
 
     base_receipt: dict[str, Any] = {
@@ -279,32 +301,41 @@ def run_cycle(*, execute: bool, state_dir: Path) -> dict[str, Any]:
     if not enabled_by_environment():
         raise AutopilotError("runtime activation missing: RADAH_AUTOPILOT_ENABLED=1 required")
 
-    operator = resolve_buddy_operator()
-    plan = operator.plan(lane.objective)
-    validate_plan(plan, operator, policy)
-    result = operator.execute(plan, session_id=f"autopilot:{lane.lane_id}")
+    try:
+        operator = resolve_buddy_operator()
+        plan = operator.plan(lane.objective)
+        validate_plan(plan, operator, policy)
+        result = operator.execute(plan, session_id=f"autopilot:{lane.lane_id}")
+        receipt = {
+            **base_receipt,
+            "status": str(result.get("status", "BLOCKED")),
+            "mission_id": result.get("mission_id"),
+            "held": result.get("held"),
+            "receipts": result.get("receipts", []),
+        }
+    except Exception as exc:
+        # Fail this lane closed but record the attempt so it yields to the next
+        # lane instead of monopolizing every future scheduler cycle.
+        receipt = {
+            **base_receipt,
+            "status": "BLOCKED",
+            "mission_id": None,
+            "held": None,
+            "receipts": [],
+            "supervisor_error": {
+                "type": type(exc).__name__,
+                "detail": str(exc)[:300],
+            },
+        }
 
-    receipt = {
-        **base_receipt,
-        "status": str(result.get("status", "BLOCKED")),
-        "mission_id": result.get("mission_id"),
-        "held": result.get("held"),
-        "receipts": result.get("receipts", []),
-    }
+    if receipt["status"] not in {"COMPLETE", "HELD", "BLOCKED"}:
+        receipt["status"] = "BLOCKED"
+        receipt["supervisor_error"] = {
+            "type": "UnexpectedMissionStatus",
+            "detail": "Buddy returned a status outside the governed supervisor vocabulary.",
+        }
 
-    lane_state = state.setdefault("lanes", {}).setdefault(lane.lane_id, {})
-    lane_state["last_attempt_at"] = iso(now)
-    lane_state["last_status"] = receipt["status"]
-    lane_state["last_mission_id"] = receipt.get("mission_id")
-    if receipt["status"] in {"COMPLETE", "HELD"}:
-        lane_state["last_productive_at"] = iso(now)
-    state["cycles"] = int(state.get("cycles", 0)) + 1
-    state["updated_at"] = iso(now)
-
-    receipt_dir = state_dir / "receipts"
-    receipt_name = now.strftime("%Y%m%dT%H%M%SZ") + f"-{lane.lane_id}.json"
-    atomic_json_write(receipt_dir / receipt_name, receipt)
-    atomic_json_write(state_path, state)
+    persist_cycle(state_dir=state_dir, state=state, lane=lane, receipt=receipt, now=now)
     return receipt
 
 

@@ -1,0 +1,66 @@
+{
+  "schema": "radah-memshalah-autopilot-v1",
+  "version": "1.0.0",
+  "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+  "purpose": "Keep every Dominion lane productive through evidence-bound internal work while preserving Founder authority over consequential external effects.",
+  "enabled": false,
+  "cadence_minutes": 30,
+  "max_missions_per_cycle": 1,
+  "max_primary_revenue_verticals": 2,
+  "primary_wave": [
+    "commerce_fulfillment",
+    "analytics_services"
+  ],
+  "support_wave": [
+    "content_traffic",
+    "intelligence_orchestration",
+    "infrastructure",
+    "governance_legal"
+  ],
+  "all_lanes_must_progress": true,
+  "default_stale_after_hours": 12,
+  "primary_stale_after_hours": 2,
+  "support_stale_after_hours": 6,
+  "rules": {
+    "truth_before_action": true,
+    "external_actions_automatic": false,
+    "no_secret_export": true,
+    "no_permission_self_expansion": true,
+    "no_live_trading": true,
+    "no_price_change": true,
+    "no_customer_contact": true,
+    "no_external_publish": true,
+    "no_credential_or_network_change": true,
+    "no_canonical_state_change": true,
+    "record_receipt_for_every_cycle": true,
+    "stop_on_policy_conflict": true
+  },
+  "allowed_automatic_capabilities": [
+    "brain.reason",
+    "web.research",
+    "vault.read",
+    "learn.record",
+    "learn.autonomous_cycle",
+    "artifact.stage",
+    "grant.research_prepare",
+    "video.prepare",
+    "revenue.prepare",
+    "system.status"
+  ],
+  "held_external_prefixes": [
+    "external."
+  ],
+  "lane_objectives": {
+    "commerce_fulfillment": "Revenue mission for commerce and fulfillment. EVIDENCE_POLICY=HYBRID. Inspect buyer intent, storefront friction, offer clarity, conversion constraints, order/fulfillment evidence, and unit-economics unknowns. Produce the highest-value internal conversion and operations package. Do not publish, contact customers, change price, submit supplier actions, or spend.",
+    "kdp_publishing": "Prepare the next governed KDP production packet from available evidence: rights checklist, editorial/quality checks, metadata, cover requirements, pricing evidence gaps, demand evidence, differentiation, and publication readiness. Draft only. Do not upload or publish.",
+    "analytics_services": "Revenue mission for governed analytics services. EVIDENCE_POLICY=HYBRID. Research current buyer pain and commercial intent, produce a decision-ready sample audit/service package, positioning, qualification criteria, measurement plan, and proposal draft. Do not contact prospects or send proposals.",
+    "digital_products": "Revenue mission for owned digital products. EVIDENCE_POLICY=HYBRID. Identify the strongest evidence-backed buyer problem, product concept, offer, delivery requirements, landing-page draft, organic acquisition plan, and validation experiment. Do not publish, change price, or alter customer delivery.",
+    "services_lead_generation": "Research qualified service opportunities and prepare a ranked internal lead list plus proposal drafts and evidence. Do not contact prospects, submit proposals, accept contracts, or represent price or delivery dates externally.",
+    "content_traffic": "Create the next internal traffic production package supporting the current primary revenue wave: buyer-intent topic, SEO brief, platform-specific content, short-form/video package, CTA, attribution tags, KPI hypothesis, and test plan. Do not publish or use personal likeness without explicit approval.",
+    "surplus": "Research one lawful surplus opportunity workflow or jurisdiction and prepare an internal evidence packet with eligibility, source citations, process map, unknowns, risk flags, and synthetic-case next step. Do not contact claimants, collect sensitive identity data, sign, file, or submit.",
+    "trading": "Research and evaluate paper-trading performance only. Produce an internal measurement packet covering sample size, drawdown, profit factor, setup quality, failure modes, and next paper-only test. Never place a live trade or change live risk permissions.",
+    "intelligence_orchestration": "Perform a system status and orchestration review. Identify stale queues, blocked handoffs, missing evidence, duplicate scheduling, and the single highest-value routing correction that can be prepared internally without changing governance or production authority.",
+    "governance_legal": "Review current internal production state for governance gaps, unresolved evidence conflicts, unowned work, and approval-boundary risks. Prepare a remediation packet only; do not sign, file, publish legal material, disclose sensitive data, or change policy automatically.",
+    "infrastructure": "Perform a system health and production-readiness review using current internal evidence. Identify degraded components, stale receipts, backup/rollback gaps, and the highest-value safe remediation proposal. Do not deploy, rotate secrets, delete data, or change DNS/networking automatically."
+  }
+}

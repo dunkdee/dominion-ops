@@ -172,6 +172,8 @@
     },
     "manual_only_workflows": {
       ".github/workflows/activate-email-drip-production.yml": "ACTIVATE EMAIL DRIP LIVE",
+      ".github/workflows/activate-radah-memshalah-autopilot.yml": "ACTIVATE RADAH MEMSHALAH AUTOPILOT",
+      ".github/workflows/deactivate-radah-memshalah-autopilot.yml": "DEACTIVATE RADAH MEMSHALAH AUTOPILOT",
       ".github/workflows/deploy-command-center.yml": "DEPLOY COMMAND CENTER",
       ".github/workflows/deploy-dominion-command-center.yml": "DEPLOY DOMINION COMMAND CENTER",
       ".github/workflows/deploy-email-drip-production-hold.yml": "DEPLOY EMAIL DRIP HOLD",

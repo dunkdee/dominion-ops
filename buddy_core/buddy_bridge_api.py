@@ -15,6 +15,11 @@ except ImportError:
     pass
 
 from core.operator import get_operator
+from core.revenue_runtime import (
+    MAX_PAYLOAD_BYTES,
+    run_compounding_payload,
+    run_fast_cash_payload,
+)
 
 app = Flask(__name__)
 
@@ -39,6 +44,38 @@ def _authorized(req) -> bool:
     auth = req.headers.get("Authorization", "")
     expected = f"Bearer {BUDDY_WEB_TOKEN}"
     return bool(auth) and hmac.compare_digest(auth, expected)
+
+
+def _governed_revenue_request(runner, lane: str):
+    if not _authorized(request):
+        return jsonify(error="unauthorized"), 401
+    if request.content_length is not None and request.content_length > MAX_PAYLOAD_BYTES:
+        return jsonify(status="BLOCKED", error="payload_too_large"), 413
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify(status="BLOCKED", error="JSON object required"), 400
+    try:
+        result = runner(payload)
+        log(
+            f"[REVENUE_{lane}] publication_state=DRAFT_SHADOW "
+            f"review_hold={result.get('review_hold', False)}"
+        )
+        return jsonify(result)
+    except (KeyError, TypeError, ValueError) as exc:
+        log(f"[REVENUE_{lane}_BLOCKED] {type(exc).__name__}")
+        return jsonify(
+            status="BLOCKED",
+            publication_state="DRAFT_SHADOW",
+            error=type(exc).__name__,
+            detail=str(exc)[:400],
+        ), 400
+    except Exception as exc:
+        log(f"[REVENUE_{lane}_ERROR] {type(exc).__name__}")
+        return jsonify(
+            status="BLOCKED",
+            publication_state="DRAFT_SHADOW",
+            error=type(exc).__name__,
+        ), 500
 
 
 @app.get("/health")
@@ -104,6 +141,18 @@ def buddy_command():
     except Exception as exc:
         log(f"[COMMAND_ERROR] {type(exc).__name__}")
         return jsonify(status="BLOCKED", error=type(exc).__name__), 500
+
+
+@app.post("/webhook/buddy/revenue/fast-cash")
+def buddy_revenue_fast_cash():
+    """Return a governed FAST CASH DRAFT_SHADOW package; never publish."""
+    return _governed_revenue_request(run_fast_cash_payload, "FAST_CASH")
+
+
+@app.post("/webhook/buddy/revenue/compounding")
+def buddy_revenue_compounding():
+    """Return a governed COMPOUNDING DRAFT_SHADOW result; never publish."""
+    return _governed_revenue_request(run_compounding_payload, "COMPOUNDING")
 
 
 @app.post("/webhook/conductor")

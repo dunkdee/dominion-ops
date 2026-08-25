@@ -128,6 +128,11 @@ test -s "$target/00-HOME.md"
 test -s "$target/14-Daily-State.md"
 test -s "$target/09-Revenue.md"
 test -s "$snippet"
+grep -Fq 'dominion-command-center-root' "$root_note"
+grep -Fq 'class="dominion-shell"' "$target/00-HOME.md"
+grep -Fq 'class="dominion-card-grid' "$target/00-HOME.md"
+grep -Fq '@media (max-width: 720px)' "$snippet"
+grep -Fq '.dominion-mobile-dock' "$snippet"
 python3 - "$appearance" <<'PY'
 import json,sys
 from pathlib import Path

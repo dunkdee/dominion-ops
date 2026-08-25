@@ -1,6 +1,8 @@
 import hashlib
 import importlib.util
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -178,3 +180,86 @@ def test_team_state_uses_constitutional_truth_vocabulary(tmp_path):
     assert "`UNKNOWN`" in state
     assert "result` must be `UNKNOWN`" in state
     assert "result` must be `unverified`" not in state
+
+
+def test_work_order_94_operational_notes_exist_and_are_source_bound(tmp_path):
+    module = load_renderer()
+    target = tmp_path / "Dominion-Brain"
+    module.render(target)
+
+    command_fields = (
+        "Last verified timestamp:",
+        "Responsible role:",
+        "Source-of-truth links:",
+        "State:",
+        "Next exact action:",
+        "Stop condition:",
+    )
+    for filename, _ in module.COMMAND_STATE_NOTES:
+        note = target / "14-Daily-State" / filename
+        assert note.is_file()
+        text = note.read_text(encoding="utf-8")
+        for field in command_fields:
+            assert field in text
+        assert "UNKNOWN" in text
+
+    required = [
+        *(relative for relative, _, _ in module.ARCHITECTURE_NOTES),
+        *(relative for relative, _, _ in module.EVIDENCE_NOTES),
+        *(relative for relative, _, _ in module.OPERATIONS_NOTES),
+    ]
+    for relative in required:
+        text = (target / relative).read_text(encoding="utf-8")
+        assert "Source-of-truth boundary" in text
+        assert "UNKNOWN" in text
+
+    assert not (target / "Dominion").exists()
+
+
+def test_priority_service_notes_use_complete_schema(tmp_path):
+    module = load_renderer()
+    target = tmp_path / "Dominion-Brain"
+    module.render(target)
+
+    fields = (
+        "Canonical service name:",
+        "Purpose:",
+        "Accountable owner:",
+        "Lifecycle state:",
+        "Repository path:",
+        "VM path:",
+        "Deployment identity and exact SHA:",
+        "Container or systemd identity:",
+        "Ports, routes, and health checks:",
+        "Dependencies and dependents:",
+        "Secrets boundary:",
+        "Monitoring and alert path:",
+        "Backup and restore method:",
+        "Rollback method:",
+        "Last verified date:",
+        "Current incidents or blockers:",
+        "Next exact action:",
+        "Evidence links:",
+    )
+    for filename, _, _ in module.SERVICE_NOTES:
+        note = target / "06-Operations" / "Services" / filename
+        assert note.is_file()
+        text = note.read_text(encoding="utf-8")
+        for field in fields:
+            assert field in text
+        assert "Source-of-truth boundary" in text
+
+
+def test_legacy_setup_vault_is_non_mutating(tmp_path):
+    vault = tmp_path / "legacy-vault"
+    env = dict(os.environ, VAULT_PATH=str(vault))
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts" / "setup_vault.sh")],
+        capture_output=True,
+        check=False,
+        env=env,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "LEGACY_VAULT_SETUP=RETIRED mutation=none" in result.stdout
+    assert not vault.exists()

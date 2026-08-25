@@ -1,0 +1,130 @@
+name: Dominion Online Finalize Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dominion-online-finalize-once.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout trigger release
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Create clean final main commit and self-remove one-shot workflows
+        id: clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA" || { echo 'ONLINE_FINALIZE=HOLD reason=main_advanced'; exit 1; }
+          git config user.name 'Dominion Operations'
+          git config user.email 'actions@users.noreply.github.com'
+          rm -f .github/workflows/dominion-online-audit-once.yml
+          rm -f .github/workflows/dominion-online-finalize-once.yml
+          git add -A
+          git commit -m 'ops: close Dominion online one-shot tooling'
+          final_sha="$(git rev-parse HEAD)"
+          git push origin HEAD:main
+          echo "final_sha=$final_sha" >> "$GITHUB_OUTPUT"
+          echo "ONLINE_FINAL_CLEAN_COMMIT=$final_sha"
+
+      - name: Stage exact clean main bundle to VM
+        id: stage
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          FINAL_SHA: ${{ steps.clean.outputs.final_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY" && test -n "$FINAL_SHA"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          git update-ref refs/heads/dominion-online-final "$FINAL_SHA"
+          bundle="$RUNNER_TEMP/dominion-online-${GITHUB_RUN_ID}.bundle"
+          remote_bundle="/tmp/dominion-online-${GITHUB_RUN_ID}.bundle"
+          git bundle create "$bundle" refs/heads/dominion-online-final
+          git bundle verify "$bundle"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes scripts/quarantine_vm_repo_state.sh "$VM_USER@$VM_HOST:/tmp/quarantine-online-${GITHUB_RUN_ID}.sh"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" "chmod 600 '$remote_bundle'; chmod 700 '/tmp/quarantine-online-${GITHUB_RUN_ID}.sh'"
+          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
+
+      - name: Synchronize VM repo and verify live stack
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          FINAL_SHA: ${{ steps.clean.outputs.final_sha }}
+          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "FINAL_SHA='$FINAL_SHA' BUNDLE='$REMOTE_BUNDLE' RUN_ID='online-${GITHUB_RUN_ID}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f "$BUNDLE" "/tmp/quarantine-online-${GITHUB_RUN_ID:-}.sh"' EXIT
+          repo="$HOME/dominion-ops"
+          q="/tmp/quarantine-online-${GITHUB_RUN_ID:-}.sh"
+          test -d "$repo/.git" || { echo 'ONLINE_FINALIZE=HOLD reason=vm_repo_missing'; exit 1; }
+          RUN_ID="$RUN_ID" DOMINION_REPO="$repo" bash "$q"
+          git -C "$repo" fetch "$BUNDLE" dominion-online-final:refs/remotes/dominion-online-final/main >/dev/null
+          git -C "$repo" checkout main >/dev/null 2>&1
+          git -C "$repo" merge-base --is-ancestor HEAD "$FINAL_SHA" || { echo 'ONLINE_FINALIZE=HOLD reason=vm_non_fast_forward'; exit 1; }
+          git -C "$repo" merge --ff-only "$FINAL_SHA" >/dev/null
+          test "$(git -C "$repo" rev-parse HEAD)" = "$FINAL_SHA"
+          test -z "$(git -C "$repo" status --porcelain=v1 --untracked-files=no)"
+          echo "VM_PARITY=PASS sha=$FINAL_SHA"
+
+          sudo caddy validate --config /etc/caddy/Caddyfile >/dev/null
+          echo 'CADDY=PASS'
+          python3 - <<'PY'
+          import socket
+          ports=[80,443,5000,5050,5055,5056,5060,5070,5080,5090,5101,5678,8080,8082,8083,8090,8099,8787,11434]
+          missing=[]
+          for p in ports:
+              s=socket.socket(); s.settimeout(1)
+              try:s.connect(('127.0.0.1',p))
+              except OSError:missing.append(p)
+              finally:s.close()
+          if missing: raise SystemExit('ONLINE_FINALIZE=HOLD missing_listeners='+','.join(map(str,missing)))
+          print('LISTENERS=PASS count=19')
+          PY
+          check200(){ name="$1"; url="$2"; code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$url" || true)"; [ "$code" = 200 ] || { echo "ONLINE_FINALIZE=HOLD http=$name status=$code"; exit 1; }; echo "HTTP=PASS name=$name"; }
+          check200 baby_api http://127.0.0.1:8080/
+          check200 wix_agent http://127.0.0.1:8082/ready
+          check200 dominion_web http://127.0.0.1:8090/
+          check200 n8n http://127.0.0.1:5678/healthz
+          check200 alpha_engine http://127.0.0.1:8787/health
+          check200 conductor http://127.0.0.1:5060/health
+          check200 email_drip http://127.0.0.1:8099/health
+          check200 ollama http://127.0.0.1:11434/api/tags
+          [ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8083/ || true)" = 401 ]
+          [ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:5070/buddy || true)" = 401 ]
+          for spec in 'dominion_healing https://dominionhealing.org/' 'voltedge_store https://www.voltedgegoods.com/' 'surplus https://surplus.dominionhealing.org/'; do
+            set -- $spec; code="$(curl -L -sS -o /dev/null -w '%{http_code}' --max-time 20 "$2" || true)"; case "$code" in 2??) echo "PUBLIC=PASS name=$1 status=$code";; *) echo "ONLINE_FINALIZE=HOLD public=$1 status=$code"; exit 1;; esac
+          done
+          [ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://vault.dominionhealing.org/ || true)" = 401 ]
+          echo "DOMINION_ONLINE=PASS sha=$FINAL_SHA"
+          REMOTE
+
+      - name: Cleanup runner SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/dominion-online-*.bundle

@@ -8,6 +8,10 @@ on:
       - 'scripts/render_dominion_brain.py'
       - 'scripts/check_brain_inputs.py'
       - 'scripts/deploy_dominion_brain_remote.sh'
+      - 'scripts/deploy_dominion_command_center.sh'
+      - 'obsidian/**'
+      - 'tests/test_dominion_command_center_ui.py'
+      - '.github/workflows/deploy-dominion-command-center.yml'
       - 'scripts/setup_vault.sh'
       - '.github/workflows/seed-vault.yml'
       - 'scripts/quarantine_vm_repo_state.sh'
@@ -29,6 +33,10 @@ on:
       - 'scripts/render_dominion_brain.py'
       - 'scripts/check_brain_inputs.py'
       - 'scripts/deploy_dominion_brain_remote.sh'
+      - 'scripts/deploy_dominion_command_center.sh'
+      - 'obsidian/**'
+      - 'tests/test_dominion_command_center_ui.py'
+      - '.github/workflows/deploy-dominion-command-center.yml'
       - 'scripts/quarantine_vm_repo_state.sh'
       - 'tests/test_render_dominion_brain.py'
       - 'agents/registry.json'
@@ -53,8 +61,8 @@ jobs:
           python-version: '3.12'
       - name: Compile and shell syntax
         run: |
-          python -m py_compile scripts/render_dominion_brain.py scripts/check_brain_inputs.py tests/test_render_dominion_brain.py
-          bash -n scripts/deploy_dominion_brain_remote.sh scripts/quarantine_vm_repo_state.sh scripts/setup_vault.sh
+          python -m py_compile scripts/render_dominion_brain.py scripts/check_brain_inputs.py tests/test_render_dominion_brain.py tests/test_dominion_command_center_ui.py
+          bash -n scripts/deploy_dominion_brain_remote.sh scripts/deploy_dominion_command_center.sh scripts/quarantine_vm_repo_state.sh scripts/setup_vault.sh
       - name: Reject secret-bearing governed inputs
         run: |
           set -euo pipefail
@@ -65,7 +73,7 @@ jobs:
       - name: Test
         run: |
           python -m pip install --disable-pip-version-check 'pytest>=8,<9'
-          pytest -q tests/test_render_dominion_brain.py
+          pytest -q tests/test_render_dominion_brain.py tests/test_dominion_command_center_ui.py
       - name: Render smoke test
         run: |
           set -euo pipefail

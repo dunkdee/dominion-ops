@@ -10,9 +10,9 @@ aliases:
 <section class="dominion-hero" aria-labelledby="dominion-title">
   <div class="dominion-hero__glow" aria-hidden="true"></div>
   <div class="dominion-hero__content">
-    <div class="dominion-eyebrow">RADAH MEMSHALAH · EXECUTIVE OPERATIONS</div>
+    <div class="dominion-eyebrow">RADAH MEMSHALAH · EXECUTIVE PRODUCTION</div>
     <h1 id="dominion-title">Dominion Command Center</h1>
-    <p class="dominion-hero__statement">One mission. One structure. One truth chain. Every action governed, every result evidenced, every lesson retained.</p>
+    <p class="dominion-hero__statement">One governed production system. Every lane has work. Every action has authority. Every result leaves evidence. Primary lanes convert while the rest of the machine strengthens the wave.</p>
     <div class="dominion-status-row" aria-label="Control status">
       <span class="dominion-status dominion-status--verified"><span class="dominion-status__dot"></span>CONTROL SURFACE ONLINE</span>
       <span class="dominion-status dominion-status--governed">FOUNDER GATED</span>
@@ -26,67 +26,60 @@ aliases:
   </div>
 </section>
 
-<section class="dominion-snapshot" aria-label="Verified deployment snapshot">
+<section class="dominion-snapshot" aria-label="Production doctrine">
   <div class="dominion-snapshot__header">
     <div>
-      <span class="dominion-kicker">VERIFIED DEPLOYMENT SNAPSHOT</span>
-      <strong>25 AUG 2026</strong>
+      <span class="dominion-kicker">RADAH MEMSHALAH PRODUCTION DOCTRINE</span>
+      <strong>CASH FLOW → SYSTEMS → SCALE</strong>
     </div>
-    <code>c3c3057</code>
+    <code>EVIDENCE-BOUND</code>
   </div>
   <div class="dominion-metric-grid">
-    <div class="dominion-metric">
-      <span class="dominion-metric__value">16</span>
-      <span class="dominion-metric__label">Governed agent homes</span>
-    </div>
-    <div class="dominion-metric">
-      <span class="dominion-metric__value">217</span>
-      <span class="dominion-metric__label">Manifested Brain files</span>
-    </div>
-    <div class="dominion-metric">
-      <span class="dominion-metric__value dominion-metric__value--text">AUTH</span>
-      <span class="dominion-metric__label">Protected access boundary</span>
-    </div>
-    <div class="dominion-metric">
-      <span class="dominion-metric__value dominion-metric__value--text">1×</span>
-      <span class="dominion-metric__label">Canonical truth chain</span>
-    </div>
+    <div class="dominion-metric"><span class="dominion-metric__value">11</span><span class="dominion-metric__label">Registered production lanes</span></div>
+    <div class="dominion-metric"><span class="dominion-metric__value">2</span><span class="dominion-metric__label">Maximum primary revenue lanes</span></div>
+    <div class="dominion-metric"><span class="dominion-metric__value dominion-metric__value--text">AUTH</span><span class="dominion-metric__label">Protected external effects</span></div>
+    <div class="dominion-metric"><span class="dominion-metric__value dominion-metric__value--text">1×</span><span class="dominion-metric__label">Canonical truth chain</span></div>
   </div>
-  <p class="dominion-snapshot__notice">This is deployment evidence, not live business telemetry. Current operational claims still require timestamped runtime evidence.</p>
+  <p class="dominion-snapshot__notice">These are operating contracts, not live business telemetry. Current production state requires timestamped runtime receipts.</p>
 </section>
 
 <div class="dominion-section-title">
-  <div>
-    <span class="dominion-kicker">EXECUTIVE CONTROL</span>
-    <h2>Command Deck</h2>
-  </div>
+  <div><span class="dominion-kicker">EXECUTIVE CONTROL</span><h2>Command Deck</h2></div>
   <span class="dominion-section-title__line" aria-hidden="true"></span>
 </div>
 
 <nav class="dominion-card-grid dominion-card-grid--executive" aria-label="Executive controls">
+  <a class="internal-link dominion-card dominion-card--featured dominion-card--active" data-href="Dominion-Command-Center/16-Production-Matrix" href="Dominion-Command-Center/16-Production-Matrix">
+    <span class="dominion-card__top"><span class="dominion-card__index">01</span><span class="dominion-pill dominion-pill--gold dominion-pill--live">PRODUCTION</span></span>
+    <span class="dominion-card__icon" aria-hidden="true">◆</span>
+    <strong>Production Matrix</strong>
+    <span>The cockpit: primary money wave, all-lane productivity, Founder holds, production receipts, blockers, and next actions.</span>
+    <div class="dominion-flow" aria-hidden="true"></div>
+    <span class="dominion-card__action">Enter production control <span aria-hidden="true">→</span></span>
+  </a>
   <a class="internal-link dominion-card dominion-card--featured" data-href="Dominion-Command-Center/15-Founder-Oversight" href="Dominion-Command-Center/15-Founder-Oversight">
-    <span class="dominion-card__top"><span class="dominion-card__index">01</span><span class="dominion-pill dominion-pill--gold">FOUNDER</span></span>
+    <span class="dominion-card__top"><span class="dominion-card__index">02</span><span class="dominion-pill dominion-pill--gold">FOUNDER</span></span>
     <span class="dominion-card__icon" aria-hidden="true">◈</span>
     <strong>Founder Oversight</strong>
     <span>Approvals, protected holds, evidence gates, and final human authority.</span>
     <span class="dominion-card__action">Open control surface <span aria-hidden="true">→</span></span>
   </a>
   <a class="internal-link dominion-card" data-href="Dominion-Command-Center/14-Daily-State" href="Dominion-Command-Center/14-Daily-State">
-    <span class="dominion-card__top"><span class="dominion-card__index">02</span><span class="dominion-pill dominion-pill--green">NOW</span></span>
+    <span class="dominion-card__top"><span class="dominion-card__index">03</span><span class="dominion-pill dominion-pill--green">NOW</span></span>
     <span class="dominion-card__icon" aria-hidden="true">◎</span>
     <strong>Daily State</strong>
     <span>Current priorities, verified state, blockers, and the next exact action.</span>
     <span class="dominion-card__action">Review today <span aria-hidden="true">→</span></span>
   </a>
   <a class="internal-link dominion-card" data-href="Dominion-Command-Center/09-Revenue" href="Dominion-Command-Center/09-Revenue">
-    <span class="dominion-card__top"><span class="dominion-card__index">03</span><span class="dominion-pill dominion-pill--gold">GROWTH</span></span>
+    <span class="dominion-card__top"><span class="dominion-card__index">04</span><span class="dominion-pill dominion-pill--gold">GROWTH</span></span>
     <span class="dominion-card__icon" aria-hidden="true">↗</span>
     <strong>Revenue</strong>
     <span>Demand, conversion, paid revenue, fulfillment, retention, and learning.</span>
     <span class="dominion-card__action">Open revenue lane <span aria-hidden="true">→</span></span>
   </a>
   <a class="internal-link dominion-card" data-href="Dominion-Command-Center/06-Operations" href="Dominion-Command-Center/06-Operations">
-    <span class="dominion-card__top"><span class="dominion-card__index">04</span><span class="dominion-pill">EXECUTION</span></span>
+    <span class="dominion-card__top"><span class="dominion-card__index">05</span><span class="dominion-pill">EXECUTION</span></span>
     <span class="dominion-card__icon" aria-hidden="true">◇</span>
     <strong>Operations</strong>
     <span>Assigned work, verified outcomes, handoffs, service state, and restoration.</span>
@@ -95,33 +88,19 @@ aliases:
 </nav>
 
 <div class="dominion-section-title">
-  <div>
-    <span class="dominion-kicker">TRUTH · AUTHORITY · DEFENSE</span>
-    <h2>Control & Intelligence</h2>
-  </div>
+  <div><span class="dominion-kicker">TRUTH · AUTHORITY · DEFENSE</span><h2>Control & Intelligence</h2></div>
   <span class="dominion-section-title__line" aria-hidden="true"></span>
 </div>
 
 <nav class="dominion-card-grid" aria-label="Control and intelligence">
-  <a class="internal-link dominion-card dominion-card--compact" data-href="Dominion-Command-Center/04-Agents" href="Dominion-Command-Center/04-Agents">
-    <span class="dominion-card__icon" aria-hidden="true">⌬</span><strong>Agents</strong><span>Team, duties, dependencies, and authority.</span>
-  </a>
-  <a class="internal-link dominion-card dominion-card--compact" data-href="Dominion-Command-Center/03-Control-Plane" href="Dominion-Command-Center/03-Control-Plane">
-    <span class="dominion-card__icon" aria-hidden="true">⌘</span><strong>Control Plane</strong><span>Authorization, delegation, verification, escalation.</span>
-  </a>
-  <a class="internal-link dominion-card dominion-card--compact" data-href="Dominion-Command-Center/08-Evidence" href="Dominion-Command-Center/08-Evidence">
-    <span class="dominion-card__icon" aria-hidden="true">◆</span><strong>Evidence</strong><span>Sources, timestamps, truth states, and proof.</span>
-  </a>
-  <a class="internal-link dominion-card dominion-card--compact dominion-card--alert" data-href="Dominion-Command-Center/07-Incidents" href="Dominion-Command-Center/07-Incidents">
-    <span class="dominion-card__icon" aria-hidden="true">△</span><strong>Incidents</strong><span>Containment, root cause, repair, and learning.</span>
-  </a>
+  <a class="internal-link dominion-card dominion-card--compact" data-href="Dominion-Command-Center/04-Agents" href="Dominion-Command-Center/04-Agents"><span class="dominion-card__icon" aria-hidden="true">⌬</span><strong>Agents</strong><span>Team, duties, dependencies, and authority.</span></a>
+  <a class="internal-link dominion-card dominion-card--compact" data-href="Dominion-Command-Center/03-Control-Plane" href="Dominion-Command-Center/03-Control-Plane"><span class="dominion-card__icon" aria-hidden="true">⌘</span><strong>Control Plane</strong><span>Authorization, delegation, verification, escalation.</span></a>
+  <a class="internal-link dominion-card dominion-card--compact" data-href="Dominion-Command-Center/08-Evidence" href="Dominion-Command-Center/08-Evidence"><span class="dominion-card__icon" aria-hidden="true">◆</span><strong>Evidence</strong><span>Sources, timestamps, truth states, and proof.</span></a>
+  <a class="internal-link dominion-card dominion-card--compact dominion-card--alert" data-href="Dominion-Command-Center/07-Incidents" href="Dominion-Command-Center/07-Incidents"><span class="dominion-card__icon" aria-hidden="true">△</span><strong>Incidents</strong><span>Containment, root cause, repair, and learning.</span></a>
 </nav>
 
 <div class="dominion-section-title">
-  <div>
-    <span class="dominion-kicker">SYSTEM MEMORY</span>
-    <h2>Knowledge & Resilience</h2>
-  </div>
+  <div><span class="dominion-kicker">SYSTEM MEMORY</span><h2>Knowledge & Resilience</h2></div>
   <span class="dominion-section-title__line" aria-hidden="true"></span>
 </div>
 
@@ -135,15 +114,12 @@ aliases:
 
 <section class="dominion-boundary">
   <div class="dominion-boundary__mark" aria-hidden="true">!</div>
-  <div>
-    <span class="dominion-kicker">TRUTH BOUNDARY</span>
-    <p><strong>GitHub</strong> governs policy and code. <strong>Foundation VM</strong> proves live runtime. <strong>Obsidian</strong> preserves operational context. This surface grants no authority and invents no status.</p>
-  </div>
+  <div><span class="dominion-kicker">TRUTH BOUNDARY</span><p><strong>GitHub</strong> governs policy and code. <strong>Foundation VM</strong> proves live runtime. <strong>Obsidian</strong> preserves operational context. Motion and design communicate hierarchy; they do not invent status or grant authority.</p></div>
 </section>
 
 <nav class="dominion-mobile-dock" aria-label="Mobile quick navigation">
   <a class="internal-link" data-href="Dominion-Command-Center/00-HOME" href="Dominion-Command-Center/00-HOME"><span aria-hidden="true">⌂</span><small>Home</small></a>
-  <a class="internal-link" data-href="Dominion-Command-Center/14-Daily-State" href="Dominion-Command-Center/14-Daily-State"><span aria-hidden="true">◎</span><small>Today</small></a>
+  <a class="internal-link" data-href="Dominion-Command-Center/16-Production-Matrix" href="Dominion-Command-Center/16-Production-Matrix"><span aria-hidden="true">◆</span><small>Produce</small></a>
   <a class="internal-link" data-href="Dominion-Command-Center/09-Revenue" href="Dominion-Command-Center/09-Revenue"><span aria-hidden="true">↗</span><small>Revenue</small></a>
   <a class="internal-link" data-href="Dominion-Command-Center/15-Founder-Oversight" href="Dominion-Command-Center/15-Founder-Oversight"><span aria-hidden="true">◈</span><small>Founder</small></a>
 </nav>

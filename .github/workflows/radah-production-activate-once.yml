@@ -38,8 +38,8 @@ jobs:
           bash -n scripts/autopilot/disable_autopilot.sh
           python -m unittest tests.test_radah_autopilot -v
           python scripts/validate_buddy_authority_policy.py governance/buddy/buddy_authority_policy.json --root .
-          grep -Fq 'dominion_env' scripts/autopilot/install_autopilot.sh
           ! grep -Fq 'ExecStart=/usr/bin/python3' scripts/autopilot/install_autopilot.sh
+          grep -Fq 'systemctl show dominion-buddy-web.service -p ExecStart' scripts/autopilot/install_autopilot.sh
           echo "RADAH_RUNTIME_FIX_CONTRACT=PASS sha=$RELEASE_SHA"
 
       - name: Require protected production access

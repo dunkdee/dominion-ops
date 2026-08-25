@@ -10,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "autopilot" / "lane_supervisor.py"
+INSTALLER_PATH = ROOT / "scripts" / "autopilot" / "install_autopilot.sh"
 spec = importlib.util.spec_from_file_location("lane_supervisor", MODULE_PATH)
 assert spec and spec.loader
 lane_supervisor = importlib.util.module_from_spec(spec)
@@ -160,6 +161,14 @@ class RadahAutopilotTests(unittest.TestCase):
             self.assertEqual(saved["cycles"], 1)
             self.assertEqual(saved["lanes"][lane.lane_id]["last_status"], "BLOCKED")
             self.assertEqual(saved["lanes"][lane.lane_id]["last_attempt_at"], now.isoformat())
+
+    def test_installer_reuses_proven_buddy_python_runtime(self):
+        installer = INSTALLER_PATH.read_text(encoding="utf-8")
+        self.assertIn("systemctl show dominion-buddy-web.service -p ExecStart --value", installer)
+        self.assertIn("BUDDY_RUNTIME_IMPORT=PASS", installer)
+        self.assertIn("ExecStart=$buddy_python", installer)
+        self.assertNotIn("ExecStart=/usr/bin/python3", installer)
+        self.assertIn("ConditionPathExists=$buddy_python", installer)
 
 
 if __name__ == "__main__":

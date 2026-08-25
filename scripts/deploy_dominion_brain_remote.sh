@@ -91,7 +91,8 @@ OBSIDIAN_PASSWORD="$OBSIDIAN_PASSWORD" docker compose up -d --no-deps obsidian-r
 ready=0
 for _ in $(seq 1 40); do
   state="$(docker inspect --format '{{.State.Status}}' obsidian-remote 2>/dev/null || true)"
-  if [ "$state" = "running" ] && curl -fsS --max-time 10 http://127.0.0.1:8083/ >/dev/null; then ready=1; break; fi
+  code="$(curl -sS -u "dominion:$OBSIDIAN_PASSWORD" -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8083/ || true)"
+  if [ "$state" = "running" ] && [[ "$code" =~ ^(200|302)$ ]]; then ready=1; break; fi
   sleep 3
 done
 test "$ready" -eq 1 || { echo "BRAIN_DEPLOY=FAIL reason=obsidian_local_unhealthy"; false; }

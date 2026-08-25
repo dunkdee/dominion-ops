@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import os
+import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -13,6 +13,7 @@ MODULE_PATH = ROOT / "scripts" / "autopilot" / "lane_supervisor.py"
 spec = importlib.util.spec_from_file_location("lane_supervisor", MODULE_PATH)
 assert spec and spec.loader
 lane_supervisor = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = lane_supervisor
 spec.loader.exec_module(lane_supervisor)
 
 
@@ -133,6 +134,32 @@ class RadahAutopilotTests(unittest.TestCase):
             self.assertFalse(receipt["external_actions_authorized"])
             self.assertFalse((root / "state.json").exists())
             self.assertFalse((root / "receipts").exists())
+
+    def test_blocked_receipt_updates_rotation_state(self):
+        lanes = lane_supervisor.validate_policy(self.policy, self.verticals)
+        lane = lanes[0]
+        now = datetime.now(timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            state = {"schema": "radah-autopilot-state-v1", "lanes": {}, "cycles": 0}
+            receipt = {
+                "schema": "radah-autopilot-receipt-v1",
+                "lane": lane.lane_id,
+                "status": "BLOCKED",
+                "mission_id": None,
+                "external_actions_authorized": False,
+            }
+            lane_supervisor.persist_cycle(
+                state_dir=state_dir,
+                state=state,
+                lane=lane,
+                receipt=receipt,
+                now=now,
+            )
+            saved = lane_supervisor.load_state(state_dir / "state.json")
+            self.assertEqual(saved["cycles"], 1)
+            self.assertEqual(saved["lanes"][lane.lane_id]["last_status"], "BLOCKED")
+            self.assertEqual(saved["lanes"][lane.lane_id]["last_attempt_at"], now.isoformat())
 
 
 if __name__ == "__main__":

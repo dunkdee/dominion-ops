@@ -263,3 +263,16 @@ def test_legacy_setup_vault_is_non_mutating(tmp_path):
     assert result.returncode == 2
     assert "LEGACY_VAULT_SETUP=RETIRED mutation=none" in result.stdout
     assert not vault.exists()
+
+
+def test_remote_publish_health_probe_authenticates_loopback():
+    script = (ROOT / "scripts" / "deploy_dominion_brain_remote.sh").read_text(
+        encoding="utf-8"
+    )
+    assert '-u "dominion:$OBSIDIAN_PASSWORD"' in script
+    assert "http://127.0.0.1:8083/" in script
+    assert '[[ "$code" =~ ^(200|302)$ ]]' in script
+    assert (
+        "curl -fsS --max-time 10 http://127.0.0.1:8083/ >/dev/null"
+        not in script
+    )

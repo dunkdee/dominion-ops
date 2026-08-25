@@ -237,8 +237,12 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(decision_receipt("invent_new_power").decision, ActionDecision.BLOCKED)
 
     def test_analysis_action_is_simulation_only(self):
-        receipt = decision_receipt("rank_opportunities")
+        receipt = decision_receipt("analyze_funnel")
         self.assertEqual(receipt.decision, ActionDecision.SIMULATION_ONLY)
+
+    def test_internal_capability_names_do_not_expand_registry_authority(self):
+        for action in ("rank_opportunities", "build_site_plan", "review_content", "propose_learning_change"):
+            self.assertEqual(decision_receipt(action).decision, ActionDecision.BLOCKED)
 
 
 class StaticHardeningTests(unittest.TestCase):

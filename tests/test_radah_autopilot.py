@@ -132,9 +132,37 @@ class RadahAutopilotTests(unittest.TestCase):
             root = Path(tmp)
             receipt = lane_supervisor.run_cycle(execute=False, state_dir=root)
             self.assertEqual(receipt["status"], "PLANNED")
+            self.assertTrue(lane_supervisor.bounded_cycle_ok(receipt))
             self.assertFalse(receipt["external_actions_authorized"])
             self.assertFalse((root / "state.json").exists())
             self.assertFalse((root / "receipts").exists())
+
+    def test_governed_blocked_cycle_is_healthy_scheduler_progress(self):
+        receipt = {
+            "schema": "radah-autopilot-receipt-v1",
+            "lane": "analytics_services",
+            "status": "BLOCKED",
+            "mission_id": "mission_test",
+            "external_actions_authorized": False,
+            "receipts": [{
+                "capability": "revenue.prepare",
+                "status": "BLOCKED",
+                "hold_code": "CURRENT_AUTHORITY_UNAVAILABLE",
+            }],
+        }
+        self.assertTrue(lane_supervisor.bounded_cycle_ok(receipt))
+
+    def test_supervisor_failure_cannot_masquerade_as_healthy_blocker(self):
+        receipt = {
+            "schema": "radah-autopilot-receipt-v1",
+            "lane": "analytics_services",
+            "status": "BLOCKED",
+            "mission_id": None,
+            "external_actions_authorized": False,
+            "receipts": [],
+            "supervisor_error": {"type": "ImportError", "detail": "missing runtime"},
+        }
+        self.assertFalse(lane_supervisor.bounded_cycle_ok(receipt))
 
     def test_blocked_receipt_updates_rotation_state(self):
         lanes = lane_supervisor.validate_policy(self.policy, self.verticals)
@@ -147,8 +175,9 @@ class RadahAutopilotTests(unittest.TestCase):
                 "schema": "radah-autopilot-receipt-v1",
                 "lane": lane.lane_id,
                 "status": "BLOCKED",
-                "mission_id": None,
+                "mission_id": "mission_blocked",
                 "external_actions_authorized": False,
+                "receipts": [{"capability": "revenue.prepare", "status": "BLOCKED"}],
             }
             lane_supervisor.persist_cycle(
                 state_dir=state_dir,
@@ -161,6 +190,7 @@ class RadahAutopilotTests(unittest.TestCase):
             self.assertEqual(saved["cycles"], 1)
             self.assertEqual(saved["lanes"][lane.lane_id]["last_status"], "BLOCKED")
             self.assertEqual(saved["lanes"][lane.lane_id]["last_attempt_at"], now.isoformat())
+            self.assertEqual(saved["lanes"][lane.lane_id]["last_progress_at"], now.isoformat())
 
     def test_installer_reuses_proven_buddy_python_runtime(self):
         installer = INSTALLER_PATH.read_text(encoding="utf-8")
@@ -169,6 +199,16 @@ class RadahAutopilotTests(unittest.TestCase):
         self.assertIn("ExecStart=$buddy_python", installer)
         self.assertNotIn("ExecStart=/usr/bin/python3", installer)
         self.assertIn("ConditionPathExists=$buddy_python", installer)
+
+    def test_installer_proves_governed_blocker_rotation_before_timer(self):
+        installer = INSTALLER_PATH.read_text(encoding="utf-8")
+        self.assertIn("AUTOPILOT_FIRST_CYCLE=PASS", installer)
+        self.assertIn("AUTOPILOT_BLOCKED_ROTATION=PASS", installer)
+        self.assertIn("if [ \"$first_status\" = \"BLOCKED\" ]", installer)
+        self.assertIn("assert not p.get('supervisor_error')", installer)
+        self.assertIn("assert p.get('mission_id')", installer)
+        self.assertIn("assert not not_lane or lane != not_lane", installer)
+        self.assertIn("AUTOPILOT_TIMER=PASS cadence=30m", installer)
 
 
 if __name__ == "__main__":

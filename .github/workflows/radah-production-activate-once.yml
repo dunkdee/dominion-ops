@@ -1,4 +1,4 @@
-name: RADAH MEMSHALAH Autopilot Diagnostic Once
+name: RADAH MEMSHALAH Buddy Runtime Diagnostic Once
 
 on:
   push:
@@ -37,7 +37,7 @@ jobs:
           ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Read preserved first-start evidence only
+      - name: Identify proven Buddy interpreter and missing import
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -47,19 +47,46 @@ jobs:
             -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
           set -u
-          echo '=== HOST ==='
-          id
-          python3 --version 2>&1 || true
-          echo '=== BUDDY SOURCE ==='
-          test -f "$HOME/buddy_core/core/operator.py" && echo 'BUDDY_OPERATOR=PASS' || echo 'BUDDY_OPERATOR=FAIL'
-          test -d "$HOME/.dominion" && echo 'DOMINION_STATE_ROOT=PASS' || echo 'DOMINION_STATE_ROOT=FAIL'
-          echo '=== AUTOPILOT POST-ROLLBACK STATE ==='
-          systemctl is-active dominion-radah-autopilot.service 2>/dev/null || true
-          systemctl is-active dominion-radah-autopilot.timer 2>/dev/null || true
-          systemctl is-enabled dominion-radah-autopilot.timer 2>/dev/null || true
-          find "$HOME/.dominion/autopilot" -maxdepth 3 -type f -printf '%p %s bytes\n' 2>/dev/null | sed "s#$HOME#~#g" | head -80 || true
-          echo '=== FIRST-START JOURNAL ==='
-          sudo journalctl -u dominion-radah-autopilot.service --since '2026-08-25 18:29:45 UTC' --until '2026-08-25 18:30:15 UTC' --no-pager -n 160 2>&1 || true
+          echo '=== BUDDY SERVICE UNIT ==='
+          sudo systemctl show dominion-buddy-web.service -p ExecStart -p User -p WorkingDirectory --no-pager 2>&1 | sed -E 's/(Environment(File)?=).*/\1[redacted]/' || true
+          echo '=== BUDDY RUNNING INTERPRETER ==='
+          buddy_pid="$(systemctl show dominion-buddy-web.service -p MainPID --value 2>/dev/null || true)"
+          echo "BUDDY_PID_PRESENT=$([ -n "$buddy_pid" ] && [ "$buddy_pid" != 0 ] && echo yes || echo no)"
+          if [ -n "$buddy_pid" ] && [ "$buddy_pid" != 0 ]; then
+            readlink -f "/proc/$buddy_pid/exe" 2>/dev/null | sed "s#$HOME#~#g" || true
+            tr '\0' ' ' < "/proc/$buddy_pid/cmdline" 2>/dev/null | sed "s#$HOME#~#g" || true
+            echo
+          fi
+          echo '=== SYSTEM PYTHON IMPORT ==='
+          /usr/bin/python3 - <<'PY'
+          import sys, traceback
+          from pathlib import Path
+          root = Path.home() / 'buddy_core'
+          sys.path.insert(0, str(root))
+          try:
+              import core.operator
+              print('SYSTEM_PYTHON_OPERATOR_IMPORT=PASS')
+          except Exception as exc:
+              print(f'SYSTEM_PYTHON_OPERATOR_IMPORT=FAIL type={type(exc).__name__} detail={exc}')
+              traceback.print_exc(limit=8)
+          PY
+          echo '=== CANDIDATE PYTHONS ==='
+          for py in "$HOME/buddy_core/.venv/bin/python" "$HOME/buddy_core/venv/bin/python" "$HOME/.venv/bin/python" "$HOME/venv/bin/python"; do
+            if [ -x "$py" ]; then
+              echo "CANDIDATE=$(printf '%s' "$py" | sed "s#$HOME#~#g")"
+              "$py" - <<'PY'
+          import sys
+          from pathlib import Path
+          root = Path.home() / 'buddy_core'
+          sys.path.insert(0, str(root))
+          try:
+              import core.operator
+              print('OPERATOR_IMPORT=PASS')
+          except Exception as exc:
+              print(f'OPERATOR_IMPORT=FAIL type={type(exc).__name__} detail={exc}')
+          PY
+            fi
+          done
           echo '=== END DIAGNOSTIC ==='
           REMOTE
 

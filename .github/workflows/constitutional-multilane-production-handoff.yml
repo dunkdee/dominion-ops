@@ -85,15 +85,28 @@ jobs:
           set -Eeuo pipefail
           repo="$HOME/dominion-ops"
           service="dominion-radah-autopilot.service"
+          release_root="/tmp/dominion-constitutional-release-${RUN_ID}"
+
+          cleanup_release() {
+            set +e
+            if [ -d "$release_root" ]; then
+              git -C "$repo" worktree remove --force "$release_root" >/dev/null 2>&1 || rm -rf "$release_root"
+            fi
+            git -C "$repo" worktree prune >/dev/null 2>&1 || true
+          }
+          trap cleanup_release EXIT
+
           test -d "$repo/.git"
-          cd "$repo"
-          git fetch origin main
-          git checkout main
-          git pull --ff-only origin main
-          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git -C "$repo" fetch origin main
+          git -C "$repo" cat-file -e "${RELEASE_SHA}^{commit}"
+          git -C "$repo" merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          rm -rf "$release_root"
+          git -C "$repo" worktree add --detach "$release_root" "$RELEASE_SHA"
+          test "$(git -C "$release_root" rev-parse HEAD)" = "$RELEASE_SHA"
+          echo "IMMUTABLE_RELEASE_WORKTREE=PASS sha=$RELEASE_SHA current_main=$(git -C "$repo" rev-parse origin/main)"
 
           base_rc=0
-          ASSET_ROOT="$repo" RUN_ID="${RUN_ID}-base" bash scripts/autopilot/install_autopilot.sh || base_rc=$?
+          ASSET_ROOT="$release_root" RUN_ID="${RUN_ID}-base" bash "$release_root/scripts/autopilot/install_autopilot.sh" || base_rc=$?
           if [ "$base_rc" -ne 0 ]; then
             echo "RADAH_BASE_INSTALL=FAILED rc=$base_rc"
             echo '--- systemd status ---'
@@ -121,7 +134,7 @@ jobs:
             exit "$base_rc"
           fi
 
-          ASSET_ROOT="$repo" RUN_ID="${RUN_ID}-multilane" bash scripts/autopilot/install_revenue_workplane.sh
+          ASSET_ROOT="$release_root" RUN_ID="${RUN_ID}-multilane" bash "$release_root/scripts/autopilot/install_revenue_workplane.sh"
 
           sudo systemctl reset-failed "$service" >/dev/null 2>&1 || true
           sudo systemctl start "$service"
@@ -184,6 +197,7 @@ jobs:
           {
             echo '## Dominion Constitutional Multi-Lane Runtime'
             echo '- exact main SHA: `${{ env.RELEASE_SHA }}`'
+            echo '- immutable release worktree: required'
             echo '- Constitution/default-deny/Five Council: enforced at runtime'
             echo '- registered runtime contracts: 11'
             echo '- economic profitability contracts: 8'

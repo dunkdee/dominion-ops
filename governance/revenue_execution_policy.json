@@ -24,6 +24,7 @@
   },
   "traffic": {
     "max_treatment_percent": 50,
+    "allowed_target_hosts": ["www.voltedgegoods.com", "voltedgegoods.com"],
     "cookie_name": "dominion_vid",
     "cookie_days": 30,
     "collect_pii": false

@@ -29,7 +29,8 @@ chmod 700 "$backup_root"
 for rel in \
   scripts/autopilot/revenue_workplane_supervisor.py \
   governance/radah_memshalah_autopilot_policy.json \
-  governance/revenue_workplane.json; do
+  governance/revenue_workplane.json \
+  governance/lane_access_policy.json; do
   if [ -f "$runtime_root/$rel" ]; then
     mkdir -p "$backup_root/$(dirname "$rel")"
     cp -a "$runtime_root/$rel" "$backup_root/$rel"
@@ -49,7 +50,8 @@ rollback() {
   for rel in \
     scripts/autopilot/revenue_workplane_supervisor.py \
     governance/radah_memshalah_autopilot_policy.json \
-    governance/revenue_workplane.json; do
+    governance/revenue_workplane.json \
+    governance/lane_access_policy.json; do
     if [ -f "$backup_root/$rel" ]; then
       mkdir -p "$runtime_root/$(dirname "$rel")"
       cp -a "$backup_root/$rel" "$runtime_root/$rel"
@@ -71,8 +73,16 @@ trap rollback ERR INT TERM EXIT
 install -m 700 "$asset_root/scripts/autopilot/revenue_workplane_supervisor.py" "$runtime_root/scripts/autopilot/revenue_workplane_supervisor.py"
 install -m 600 "$asset_root/governance/radah_memshalah_autopilot_policy.json" "$runtime_root/governance/radah_memshalah_autopilot_policy.json"
 install -m 600 "$asset_root/governance/revenue_workplane.json" "$runtime_root/governance/revenue_workplane.json"
+install -m 600 "$asset_root/governance/lane_access_policy.json" "$runtime_root/governance/lane_access_policy.json"
 
 "$buddy_python" -m py_compile "$runtime_root/scripts/autopilot/revenue_workplane_supervisor.py"
+
+access="$(cd "$runtime_root/scripts/autopilot" && "$buddy_python" revenue_workplane_supervisor.py --inspect-lane-access)"
+printf '%s\n' "$access"
+printf '%s' "$access" | grep -q '"LANE_ACCESS": "PASS"'
+printf '%s' "$access" | grep -q '"registered": 11'
+printf '%s' "$access" | grep -q '"open": 11'
+printf '%s' "$access" | grep -q '"all_registered_lanes_internal_open": true'
 
 snapshot="$(cd "$runtime_root/scripts/autopilot" && "$buddy_python" revenue_workplane_supervisor.py --inspect-workplane)"
 printf '%s\n' "$snapshot"
@@ -94,18 +104,28 @@ sudo systemctl daemon-reload
 resolved="$(systemctl show "$service" -p ExecStart --value)"
 printf '%s\n' "$resolved" | grep -q 'revenue_workplane_supervisor.py'
 
-# Prove the revenue lane can consume current work-plane evidence without mutation.
-plan="$(cd "$runtime_root/scripts/autopilot" && RADAH_AUTOPILOT_ENABLED=0 "$buddy_python" revenue_workplane_supervisor.py --plan-only --lane commerce_fulfillment --state-dir "$state_root")"
-printf '%s\n' "$plan"
-printf '%s' "$plan" | grep -q '"lane": "commerce_fulfillment"'
-printf '%s' "$plan" | grep -q '"revenue_workplane"'
-printf '%s' "$plan" | grep -q '"experiment_id": "voltedge-speaker-offer-v1"'
-printf '%s' "$plan" | grep -q 'RADAH_AUTOPILOT=PLANNED lane=commerce_fulfillment bounded_cycle=true'
+# Prove all 11 registered lanes remain schedulable for internal work.
+for lane in \
+  commerce_fulfillment kdp_publishing analytics_services digital_products \
+  services_lead_generation content_traffic surplus trading \
+  intelligence_orchestration governance_legal infrastructure; do
+  plan="$(cd "$runtime_root/scripts/autopilot" && RADAH_AUTOPILOT_ENABLED=0 "$buddy_python" revenue_workplane_supervisor.py --plan-only --lane "$lane" --state-dir "$state_root")"
+  printf '%s' "$plan" | grep -q "\"lane\": \"$lane\""
+  printf '%s' "$plan" | grep -q '"lane_internal_open": true'
+  printf '%s' "$plan" | grep -q '"all_registered_lanes_internal_open": true'
+  printf '%s' "$plan" | grep -q "RADAH_AUTOPILOT=PLANNED lane=$lane bounded_cycle=true"
+done
+
+# Revenue-bound lane must also receive current runtime evidence.
+commerce="$(cd "$runtime_root/scripts/autopilot" && RADAH_AUTOPILOT_ENABLED=0 "$buddy_python" revenue_workplane_supervisor.py --plan-only --lane commerce_fulfillment --state-dir "$state_root")"
+printf '%s' "$commerce" | grep -q '"revenue_workplane"'
+printf '%s' "$commerce" | grep -q '"experiment_id": "voltedge-speaker-offer-v1"'
 
 # Existing recurring supervisor remains armed; no unrelated service restart.
 test "$(systemctl is-active "$timer")" = active
 test "$(systemctl is-enabled "$timer")" = enabled
 
+echo 'RADAH_ALL_LANES=OPEN count=11 internal=true scheduler_eligible=true'
 echo 'REVENUE_WORKPLANE=BOUND lane=commerce_fulfillment support=content_traffic,intelligence_orchestration,infrastructure'
 echo 'REVENUE_WORKPLANE_RUNTIME=PASS service=dominion-revenue-runtime.service evaluator=10m'
 echo 'REVENUE_WORKPLANE_AUTOPILOT=PASS cadence=30m'

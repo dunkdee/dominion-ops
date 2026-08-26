@@ -1,0 +1,67 @@
+{
+  "schema": "dominion-revenue-workplane-v1",
+  "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+  "status": "LIVE_CANARY",
+  "primary_lane": "commerce_fulfillment",
+  "supporting_lanes": [
+    "content_traffic",
+    "intelligence_orchestration",
+    "infrastructure"
+  ],
+  "runtime": {
+    "service": "dominion-revenue-runtime.service",
+    "evaluator_timer": "dominion-revenue-evaluator.timer",
+    "evaluator_cadence_minutes": 10,
+    "loopback_port": 8790,
+    "public_offer_prefix": "https://dominionhealing.org/r/",
+    "event_endpoint": "https://dominionhealing.org/revenue/events",
+    "execution_policy": "governance/revenue_execution_policy.json",
+    "database": "~/.dominion/revenue-runtime/revenue.db"
+  },
+  "active_experiment": {
+    "id": "voltedge-speaker-offer-v1",
+    "product_id": "09ecaf7f-9054-48d4-a7c6-9071b872cbd1",
+    "route": "https://dominionhealing.org/r/voltedge-speaker-offer-v1",
+    "success_event": "purchase",
+    "traffic_split": "deterministic_50_50",
+    "auto_promote": true,
+    "automatic_price_change": false,
+    "automatic_paid_spend": false,
+    "synthetic_traffic_at_activation": 0,
+    "activation_evidence": {
+      "workflow_run_id": 32929081710,
+      "wix_revision_at_activation": "10",
+      "public_route_verified": true
+    }
+  },
+  "funnel": [
+    "qualified_traffic",
+    "experiment_impression",
+    "offer_click",
+    "voltedge_product_view",
+    "checkout",
+    "paid_purchase",
+    "revenue_attribution",
+    "statistical_evaluation",
+    "reversible_winner_promotion",
+    "next_experiment"
+  ],
+  "work_rules": {
+    "truth_before_optimization": true,
+    "never_fabricate_metrics": true,
+    "traffic_zero_action": "produce and route qualified organic traffic package to active experiment",
+    "impressions_without_clicks_action": "improve offer hook CTA and message match",
+    "clicks_without_purchases_action": "diagnose product checkout trust and offer friction",
+    "purchases_action": "reconcile attribution accumulate statistical evidence and protect revenue per visitor",
+    "winner_action": "allow revenue runtime to promote only within execution policy",
+    "failed_variant_action": "retain control and prepare next evidence-backed treatment"
+  },
+  "founder_held": [
+    "paid_spend",
+    "price_change",
+    "inventory_change",
+    "provider_change",
+    "destructive_change",
+    "legal_or_compliance_sensitive_claim"
+  ]
+}

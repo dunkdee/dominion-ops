@@ -48,7 +48,7 @@ jobs:
           test -s apps/command-center/Dockerfile
           test -s docker-compose.command-center.yml
           test -s governance/lane_access_policy.json
-          test "$(grep -Fc '"'"'"internal_work_open"'"'": true' governance/lane_access_policy.json)" -eq 11
+          python -c 'import json; d=json.load(open("governance/lane_access_policy.json")); assert len(d["lanes"]) == 11 and all(v["internal_work_open"] and v["scheduler_eligible"] for v in d["lanes"].values())'
           test -s obsidian/00-DOMINION-COMMAND-CENTER.md
           test -s obsidian/dominion.css
           test -s obsidian/command-center/00-HOME.md

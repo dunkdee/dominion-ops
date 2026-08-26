@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   dominion-command-center:
     build: ./apps/command-center
@@ -9,23 +7,19 @@ services:
     volumes:
       - ${VAULT_PATH:-/home/malachisingleton8/vault}:/vault:ro
       - ${COMMAND_CENTER_MEMORY_PATH:-/home/malachisingleton8/dominion-memory}:/data/memory
+      - ${COMMAND_CENTER_RUNTIME_DIR:-/home/malachisingleton8/.dominion/command-center}:/runtime:ro
       - ./governance/lane_access_policy.json:/governance/lane_access_policy.json:ro
     restart: unless-stopped
     environment:
       VAULT_PATH: /vault
       MEMORY_PATH: /data/memory
+      RUNTIME_STATE_PATH: /runtime/runtime-state.json
       LANE_POLICY_PATH: /governance/lane_access_policy.json
       NEMOTRON_BASE_URL: ${NEMOTRON_BASE_URL:-}
       NEMOTRON_MODEL: ${NEMOTRON_MODEL:-nemotron-3}
       NEMOTRON_API_KEY: ${NEMOTRON_API_KEY:-}
       CONDUCTOR_URL: ${CONDUCTOR_URL:-http://host.docker.internal:5060}
       INTELLIGENCE_TIMEOUT_SECONDS: ${INTELLIGENCE_TIMEOUT_SECONDS:-60}
-      CHECKOUT_ART_OF_TRUE_HEALING: ${CHECKOUT_ART_OF_TRUE_HEALING:-}
-      DELIVERY_ART_OF_TRUE_HEALING: ${DELIVERY_ART_OF_TRUE_HEALING:-}
-      CHECKOUT_CREDIT_DISPUTE_TOOLKIT: ${CHECKOUT_CREDIT_DISPUTE_TOOLKIT:-}
-      DELIVERY_CREDIT_DISPUTE_TOOLKIT: ${DELIVERY_CREDIT_DISPUTE_TOOLKIT:-}
-      CHECKOUT_AI_AUTOMATION_BLUEPRINT: ${CHECKOUT_AI_AUTOMATION_BLUEPRINT:-}
-      DELIVERY_AI_AUTOMATION_BLUEPRINT: ${DELIVERY_AI_AUTOMATION_BLUEPRINT:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

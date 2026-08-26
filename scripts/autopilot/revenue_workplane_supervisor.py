@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""RADAH MEMSHALAH revenue-aware work-plane supervisor.
+"""RADAH MEMSHALAH revenue-aware all-lanes-open production supervisor.
 
-This is a narrow adapter over lane_supervisor. It preserves the existing
-scheduler, Buddy capability validation, persistence, and fail-closed behavior,
-while injecting current Dominion Revenue Runtime evidence into the lanes that
-are explicitly bound to the revenue work plane.
+This adapter preserves the governed scheduler, Buddy capability validation,
+persistence, and fail-closed behavior while injecting current Dominion Revenue
+Runtime evidence into explicitly bound revenue-support lanes.
+
+Lane access and external readiness are separate concepts. Every registered lane
+must be open and scheduler-eligible for bounded internal production. Readiness
+labels such as blocked, draft_only, paper_only, or unverified may still limit
+specific external effects but never remove a lane from internal scheduling.
 """
 from __future__ import annotations
 
@@ -17,6 +21,7 @@ from typing import Any
 import lane_supervisor as base
 
 WORKPLANE_PATH = base.REPO_ROOT / "governance" / "revenue_workplane.json"
+LANE_ACCESS_PATH = base.REPO_ROOT / "governance" / "lane_access_policy.json"
 DEFAULT_REVENUE_DB = Path.home() / ".dominion" / "revenue-runtime" / "revenue.db"
 
 
@@ -29,8 +34,43 @@ def _empty_snapshot(reason: str) -> dict[str, Any]:
     }
 
 
+def validate_all_lanes_open(verticals: dict[str, Any]) -> dict[str, Any]:
+    access = base.load_json(LANE_ACCESS_PATH)
+    if access.get("schema") != "dominion-lane-access-v1":
+        raise base.AutopilotError("unexpected lane access policy schema")
+    if access.get("all_registered_lanes_internal_open") is not True:
+        raise base.AutopilotError("all registered lanes are not declared internal-open")
+    if access.get("readiness_labels_do_not_close_internal_work") is not True:
+        raise base.AutopilotError("readiness/access separation is not enforced")
+
+    rows = verticals.get("verticals") or []
+    registered = {str(row.get("id") or "") for row in rows}
+    registered.discard("")
+    lane_rules = access.get("lanes") or {}
+    if set(lane_rules) != registered:
+        missing = sorted(registered - set(lane_rules))
+        extra = sorted(set(lane_rules) - registered)
+        raise base.AutopilotError(f"lane access mismatch missing={missing} extra={extra}")
+    closed = sorted(
+        lane_id for lane_id, rule in lane_rules.items()
+        if not isinstance(rule, dict)
+        or rule.get("internal_work_open") is not True
+        or rule.get("scheduler_eligible") is not True
+    )
+    if closed:
+        raise base.AutopilotError(f"registered lanes not open/scheduler-eligible: {closed}")
+    return access
+
+
+def _empty_metrics() -> dict[str, dict[str, int]]:
+    return {
+        "control": {"visitors": 0, "clicks": 0, "conversions": 0, "revenue_cents": 0},
+        "treatment": {"visitors": 0, "clicks": 0, "conversions": 0, "revenue_cents": 0},
+    }
+
+
 def load_revenue_snapshot() -> dict[str, Any]:
-    """Read only the non-PII experiment/funnel facts needed by the work plane."""
+    """Read only non-PII experiment/funnel facts required by the work plane."""
     try:
         workplane = base.load_json(WORKPLANE_PATH)
     except Exception as exc:
@@ -45,6 +85,7 @@ def load_revenue_snapshot() -> dict[str, Any]:
     if not db_path.is_file():
         return _empty_snapshot("revenue_db_missing")
 
+    metrics = _empty_metrics()
     try:
         uri = f"file:{db_path}?mode=ro"
         with sqlite3.connect(uri, uri=True, timeout=5) as db:
@@ -57,7 +98,6 @@ def load_revenue_snapshot() -> dict[str, Any]:
             if exp is None:
                 return _empty_snapshot("experiment_not_found")
 
-            metrics: dict[str, dict[str, int]] = {}
             for variant in ("control", "treatment"):
                 visitors = db.execute(
                     "SELECT COUNT(DISTINCT visitor_id) n FROM events WHERE experiment_id=? AND variant=? AND event_type='impression'",
@@ -159,6 +199,7 @@ def select_named_lane(lanes: list[base.Lane], lane_id: str | None, state: dict[s
 def run_cycle(*, execute: bool, state_dir: Path, lane_id: str | None = None) -> dict[str, Any]:
     policy = base.load_json(base.POLICY_PATH)
     verticals = base.load_json(base.VERTICALS_PATH)
+    access = validate_all_lanes_open(verticals)
     lanes = base.validate_policy(policy, verticals)
     now = base.utc_now()
     state = base.load_state(state_dir / "state.json")
@@ -176,6 +217,8 @@ def run_cycle(*, execute: bool, state_dir: Path, lane_id: str | None = None) -> 
         "lane_status": lane.status,
         "lane_mode": lane.mode,
         "lane_group": lane.group,
+        "lane_internal_open": True,
+        "all_registered_lanes_internal_open": bool(access.get("all_registered_lanes_internal_open")),
         "objective": objective,
         "execution_requested": bool(execute),
         "external_actions_authorized": False,
@@ -225,18 +268,34 @@ def run_cycle(*, execute: bool, state_dir: Path, lane_id: str | None = None) -> 
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="RADAH MEMSHALAH revenue-aware production supervisor")
+    parser = argparse.ArgumentParser(description="RADAH MEMSHALAH revenue-aware all-lanes-open production supervisor")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--plan-only", action="store_true")
     parser.add_argument("--state-dir", default=str(base.DEFAULT_STATE_DIR))
     parser.add_argument("--lane", default=None, help="governed acceptance override for one registered lane")
     parser.add_argument("--inspect-workplane", action="store_true")
+    parser.add_argument("--inspect-lane-access", action="store_true")
     args = parser.parse_args()
 
     if args.inspect_workplane:
         snapshot = load_revenue_snapshot()
         print(json.dumps(snapshot, ensure_ascii=False, sort_keys=True))
         return 0 if snapshot.get("available") else 4
+
+    if args.inspect_lane_access:
+        try:
+            verticals = base.load_json(base.VERTICALS_PATH)
+            access = validate_all_lanes_open(verticals)
+        except Exception as exc:
+            print(json.dumps({"LANE_ACCESS": "BLOCKED", "reason": type(exc).__name__}, sort_keys=True))
+            return 4
+        print(json.dumps({
+            "LANE_ACCESS": "PASS",
+            "registered": len(verticals.get("verticals") or []),
+            "open": len(access.get("lanes") or {}),
+            "all_registered_lanes_internal_open": True,
+        }, sort_keys=True))
+        return 0
 
     try:
         receipt = run_cycle(

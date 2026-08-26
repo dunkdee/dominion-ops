@@ -40,7 +40,7 @@ aliases:
     <div class="dominion-metric"><span class="dominion-metric__value dominion-metric__value--text">LIVE</span><span class="dominion-metric__label">VoltEdge revenue experiment runtime</span></div>
     <div class="dominion-metric"><span class="dominion-metric__value dominion-metric__value--text">TRAFFIC</span><span class="dominion-metric__label">Last verified revenue constraint</span></div>
   </div>
-  <p class="dominion-snapshot__notice"><strong>Lane access and external readiness are different facts.</strong> Labels such as draft-only, paper-only, blocked, or unverified restrict specific external effects; they do not close internal work. Last verified revenue baseline after deployment-probe cleanup: 0 real visitors, 0 clicks, 0 paid purchases, $0 attributed revenue → <strong>QUALIFIED_TRAFFIC</strong>.</p>
+  <p class="dominion-snapshot__notice"><strong>Lane access and external readiness are different facts.</strong> Labels such as draft-only, paper-only, blocked, or unverified restrict specific external effects; they do not close internal work. Current production state requires timestamped runtime receipts. Last verified revenue baseline after deployment-probe cleanup: 0 real visitors, 0 clicks, 0 paid purchases, $0 attributed revenue → <strong>QUALIFIED_TRAFFIC</strong>.</p>
 </section>
 
 <div class="dominion-section-title">

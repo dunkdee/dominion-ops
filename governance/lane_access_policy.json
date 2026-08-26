@@ -1,0 +1,36 @@
+{
+  "schema": "dominion-lane-access-v1",
+  "version": "1.0.0",
+  "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+  "purpose": "Keep every registered Dominion lane open for bounded internal production while preserving truthful external-readiness and Founder-held consequence gates.",
+  "all_registered_lanes_internal_open": true,
+  "readiness_labels_do_not_close_internal_work": true,
+  "scheduler_uses_access_policy_not_readiness_status": true,
+  "external_actions_require_explicit_authority": true,
+  "max_lane_gap_hours": 6,
+  "lanes": {
+    "commerce_fulfillment": {"internal_work_open": true, "scheduler_eligible": true},
+    "kdp_publishing": {"internal_work_open": true, "scheduler_eligible": true},
+    "analytics_services": {"internal_work_open": true, "scheduler_eligible": true},
+    "digital_products": {"internal_work_open": true, "scheduler_eligible": true},
+    "services_lead_generation": {"internal_work_open": true, "scheduler_eligible": true},
+    "content_traffic": {"internal_work_open": true, "scheduler_eligible": true},
+    "surplus": {"internal_work_open": true, "scheduler_eligible": true},
+    "trading": {"internal_work_open": true, "scheduler_eligible": true},
+    "intelligence_orchestration": {"internal_work_open": true, "scheduler_eligible": true},
+    "governance_legal": {"internal_work_open": true, "scheduler_eligible": true},
+    "infrastructure": {"internal_work_open": true, "scheduler_eligible": true}
+  },
+  "founder_held_external_classes": [
+    "external_publish",
+    "external_message_or_customer_contact",
+    "paid_spend_or_money_movement",
+    "price_change",
+    "live_trading",
+    "legal_signature_or_filing",
+    "credential_or_secret_change",
+    "public_dns_or_network_change",
+    "destructive_persistent_data_change",
+    "canonical_governance_change"
+  ]
+}

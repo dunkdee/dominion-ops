@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fail-closed constitutional guard for RADAH MEMSHALAH lane execution.
 
-This module does not grant authority. It proves that the runtime copy of the
-constitutional chain, lane registry, lane runtime contracts, and profitability
-contracts are mutually consistent before the scheduler may select work.
+This module grants no authority. It proves that the runtime copy of Dominion's
+constitutional chain and lane contracts are mutually consistent before the
+scheduler may plan or execute work.
 """
 from __future__ import annotations
 
@@ -102,6 +102,9 @@ def validate_runtime_root(runtime_root: Path) -> dict[str, Any]:
 
     authority = _load_json(governance / "authority_matrix.json")
     council = _load_json(governance / "five_council_policy.json")
+    incident = _load_json(governance / "incident_learning_policy.json")
+    legal = _load_json(governance / "legal_evidence_policy.json")
+    amendment = _load_json(governance / "constitutional_amendment_policy.json")
     registry = _load_json(agents / "registry.json")
     verticals = _load_json(governance / "verticals.json")
     access = _load_json(governance / "lane_access_policy.json")
@@ -124,6 +127,37 @@ def validate_runtime_root(runtime_root: Path) -> dict[str, Any]:
         "business_human_impact",
     }:
         raise ConstitutionalGuardError("Five Council membership drifted")
+
+    closure = incident.get("closure_gates") or {}
+    for gate in (
+        "root_cause_required",
+        "control_change_required",
+        "regression_test_required",
+        "verification_required",
+        "recurrence_monitor_required",
+    ):
+        if closure.get(gate) is not True:
+            raise ConstitutionalGuardError(f"incident-learning closure gate disabled: {gate}")
+    self_mod = incident.get("self_modification") or {}
+    if self_mod.get("agent_may_activate") is not False or self_mod.get("requires_version_control") is not True:
+        raise ConstitutionalGuardError("incident-learning self-modification boundary drifted")
+
+    if legal.get("default_legal_status") != "UNRESOLVED":
+        raise ConstitutionalGuardError("legal evidence policy must default to UNRESOLVED")
+    fail_closed = set(legal.get("fail_closed_statuses") or [])
+    if not {"CONFLICTED", "UNRESOLVED", "REQUIRES_COUNSEL"}.issubset(fail_closed):
+        raise ConstitutionalGuardError("legal fail-closed states are incomplete")
+    if legal.get("hold_response") != {"legal_status": "UNRESOLVED", "action": "HOLD"}:
+        raise ConstitutionalGuardError("legal hold response drifted")
+
+    if amendment.get("default_behavior") != "deny":
+        raise ConstitutionalGuardError("constitutional amendment policy is not default-deny")
+    if amendment.get("direct_edit_to_protected_subjects_prohibited") is not True:
+        raise ConstitutionalGuardError("protected constitutional direct edits are not prohibited")
+    if amendment.get("unanimous_council_required") is not True:
+        raise ConstitutionalGuardError("constitutional amendments must require unanimous Council")
+    if amendment.get("human_overseer_authorization_required") is not True:
+        raise ConstitutionalGuardError("constitutional amendments must require Human Overseer authorization")
 
     agent_rows = registry.get("agents") or []
     agents_by_id = {
@@ -226,5 +260,8 @@ def validate_runtime_root(runtime_root: Path) -> dict[str, Any]:
         "default_deny": True,
         "human_final_authority": "human_overseer",
         "five_council": True,
-        "live_trading_authorized": False,
+        "incident_learning": True,
+        "legal_fail_closed": True,
+        "constitutional_amendment_guard": True,
+        "live_trading_authorized": False
     }

@@ -7,9 +7,15 @@ on:
       - 'apps/command-center/**'
       - 'docker-compose.command-center.yml'
       - 'governance/lane_access_policy.json'
+      - 'governance/revenue_execution_policy.json'
       - 'obsidian/**'
+      - 'scripts/command_center_state_bridge_v2.py'
+      - 'scripts/install_command_center_state_bridge.sh'
+      - 'scripts/converge_command_center_vault_route.sh'
       - 'scripts/deploy_command_center.sh'
       - 'scripts/deploy_dominion_command_center.sh'
+      - 'tests/test_command_center_live_truth.py'
+      - 'tests/test_dominion_command_center_ui.py'
       - '.github/workflows/deploy-dominion-command-center.yml'
   workflow_dispatch:
     inputs:
@@ -42,27 +48,30 @@ jobs:
         )
       )
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     environment: foundation-vm-production
     steps:
       - name: Checkout exact release
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Validate complete command center release
+      - name: Validate complete live-truth release
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           bash -n scripts/deploy_dominion_command_center.sh
           bash -n scripts/deploy_command_center.sh
-          python -m py_compile apps/command-center/app.py apps/command-center/intelligence.py apps/command-center/revenue.py
+          bash -n scripts/install_command_center_state_bridge.sh
+          bash -n scripts/converge_command_center_vault_route.sh
+          python -m py_compile apps/command-center/app.py apps/command-center/intelligence.py apps/command-center/revenue.py apps/command-center/runtime_state.py scripts/command_center_state_bridge_v2.py
           test -s apps/command-center/index.html
           test -s apps/command-center/Dockerfile
           test -s docker-compose.command-center.yml
           test -s governance/lane_access_policy.json
+          test -s governance/revenue_execution_policy.json
           python -c 'import json; d=json.load(open("governance/lane_access_policy.json")); assert len(d["lanes"]) == 11 and all(v["internal_work_open"] and v["scheduler_eligible"] for v in d["lanes"].values())'
           test -s obsidian/00-DOMINION-COMMAND-CENTER.md
           test -s obsidian/dominion.css
@@ -70,10 +79,13 @@ jobs:
           test -s obsidian/command-center/14-Daily-State.md
           test -s obsidian/command-center/09-Revenue.md
           test -s obsidian/command-center/16-Production-Matrix.md
+          python -m unittest tests.test_command_center_live_truth -v
           python tests/test_dominion_command_center_ui.py
           grep -Fq 'All Dominion lanes' apps/command-center/index.html
-          grep -Fq 'lane_summary' apps/command-center/app.py
-          echo 'DOMINION_COMPLETE_COMMAND_CENTER_ASSETS=PASS'
+          grep -Fq 'canonical_runtime_state' apps/command-center/app.py
+          grep -Fq 'dominion-command-center-runtime-state-v2' scripts/command_center_state_bridge_v2.py
+          docker build -t dominion-command-center-release-check apps/command-center
+          echo 'DOMINION_COMPLETE_COMMAND_CENTER_ASSETS=PASS truth=canonical image=import_tested'
 
       - name: Require protected VM access
         env:
@@ -84,10 +96,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$VM_HOST"
-          test -n "$VM_USER"
-          test -n "$VM_SSH_KEY"
-          test -n "$OBSIDIAN_PASSWORD"
+          test -n "$VM_HOST"; test -n "$VM_USER"; test -n "$VM_SSH_KEY"; test -n "$OBSIDIAN_PASSWORD"
 
       - name: Stage Obsidian knowledge surface
         id: stage
@@ -100,29 +109,17 @@ jobs:
         run: |
           set -euo pipefail
           install -m 700 -d "$HOME/.ssh"
-          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
-          chmod 600 "$HOME/.ssh/foundation_vm_key"
-          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/known_hosts"
-
-          bundle="$RUNNER_TEMP/dominion-ui-${GITHUB_RUN_ID}.tgz"
-          remote_bundle="/tmp/dominion-ui-${GITHUB_RUN_ID}.tgz"
-          remote_root="/tmp/dominion-ui-${GITHUB_RUN_ID}"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"; chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"; chmod 600 "$HOME/.ssh/known_hosts"
+          bundle="$RUNNER_TEMP/dominion-ui-${GITHUB_RUN_ID}.tgz"; remote_bundle="/tmp/dominion-ui-${GITHUB_RUN_ID}.tgz"; remote_root="/tmp/dominion-ui-${GITHUB_RUN_ID}"
           tar -czf "$bundle" obsidian scripts/deploy_dominion_command_center.sh
           scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
-
-          password_file="$RUNNER_TEMP/obsidian-password-${GITHUB_RUN_ID}"
-          remote_password="/tmp/obsidian-password-${GITHUB_RUN_ID}"
-          umask 077
-          printf '%s' "$OBSIDIAN_PASSWORD" > "$password_file"
+          password_file="$RUNNER_TEMP/obsidian-password-${GITHUB_RUN_ID}"; remote_password="/tmp/obsidian-password-${GITHUB_RUN_ID}"; umask 077; printf '%s' "$OBSIDIAN_PASSWORD" > "$password_file"
           scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$password_file" "$VM_USER@$VM_HOST:$remote_password"
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" "chmod 600 '$remote_bundle' '$remote_password'"
+          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"; echo "remote_root=$remote_root" >> "$GITHUB_OUTPUT"; echo "remote_password=$remote_password" >> "$GITHUB_OUTPUT"
 
-          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
-          echo "remote_root=$remote_root" >> "$GITHUB_OUTPUT"
-          echo "remote_password=$remote_password" >> "$GITHUB_OUTPUT"
-
-      - name: Install knowledge layer and full web control surface
+      - name: Install knowledge layer and full live control surface
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -135,33 +132,28 @@ jobs:
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
             "REMOTE_BUNDLE='$REMOTE_BUNDLE' REMOTE_ROOT='$REMOTE_ROOT' PASSWORD_FILE='$REMOTE_PASSWORD' RUN_ID='$GITHUB_RUN_ID' RUN_SHA='$GITHUB_SHA' bash -s" <<'REMOTE'
           set -Eeuo pipefail
-          cleanup() {
-            rm -rf "$REMOTE_ROOT"
-            rm -f "$REMOTE_BUNDLE" "$PASSWORD_FILE"
-          }
+          cleanup(){ rm -rf "$REMOTE_ROOT"; rm -f "$REMOTE_BUNDLE" "$PASSWORD_FILE"; }
           trap cleanup EXIT
-
-          test -f "$REMOTE_BUNDLE"
-          test -f "$PASSWORD_FILE"
-          mkdir -m 700 "$REMOTE_ROOT"
-          tar -xzf "$REMOTE_BUNDLE" -C "$REMOTE_ROOT"
-          password="$(cat "$PASSWORD_FILE")"
-          test -n "$password"
-          export OBSIDIAN_PASSWORD="$password"
+          test -f "$REMOTE_BUNDLE"; test -f "$PASSWORD_FILE"; mkdir -m 700 "$REMOTE_ROOT"; tar -xzf "$REMOTE_BUNDLE" -C "$REMOTE_ROOT"
+          password="$(cat "$PASSWORD_FILE")"; test -n "$password"; export OBSIDIAN_PASSWORD="$password"
 
           ASSET_ROOT="$REMOTE_ROOT" RUN_ID="$RUN_ID" bash "$REMOTE_ROOT/scripts/deploy_dominion_command_center.sh"
+          repo="$HOME/dominion-ops"; test -d "$repo/.git"; cd "$repo"
+          git fetch origin main; git checkout main; git pull --ff-only origin main; test "$(git rev-parse HEAD)" = "$RUN_SHA"
+          EXPECTED_SHA="$RUN_SHA" COMMAND_CENTER_BRANCH=main RUN_ID="$RUN_ID" bash scripts/deploy_command_center.sh
 
-          repo="$HOME/dominion-ops"
-          test -d "$repo/.git"
-          cd "$repo"
-          git fetch origin main
-          git checkout main
-          git pull --ff-only origin main
-          test "$(git rev-parse HEAD)" = "$RUN_SHA"
-          EXPECTED_SHA="$RUN_SHA" COMMAND_CENTER_BRANCH=main bash scripts/deploy_command_center.sh
-
-          curl -fsS http://127.0.0.1:8091/health
-          curl -fsS http://127.0.0.1:8091/api/status | python3 -m json.tool
+          curl -fsS http://127.0.0.1:8091/health | python3 -m json.tool
+          STATUS="$(curl -fsS http://127.0.0.1:8091/api/status)"
+          python3 - "$STATUS" "$RUN_SHA" <<'PY'
+          import json,sys
+          s=json.loads(sys.argv[1]); sha=sys.argv[2]
+          assert s['truth']['connected'] is True and s['truth']['release_sha']==sha
+          assert s['lane_summary']=={'open':11,'registered':11,'all_open':True}
+          assert s['revenue']['runtime_connected'] is True and s['revenue']['active_experiment_count']>=1
+          assert s['autopilot']['connected'] is True
+          assert s['latest_receipts']
+          print('DOMINION_COMMAND_CENTER_FINAL_ACCEPTANCE=PASS')
+          PY
           REMOTE
 
       - name: Cleanup runner access material
@@ -175,7 +167,5 @@ jobs:
         shell: bash
         run: |
           set +e
-          if [ -f "$HOME/.ssh/foundation_vm_key" ]; then
-            ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" "rm -rf '$REMOTE_ROOT'; rm -f '$REMOTE_BUNDLE' '$REMOTE_PASSWORD'" >/dev/null 2>&1
-          fi
-          rm -f "$HOME/.ssh/foundation_vm_key" "$RUNNER_TEMP"/dominion-ui-*.tgz "$RUNNER_TEMP"/obsidian-password-*
+          if [ -f "$HOME/.ssh/foundation_vm_key" ]; then ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" "rm -rf '$REMOTE_ROOT'; rm -f '$REMOTE_BUNDLE' '$REMOTE_PASSWORD'" >/dev/null 2>&1; fi
+          rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts" "$RUNNER_TEMP"/dominion-ui-*.tgz "$RUNNER_TEMP"/obsidian-password-*

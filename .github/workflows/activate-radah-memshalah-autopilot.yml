@@ -79,8 +79,22 @@ jobs:
           tar -czf "$bundle" \
             scripts/autopilot/lane_supervisor.py \
             scripts/autopilot/install_autopilot.sh \
+            scripts/autopilot/revenue_workplane_supervisor.py \
+            scripts/autopilot/multilane_supervisor.py \
+            scripts/autopilot/control_plane_guard.py \
             governance/radah_memshalah_autopilot_policy.json \
-            governance/verticals.json
+            governance/verticals.json \
+            governance/SYSTEM_CONSTITUTION.md \
+            governance/authority_matrix.json \
+            governance/five_council_policy.json \
+            governance/incident_learning_policy.json \
+            governance/legal_evidence_policy.json \
+            governance/constitutional_amendment_policy.json \
+            governance/revenue_workplane.json \
+            governance/lane_access_policy.json \
+            governance/lane_runtime_contracts.json \
+            governance/profitability_lane_contracts.json \
+            agents/registry.json
           scp -i "$HOME/.ssh/foundation_vm_key" \
             -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
             "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"

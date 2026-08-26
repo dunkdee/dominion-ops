@@ -1,6 +1,6 @@
 {
   "schema": "radah-memshalah-autopilot-v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
   "purpose": "Keep every Dominion lane productive through evidence-bound internal work while preserving Founder authority over consequential external effects.",
   "enabled": false,
@@ -21,9 +21,27 @@
   "default_stale_after_hours": 12,
   "primary_stale_after_hours": 2,
   "support_stale_after_hours": 6,
+  "delegated_runtimes": {
+    "dominion_revenue_runtime": {
+      "workplane": "governance/revenue_workplane.json",
+      "primary_lane": "commerce_fulfillment",
+      "supporting_lanes": [
+        "content_traffic",
+        "intelligence_orchestration",
+        "infrastructure"
+      ],
+      "runtime_service": "dominion-revenue-runtime.service",
+      "evaluator_timer": "dominion-revenue-evaluator.timer",
+      "automatic_reversible_cro": true,
+      "automatic_price_change": false,
+      "automatic_paid_spend": false,
+      "authority_source": "governance/revenue_execution_policy.json"
+    }
+  },
   "rules": {
     "truth_before_action": true,
     "external_actions_automatic": false,
+    "delegated_runtime_actions_follow_their_narrow_policy": true,
     "no_secret_export": true,
     "no_permission_self_expansion": true,
     "no_live_trading": true,
@@ -51,16 +69,16 @@
     "external."
   ],
   "lane_objectives": {
-    "commerce_fulfillment": "Revenue mission for commerce and fulfillment. EVIDENCE_POLICY=HYBRID. Inspect buyer intent, storefront friction, offer clarity, conversion constraints, order/fulfillment evidence, and unit-economics unknowns. Produce the highest-value internal conversion and operations package. Do not publish, contact customers, change price, submit supplier actions, or spend.",
+    "commerce_fulfillment": "Revenue mission for the LIVE Dominion Revenue Work Plane and VoltEdge commerce funnel. EVIDENCE_POLICY=HYBRID. Treat the injected REVENUE_WORKPLANE_SNAPSHOT as authoritative current runtime evidence and never invent metrics. If visitors are zero, produce the highest-intent organic traffic and message-match package for the active experiment route. If impressions exist without clicks, diagnose hook, CTA, offer clarity, and message match. If clicks exist without paid purchases, diagnose product-page, trust, checkout, shipping, and offer friction. If purchases exist, protect attribution and revenue per visitor while preparing the next evidence-backed treatment. The separately governed Dominion Revenue Runtime may perform only reversible CRO allowed by governance/revenue_execution_policy.json. Do not publish through Buddy, contact customers, change price, submit supplier actions, spend, or weaken the revenue runtime policy.",
     "kdp_publishing": "Prepare the next governed KDP production packet from available evidence: rights checklist, editorial/quality checks, metadata, cover requirements, pricing evidence gaps, demand evidence, differentiation, and publication readiness. Draft only. Do not upload or publish.",
     "analytics_services": "Revenue mission for governed analytics services. EVIDENCE_POLICY=HYBRID. Research current buyer pain and commercial intent, produce a decision-ready sample audit/service package, positioning, qualification criteria, measurement plan, and proposal draft. Do not contact prospects or send proposals.",
     "digital_products": "Revenue mission for owned digital products. EVIDENCE_POLICY=HYBRID. Identify the strongest evidence-backed buyer problem, product concept, offer, delivery requirements, landing-page draft, organic acquisition plan, and validation experiment. Do not publish, change price, or alter customer delivery.",
     "services_lead_generation": "Research qualified service opportunities and prepare a ranked internal lead list plus proposal drafts and evidence. Do not contact prospects, submit proposals, accept contracts, or represent price or delivery dates externally.",
-    "content_traffic": "Create the next internal traffic production package supporting the current primary revenue wave: buyer-intent topic, SEO brief, platform-specific content, short-form/video package, CTA, attribution tags, KPI hypothesis, and test plan. Do not publish or use personal likeness without explicit approval.",
+    "content_traffic": "Revenue-support mission for the LIVE Dominion Revenue Work Plane. EVIDENCE_POLICY=HYBRID. Treat the injected REVENUE_WORKPLANE_SNAPSHOT as authoritative current funnel evidence. Produce the next buyer-intent SEO, short-form, video, CTA, and attribution package that routes qualified owned/organic traffic to the active experiment route. Use the current constraint: zero visitors means traffic acquisition first; impressions without clicks means message-match and hook work; clicks without purchases means pre-sell trust and objection work. Do not fabricate metrics, publish automatically through Buddy, use personal likeness without approval, spend, or make health/legal/income claims.",
     "surplus": "Research one lawful surplus opportunity workflow or jurisdiction and prepare an internal evidence packet with eligibility, source citations, process map, unknowns, risk flags, and synthetic-case next step. Do not contact claimants, collect sensitive identity data, sign, file, or submit.",
     "trading": "Research and evaluate paper-trading performance only. Produce an internal measurement packet covering sample size, drawdown, profit factor, setup quality, failure modes, and next paper-only test. Never place a live trade or change live risk permissions.",
-    "intelligence_orchestration": "Perform a system status and orchestration review. Identify stale queues, blocked handoffs, missing evidence, duplicate scheduling, and the single highest-value routing correction that can be prepared internally without changing governance or production authority.",
+    "intelligence_orchestration": "Perform a system status and orchestration review with the LIVE Dominion Revenue Work Plane as a production dependency. Treat the injected REVENUE_WORKPLANE_SNAPSHOT as authoritative for the active experiment, funnel constraint, runtime status, and evaluator state. Identify stale queues, blocked traffic handoffs, missing evidence, duplicate scheduling, and the single highest-value routing correction that can be prepared internally without changing governance or production authority.",
     "governance_legal": "Review current internal production state for governance gaps, unresolved evidence conflicts, unowned work, and approval-boundary risks. Prepare a remediation packet only; do not sign, file, publish legal material, disclose sensitive data, or change policy automatically.",
-    "infrastructure": "Perform a system health and production-readiness review using current internal evidence. Identify degraded components, stale receipts, backup/rollback gaps, and the highest-value safe remediation proposal. Do not deploy, rotate secrets, delete data, or change DNS/networking automatically."
+    "infrastructure": "Perform a system health and production-readiness review using current internal evidence, including dominion-revenue-runtime.service and dominion-revenue-evaluator.timer when REVENUE_WORKPLANE_SNAPSHOT is injected. Identify degraded components, stale receipts, backup/rollback gaps, and the highest-value safe remediation proposal. Do not deploy, rotate secrets, delete data, or change DNS/networking automatically."
   }
 }

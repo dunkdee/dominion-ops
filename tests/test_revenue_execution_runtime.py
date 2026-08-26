@@ -41,8 +41,8 @@ class RevenueExecutionRuntimeTests(unittest.TestCase):
             "wix_field": "plainDescription",
             "treatment_pct": 50,
             "auto_promote": True,
-            "control": {"headline":"A","body_html":"A","cta_text":"Shop","wix_value":"<p>A</p>"},
-            "treatment": {"headline":"B","body_html":"B","cta_text":"Shop","wix_value":"<p>B</p>"},
+            "control": {"headline":"A","body_text":"A","cta_text":"Shop","wix_value":"<p>A</p>"},
+            "treatment": {"headline":"B","body_text":"B","cta_text":"Shop","wix_value":"<p>B</p>"},
         }
 
     def test_deterministic_split_is_stable_and_balanced(self):
@@ -152,6 +152,11 @@ class RevenueExecutionRuntimeTests(unittest.TestCase):
         self.assertEqual(self.policy["wix"]["allowed_product_fields"], ["plainDescription"])
         self.assertEqual(self.policy["attribution"]["auto_promotion_requires_success_event"], "purchase")
 
+    def test_public_offer_copy_is_escaped_not_raw_html(self):
+        source = SERVICE.read_text(encoding="utf-8")
+        self.assertIn("html.escape(copy['body_text'])", source)
+        self.assertNotIn("copy['body_html']", source)
+
     def test_service_and_installer_expose_only_bounded_public_surface(self):
         source = SERVICE.read_text(encoding="utf-8")
         installer = INSTALLER.read_text(encoding="utf-8")
@@ -161,6 +166,8 @@ class RevenueExecutionRuntimeTests(unittest.TestCase):
         self.assertIn('_require_auth(request)', source)
         self.assertIn('@dominion_revenue_public path /r /r/* /revenue/events', installer)
         self.assertNotIn('/control/*', installer)
+        self.assertIn('sudo python3 - "$caddy_path"', installer)
+        self.assertNotIn('sudo "$buddy_python" - "$caddy_path"', installer)
         self.assertIn('OnUnitActiveSec=10min', installer)
         self.assertIn('DOMINION_REVENUE_RUNTIME=DISABLED', kill)
 

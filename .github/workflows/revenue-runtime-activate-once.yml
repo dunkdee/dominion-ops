@@ -1,0 +1,236 @@
+name: Dominion Revenue Runtime Activate Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/revenue-runtime-activate-once.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+env:
+  RELEASE_SHA: d3819b12671d54d397e4f00b9c1f58d4ca16ef82
+
+jobs:
+  activate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact verified revenue release
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+
+      - name: Re-prove exact release contract
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          bash -n scripts/revenue_runtime/install_revenue_runtime.sh
+          bash -n scripts/revenue_runtime/disable_revenue_runtime.sh
+          python -m json.tool governance/revenue_execution_policy.json >/dev/null
+          grep -Fq '"cro_reversible": true' governance/revenue_execution_policy.json
+          grep -Fq '"price_change": false' governance/revenue_execution_policy.json
+          grep -Fq '"paid_spend": false' governance/revenue_execution_policy.json
+          grep -Fq '"destructive_change": false' governance/revenue_execution_policy.json
+          grep -Fq 'allowed_product_fields' governance/revenue_execution_policy.json
+          grep -Fq 'AMBIGUOUS_CANDIDATES' apps/revenue_runtime/evaluator.py
+          grep -Fq "html.escape(copy['body_text'])" apps/revenue_runtime/service.py
+          echo "REVENUE_RELEASE_CONTRACT=PASS sha=$RELEASE_SHA"
+
+      - name: Require protected production access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Stage exact revenue runtime bundle
+        id: stage
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/revenue-runtime-${GITHUB_RUN_ID}.tgz"
+          remote_bundle="/tmp/revenue-runtime-${GITHUB_RUN_ID}.tgz"
+          remote_root="/tmp/revenue-runtime-${GITHUB_RUN_ID}"
+          tar -czf "$bundle" apps/revenue_runtime governance/revenue_execution_policy.json scripts/revenue_runtime
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
+            "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" \
+            "chmod 600 '$remote_bundle'"
+          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
+          echo "remote_root=$remote_root" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy runtime and activate first governed canary
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+          REMOTE_ROOT: ${{ steps.stage.outputs.remote_root }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
+            "$VM_USER@$VM_HOST" \
+            "REMOTE_BUNDLE='$REMOTE_BUNDLE' REMOTE_ROOT='$REMOTE_ROOT' RUN_ID='$GITHUB_RUN_ID' RELEASE_SHA='$RELEASE_SHA' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          cleanup() {
+            rm -rf "$REMOTE_ROOT"
+            rm -f "$REMOTE_BUNDLE"
+          }
+          trap cleanup EXIT
+          test -f "$REMOTE_BUNDLE"
+          mkdir -m 700 "$REMOTE_ROOT"
+          tar -xzf "$REMOTE_BUNDLE" -C "$REMOTE_ROOT"
+
+          echo '=== INSTALL GOVERNED REVENUE RUNTIME ==='
+          ASSET_ROOT="$REMOTE_ROOT" RUN_ID="$RUN_ID" bash "$REMOTE_ROOT/scripts/revenue_runtime/install_revenue_runtime.sh"
+
+          runtime_root="$HOME/.dominion/revenue-runtime/runtime"
+          buddy_exec="$(systemctl show dominion-buddy-web.service -p ExecStart --value 2>/dev/null || true)"
+          buddy_python="$(printf '%s\n' "$buddy_exec" | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)"
+          test -x "$buddy_python"
+
+          echo '=== CREATE AND ACTIVATE LIVE CANARY WITHOUT SYNTHETIC TRAFFIC ==='
+          PYTHONPATH="$runtime_root" DOMINION_RUNTIME_ROOT="$runtime_root" "$buddy_python" - <<'PY'
+          import json, os
+          from pathlib import Path
+          import httpx
+          from dotenv import dotenv_values
+          from apps.revenue_runtime import wix_adapter
+
+          exp_id = 'voltedge-speaker-offer-v1'
+          product_id = '09ecaf7f-9054-48d4-a7c6-9071b872cbd1'
+          target_url = 'https://www.voltedgegoods.com/product-page/portable-wireless-bluetooth-speaker-with-tws-function-rechargeable-bluetooth-s'
+          env = dotenv_values(Path.home() / 'dominion-ops/.env')
+          token = env.get('WIX_AGENT_OPERATOR_TOKEN')
+          assert token, 'operator token unavailable'
+          headers = {'X-Operator-Token': token}
+          base = 'http://127.0.0.1:8790'
+
+          before = wix_adapter.get_product(product_id)
+          before_revision = str(before.get('revision') or '')
+          before_description = str(before.get('plainDescription') or '')
+          assert before_revision and before_description
+
+          payload = {
+            'id': exp_id,
+            'name': 'VoltEdge Portable Speaker Offer V1',
+            'product_id': product_id,
+            'target_url': target_url,
+            'success_event': 'purchase',
+            'wix_field': 'plainDescription',
+            'treatment_pct': 50,
+            'auto_promote': True,
+            'control': {
+              'headline': 'Portable Sound Without the Wires',
+              'body_text': 'Pair two TWS-compatible speakers for true stereo and bring rechargeable wireless audio to beach days, backyard cookouts, camping trips, and road-trip stops. Free U.S. shipping.',
+              'cta_text': 'See the Speaker',
+              'wix_value': before_description
+            },
+            'treatment': {
+              'headline': 'Take Stereo Sound Anywhere',
+              'body_text': 'Bring wireless audio to beach days, backyard cookouts, camping trips, and road-trip stops. Pair two TWS-compatible speakers for true stereo, recharge, and keep the setup easy to carry. Free U.S. shipping.',
+              'cta_text': 'Explore the Speaker',
+              'wix_value': '<p><strong>Take stereo sound anywhere.</strong> Bring wireless audio to beach days, backyard cookouts, camping trips, and road-trip stops. Pair two TWS-compatible speakers for true stereo, recharge, and keep the setup easy to carry. Free U.S. shipping.</p>'
+            }
+          }
+
+          created = httpx.post(base + '/control/experiments', headers=headers, json=payload, timeout=20)
+          if created.status_code not in (200, 409):
+              raise RuntimeError(f'create experiment failed status={created.status_code}')
+
+          status = httpx.get(base + f'/control/experiments/{exp_id}', headers=headers, timeout=20)
+          status.raise_for_status()
+          current = status.json()['experiment']
+          if current['status'] == 'draft':
+              activated = httpx.post(base + f'/control/experiments/{exp_id}/activate', headers=headers, timeout=20)
+              activated.raise_for_status()
+          elif current['status'] != 'active':
+              raise RuntimeError(f"unexpected canary state={current['status']}")
+
+          evaluation = httpx.post(base + '/control/evaluate', headers=headers, timeout=45)
+          evaluation.raise_for_status()
+
+          final = httpx.get(base + f'/control/experiments/{exp_id}', headers=headers, timeout=20)
+          final.raise_for_status()
+          final_data = final.json()
+          assert final_data['experiment']['status'] == 'active'
+
+          after = wix_adapter.get_product(product_id)
+          after_revision = str(after.get('revision') or '')
+          after_description = str(after.get('plainDescription') or '')
+          assert after_revision == before_revision, (before_revision, after_revision)
+          assert after_description == before_description
+
+          metrics = final_data['metrics']
+          print(json.dumps({
+            'CANARY': 'ACTIVE',
+            'experiment_id': exp_id,
+            'product_id': product_id,
+            'wix_revision_unchanged': before_revision,
+            'synthetic_impressions_sent': 0,
+            'metrics_observed': metrics,
+            'price_changed': False,
+            'spend_changed': False
+          }, sort_keys=True))
+          PY
+
+          echo '=== FINAL PRODUCTION ACCEPTANCE ==='
+          test "$(systemctl is-active dominion-revenue-runtime.service)" = active
+          test "$(systemctl is-active dominion-revenue-evaluator.timer)" = active
+          test "$(systemctl is-enabled dominion-revenue-evaluator.timer)" = enabled
+
+          for spec in \
+            'revenue_runtime|http://127.0.0.1:8790/health' \
+            'n8n|http://127.0.0.1:5678/healthz' \
+            'conductor|http://127.0.0.1:5060/health' \
+            'alpha_engine|http://127.0.0.1:8787/health' \
+            'dominion_web|http://127.0.0.1:8090/' \
+            'wix_agent|http://127.0.0.1:8082/ready'; do
+            name="${spec%%|*}"; url="${spec#*|}"
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 8 "$url" || true)"
+            test "$code" = 200
+            echo "PRODUCTION_HEALTH=PASS name=$name status=200"
+          done
+          buddy_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 http://127.0.0.1:5070/buddy || true)"
+          test "$buddy_code" = 401
+          echo 'PRODUCTION_HEALTH=PASS name=buddy auth=protected'
+
+          probe="$(curl -sS --max-time 12 https://dominionhealing.org/r/__revenue_postdeploy_probe__ || true)"
+          printf '%s' "$probe" | grep -q 'Experiment not found'
+          echo 'REVENUE_PUBLIC_INGRESS=PASS'
+          echo "DOMINION_REVENUE_PRODUCTION=PASS release_sha=$RELEASE_SHA canary=voltedge-speaker-offer-v1"
+          REMOTE
+
+      - name: Cleanup runner and remote staging
+        if: always()
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+          REMOTE_ROOT: ${{ steps.stage.outputs.remote_root }}
+        run: |
+          set +e
+          if [ -f "$HOME/.ssh/foundation_vm_key" ]; then
+            ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" \
+              "rm -rf '$REMOTE_ROOT'; rm -f '$REMOTE_BUNDLE'" >/dev/null 2>&1
+          fi
+          rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts" "$RUNNER_TEMP"/revenue-runtime-*.tgz

@@ -31,22 +31,28 @@ jobs:
       inputs.commit_sha == github.sha &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - name: Checkout main
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Resolve exact activation SHA
+      - name: Resolve and freeze exact activation SHA
         id: sha
+        env:
+          INPUT_SHA: ${{ inputs.commit_sha }}
         shell: bash
         run: |
           set -euo pipefail
           target_sha="$(git rev-parse HEAD)"
           [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]]
+          test "$target_sha" = "$INPUT_SHA"
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$target_sha"
           echo "target_sha=$target_sha" >> "$GITHUB_OUTPUT"
+          echo "DOMINION_RELEASE_FREEZE=PASS sha=$target_sha"
 
       - name: Run strict Foundation VM dry-run
         env:
@@ -146,6 +152,48 @@ jobs:
             exit 1
           fi
 
+      - name: Publish Brain, deploy complete Command Center, and prove live runtime
+        id: closure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.sha.outputs.target_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          dispatch_and_wait() {
+            local workflow="$1"
+            shift
+            local previous current run_id
+            previous="$(gh run list --workflow "$workflow" --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+            gh workflow run "$workflow" --ref main "$@"
+            run_id=""
+            for _ in {1..36}; do
+              current="$(gh run list --workflow "$workflow" --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+              if [[ -n "$current" && "$current" != "$previous" ]]; then
+                run_id="$current"
+                break
+              fi
+              sleep 5
+            done
+            test -n "$run_id"
+            gh run watch "$run_id" --exit-status
+            printf '%s=%s\n' "${workflow//[^A-Za-z0-9]/_}_run_id" "$run_id" >> "$GITHUB_OUTPUT"
+          }
+
+          dispatch_and_wait publish-dominion-brain-production.yml \
+            -f commit_sha="$TARGET_SHA" \
+            -f confirm='PUBLISH DOMINION BRAIN'
+
+          dispatch_and_wait deploy-dominion-command-center.yml \
+            -f commit_sha="$TARGET_SHA" \
+            -f confirm='DEPLOY DOMINION COMMAND CENTER'
+
+          dispatch_and_wait final-production-acceptance.yml \
+            -f commit_sha="$TARGET_SHA" \
+            -f confirm='RUN PRODUCTION ACCEPTANCE'
+
+          dispatch_and_wait watchdog.yml
+          echo "DOMINION_TOP_TO_BOTTOM_CLOSURE=PASS sha=$TARGET_SHA"
       - name: Validate content engine entrypoint
         shell: bash
         run: |
@@ -164,6 +212,10 @@ jobs:
           deploy_run="$(gh run list --workflow deploy-foundation-vm-governed.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
           dry_run="$(gh run list --workflow run-foundation-vm-dry-run.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
           obsidian_run="$(gh run list --workflow deploy-obsidian.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
+          brain_run="$(gh run list --workflow publish-dominion-brain-production.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
+          command_center_run="$(gh run list --workflow deploy-dominion-command-center.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
+          acceptance_run="$(gh run list --workflow final-production-acceptance.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
+          observer_run="$(gh run list --workflow watchdog.yml --event workflow_dispatch --limit 1 --json url --jq '.[0].url')"
           cat > /tmp/issue79.md <<EOF
           # Dominion Production Activation — Verified
 
@@ -172,6 +224,10 @@ jobs:
           - [x] Governed Foundation VM deployment passed for exact SHA \`$TARGET_SHA\`.
           - [x] Validation passed, deployment passed, remote exit code was 0, with no failure and no rollback.
           - [x] Governed Obsidian Remote Access workflow passed on the same SHA.
+          - [x] Canonical Dominion Brain published and authenticated public route passed.
+          - [x] Complete live-truth Command Center deployed with 11/11 lanes, connected revenue runtime, connected autopilot, and receipts present.
+          - [x] Full live production acceptance passed on the VM for the exact SHA.
+          - [x] Final read-only runtime observer passed after deployment.
           - [x] Content engine entrypoint compiled and exposed the campaign command.
 
           ## Evidence
@@ -179,12 +235,16 @@ jobs:
           - Strict dry-run: $dry_run
           - Governed deployment: $deploy_run
           - Obsidian verification: $obsidian_run
+          - Dominion Brain publish: $brain_run
+          - Complete Command Center deploy: $command_center_run
+          - Live production acceptance: $acceptance_run
+          - Final runtime observer: $observer_run
           - Deployment status: issue #55
           - Dry-run status: issue #78
 
           ## Production state
 
-          The governed control plane is deployed on foundation-vm at \`$TARGET_SHA\`. The Docker reconciliation boundary is fail-closed for Baby API identity, the deployment workflow completed without rollback, and Obsidian remote access completed its authenticated runtime checks.
+          The governed control plane, canonical Brain, and complete live-truth Command Center are deployed on foundation-vm at \`$TARGET_SHA\`. The release passed exact-SHA synchronization, fail-closed deployment, authenticated access, 11/11 internal lane truth, connected revenue/autopilot state, full runtime acceptance, and the final read-only observer.
 
           Paid services were not activated and no secrets were written to GitHub.
           EOF

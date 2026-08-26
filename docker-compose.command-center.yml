@@ -9,10 +9,12 @@ services:
     volumes:
       - ${VAULT_PATH:-/home/malachisingleton8/vault}:/vault:ro
       - ${COMMAND_CENTER_MEMORY_PATH:-/home/malachisingleton8/dominion-memory}:/data/memory
+      - ./governance/lane_access_policy.json:/governance/lane_access_policy.json:ro
     restart: unless-stopped
     environment:
       VAULT_PATH: /vault
       MEMORY_PATH: /data/memory
+      LANE_POLICY_PATH: /governance/lane_access_policy.json
       NEMOTRON_BASE_URL: ${NEMOTRON_BASE_URL:-}
       NEMOTRON_MODEL: ${NEMOTRON_MODEL:-nemotron-3}
       NEMOTRON_API_KEY: ${NEMOTRON_API_KEY:-}

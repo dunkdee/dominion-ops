@@ -1,4 +1,4 @@
-name: Dominion Revenue Work Plane Commerce Now
+name: Dominion Revenue Authority Gate Diagnostic Once
 
 on:
   push:
@@ -14,9 +14,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  commerce-now:
+  diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     environment: foundation-vm-production
     steps:
       - name: Require protected production access
@@ -33,63 +33,29 @@ jobs:
           ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Execute one bounded Commerce revenue mission
+      - name: Inspect live Buddy authority gate read-only
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
-          set -Eeuo pipefail
-          test "$(systemctl is-active dominion-radah-autopilot.timer)" = active
-          test "$(systemctl is-active dominion-revenue-runtime.service)" = active
-          test "$(systemctl is-active dominion-revenue-evaluator.timer)" = active
-
-          runtime_root="$HOME/.dominion/autopilot/runtime"
-          state_root="$HOME/.dominion/autopilot"
-          buddy_exec="$(systemctl show dominion-buddy-web.service -p ExecStart --value)"
-          buddy_python="$(printf '%s\n' "$buddy_exec" | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)"
-          test -x "$buddy_python"
-          test -f "$runtime_root/scripts/autopilot/revenue_workplane_supervisor.py"
-
-          before="$(find "$state_root/receipts" -maxdepth 1 -type f -name '*.json' 2>/dev/null | wc -l)"
-          set +e
-          output="$(cd "$runtime_root/scripts/autopilot" && RADAH_AUTOPILOT_ENABLED=1 "$buddy_python" revenue_workplane_supervisor.py --execute --lane commerce_fulfillment --state-dir "$state_root" 2>&1)"
-          rc=$?
-          set -e
-          printf '%s\n' "$output"
-          test "$rc" -eq 0
-          printf '%s' "$output" | grep -q 'RADAH_AUTOPILOT=' 
-          printf '%s' "$output" | grep -q 'lane=commerce_fulfillment'
-          printf '%s' "$output" | grep -q 'bounded_cycle=true'
-          printf '%s' "$output" | grep -q '"revenue_workplane"'
-          printf '%s' "$output" | grep -q '"constraint": "QUALIFIED_TRAFFIC"'
-
-          after="$(find "$state_root/receipts" -maxdepth 1 -type f -name '*.json' 2>/dev/null | wc -l)"
-          test "$after" -gt "$before"
-          latest="$(find "$state_root/receipts" -maxdepth 1 -type f -name '*.json' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
-          test -f "$latest"
-          "$buddy_python" - "$latest" <<'PY'
-          import json,sys
-          from pathlib import Path
-          p=Path(sys.argv[1]); d=json.loads(p.read_text())
-          assert d.get('lane') == 'commerce_fulfillment'
-          assert d.get('status') in {'COMPLETE','HELD','BLOCKED'}
-          assert 'revenue_workplane' in d
-          if d.get('supervisor_error'):
-              raise SystemExit('COMMERCE_MISSION=FAIL reason=supervisor_error')
-          mission_id=d.get('mission_id')
-          assert mission_id, 'mission_id missing'
-          print(json.dumps({
-              'COMMERCE_MISSION':'PASS',
-              'status':d.get('status'),
-              'mission_id':mission_id,
-              'constraint':d['revenue_workplane'].get('constraint'),
-              'receipt_count':len(d.get('receipts') or []),
-              'held':d.get('held')
-          }, sort_keys=True))
-          PY
-          echo 'DOMINION_REVENUE_COMMERCE_NOW=PASS'
+          set -euo pipefail
+          root="$HOME/buddy_core"
+          test -d "$root"
+          echo '=== LIVE BUDDY SERVICE ==='
+          systemctl show dominion-buddy-web.service -p WorkingDirectory -p ExecStart --no-pager
+          echo '=== AUTHORITY GATE LOCATIONS ==='
+          grep -R -n -E 'CURRENT_AUTHORITY|L2_FIELD_NOT_CURRENT|L2_STALE|VOLTEDGE_STOREFRONT_LIVE' "$root" \
+            --include='*.py' --include='*.json' --exclude-dir='__pycache__' | head -120 || true
+          echo '=== REVENUE PREPARE REFERENCES ==='
+          grep -R -n -E 'revenue\.prepare|current.authority|current_authority' "$root" \
+            --include='*.py' --include='*.json' --exclude-dir='__pycache__' | head -160 || true
+          echo '=== TARGET FILE HASHES ==='
+          for f in "$root/core/operator.py" "$root/core/current_authority.py" "$root/config/capability_registry.json"; do
+            if [ -f "$f" ]; then sha256sum "$f"; fi
+          done
+          echo 'BUDDY_REVENUE_AUTHORITY_DIAG=PASS'
           REMOTE
 
       - name: Cleanup access material

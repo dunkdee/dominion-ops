@@ -1,0 +1,55 @@
+{
+  "schema": "dominion-revenue-execution-policy-v1",
+  "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+  "mode": "production_bounded",
+  "automatic_external_actions": {
+    "cro_reversible": true,
+    "price_change": false,
+    "paid_spend": false,
+    "provider_change": false,
+    "inventory_change": false,
+    "destructive_change": false,
+    "legal_or_compliance_sensitive_claim": false,
+    "live_trading": false
+  },
+  "wix": {
+    "catalog_version": "v3",
+    "allowed_product_fields": ["plainDescription"],
+    "max_plain_description_chars": 8000,
+    "one_active_experiment_per_product": true,
+    "require_current_revision": true,
+    "require_before_snapshot": true,
+    "require_after_verification": true,
+    "rollback_required": true
+  },
+  "traffic": {
+    "max_treatment_percent": 50,
+    "cookie_name": "dominion_vid",
+    "cookie_days": 30,
+    "collect_pii": false
+  },
+  "attribution": {
+    "auto_promotion_requires_success_event": "purchase",
+    "order_attribution_lookback_minutes": 240,
+    "ambiguous_orders": "unattributed",
+    "paid_orders_only": true
+  },
+  "statistics": {
+    "min_visitors_per_variant": 100,
+    "min_total_conversions": 10,
+    "min_confidence": 0.95,
+    "min_relative_lift": 0.05,
+    "min_revenue_per_visitor_ratio": 0.95
+  },
+  "copy_guard": {
+    "forbidden_fragments": [
+      "<script", "<iframe", "javascript:", " onclick=", " onload=",
+      "guaranteed", "100%", "cure", "treats disease", "risk-free",
+      "% off", "discount code", "limited time price", "lowest price"
+    ]
+  },
+  "kill_switch": {
+    "environment_variable": "DOMINION_REVENUE_RUNTIME_ENABLED",
+    "enabled_value": "1"
+  }
+}

@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from intelligence import route_intelligence
@@ -20,7 +20,7 @@ LANE_POLICY_PATH = Path(os.getenv("LANE_POLICY_PATH", "/governance/lane_access_p
 NEMOTRON_BASE_URL = os.getenv("NEMOTRON_BASE_URL", "").rstrip("/")
 NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "nemotron-3")
 
-app = FastAPI(title="Dominion Command Center", version="0.4.0")
+app = FastAPI(title="Dominion Command Center", version="0.4.1")
 
 
 class ChatRequest(BaseModel):
@@ -132,9 +132,27 @@ def record_exchange(message: str, answer: str, source: str) -> None:
         pass
 
 
-@app.get("/")
-def dashboard() -> FileResponse:
-    return FileResponse(APP_DIR / "index.html")
+@app.get("/", response_class=HTMLResponse)
+def dashboard(request: Request) -> HTMLResponse:
+    """Serve one UI at root or behind the protected /command-center path.
+
+    Caddy supplies X-Forwarded-Prefix only for the vault fallback. The HTML is
+    adjusted at response time so API calls remain same-origin and prefix-safe
+    without maintaining two front ends.
+    """
+    prefix = request.headers.get("x-forwarded-prefix", "").strip().rstrip("/")
+    if prefix and (not prefix.startswith("/") or ".." in prefix):
+        prefix = ""
+    html = (APP_DIR / "index.html").read_text(encoding="utf-8")
+    api_base = json.dumps(prefix)
+    marker = "<script>\nconst $="
+    replacement = f"<script>\nconst API_BASE={api_base};\nconst $="
+    if marker not in html:
+        raise HTTPException(status_code=500, detail="command-center-ui-marker-missing")
+    html = html.replace(marker, replacement, 1)
+    html = html.replace("fetch('/api/status'", "fetch(API_BASE+'/api/status'", 1)
+    html = html.replace("fetch('/api/chat'", "fetch(API_BASE+'/api/chat'", 1)
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/health")

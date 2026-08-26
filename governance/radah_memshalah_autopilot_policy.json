@@ -1,11 +1,11 @@
 {
   "schema": "radah-memshalah-autopilot-v1",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
   "purpose": "Keep every Dominion lane open and productive through evidence-bound internal work while preserving Founder authority over consequential external effects.",
   "enabled": false,
   "cadence_minutes": 30,
-  "max_missions_per_cycle": 1,
+  "max_missions_per_cycle": 3,
   "max_primary_revenue_verticals": 2,
   "primary_wave": [
     "commerce_fulfillment",

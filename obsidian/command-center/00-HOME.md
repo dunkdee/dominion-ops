@@ -12,10 +12,10 @@ aliases:
   <div class="dominion-hero__content">
     <div class="dominion-eyebrow">RADAH MEMSHALAH · EXECUTIVE PRODUCTION</div>
     <h1 id="dominion-title">Dominion Command Center</h1>
-    <p class="dominion-hero__statement">One governed production system. Every lane has work. Every action has authority. Every result leaves evidence. Primary lanes convert while the rest of the machine strengthens the wave.</p>
+    <p class="dominion-hero__statement">All eleven registered lanes stay open for bounded internal production. Two lanes may receive revenue priority, but priority never closes the rest of the system. External consequence gates remain separate from lane access.</p>
     <div class="dominion-status-row" aria-label="Control status">
-      <span class="dominion-status dominion-status--verified"><span class="dominion-status__dot"></span>CONTROL SURFACE ONLINE</span>
-      <span class="dominion-status dominion-status--governed">FOUNDER GATED</span>
+      <span class="dominion-status dominion-status--verified"><span class="dominion-status__dot"></span>11 / 11 LANES OPEN</span>
+      <span class="dominion-status dominion-status--governed">REVENUE RUNTIME LIVE</span>
       <span class="dominion-status">PHONE FIRST</span>
     </div>
   </div>
@@ -29,18 +29,18 @@ aliases:
 <section class="dominion-snapshot" aria-label="Production doctrine">
   <div class="dominion-snapshot__header">
     <div>
-      <span class="dominion-kicker">RADAH MEMSHALAH PRODUCTION DOCTRINE</span>
-      <strong>CASH FLOW → SYSTEMS → SCALE</strong>
+      <span class="dominion-kicker">LIVE OPERATING MODEL</span>
+      <strong>OPEN LANES → EVIDENCE → WORK → RECEIPT</strong>
     </div>
-    <code>EVIDENCE-BOUND</code>
+    <code>RADAH MEMSHALAH</code>
   </div>
   <div class="dominion-metric-grid">
-    <div class="dominion-metric"><span class="dominion-metric__value">11</span><span class="dominion-metric__label">Registered production lanes</span></div>
-    <div class="dominion-metric"><span class="dominion-metric__value">2</span><span class="dominion-metric__label">Maximum primary revenue lanes</span></div>
-    <div class="dominion-metric"><span class="dominion-metric__value dominion-metric__value--text">AUTH</span><span class="dominion-metric__label">Protected external effects</span></div>
-    <div class="dominion-metric"><span class="dominion-metric__value dominion-metric__value--text">1×</span><span class="dominion-metric__label">Canonical truth chain</span></div>
+    <div class="dominion-metric"><span class="dominion-metric__value">11</span><span class="dominion-metric__label">Open internal production lanes</span></div>
+    <div class="dominion-metric"><span class="dominion-metric__value">2</span><span class="dominion-metric__label">Priority revenue lanes · not exclusive</span></div>
+    <div class="dominion-metric"><span class="dominion-metric__value dominion-metric__value--text">LIVE</span><span class="dominion-metric__label">VoltEdge revenue experiment runtime</span></div>
+    <div class="dominion-metric"><span class="dominion-metric__value dominion-metric__value--text">TRAFFIC</span><span class="dominion-metric__label">Last verified revenue constraint</span></div>
   </div>
-  <p class="dominion-snapshot__notice">These are operating contracts, not live business telemetry. Current production state requires timestamped runtime receipts.</p>
+  <p class="dominion-snapshot__notice"><strong>Lane access and external readiness are different facts.</strong> Labels such as draft-only, paper-only, blocked, or unverified restrict specific external effects; they do not close internal work. Last verified revenue baseline after deployment-probe cleanup: 0 real visitors, 0 clicks, 0 paid purchases, $0 attributed revenue → <strong>QUALIFIED_TRAFFIC</strong>.</p>
 </section>
 
 <div class="dominion-section-title">
@@ -50,33 +50,34 @@ aliases:
 
 <nav class="dominion-card-grid dominion-card-grid--executive" aria-label="Executive controls">
   <a class="internal-link dominion-card dominion-card--featured dominion-card--active" data-href="Dominion-Command-Center/16-Production-Matrix" href="Dominion-Command-Center/16-Production-Matrix">
-    <span class="dominion-card__top"><span class="dominion-card__index">01</span><span class="dominion-pill dominion-pill--gold dominion-pill--live">PRODUCTION</span></span>
+    <span class="dominion-card__top"><span class="dominion-card__index">01</span><span class="dominion-pill dominion-pill--gold dominion-pill--live">11 OPEN</span></span>
     <span class="dominion-card__icon" aria-hidden="true">◆</span>
     <strong>Production Matrix</strong>
-    <span>The cockpit: primary money wave, all-lane productivity, Founder holds, production receipts, blockers, and next actions.</span>
+    <span>All eleven lanes remain schedulable for internal production. See lane work, revenue priority, external-readiness holds, Founder gates, receipts, blockers, and next actions.</span>
     <div class="dominion-flow" aria-hidden="true"></div>
     <span class="dominion-card__action">Enter production control <span aria-hidden="true">→</span></span>
   </a>
-  <a class="internal-link dominion-card dominion-card--featured" data-href="Dominion-Command-Center/15-Founder-Oversight" href="Dominion-Command-Center/15-Founder-Oversight">
-    <span class="dominion-card__top"><span class="dominion-card__index">02</span><span class="dominion-pill dominion-pill--gold">FOUNDER</span></span>
+  <a class="internal-link dominion-card dominion-card--featured dominion-card--active" data-href="Dominion-Command-Center/09-Revenue" href="Dominion-Command-Center/09-Revenue">
+    <span class="dominion-card__top"><span class="dominion-card__index">02</span><span class="dominion-pill dominion-pill--gold dominion-pill--live">LIVE CRO</span></span>
+    <span class="dominion-card__icon" aria-hidden="true">↗</span>
+    <strong>Revenue Work Plane</strong>
+    <span>VoltEdge canary <code>voltedge-speaker-offer-v1</code> is live. Current verified funnel constraint is qualified traffic. Revenue evaluation runs every 10 minutes; RADAH work-plane routing runs every 30 minutes.</span>
+    <div class="dominion-flow" aria-hidden="true"></div>
+    <span class="dominion-card__action">Open revenue control <span aria-hidden="true">→</span></span>
+  </a>
+  <a class="internal-link dominion-card" data-href="Dominion-Command-Center/15-Founder-Oversight" href="Dominion-Command-Center/15-Founder-Oversight">
+    <span class="dominion-card__top"><span class="dominion-card__index">03</span><span class="dominion-pill dominion-pill--gold">FOUNDER</span></span>
     <span class="dominion-card__icon" aria-hidden="true">◈</span>
     <strong>Founder Oversight</strong>
-    <span>Approvals, protected holds, evidence gates, and final human authority.</span>
+    <span>Only consequential external effects belong here: spend, prices, publishing, customer contact, live trading, legal filings, credential/network changes, destructive changes, and governance changes.</span>
     <span class="dominion-card__action">Open control surface <span aria-hidden="true">→</span></span>
   </a>
   <a class="internal-link dominion-card" data-href="Dominion-Command-Center/14-Daily-State" href="Dominion-Command-Center/14-Daily-State">
-    <span class="dominion-card__top"><span class="dominion-card__index">03</span><span class="dominion-pill dominion-pill--green">NOW</span></span>
+    <span class="dominion-card__top"><span class="dominion-card__index">04</span><span class="dominion-pill dominion-pill--green">NOW</span></span>
     <span class="dominion-card__icon" aria-hidden="true">◎</span>
     <strong>Daily State</strong>
     <span>Current priorities, verified state, blockers, and the next exact action.</span>
     <span class="dominion-card__action">Review today <span aria-hidden="true">→</span></span>
-  </a>
-  <a class="internal-link dominion-card" data-href="Dominion-Command-Center/09-Revenue" href="Dominion-Command-Center/09-Revenue">
-    <span class="dominion-card__top"><span class="dominion-card__index">04</span><span class="dominion-pill dominion-pill--gold">GROWTH</span></span>
-    <span class="dominion-card__icon" aria-hidden="true">↗</span>
-    <strong>Revenue</strong>
-    <span>Demand, conversion, paid revenue, fulfillment, retention, and learning.</span>
-    <span class="dominion-card__action">Open revenue lane <span aria-hidden="true">→</span></span>
   </a>
   <a class="internal-link dominion-card" data-href="Dominion-Command-Center/06-Operations" href="Dominion-Command-Center/06-Operations">
     <span class="dominion-card__top"><span class="dominion-card__index">05</span><span class="dominion-pill">EXECUTION</span></span>
@@ -114,7 +115,7 @@ aliases:
 
 <section class="dominion-boundary">
   <div class="dominion-boundary__mark" aria-hidden="true">!</div>
-  <div><span class="dominion-kicker">TRUTH BOUNDARY</span><p><strong>GitHub</strong> governs policy and code. <strong>Foundation VM</strong> proves live runtime. <strong>Obsidian</strong> preserves operational context. Motion and design communicate hierarchy; they do not invent status or grant authority.</p></div>
+  <div><span class="dominion-kicker">TRUTH BOUNDARY</span><p><strong>Open lane</strong> means internal production may run. <strong>External-ready</strong> means a specific consequential action has cleared its separate evidence and Founder gate. GitHub governs policy and code. Foundation VM proves runtime. Obsidian displays the operating picture. Motion never invents status.</p></div>
 </section>
 
 <nav class="dominion-mobile-dock" aria-label="Mobile quick navigation">

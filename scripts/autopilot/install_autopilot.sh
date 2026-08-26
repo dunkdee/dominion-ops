@@ -15,7 +15,27 @@ service_name="dominion-radah-autopilot.service"
 timer_name="dominion-radah-autopilot.timer"
 service_path="/etc/systemd/system/$service_name"
 timer_path="/etc/systemd/system/$timer_name"
+dropin_dir="/etc/systemd/system/$service_name.d"
+revenue_dropin="$dropin_dir/revenue-workplane.conf"
 success=0
+
+# A base-layer replacement must remain compatible with an already-active
+# revenue/multilane ExecStart override. The overlay is authoritative until the
+# revenue installer atomically replaces it, so never create a runtime tree that
+# makes the active override point at a missing file.
+overlay_mode="none"
+overlay_text=""
+if sudo test -f "$revenue_dropin"; then
+  overlay_text="$(sudo cat "$revenue_dropin")"
+  if printf '%s' "$overlay_text" | grep -q 'multilane_supervisor.py'; then
+    overlay_mode="multilane"
+  elif printf '%s' "$overlay_text" | grep -q 'revenue_workplane_supervisor.py'; then
+    overlay_mode="revenue"
+  else
+    echo 'RADAH_AUTOPILOT=HOLD reason=unknown_execstart_overlay'
+    exit 23
+  fi
+fi
 
 # Reuse the exact Python entrypoint already proven by the healthy Buddy service.
 # This avoids creating a second dependency universe for the same operator.
@@ -42,14 +62,52 @@ PY
 mkdir -p "$state_root" "$state_root/backups"
 chmod 700 "$state_root" "$state_root/backups"
 rm -rf "$new_runtime"
-mkdir -p "$new_runtime/scripts/autopilot" "$new_runtime/governance"
-chmod 700 "$new_runtime"
+mkdir -p "$new_runtime/scripts/autopilot" "$new_runtime/governance" "$new_runtime/agents"
+chmod 700 "$new_runtime" "$new_runtime/scripts/autopilot" "$new_runtime/governance" "$new_runtime/agents"
 
 install -m 700 "$asset_root/scripts/autopilot/lane_supervisor.py" "$new_runtime/scripts/autopilot/lane_supervisor.py"
 install -m 600 "$asset_root/governance/radah_memshalah_autopilot_policy.json" "$new_runtime/governance/radah_memshalah_autopilot_policy.json"
 install -m 600 "$asset_root/governance/verticals.json" "$new_runtime/governance/verticals.json"
 
+# Preserve every dependency required by a known active overlay while replacing
+# the base layer. This is the migration invariant that prevents an ExecStart
+# override from pointing into a half-replaced runtime tree.
+if [ "$overlay_mode" != "none" ]; then
+  layered_files=(
+    scripts/autopilot/revenue_workplane_supervisor.py
+    scripts/autopilot/multilane_supervisor.py
+    scripts/autopilot/control_plane_guard.py
+    governance/SYSTEM_CONSTITUTION.md
+    governance/authority_matrix.json
+    governance/five_council_policy.json
+    governance/incident_learning_policy.json
+    governance/legal_evidence_policy.json
+    governance/constitutional_amendment_policy.json
+    governance/revenue_workplane.json
+    governance/lane_access_policy.json
+    governance/lane_runtime_contracts.json
+    governance/profitability_lane_contracts.json
+    agents/registry.json
+  )
+  for rel in "${layered_files[@]}"; do
+    test -f "$asset_root/$rel" || { echo "RADAH_AUTOPILOT=HOLD reason=layered_asset_missing path=$rel"; exit 24; }
+    mkdir -p "$new_runtime/$(dirname "$rel")"
+    case "$rel" in
+      scripts/*) install -m 700 "$asset_root/$rel" "$new_runtime/$rel" ;;
+      *) install -m 600 "$asset_root/$rel" "$new_runtime/$rel" ;;
+    esac
+  done
+  echo "AUTOPILOT_LAYERED_OVERLAY=PRESERVED mode=$overlay_mode"
+fi
+
 "$buddy_python" -m py_compile "$new_runtime/scripts/autopilot/lane_supervisor.py"
+if [ "$overlay_mode" != "none" ]; then
+  "$buddy_python" -m py_compile \
+    "$new_runtime/scripts/autopilot/revenue_workplane_supervisor.py" \
+    "$new_runtime/scripts/autopilot/multilane_supervisor.py" \
+    "$new_runtime/scripts/autopilot/control_plane_guard.py"
+fi
+
 plan_output="$(RADAH_AUTOPILOT_ENABLED=0 "$buddy_python" "$new_runtime/scripts/autopilot/lane_supervisor.py" --plan-only --state-dir "$state_root/preflight")"
 printf '%s\n' "$plan_output"
 printf '%s' "$plan_output" | grep -q 'RADAH_AUTOPILOT=PLANNED'
@@ -162,6 +220,14 @@ rm -f "$service_tmp" "$timer_tmp"
 sudo systemctl daemon-reload
 sudo systemctl enable "$timer_name" >/dev/null
 
+resolved_exec="$(systemctl show "$service_name" -p ExecStart --value)"
+case "$overlay_mode" in
+  multilane) printf '%s' "$resolved_exec" | grep -q 'multilane_supervisor.py' ;;
+  revenue) printf '%s' "$resolved_exec" | grep -q 'revenue_workplane_supervisor.py' ;;
+  none) printf '%s' "$resolved_exec" | grep -q 'lane_supervisor.py' ;;
+esac
+echo "AUTOPILOT_EFFECTIVE_ENTRYPOINT=PASS mode=$overlay_mode"
+
 cycles_before="$("$buddy_python" - "$state_root/state.json" <<'PY'
 import json,sys
 from pathlib import Path
@@ -199,32 +265,69 @@ print(f"{lane}|{status}")
 PY
 }
 
+validate_latest_multilane_sweep() {
+  latest="$state_root/latest_sweep.json"
+  test -n "$latest" && test -s "$latest"
+  "$buddy_python" - "$latest" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1],encoding='utf-8'))
+assert p.get('schema') == 'radah-multilane-sweep-v1'
+assert p.get('status') == 'HEALTHY'
+assert p.get('execution_requested') is True
+assert p.get('external_actions_authorized') is False
+selected=int(p.get('selected_count',0))
+assert selected >= 2
+rows=p.get('lane_results')
+assert isinstance(rows,list) and len(rows) == selected
+for row in rows:
+    assert row.get('external_actions_authorized') is False
+    assert row.get('status') in {'COMPLETE','HELD','BLOCKED'}
+    assert not row.get('supervisor_error')
+    assert row.get('mission_id')
+    if row.get('status') == 'BLOCKED':
+        receipts=row.get('receipts')
+        assert isinstance(receipts,list) and receipts
+constitutional=p.get('constitutional_guard') or {}
+assert constitutional.get('status') == 'PASS'
+assert constitutional.get('human_final_authority') == 'human_overseer'
+print(selected)
+PY
+}
+
 # A governed evidence/policy blocker is a healthy bounded cycle. It must yield
 # instead of crashing the scheduler. Supervisor exceptions still fail systemd.
 sudo systemctl reset-failed "$service_name" >/dev/null 2>&1 || true
 sudo systemctl start "$service_name"
 result="$(sudo systemctl show "$service_name" -p Result --value)"
 [ "$result" = "success" ] || { echo "RADAH_AUTOPILOT=HOLD service_result=$result"; exit 40; }
-first_meta="$(validate_latest_cycle)"
-first_lane="${first_meta%%|*}"
-first_status="${first_meta#*|}"
-echo "AUTOPILOT_FIRST_CYCLE=PASS lane=$first_lane status=$first_status"
 
-cycles_after_first="$("$buddy_python" -c "import json; print(int(json.load(open('$state_root/state.json')).get('cycles',0)))")"
-[ "$cycles_after_first" -ge "$((cycles_before + 1))" ]
+if [ "$overlay_mode" = "multilane" ]; then
+  selected_count="$(validate_latest_multilane_sweep)"
+  cycles_after="$("$buddy_python" -c "import json; print(int(json.load(open('$state_root/state.json')).get('cycles',0)))")"
+  [ "$cycles_after" -ge "$((cycles_before + selected_count))" ]
+  echo "AUTOPILOT_LAYERED_MULTILANE_SMOKE=PASS selected=$selected_count"
+else
+  first_meta="$(validate_latest_cycle)"
+  first_lane="${first_meta%%|*}"
+  first_status="${first_meta#*|}"
+  echo "AUTOPILOT_FIRST_CYCLE=PASS lane=$first_lane status=$first_status"
 
-# If the first lane is legitimately blocked, immediately prove rotation to a
-# different lane before arming the recurring timer.
-if [ "$first_status" = "BLOCKED" ]; then
-  sudo systemctl start "$service_name"
-  result="$(sudo systemctl show "$service_name" -p Result --value)"
-  [ "$result" = "success" ] || { echo "RADAH_AUTOPILOT=HOLD rotation_service_result=$result"; exit 43; }
-  second_meta="$(validate_latest_cycle "$first_lane")"
-  second_lane="${second_meta%%|*}"
-  second_status="${second_meta#*|}"
-  echo "AUTOPILOT_BLOCKED_ROTATION=PASS from=$first_lane to=$second_lane status=$second_status"
-  cycles_after_second="$("$buddy_python" -c "import json; print(int(json.load(open('$state_root/state.json')).get('cycles',0)))")"
-  [ "$cycles_after_second" -ge "$((cycles_before + 2))" ]
+  cycles_after_first="$("$buddy_python" -c "import json; print(int(json.load(open('$state_root/state.json')).get('cycles',0)))")"
+  [ "$cycles_after_first" -ge "$((cycles_before + 1))" ]
+
+  # If the first lane is legitimately blocked, immediately prove rotation to a
+  # different lane before arming the recurring timer.
+  if [ "$first_status" = "BLOCKED" ]; then
+    sudo systemctl start "$service_name"
+    result="$(sudo systemctl show "$service_name" -p Result --value)"
+    [ "$result" = "success" ] || { echo "RADAH_AUTOPILOT=HOLD rotation_service_result=$result"; exit 43; }
+    second_meta="$(validate_latest_cycle "$first_lane")"
+    second_lane="${second_meta%%|*}"
+    second_status="${second_meta#*|}"
+    echo "AUTOPILOT_BLOCKED_ROTATION=PASS from=$first_lane to=$second_lane status=$second_status"
+    cycles_after_second="$("$buddy_python" -c "import json; print(int(json.load(open('$state_root/state.json')).get('cycles',0)))")"
+    [ "$cycles_after_second" -ge "$((cycles_before + 2))" ]
+  fi
 fi
 
 # Confirm the already-online core did not regress while activating the supervisor.
@@ -252,6 +355,7 @@ printf 'AUTOPILOT_RUNTIME_SHA256=%s\n' "$runtime_sha"
 printf 'AUTOPILOT_POLICY_FILE_SHA256=%s\n' "$policy_sha"
 printf 'AUTOPILOT_TIMER=PASS cadence=30m\n'
 printf 'AUTOPILOT_BUDDY_RUNTIME=PASS interpreter=%s\n' "$buddy_python"
+printf 'AUTOPILOT_LAYERED_MIGRATION=PASS mode=%s\n' "$overlay_mode"
 
 success=1
 trap - ERR INT TERM EXIT

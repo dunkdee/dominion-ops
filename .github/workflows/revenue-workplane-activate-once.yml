@@ -1,4 +1,4 @@
-name: Dominion Revenue Work Plane Activate Once
+name: Dominion Revenue Probe Cleanup Once
 
 on:
   push:
@@ -13,35 +13,12 @@ concurrency:
   group: foundation-vm-production
   cancel-in-progress: false
 
-env:
-  RELEASE_SHA: 31945a021bfde4d822e5b971a1a405ac59077e0a
-
 jobs:
-  activate:
+  cleanup-known-probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     environment: foundation-vm-production
     steps:
-      - name: Checkout exact verified work-plane release
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-        with:
-          ref: ${{ env.RELEASE_SHA }}
-          fetch-depth: 0
-
-      - name: Re-prove work-plane contract
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
-          python -m json.tool governance/revenue_workplane.json >/dev/null
-          python -m json.tool governance/radah_memshalah_autopilot_policy.json >/dev/null
-          python -m py_compile scripts/autopilot/lane_supervisor.py scripts/autopilot/revenue_workplane_supervisor.py
-          bash -n scripts/autopilot/install_revenue_workplane.sh
-          grep -Fq '"primary_lane": "commerce_fulfillment"' governance/revenue_workplane.json
-          grep -Fq 'REVENUE_WORKPLANE_SNAPSHOT' governance/radah_memshalah_autopilot_policy.json
-          grep -Fq '"automatic_price_change": false' governance/revenue_workplane.json
-          grep -Fq '"automatic_paid_spend": false' governance/revenue_workplane.json
-          echo "REVENUE_WORKPLANE_RELEASE=PASS sha=$RELEASE_SHA"
-
       - name: Require protected production access
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -56,85 +33,87 @@ jobs:
           ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Stage exact work-plane bundle
-        id: stage
+      - name: Remove only the known deployment verification impression
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
         run: |
           set -euo pipefail
-          bundle="$RUNNER_TEMP/revenue-workplane-${GITHUB_RUN_ID}.tgz"
-          remote_bundle="/tmp/revenue-workplane-${GITHUB_RUN_ID}.tgz"
-          remote_root="/tmp/revenue-workplane-${GITHUB_RUN_ID}"
-          tar -czf "$bundle" \
-            scripts/autopilot/revenue_workplane_supervisor.py \
-            scripts/autopilot/install_revenue_workplane.sh \
-            governance/radah_memshalah_autopilot_policy.json \
-            governance/revenue_workplane.json
-          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
-            "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
-          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" \
-            "chmod 600 '$remote_bundle'"
-          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
-          echo "remote_root=$remote_root" >> "$GITHUB_OUTPUT"
-
-      - name: Bind live revenue evidence to RADAH work plane
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
-          REMOTE_ROOT: ${{ steps.stage.outputs.remote_root }}
-        run: |
-          set -euo pipefail
-          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" \
-            "REMOTE_BUNDLE='$REMOTE_BUNDLE' REMOTE_ROOT='$REMOTE_ROOT' RUN_ID='$GITHUB_RUN_ID' RELEASE_SHA='$RELEASE_SHA' bash -s" <<'REMOTE'
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
           set -Eeuo pipefail
-          cleanup() { rm -rf "$REMOTE_ROOT"; rm -f "$REMOTE_BUNDLE"; }
-          trap cleanup EXIT
-          mkdir -m 700 "$REMOTE_ROOT"
-          tar -xzf "$REMOTE_BUNDLE" -C "$REMOTE_ROOT"
-
-          ASSET_ROOT="$REMOTE_ROOT" RUN_ID="$RUN_ID" bash "$REMOTE_ROOT/scripts/autopilot/install_revenue_workplane.sh"
-
-          test "$(systemctl is-active dominion-radah-autopilot.timer)" = active
-          test "$(systemctl is-enabled dominion-radah-autopilot.timer)" = enabled
-          test "$(systemctl is-active dominion-revenue-runtime.service)" = active
-          test "$(systemctl is-active dominion-revenue-evaluator.timer)" = active
-          test "$(systemctl is-enabled dominion-revenue-evaluator.timer)" = enabled
-
-          execstart="$(systemctl show dominion-radah-autopilot.service -p ExecStart --value)"
-          printf '%s\n' "$execstart" | grep -q 'revenue_workplane_supervisor.py'
+          db="$HOME/.dominion/revenue-runtime/revenue.db"
+          receipts="$HOME/.dominion/revenue-runtime/receipts"
+          test -f "$db"
+          mkdir -p "$receipts"
+          chmod 700 "$receipts"
 
           buddy_exec="$(systemctl show dominion-buddy-web.service -p ExecStart --value)"
           buddy_python="$(printf '%s\n' "$buddy_exec" | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)"
+          test -x "$buddy_python"
+
+          DB_PATH="$db" RECEIPT_PATH="$receipts/20260826-canary-public-verification-cleanup.json" "$buddy_python" - <<'PY'
+          import json, os, sqlite3
+          from pathlib import Path
+
+          db_path = Path(os.environ['DB_PATH'])
+          receipt_path = Path(os.environ['RECEIPT_PATH'])
+          exp_id = 'voltedge-speaker-offer-v1'
+          start = '2026-08-26T04:08:35+00:00'
+          end = '2026-08-26T04:08:38+00:00'
+
+          with sqlite3.connect(db_path, timeout=20) as db:
+              db.row_factory = sqlite3.Row
+              rows = db.execute(
+                  "SELECT id,visitor_id,variant,event_type,revenue_cents,occurred_at,metadata_json "
+                  "FROM events WHERE experiment_id=? AND occurred_at>=? AND occurred_at<=? ORDER BY occurred_at",
+                  (exp_id, start, end),
+              ).fetchall()
+              if len(rows) != 1:
+                  raise SystemExit(f'PROBE_CLEANUP=HOLD reason=unexpected_window_rows count={len(rows)}')
+              row = dict(rows[0])
+              if row['event_type'] != 'impression' or int(row['revenue_cents'] or 0) != 0:
+                  raise SystemExit('PROBE_CLEANUP=HOLD reason=unexpected_event_shape')
+              related = db.execute(
+                  "SELECT COUNT(*) FROM events WHERE experiment_id=? AND visitor_id=? AND event_type<>'impression'",
+                  (exp_id, row['visitor_id']),
+              ).fetchone()[0]
+              if related != 0:
+                  raise SystemExit('PROBE_CLEANUP=HOLD reason=visitor_has_nonprobe_events')
+
+              receipt = {
+                  'schema': 'dominion-revenue-ledger-maintenance-v1',
+                  'reason': 'remove_known_public_route_verification_impression',
+                  'experiment_id': exp_id,
+                  'deleted_event': row,
+                  'window': {'start': start, 'end': end},
+                  'synthetic_source_evidence': 'GitHub canary activation run 32929081710 public route verification after zero-metric assertion',
+              }
+              receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+              receipt_path.chmod(0o600)
+              db.execute('DELETE FROM events WHERE id=?', (row['id'],))
+              db.commit()
+              remaining = db.execute(
+                  "SELECT COUNT(*) FROM events WHERE experiment_id=?",
+                  (exp_id,),
+              ).fetchone()[0]
+              print(json.dumps({'PROBE_CLEANUP':'PASS','deleted_event_id':row['id'],'remaining_experiment_events':remaining}, sort_keys=True))
+          PY
+
           runtime_root="$HOME/.dominion/autopilot/runtime"
           snapshot="$(cd "$runtime_root/scripts/autopilot" && "$buddy_python" revenue_workplane_supervisor.py --inspect-workplane)"
           printf '%s\n' "$snapshot"
-          printf '%s' "$snapshot" | grep -q '"available": true'
-          printf '%s' "$snapshot" | grep -q '"experiment_id": "voltedge-speaker-offer-v1"'
+          printf '%s' "$snapshot" | grep -q '"constraint": "QUALIFIED_TRAFFIC"'
+          printf '%s' "$snapshot" | grep -q '"visitors": 0'
+          printf '%s' "$snapshot" | grep -q '"clicks": 0'
+          printf '%s' "$snapshot" | grep -q '"conversions": 0'
+          printf '%s' "$snapshot" | grep -q '"revenue_cents": 0'
 
-          plan="$(cd "$runtime_root/scripts/autopilot" && RADAH_AUTOPILOT_ENABLED=0 "$buddy_python" revenue_workplane_supervisor.py --plan-only --lane commerce_fulfillment --state-dir "$HOME/.dominion/autopilot")"
-          printf '%s\n' "$plan"
-          printf '%s' "$plan" | grep -q '"lane": "commerce_fulfillment"'
-          printf '%s' "$plan" | grep -q '"revenue_workplane"'
-          printf '%s' "$plan" | grep -q '"experiment_id": "voltedge-speaker-offer-v1"'
-
-          echo "DOMINION_REVENUE_WORKPLANE=PASS release_sha=$RELEASE_SHA"
-          echo 'WORKPLANE_TIMERS=PASS revenue=10m radah=30m'
-          echo 'WORKPLANE_AUTHORITY=PASS global_external=false price=false spend=false'
+          test "$(systemctl is-active dominion-revenue-runtime.service)" = active
+          test "$(systemctl is-active dominion-revenue-evaluator.timer)" = active
+          test "$(systemctl is-active dominion-radah-autopilot.timer)" = active
+          echo 'DOMINION_REVENUE_LEDGER=PASS synthetic_probe_removed=true real_constraint=QUALIFIED_TRAFFIC'
           REMOTE
 
-      - name: Cleanup staging and runner access material
+      - name: Cleanup access material
         if: always()
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
-          REMOTE_ROOT: ${{ steps.stage.outputs.remote_root }}
-        run: |
-          set +e
-          if [ -f "$HOME/.ssh/foundation_vm_key" ] && [ -n "${REMOTE_ROOT:-}" ]; then
-            ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" \
-              "rm -rf '$REMOTE_ROOT'; rm -f '$REMOTE_BUNDLE'" >/dev/null 2>&1
-          fi
-          rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts" "$RUNNER_TEMP"/revenue-workplane-*.tgz
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

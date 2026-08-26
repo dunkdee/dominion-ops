@@ -1,0 +1,123 @@
+name: Constitutional Lane Runtime CI
+
+on:
+  pull_request:
+    paths:
+      - 'governance/**'
+      - 'agents/**'
+      - 'scripts/autopilot/**'
+      - 'scripts/validate_control_plane.py'
+      - 'scripts/validate_lane_runtime_contracts.py'
+      - 'tests/test_lane_runtime_contracts.py'
+      - 'tests/test_radah_autopilot.py'
+      - '.github/workflows/constitutional-lane-runtime-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'governance/**'
+      - 'agents/**'
+      - 'scripts/autopilot/**'
+      - 'scripts/validate_control_plane.py'
+      - 'scripts/validate_lane_runtime_contracts.py'
+      - 'tests/test_lane_runtime_contracts.py'
+      - 'tests/test_radah_autopilot.py'
+      - '.github/workflows/constitutional-lane-runtime-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: constitutional-lane-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact release candidate
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Parse all constitutional lane contracts
+        run: |
+          set -euo pipefail
+          python -m json.tool governance/authority_matrix.json >/dev/null
+          python -m json.tool governance/five_council_policy.json >/dev/null
+          python -m json.tool governance/incident_learning_policy.json >/dev/null
+          python -m json.tool governance/legal_evidence_policy.json >/dev/null
+          python -m json.tool governance/constitutional_amendment_policy.json >/dev/null
+          python -m json.tool governance/verticals.json >/dev/null
+          python -m json.tool governance/lane_access_policy.json >/dev/null
+          python -m json.tool governance/lane_runtime_contracts.json >/dev/null
+          python -m json.tool governance/profitability_lane_contracts.json >/dev/null
+          python -m json.tool governance/radah_memshalah_autopilot_policy.json >/dev/null
+          python -m json.tool agents/registry.json >/dev/null
+
+      - name: Compile governed runtime
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            scripts/validate_control_plane.py \
+            scripts/validate_lane_runtime_contracts.py \
+            scripts/autopilot/lane_supervisor.py \
+            scripts/autopilot/revenue_workplane_supervisor.py \
+            scripts/autopilot/control_plane_guard.py \
+            scripts/autopilot/multilane_supervisor.py \
+            tests/test_lane_runtime_contracts.py \
+            tests/test_radah_autopilot.py
+          bash -n scripts/autopilot/install_revenue_workplane.sh
+
+      - name: Validate original Dominion Constitution kernel
+        run: python scripts/validate_control_plane.py
+
+      - name: Validate all lane runtime and profitability contracts
+        run: python scripts/validate_lane_runtime_contracts.py
+
+      - name: Run fail-closed lane contract tests
+        run: python -m unittest tests.test_lane_runtime_contracts -v
+
+      - name: Preserve autopilot governance regression suite
+        run: python -m unittest tests.test_radah_autopilot -v
+
+      - name: Prove constitutional scheduler preflight is inert
+        env:
+          RADAH_AUTOPILOT_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          state="$RUNNER_TEMP/constitutional-multilane"
+          output="$(python scripts/autopilot/multilane_supervisor.py --plan-only --sweep-size 3 --state-dir "$state")"
+          printf '%s\n' "$output"
+          printf '%s' "$output" | grep -q '"status": "PASS"'
+          printf '%s' "$output" | grep -q '"registered_lanes": 11'
+          printf '%s' "$output" | grep -q '"runtime_contracts": 11'
+          printf '%s' "$output" | grep -q '"economic_profitability_contracts": 8'
+          printf '%s' "$output" | grep -q '"human_final_authority": "human_overseer"'
+          printf '%s' "$output" | grep -q 'RADAH_MULTILANE_SWEEP=PLANNED selected=3'
+          test ! -e "$state/state.json"
+
+      - name: Prove constitutional profit truth cannot be bypassed
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('governance/profitability_lane_contracts.json').read_text())
+          r=p['portfolio_rules']
+          assert r['profit_claim_requires_verified_posted_revenue'] is True
+          assert r['profit_claim_requires_positive_contribution_margin'] is True
+          assert r['profit_claim_requires_reconciled_delivery'] is True
+          assert r['profit_claim_requires_repeatability'] is True
+          assert r['live_trading_authorized'] is False
+          assert len(p['lanes']) == 8
+          print('CONSTITUTIONAL_PROFIT_TRUTH=PASS economic_lanes=8')
+          PY
+
+      - name: Receipt
+        run: |
+          echo 'CONSTITUTIONAL_LANE_RUNTIME=PASS lanes=11 economic_lanes=8 default_deny=true founder_authority=preserved'

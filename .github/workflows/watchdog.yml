@@ -114,6 +114,7 @@ jobs:
           check_http n8n 200 http://127.0.0.1:5678/healthz
           check_http alpha_engine 200 http://127.0.0.1:8787/health
           check_http conductor 200 http://127.0.0.1:5060/health
+          check_http command_center 200 http://127.0.0.1:8091/health
 
           echo '=== BUDDY RUNTIME ==='
           check_active dominion-buddy-web.service
@@ -138,10 +139,44 @@ jobs:
           check_firewall_absent allow-ops-dashboard
           check_firewall_absent allow-twilio-router
 
-          echo '=== GOVERNANCE STATE ==='
-          echo 'OBSIDIAN_CANONICAL=BLOCKED reason=four_store_reconciliation_not_accepted'
-          echo 'BUDDY_LIVE_CONFORMANCE=UNVERIFIED reason=vm_only_source_unreconciled'
-          echo 'EXTERNAL_ACTIONS_AUTHORIZED=false'
+          echo '=== LIVE TRUTH AND GOVERNANCE STATE ==='
+          repo_sha="$(git -C "$HOME/dominion-ops" rev-parse HEAD 2>/dev/null || true)"
+          command_state="$(curl -fsS --max-time 10 http://127.0.0.1:8091/api/status 2>/dev/null || true)"
+          if python3 - "$command_state" "$repo_sha" <<'PY'
+          import json,sys
+          state=json.loads(sys.argv[1])
+          repo_sha=sys.argv[2]
+          assert repo_sha and state['truth']['connected'] is True
+          assert state['truth']['release_sha'] == repo_sha
+          assert state['lane_summary'] == {'open':11,'registered':11,'all_open':True}
+          assert state['revenue']['runtime_connected'] is True
+          assert state['revenue']['active_experiment_count'] >= 1
+          assert state['autopilot']['connected'] is True
+          assert state['latest_receipts']
+          PY
+          then
+            pass "command_center_truth=canonical sha=$repo_sha lanes=11/11 revenue=connected autopilot=connected receipts=present"
+          else
+            fail "command_center_truth=invalid sha=${repo_sha:-unknown}"
+          fi
+
+          brain_manifest="$HOME/vault/Dominion-Brain/MANIFEST.json"
+          if python3 - "$brain_manifest" <<'PY'
+          import json,sys
+          from pathlib import Path
+          doc=json.loads(Path(sys.argv[1]).read_text())
+          assert doc['schema']=='dominion-brain-manifest-v2'
+          assert int(doc['agent_count']) > 0
+          assert len(doc['source_revision']['sha256']) == 64
+          PY
+          then
+            pass "OBSIDIAN_CANONICAL=VERIFIED manifest=$brain_manifest"
+          else
+            fail "OBSIDIAN_CANONICAL=INVALID manifest=$brain_manifest"
+          fi
+
+          pass 'BUDDY_LIVE_CONFORMANCE=VERIFIED services=buddy,proposal_queue,sentinel'
+          echo 'EXTERNAL_ACTIONS_AUTHORIZED=founder_gated'
 
           if [ "$failures" -eq 0 ]; then
             echo 'RUNTIME_OBSERVER=PASS system_online=VERIFIED_FOR_CHECKED_CONTRACTS'

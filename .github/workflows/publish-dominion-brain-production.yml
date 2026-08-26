@@ -45,7 +45,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-          bash -n scripts/deploy_dominion_brain_remote.sh scripts/quarantine_vm_repo_state.sh
+          bash -n scripts/deploy_dominion_brain_remote.sh scripts/quarantine_vm_repo_state.sh scripts/converge_command_center_vault_route.sh
           python -m py_compile scripts/render_dominion_brain.py scripts/check_brain_inputs.py
           python scripts/check_brain_inputs.py
           root="$(mktemp -d)"
@@ -125,7 +125,7 @@ jobs:
           echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
           echo "remote_password=$remote_password" >> "$GITHUB_OUTPUT"
           echo "remote_quarantine=$remote_quarantine" >> "$GITHUB_OUTPUT"
-      - name: Preserve VM drift, synchronize exact Git commit, and publish brain
+      - name: Preserve VM drift, synchronize exact Git commit, publish brain, and preserve Command Center route
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -153,6 +153,7 @@ jobs:
           password="$(cat "$PASSWORD_FILE")"
           test -n "$password"
           DEPLOY_SHA="$DEPLOY_SHA" OBSIDIAN_PASSWORD="$password" RUN_ID="$RUN_ID" bash scripts/deploy_dominion_brain_remote.sh
+          bash scripts/converge_command_center_vault_route.sh
           unset password
           REMOTE
       - name: Verify external authenticated route
@@ -163,7 +164,7 @@ jobs:
           curl -fsS --retry 6 --retry-all-errors --retry-delay 3 --max-time 30 -u "dominion:$OBSIDIAN_PASSWORD" https://vault.dominionhealing.org/ >/dev/null
           unauth="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://vault.dominionhealing.org/ || true)"
           test "$unauth" = "401"
-          echo "BRAIN_PUBLIC_ACCEPTANCE=PASS sha=${{ needs.validate.outputs.deploy_sha }}"
+          echo "BRAIN_PUBLIC_ACCEPTANCE=PASS sha=${{ needs.validate.outputs.deploy_sha }} command_center_route=preserved"
       - name: Remove temporary access material
         if: always()
         run: |

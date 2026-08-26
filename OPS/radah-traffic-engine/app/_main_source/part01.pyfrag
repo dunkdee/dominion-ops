@@ -1,0 +1,195 @@
+        for i, r in enumerate(rows, 1)
+    ]
+
+
+@app.post("/v1/route")
+def route_visitor(v: VisitorIntent):
+    """
+    Advisory route only. Does not execute a purchase, lead transmission,
+    email send, affiliate redirect, or other side effect.
+    """
+    routes = []
+
+    if v.service_need >= 0.70 and v.lead_value > 0:
+        routes.append(("qualified_lead", v.lead_value * v.service_need))
+    if v.purchase_intent >= 0.65:
+        if v.own_offer_value > 0:
+            routes.append(("own_offer", v.own_offer_value * v.purchase_intent))
+        if v.affiliate_value > 0:
+            routes.append(("affiliate", v.affiliate_value * v.purchase_intent))
+    if v.email_available:
+        routes.append(("email_capture", v.information_intent * 3 + v.purchase_intent * 2))
+
+    if not routes:
+        return {"primary_route": "educational_content", "estimated_value": 0.0}
+
+    routes.sort(key=lambda x: x[1], reverse=True)
+    return {
+        "primary_route": routes[0][0],
+        "estimated_value": round(routes[0][1], 2),
+        "alternatives": [
+            {"route": name, "estimated_value": round(value, 2)}
+            for name, value in routes[1:]
+        ],
+        "execution_authorized": False,
+        "note": "Routing is advisory. Side effects require a separate RADAH-authorized executor."
+    }
+
+
+@app.post("/v1/events", dependencies=[Depends(require_api_key)])
+def track_event(
+    event: TrackEvent,
+    idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128),
+):
+    """
+    Event ingestion is authenticated and idempotent. It records observations;
+    it does not perform monetization side effects.
+    """
+    now = int(time.time())
+    occurred = event.occurred_at or now
+    if occurred > now + 300:
+        raise HTTPException(status_code=422, detail="occurred_at too far in future")
+    if occurred < now - 60 * 60 * 24 * 366 * 5:
+        raise HTTPException(status_code=422, detail="occurred_at outside retention horizon")
+
+    eid = str(uuid.uuid4())
+    metadata_json = json.dumps(event.metadata, sort_keys=True, separators=(",", ":"))
+
+    try:
+        with tx(write=True) as conn:
+            conn.execute("""
+                INSERT INTO events(
+                    id,idempotency_key,opportunity_slug,event_type,source,medium,
+                    campaign,page,revenue,occurred_at,recorded_at,metadata_json
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                eid,idempotency_key,event.opportunity_slug,event.event_type,
+                event.source,event.medium,event.campaign,event.page,event.revenue,
+                occurred,now,metadata_json
+            ))
+    except Exception:
+        with tx() as conn:
+            existing = conn.execute(
+                "SELECT id FROM events WHERE idempotency_key=?",
+                (idempotency_key,)
+            ).fetchone()
+        if existing:
+            return {"tracked": True, "event_id": existing["id"], "idempotent_replay": True}
+        raise
+
+    return {"tracked": True, "event_id": eid, "idempotent_replay": False}
+
+
+@app.get("/v1/metrics/{slug}")
+def metrics(slug: str):
+    with tx() as conn:
+        rows = conn.execute("""
+            SELECT event_type, COUNT(*) AS count, COALESCE(SUM(revenue),0) AS revenue
+            FROM events
+            WHERE opportunity_slug=?
+            GROUP BY event_type
+        """, (slug,)).fetchall()
+
+    stats = {
+        r["event_type"]: {"count": r["count"], "revenue": r["revenue"]}
+        for r in rows
+    }
+    visits = stats.get("visit", {}).get("count", 0)
+    leads = stats.get("lead", {}).get("count", 0)
+    conversions = (
+        stats.get("sale", {}).get("count", 0) +
+        stats.get("conversion", {}).get("count", 0)
+    )
+    revenue = sum(v["revenue"] for v in stats.values())
+    rpv = revenue / visits if visits else 0.0
+    lead_rate = leads / visits if visits else 0.0
+    conversion_rate = conversions / visits if visits else 0.0
+
+    if visits < 100:
+        action = "COLLECT_MORE_DATA"
+    elif rpv >= 5:
+        action = "RECOMMEND_SCALE_HARD"
+    elif rpv >= 1:
+        action = "RECOMMEND_SCALE"
+    elif rpv >= 0.25:
+        action = "RECOMMEND_OPTIMIZE"
+    else:
+        action = "RECOMMEND_PAUSE_OR_REWORK"
+
+    return {
+        "opportunity": slug,
+        "visits": visits,
+        "leads": leads,
+        "conversions": conversions,
+        "revenue": round(revenue, 2),
+        "actual_rpv": round(rpv, 4),
+        "lead_rate": round(lead_rate, 4),
+        "conversion_rate": round(conversion_rate, 4),
+        "recommendation": action,
+        "execution_authorized": False,
+    }
+
+
+_CHILDCARE_PAGE = Path(__file__).resolve().parent / "static" / "employer_childcare.html"
+
+
+@app.get("/tools/employer-childcare", response_class=HTMLResponse)
+def employer_childcare_page():
+    return HTMLResponse(_CHILDCARE_PAGE.read_text(encoding="utf-8"))
+
+
+@app.get("/v1/tools/employer-childcare/config")
+def employer_childcare_config():
+    return {
+        "lane": "employer-childcare-net-cost",
+        "lead_capture_enabled": settings.enable_public_lead_capture,
+        "privacy_policy_url": settings.privacy_policy_url if settings.enable_public_lead_capture else None,
+        "published_referral_economics": {
+            "reward_usd": TOOTRIS_REFERRAL_SOURCE["published_reward_usd"],
+            "trigger": TOOTRIS_REFERRAL_SOURCE["trigger"],
+            "verified_at": TOOTRIS_REFERRAL_SOURCE["verified_at"],
+        },
+        "execution_authorized": False,
+    }
+
+
+@app.post("/v1/tools/employer-childcare/net-cost")
+def employer_childcare_net_cost(data: EmployerChildcareEstimateIn):
+    try:
+        return build_estimate(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/v1/tools/employer-childcare/leads")
+def capture_employer_childcare_lead(
+    lead: EmployerChildcareLeadIn,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128),
+):
+    # Honeypot: do not reveal bot filtering behavior.
+    if lead.website_honeypot:
+        return {"accepted": True, "status": "RECEIVED"}
+
+    if not settings.enable_public_lead_capture:
+        raise HTTPException(
+            status_code=503,
+            detail="Public lead capture is disabled until privacy configuration is complete.",
+        )
+    if not lead.consent_to_contact_and_share:
+        raise HTTPException(
+            status_code=422,
+            detail="Explicit consent is required before a provider handoff can be queued.",
+        )
+
+    now = int(time.time())
+    expires_at = now + settings.lead_retention_days * 86400
+    lead_id = str(uuid.uuid4())
+
+    with tx(write=True) as conn:
+        # Apply retention on every new capture so stale PII does not accumulate indefinitely.
+        conn.execute("DELETE FROM childcare_leads WHERE expires_at < ?", (now,))
+        try:
+            conn.execute(
+                """
+                INSERT INTO childcare_leads(

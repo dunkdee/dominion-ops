@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Employer Childcare Net-Cost Finder</title>
+  <style>
+    :root { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; background: #f7f7f8; color: #151515; }
+    main { max-width: 880px; margin: 0 auto; padding: 32px 18px 56px; }
+    .card { background: white; border: 1px solid #dedee3; border-radius: 14px; padding: 22px; margin: 16px 0; }
+    h1 { margin: 0 0 8px; font-size: clamp(28px, 5vw, 44px); line-height: 1.06; }
+    h2 { margin-top: 0; }
+    .sub { color: #555; line-height: 1.5; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+    label { display: block; font-weight: 650; font-size: 14px; }
+    input { width: 100%; box-sizing: border-box; margin-top: 6px; padding: 11px 12px; border: 1px solid #cfcfd6; border-radius: 9px; font: inherit; }
+    button { border: 0; border-radius: 9px; padding: 12px 16px; font-weight: 750; cursor: pointer; background: #161616; color: white; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .result { display: none; }
+    .metric { padding: 13px 0; border-bottom: 1px solid #ececf0; }
+    .metric:last-child { border-bottom: 0; }
+    .metric strong { display: block; font-size: 26px; }
+    .small { font-size: 13px; color: #666; line-height: 1.5; }
+    .notice { border-left: 4px solid #888; padding-left: 12px; }
+    .hidden { display: none; }
+    .status { margin-top: 12px; font-size: 14px; }
+    .honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+    @media (max-width: 680px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>Employer Childcare Net-Cost Finder</h1>
+    <p class="sub">Estimate the 2026 federal Section 45F childcare credit and identify currently verified employer-match programs. This is a screening tool, not a tax determination.</p>
+  </section>
+
+  <form id="calc" class="card">
+    <h2>Estimate your employer cost</h2>
+    <div class="grid">
+      <label>Average annual gross receipts
+        <input id="receipts" type="number" min="0" step="1000" required placeholder="e.g. 5000000" />
+      </label>
+      <label>Qualified childcare expenditures
+        <input id="childcareSpend" type="number" min="0" step="100" required placeholder="e.g. 36000" />
+      </label>
+      <label>Resource/referral expenditures
+        <input id="referralSpend" type="number" min="0" step="100" value="0" />
+      </label>
+      <label>State
+        <input id="state" maxlength="2" required placeholder="TX" />
+      </label>
+      <label>County
+        <input id="county" maxlength="100" placeholder="Dallas" />
+      </label>
+      <label>Eligible children in employer benefit
+        <input id="children" type="number" min="0" step="1" value="0" />
+      </label>
+      <label>Annual employer contribution per child
+        <input id="perChild" type="number" min="0" step="50" value="0" />
+      </label>
+    </div>
+    <p class="small">For 2026 screening, the tool uses the IRS-published $32 million gross-receipts threshold to flag possible small-business treatment. Tax aggregation and related rules can alter the final result.</p>
+    <button type="submit">Calculate estimate</button>
+    <div id="calcStatus" class="status"></div>
+  </form>
+
+  <section id="results" class="card result" aria-live="polite">
+    <h2>Estimated economics</h2>
+    <div class="metric"><span>Estimated federal credit</span><strong id="credit">$0</strong></div>
+    <div class="metric"><span>Illustrative employer cost after federal estimate</span><strong id="netCost">$0</strong></div>
+    <div class="metric"><span>Federal childcare expenditure rate used</span><strong id="rate">0%</strong></div>
+    <div id="localMetric" class="metric hidden"><span>Potential verified local match</span><strong id="localMatch">$0</strong><div id="localNote" class="small"></div></div>
+    <p id="legalNotice" class="small notice"></p>
+  </section>
+
+  <section id="leadCard" class="card hidden">
+    <h2>Get implementation options</h2>
+    <p class="sub">If you want help evaluating childcare-benefit providers, submit the business contact below. No external provider receives the lead until consent is recorded and a governed handoff is authorized.</p>
+    <form id="leadForm">
+      <div class="grid">
+        <label>Business name<input id="businessName" required maxlength="160" /></label>
+        <label>Contact name<input id="contactName" required maxlength="160" /></label>
+        <label>Work email<input id="workEmail" type="email" required /></label>
+        <label>Employee count<input id="employeeCount" type="number" min="1" step="1" /></label>
+        <label>Estimated annual childcare budget<input id="budget" type="number" min="0" step="100" /></label>
+        <label>Company website<input id="companyWebsite" placeholder="https://..." /></label>
+      </div>
+      <div class="honeypot" aria-hidden="true"><label>Website<input id="websiteHoneypot" tabindex="-1" autocomplete="off" /></label></div>
+      <p><label style="font-weight:500"><input id="consent" type="checkbox" required style="width:auto;margin-right:8px" />I consent to being contacted about employer childcare benefits and to my submitted business contact information being shared with a selected provider if a later authorized handoff occurs.</label></p>
+      <p id="privacyLine" class="small"></p>
+      <button type="submit">Request options</button>
+      <div id="leadStatus" class="status"></div>
+    </form>
+  </section>
+</main>
+<script>
+const money = new Intl.NumberFormat('en-US', {style:'currency', currency:'USD', maximumFractionDigits:0});
+let latest = null;
+
+async function loadConfig() {
+  try {
+    const r = await fetch('/v1/tools/employer-childcare/config');
+    const c = await r.json();
+    if (c.lead_capture_enabled) {
+      document.getElementById('leadCard').classList.remove('hidden');
+      if (c.privacy_policy_url) {
+        const line = document.getElementById('privacyLine');
+        const a = document.createElement('a');
+        a.href = c.privacy_policy_url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = 'Privacy policy';
+        line.appendChild(a);
+      }
+    }
+  } catch (_) {}
+}
+loadConfig();
+
+document.getElementById('calc').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('calcStatus');
+  status.textContent = 'Calculating…';
+  const payload = {
+    tax_year: 2026,
+    average_annual_gross_receipts: Number(document.getElementById('receipts').value || 0),
+    qualified_childcare_expenditures: Number(document.getElementById('childcareSpend').value || 0),
+    qualified_resource_referral_expenditures: Number(document.getElementById('referralSpend').value || 0),
+    state: document.getElementById('state').value.trim().toUpperCase(),
+    county: document.getElementById('county').value.trim() || null,
+    eligible_children: Number(document.getElementById('children').value || 0),
+    annual_employer_contribution_per_child: Number(document.getElementById('perChild').value || 0)
+  };
+  try {
+    const r = await fetch('/v1/tools/employer-childcare/net-cost', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Unable to calculate');
+    latest = payload;
+    document.getElementById('credit').textContent = money.format(data.federal.estimated_federal_credit_usd);
+    document.getElementById('netCost').textContent = money.format(data.federal.illustrative_employer_cost_after_estimated_credit_usd);
+    document.getElementById('rate').textContent = Math.round(data.federal.childcare_expenditure_rate * 100) + '%';
+    document.getElementById('legalNotice').textContent = data.legal_notice;
+    const local = data.local_programs?.[0];
+    const lm = document.getElementById('localMetric');
+    if (local) {
+      lm.classList.remove('hidden');
+      document.getElementById('localMatch').textContent = money.format(local.potential_match_usd);
+      document.getElementById('localNote').textContent = local.note + ' Status: ' + local.status;
+    } else {
+      lm.classList.add('hidden');
+    }
+    document.getElementById('results').style.display = 'block';
+    status.textContent = '';
+  } catch (err) {
+    status.textContent = err.message;
+  }
+});
+
+document.getElementById('leadForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('leadStatus');
+  status.textContent = 'Submitting…';
+  const payload = {
+    business_name: document.getElementById('businessName').value,
+    contact_name: document.getElementById('contactName').value,
+    work_email: document.getElementById('workEmail').value,
+    state: latest?.state || document.getElementById('state').value.trim().toUpperCase(),
+    county: latest?.county || document.getElementById('county').value.trim() || null,
+    employee_count: document.getElementById('employeeCount').value ? Number(document.getElementById('employeeCount').value) : null,
+    estimated_annual_childcare_budget: document.getElementById('budget').value ? Number(document.getElementById('budget').value) : null,
+    company_website: document.getElementById('companyWebsite').value || null,
+    consent_to_contact_and_share: document.getElementById('consent').checked,
+    website_honeypot: document.getElementById('websiteHoneypot').value || null
+  };
+  try {
+    const r = await fetch('/v1/tools/employer-childcare/leads', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'Idempotency-Key': crypto.randomUUID()},
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Unable to submit');
+    status.textContent = 'Received. Your request is queued for governed review.';
+    e.target.reset();
+  } catch (err) {
+    status.textContent = err.message;
+  }
+});
+</script>
+</body>
+</html>

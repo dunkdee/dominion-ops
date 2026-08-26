@@ -1,0 +1,29 @@
+{
+  "version": "2.2.0",
+  "lane": "employer-childcare-net-cost",
+  "provider": {
+    "id": "tootris",
+    "name": "TOOTRiS Employer Referral",
+    "official_destination": "https://go.tootris.com/refer",
+    "handoff_mode": "USER_REDIRECT_TO_OFFICIAL_FORM",
+    "published_reward_usd": 250,
+    "reward_trigger": "referred employer creates a partnership with TOOTRiS",
+    "verified_at": "2026-08-25",
+    "refresh_after": "2026-09-24",
+    "background_pii_submission": false
+  },
+  "radah_actions": {
+    "authorize_handoff": "AUTHORIZE_CHILDCARE_HANDOFF",
+    "confirm_conversion": "CONFIRM_CHILDCARE_CONVERSION"
+  },
+  "revenue_recognition": "provider-confirmed conversion only",
+  "outbound_click_revenue_usd": 0,
+  "fail_closed_conditions": [
+    "provider terms stale",
+    "lead consent missing",
+    "lead expired",
+    "RADAH HOLD or DENY",
+    "RADAH signature invalid or expired",
+    "conversion receipt conflicts with previously confirmed receipt"
+  ]
+}

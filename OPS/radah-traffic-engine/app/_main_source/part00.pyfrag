@@ -1,0 +1,214 @@
+from __future__ import annotations
+import hashlib
+import json
+import logging
+import secrets
+import time
+import uuid
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+
+from .audit import append_audit, verify_audit_chain
+from .config import settings
+from .db import init_db, tx
+from .models import (
+    GovernedOpportunityCreate, GovernedStatusChange, TrackEvent, VisitorIntent
+)
+from .radah import enforce_radah
+from .scoring import expected_rpv, opportunity_score, recommendation
+from .security import request_guard, require_api_key
+from .lanes.employer_childcare import (
+    EmployerChildcareEstimateIn,
+    EmployerChildcareLeadIn,
+    GovernedChildcareLeadStatus,
+    TOOTRIS_REFERRAL_SOURCE,
+    build_estimate,
+)
+from .lanes.childcare_handoff import (
+    GovernedChildcareConversion,
+    GovernedChildcareHandoff,
+    provider_is_current,
+    provider_public_descriptor,
+)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+)
+log = logging.getLogger(settings.service_name)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(
+    title="RADAH Traffic Revenue Engine",
+    version="2.2.0",
+    docs_url="/docs" if settings.allow_docs else None,
+    redoc_url=None,
+    lifespan=lifespan,
+)
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    started = time.monotonic()
+    correlation_id = request.headers.get("x-correlation-id") or str(uuid.uuid4())
+    request.state.correlation_id = correlation_id
+
+    try:
+        await request_guard(request)
+        response = await call_next(request)
+    except HTTPException as exc:
+        response = JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    except Exception:
+        log.exception("Unhandled request failure correlation_id=%s", correlation_id)
+        response = JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+    response.headers["x-correlation-id"] = correlation_id
+    response.headers["x-content-type-options"] = "nosniff"
+    response.headers["x-frame-options"] = "DENY"
+    response.headers["referrer-policy"] = "no-referrer"
+    response.headers["cache-control"] = "no-store"
+    response.headers["server-timing"] = f"app;dur={(time.monotonic()-started)*1000:.1f}"
+    return response
+
+
+@app.get("/health/live")
+def liveness():
+    return {"status": "ok", "service": settings.service_name}
+
+
+@app.get("/health/ready")
+def readiness():
+    try:
+        with tx() as conn:
+            conn.execute("SELECT 1").fetchone()
+        return {"status": "ready"}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="database unavailable") from exc
+
+
+@app.post("/v1/opportunities", dependencies=[Depends(require_api_key)])
+def create_opportunity(
+    body: GovernedOpportunityCreate,
+    x_radah_signature: str | None = Header(default=None),
+    x_radah_timestamp: str | None = Header(default=None),
+):
+    o = body.opportunity
+    corr = body.radah.correlation_id
+    target = f"opportunity:{o.slug}"
+
+    enforce_radah(
+        body.radah,
+        expected_action="CREATE_OPPORTUNITY",
+        expected_target=target,
+        signature=x_radah_signature,
+        signature_timestamp=x_radah_timestamp,
+    )
+
+    score = opportunity_score(o)
+    rpv = expected_rpv(o)
+    now = int(time.time())
+    oid = str(uuid.uuid4())
+
+    try:
+        with tx(write=True) as conn:
+            conn.execute("""
+                INSERT INTO opportunities(
+                    id,name,slug,demand,buyer_intent,urgency,competition,
+                    scalability,defensibility,execution_ease,payout,conversion_rate,
+                    opportunity_score,expected_rpv,status,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                oid,o.name,o.slug,o.demand,o.buyer_intent,o.urgency,o.competition,
+                o.scalability,o.defensibility,o.execution_ease,o.payout,o.conversion_rate,
+                score,rpv,"ACTIVE",now,now
+            ))
+    except Exception as exc:
+        append_audit(
+            correlation_id=corr, actor="traffic-engine", action="CREATE_OPPORTUNITY",
+            target=target, result="FAILED", after={"error": "insert_failed"}
+        )
+        raise HTTPException(status_code=409, detail="Opportunity already exists or is invalid") from exc
+
+    result = {
+        "id": oid,
+        "name": o.name,
+        "slug": o.slug,
+        "score": score,
+        "expected_rpv": rpv,
+        "recommendation": recommendation(score),
+        "status": "ACTIVE",
+    }
+    append_audit(
+        correlation_id=corr, actor="traffic-engine", action="CREATE_OPPORTUNITY",
+        target=target, result="SUCCESS", after=result
+    )
+    return result
+
+
+@app.post("/v1/opportunities/{slug}/status", dependencies=[Depends(require_api_key)])
+def set_status(
+    slug: str,
+    body: GovernedStatusChange,
+    x_radah_signature: str | None = Header(default=None),
+    x_radah_timestamp: str | None = Header(default=None),
+):
+    corr = body.radah.correlation_id
+    target = f"opportunity:{slug}"
+
+    enforce_radah(
+        body.radah,
+        expected_action="SET_OPPORTUNITY_STATUS",
+        expected_target=target,
+        signature=x_radah_signature,
+        signature_timestamp=x_radah_timestamp,
+    )
+
+    with tx(write=True) as conn:
+        row = conn.execute("SELECT * FROM opportunities WHERE slug=?", (slug,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Opportunity not found")
+        before = dict(row)
+        conn.execute(
+            "UPDATE opportunities SET status=?, updated_at=? WHERE slug=?",
+            (body.status, int(time.time()), slug),
+        )
+        after = dict(conn.execute("SELECT * FROM opportunities WHERE slug=?", (slug,)).fetchone())
+
+    append_audit(
+        correlation_id=corr, actor="traffic-engine", action="SET_OPPORTUNITY_STATUS",
+        target=target, result="SUCCESS", before=before, after=after
+    )
+    return {"slug": slug, "status": body.status}
+
+
+@app.get("/v1/opportunities/rank")
+def rank_opportunities():
+    with tx() as conn:
+        rows = conn.execute("""
+            SELECT name,slug,opportunity_score,expected_rpv,status
+            FROM opportunities
+            ORDER BY
+                CASE status WHEN 'ACTIVE' THEN 0 WHEN 'PAUSED' THEN 1 ELSE 2 END,
+                opportunity_score DESC,
+                expected_rpv DESC
+        """).fetchall()
+
+    return [
+        {
+            "rank": i,
+            "name": r["name"],
+            "slug": r["slug"],
+            "score": r["opportunity_score"],
+            "expected_rpv": r["expected_rpv"],
+            "recommendation": recommendation(r["opportunity_score"]),
+            "status": r["status"],
+        }

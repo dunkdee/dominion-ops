@@ -1,0 +1,181 @@
+                    id,lead_id,provider,destination_url,token_hash,
+                    radah_correlation_id,published_reward_usd,created_at,expires_at
+                ) VALUES(?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    handoff_id,lead_id,body.provider,provider["destination_url"],
+                    token_hash,body.radah.correlation_id,
+                    provider["published_reward_usd"],now,expires_at,
+                ),
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail="Handoff already authorized or invalid") from exc
+
+    append_audit(
+        correlation_id=body.radah.correlation_id,
+        actor="traffic-engine",
+        action="AUTHORIZE_CHILDCARE_HANDOFF",
+        target=target,
+        result="SUCCESS",
+        after={
+            "handoff_id": handoff_id,
+            "provider": body.provider,
+            "expires_at": expires_at,
+            "transmits_saved_lead_data": False,
+        },
+    )
+
+    base = str(request.base_url).rstrip("/")
+    return {
+        "authorized": True,
+        "handoff_id": handoff_id,
+        "provider": provider,
+        "handoff_url": f"{base}/r/childcare/{raw_token}",
+        "expires_at": expires_at,
+        "external_handoff_executed": False,
+        "note": "Open the handoff URL to continue to the provider's official referral form.",
+    }
+
+
+@app.get("/r/childcare/{token}")
+def employer_childcare_provider_redirect(token: str, request: Request):
+    """Record the outbound handoff and redirect to the official provider form."""
+    if len(token) < 20 or len(token) > 200:
+        raise HTTPException(status_code=404, detail="Invalid handoff token")
+    now = int(time.time())
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    with tx(write=True) as conn:
+        row = conn.execute(
+            "SELECT * FROM childcare_handoffs WHERE token_hash=?",
+            (token_hash,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Handoff not found")
+        if row["expires_at"] <= now:
+            raise HTTPException(status_code=410, detail="Handoff expired")
+
+        first_click = row["first_clicked_at"] is None
+        if first_click:
+            conn.execute(
+                "UPDATE childcare_handoffs SET first_clicked_at=? WHERE id=?",
+                (now,row["id"]),
+            )
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO events(
+                        id,idempotency_key,opportunity_slug,event_type,source,medium,
+                        campaign,page,revenue,occurred_at,recorded_at,metadata_json
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        str(uuid.uuid4()),f"childcare-handoff-click:{row['id']}",
+                        "employer-childcare-net-cost","affiliate_click","childcare-tool",
+                        "provider-referral","tootris-employer-referral",
+                        row["destination_url"],0.0,now,now,
+                        json.dumps({"handoff_id": row["id"], "provider": row["provider"]}, sort_keys=True),
+                    ),
+                )
+            except Exception:
+                # The click event is idempotent; redirect must not fail on a duplicate event.
+                pass
+
+    if first_click:
+        append_audit(
+            correlation_id=row["radah_correlation_id"],
+            actor="public-childcare-handoff",
+            action="OPEN_PROVIDER_HANDOFF",
+            target=f"childcare-handoff:{row['id']}",
+            result="SUCCESS",
+            after={
+                "provider": row["provider"],
+                "first_clicked_at": now,
+                "transmitted_lead_pii": False,
+            },
+        )
+
+    return RedirectResponse(url=row["destination_url"], status_code=302)
+
+
+@app.post(
+    "/v1/tools/employer-childcare/handoffs/{handoff_id}/conversion",
+    dependencies=[Depends(require_api_key)],
+)
+def confirm_employer_childcare_conversion(
+    handoff_id: str,
+    body: GovernedChildcareConversion,
+    x_radah_signature: str | None = Header(default=None),
+    x_radah_timestamp: str | None = Header(default=None),
+):
+    """Record only a provider-confirmed conversion/reward as revenue."""
+    target = f"childcare-handoff:{handoff_id}"
+    enforce_radah(
+        body.radah,
+        expected_action="CONFIRM_CHILDCARE_CONVERSION",
+        expected_target=target,
+        signature=x_radah_signature,
+        signature_timestamp=x_radah_timestamp,
+    )
+    now = int(time.time())
+
+    with tx(write=True) as conn:
+        row = conn.execute(
+            "SELECT * FROM childcare_handoffs WHERE id=?",
+            (handoff_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Handoff not found")
+        if row["converted_at"] is not None:
+            if (
+                row["provider_receipt_id"] == body.provider_receipt_id
+                and float(row["confirmed_reward_usd"] or 0) == body.confirmed_reward_usd
+            ):
+                return {
+                    "confirmed": True,
+                    "handoff_id": handoff_id,
+                    "idempotent_replay": True,
+                    "confirmed_reward_usd": body.confirmed_reward_usd,
+                }
+            raise HTTPException(status_code=409, detail="Conversion already confirmed with different receipt")
+
+        conn.execute(
+            """
+            UPDATE childcare_handoffs
+            SET converted_at=?,confirmed_reward_usd=?,provider_receipt_id=?
+            WHERE id=?
+            """,
+            (now,body.confirmed_reward_usd,body.provider_receipt_id,handoff_id),
+        )
+        conn.execute(
+            "UPDATE childcare_leads SET status='CLOSED' WHERE id=?",
+            (row["lead_id"],),
+        )
+        conn.execute(
+            """
+            INSERT INTO events(
+                id,idempotency_key,opportunity_slug,event_type,source,medium,campaign,
+                page,revenue,occurred_at,recorded_at,metadata_json
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                str(uuid.uuid4()),f"childcare-conversion:{handoff_id}",
+                "employer-childcare-net-cost","conversion","provider-confirmed",
+                "provider-referral","tootris-employer-referral",row["destination_url"],
+                body.confirmed_reward_usd,now,now,
+                json.dumps({
+                    "handoff_id": handoff_id,
+                    "provider": row["provider"],
+                    "provider_receipt_id": body.provider_receipt_id,
+                }, sort_keys=True),
+            ),
+        )
+
+    append_audit(
+        correlation_id=body.radah.correlation_id,
+        actor="traffic-engine",
+        action="CONFIRM_CHILDCARE_CONVERSION",
+        target=target,
+        result="SUCCESS",
+        after={
+            "provider": row["provider"],

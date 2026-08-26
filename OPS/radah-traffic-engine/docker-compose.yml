@@ -1,0 +1,30 @@
+services:
+  traffic-engine:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      ENVIRONMENT: production
+      API_KEY: ${API_KEY}
+      RADAH_SHARED_SECRET: ${RADAH_SHARED_SECRET}
+      AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY}
+      REQUIRE_RADAH_SIGNATURE: "true"
+      DB_PATH: /data/traffic_engine.db
+      ALLOW_DOCS: "false"
+      RATE_LIMIT_PER_MINUTE: "120"
+      ENABLE_PUBLIC_LEAD_CAPTURE: ${ENABLE_PUBLIC_LEAD_CAPTURE:-false}
+      PRIVACY_POLICY_URL: ${PRIVACY_POLICY_URL:-https://example.com/privacy}
+      LEAD_RETENTION_DAYS: ${LEAD_RETENTION_DAYS:-90}
+    volumes:
+      - traffic-data:/data
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  traffic-data:

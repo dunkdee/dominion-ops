@@ -1,0 +1,16 @@
+            "provider_receipt_id": body.provider_receipt_id,
+            "confirmed_reward_usd": body.confirmed_reward_usd,
+            "converted_at": now,
+        },
+    )
+    return {
+        "confirmed": True,
+        "handoff_id": handoff_id,
+        "idempotent_replay": False,
+        "confirmed_reward_usd": body.confirmed_reward_usd,
+    }
+
+
+@app.get("/v1/audit/verify", dependencies=[Depends(require_api_key)])
+def audit_verify():
+    return verify_audit_chain()

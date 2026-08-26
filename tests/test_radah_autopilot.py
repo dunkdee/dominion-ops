@@ -21,22 +21,10 @@ spec.loader.exec_module(lane_supervisor)
 class FakeOperator:
     def __init__(self):
         self.capabilities = {
-            "brain.reason": {
-                "auth_required": False,
-                "classification": "internal",
-            },
-            "artifact.stage": {
-                "auth_required": False,
-                "classification": "internal",
-            },
-            "external.publish": {
-                "auth_required": True,
-                "classification": "privileged_write",
-            },
-            "unsafe.write": {
-                "auth_required": False,
-                "classification": "internal",
-            },
+            "brain.reason": {"auth_required": False, "classification": "internal"},
+            "artifact.stage": {"auth_required": False, "classification": "internal"},
+            "external.publish": {"auth_required": True, "classification": "privileged_write"},
+            "unsafe.write": {"auth_required": False, "classification": "internal"},
         }
 
 
@@ -92,29 +80,19 @@ class RadahAutopilotTests(unittest.TestCase):
                 {"capability": "brain.reason", "instruction": "analyze"},
                 {"capability": "artifact.stage", "instruction": "stage"},
                 {"capability": "external.publish", "instruction": "publish"},
-            ]},
-            op,
-            self.policy,
+            ]}, op, self.policy,
         )
-
         with self.assertRaises(lane_supervisor.AutopilotError):
             lane_supervisor.validate_plan(
-                {"steps": [{"capability": "unsafe.write", "instruction": "mutate"}]},
-                op,
-                self.policy,
+                {"steps": [{"capability": "unsafe.write", "instruction": "mutate"}]}, op, self.policy
             )
 
     def test_external_capability_must_be_founder_held(self):
         op = FakeOperator()
-        op.capabilities["external.publish"] = {
-            "auth_required": False,
-            "classification": "internal",
-        }
+        op.capabilities["external.publish"] = {"auth_required": False, "classification": "internal"}
         with self.assertRaises(lane_supervisor.AutopilotError):
             lane_supervisor.validate_plan(
-                {"steps": [{"capability": "external.publish", "instruction": "publish"}]},
-                op,
-                self.policy,
+                {"steps": [{"capability": "external.publish", "instruction": "publish"}]}, op, self.policy
             )
 
     def test_execute_fails_closed_without_runtime_activation(self):
@@ -139,28 +117,17 @@ class RadahAutopilotTests(unittest.TestCase):
 
     def test_governed_blocked_cycle_is_healthy_scheduler_progress(self):
         receipt = {
-            "schema": "radah-autopilot-receipt-v1",
-            "lane": "analytics_services",
-            "status": "BLOCKED",
-            "mission_id": "mission_test",
-            "external_actions_authorized": False,
-            "receipts": [{
-                "capability": "revenue.prepare",
-                "status": "BLOCKED",
-                "hold_code": "CURRENT_AUTHORITY_UNAVAILABLE",
-            }],
+            "schema": "radah-autopilot-receipt-v1", "lane": "analytics_services",
+            "status": "BLOCKED", "mission_id": "mission_test", "external_actions_authorized": False,
+            "receipts": [{"capability": "revenue.prepare", "status": "BLOCKED", "hold_code": "CURRENT_AUTHORITY_UNAVAILABLE"}],
         }
         self.assertTrue(lane_supervisor.bounded_cycle_ok(receipt))
 
     def test_supervisor_failure_cannot_masquerade_as_healthy_blocker(self):
         receipt = {
-            "schema": "radah-autopilot-receipt-v1",
-            "lane": "analytics_services",
-            "status": "BLOCKED",
-            "mission_id": None,
-            "external_actions_authorized": False,
-            "receipts": [],
-            "supervisor_error": {"type": "ImportError", "detail": "missing runtime"},
+            "schema": "radah-autopilot-receipt-v1", "lane": "analytics_services",
+            "status": "BLOCKED", "mission_id": None, "external_actions_authorized": False,
+            "receipts": [], "supervisor_error": {"type": "ImportError", "detail": "missing runtime"},
         }
         self.assertFalse(lane_supervisor.bounded_cycle_ok(receipt))
 
@@ -172,20 +139,11 @@ class RadahAutopilotTests(unittest.TestCase):
             state_dir = Path(tmp)
             state = {"schema": "radah-autopilot-state-v1", "lanes": {}, "cycles": 0}
             receipt = {
-                "schema": "radah-autopilot-receipt-v1",
-                "lane": lane.lane_id,
-                "status": "BLOCKED",
-                "mission_id": "mission_blocked",
-                "external_actions_authorized": False,
+                "schema": "radah-autopilot-receipt-v1", "lane": lane.lane_id, "status": "BLOCKED",
+                "mission_id": "mission_blocked", "external_actions_authorized": False,
                 "receipts": [{"capability": "revenue.prepare", "status": "BLOCKED"}],
             }
-            lane_supervisor.persist_cycle(
-                state_dir=state_dir,
-                state=state,
-                lane=lane,
-                receipt=receipt,
-                now=now,
-            )
+            lane_supervisor.persist_cycle(state_dir=state_dir, state=state, lane=lane, receipt=receipt, now=now)
             saved = lane_supervisor.load_state(state_dir / "state.json")
             self.assertEqual(saved["cycles"], 1)
             self.assertEqual(saved["lanes"][lane.lane_id]["last_status"], "BLOCKED")
@@ -199,6 +157,30 @@ class RadahAutopilotTests(unittest.TestCase):
         self.assertIn("ExecStart=$buddy_python", installer)
         self.assertNotIn("ExecStart=/usr/bin/python3", installer)
         self.assertIn("ConditionPathExists=$buddy_python", installer)
+
+    def test_installer_preserves_known_layered_execstart_dependencies_atomically(self):
+        installer = INSTALLER_PATH.read_text(encoding="utf-8")
+        self.assertIn("revenue-workplane.conf", installer)
+        self.assertIn("overlay_mode=\"multilane\"", installer)
+        self.assertIn("overlay_mode=\"revenue\"", installer)
+        self.assertIn("unknown_execstart_overlay", installer)
+        self.assertIn("scripts/autopilot/revenue_workplane_supervisor.py", installer)
+        self.assertIn("scripts/autopilot/multilane_supervisor.py", installer)
+        self.assertIn("scripts/autopilot/control_plane_guard.py", installer)
+        self.assertIn("governance/SYSTEM_CONSTITUTION.md", installer)
+        self.assertIn("governance/lane_runtime_contracts.json", installer)
+        self.assertIn("governance/profitability_lane_contracts.json", installer)
+        self.assertIn("agents/registry.json", installer)
+        self.assertIn("AUTOPILOT_LAYERED_OVERLAY=PRESERVED", installer)
+        self.assertIn("AUTOPILOT_EFFECTIVE_ENTRYPOINT=PASS", installer)
+        self.assertIn("AUTOPILOT_LAYERED_MIGRATION=PASS", installer)
+
+    def test_installer_validates_multilane_overlay_as_multilane_not_single_lane(self):
+        installer = INSTALLER_PATH.read_text(encoding="utf-8")
+        self.assertIn("validate_latest_multilane_sweep", installer)
+        self.assertIn("AUTOPILOT_LAYERED_MULTILANE_SMOKE=PASS", installer)
+        self.assertIn("constitutional.get('human_final_authority') == 'human_overseer'", installer)
+        self.assertIn("cycles_before + selected_count", installer)
 
     def test_installer_proves_governed_blocker_rotation_before_timer(self):
         installer = INSTALLER_PATH.read_text(encoding="utf-8")

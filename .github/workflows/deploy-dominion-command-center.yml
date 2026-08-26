@@ -1,22 +1,6 @@
 name: Deploy Dominion Command Center
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/command-center/**'
-      - 'docker-compose.command-center.yml'
-      - 'governance/lane_access_policy.json'
-      - 'governance/revenue_execution_policy.json'
-      - 'obsidian/**'
-      - 'scripts/command_center_state_bridge_v2.py'
-      - 'scripts/install_command_center_state_bridge.sh'
-      - 'scripts/converge_command_center_vault_route.sh'
-      - 'scripts/deploy_command_center.sh'
-      - 'scripts/deploy_dominion_command_center.sh'
-      - 'tests/test_command_center_live_truth.py'
-      - 'tests/test_dominion_command_center_ui.py'
-      - '.github/workflows/deploy-dominion-command-center.yml'
   workflow_dispatch:
     inputs:
       confirm:
@@ -39,14 +23,8 @@ jobs:
   deploy:
     if: >-
       github.ref == 'refs/heads/main' &&
-      (
-        github.event_name == 'push' ||
-        (
-          github.event_name == 'workflow_dispatch' &&
-          inputs.confirm == 'DEPLOY DOMINION COMMAND CENTER' &&
-          inputs.commit_sha == github.sha
-        )
-      )
+      inputs.confirm == 'DEPLOY DOMINION COMMAND CENTER' &&
+      inputs.commit_sha == github.sha
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: foundation-vm-production
@@ -136,12 +114,10 @@ jobs:
           trap cleanup EXIT
           test -f "$REMOTE_BUNDLE"; test -f "$PASSWORD_FILE"; mkdir -m 700 "$REMOTE_ROOT"; tar -xzf "$REMOTE_BUNDLE" -C "$REMOTE_ROOT"
           password="$(cat "$PASSWORD_FILE")"; test -n "$password"; export OBSIDIAN_PASSWORD="$password"
-
           ASSET_ROOT="$REMOTE_ROOT" RUN_ID="$RUN_ID" bash "$REMOTE_ROOT/scripts/deploy_dominion_command_center.sh"
           repo="$HOME/dominion-ops"; test -d "$repo/.git"; cd "$repo"
           git fetch origin main; git checkout main; git pull --ff-only origin main; test "$(git rev-parse HEAD)" = "$RUN_SHA"
           EXPECTED_SHA="$RUN_SHA" COMMAND_CENTER_BRANCH=main RUN_ID="$RUN_ID" bash scripts/deploy_command_center.sh
-
           curl -fsS http://127.0.0.1:8091/health | python3 -m json.tool
           STATUS="$(curl -fsS http://127.0.0.1:8091/api/status)"
           python3 - "$STATUS" "$RUN_SHA" <<'PY'

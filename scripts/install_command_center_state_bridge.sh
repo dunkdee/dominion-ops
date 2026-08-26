@@ -7,7 +7,7 @@ repo="${REPO_DIR:-$HOME/dominion-ops}"
 state_root="$HOME/.dominion/command-center"
 runtime_root="$state_root/runtime"
 receipts="$state_root/receipts"
-bridge_src="$repo/scripts/command_center_state_bridge.py"
+bridge_src="$repo/scripts/command_center_state_bridge_v2.py"
 bridge="$runtime_root/command_center_state_bridge.py"
 service_name="dominion-command-center-state.service"
 timer_name="dominion-command-center-state.timer"
@@ -84,8 +84,10 @@ test -s "$state_root/runtime-state.json"
 python3 - "$state_root/runtime-state.json" "$RUN_SHA" <<'PY'
 import json,sys
 state=json.load(open(sys.argv[1],encoding='utf-8'))
+assert state['schema']=='dominion-command-center-runtime-state-v2', state.get('schema')
 assert state['release_sha']==sys.argv[2], (state.get('release_sha'),sys.argv[2])
 lanes=state['lanes']
 assert lanes['registered']==11 and lanes['open']==11 and lanes['all_open'] is True, lanes
-print('COMMAND_CENTER_STATE_BRIDGE=PASS lanes=11/11 cadence=60s')
+assert state['founder_holds'], 'Founder holds unavailable'
+print(f"COMMAND_CENTER_STATE_BRIDGE=PASS lanes=11/11 cadence=60s receipts={len(state['latest_receipts'])}")
 PY

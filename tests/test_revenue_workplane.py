@@ -48,6 +48,7 @@ class RevenueWorkplaneTests(unittest.TestCase):
         self.assertTrue(self.autopilot["all_registered_lanes_internal_open"])
         self.assertTrue(self.autopilot["rules"]["every_registered_lane_is_scheduler_eligible"])
         self.assertTrue(self.autopilot["rules"]["readiness_labels_do_not_close_internal_work"])
+        self.assertEqual(self.autopilot["max_missions_per_cycle"], 3)
 
     def test_workplane_binds_live_canary_to_commerce(self):
         self.assertEqual(self.workplane["primary_lane"], "commerce_fulfillment")
@@ -144,14 +145,21 @@ class RevenueWorkplaneTests(unittest.TestCase):
         self.assertIn("zero synthetic traffic", revenue.lower())
         self.assertIn("not sales", revenue.lower())
 
-    def test_installer_proves_all_lanes_open_without_restarting_runtime(self):
+    def test_installer_binds_constitutional_multilane_runtime_without_unrelated_restart(self):
         installer = (ROOT / "scripts" / "autopilot" / "install_revenue_workplane.sh").read_text(encoding="utf-8")
+        self.assertIn("governance/SYSTEM_CONSTITUTION.md", installer)
+        self.assertIn("governance/authority_matrix.json", installer)
         self.assertIn("governance/lane_access_policy.json", installer)
+        self.assertIn("governance/lane_runtime_contracts.json", installer)
+        self.assertIn("governance/profitability_lane_contracts.json", installer)
+        self.assertIn("agents/registry.json", installer)
+        self.assertIn("CONSTITUTIONAL_RUNTIME_GUARD=PASS", installer)
         self.assertIn("RADAH_ALL_LANES=OPEN count=11", installer)
-        self.assertIn("revenue_workplane_supervisor.py --execute", installer)
+        self.assertIn("multilane_supervisor.py --execute", installer)
         self.assertIn("--plan-only --lane", installer)
         self.assertIn("dominion-revenue-runtime.service", installer)
         self.assertIn("dominion-revenue-evaluator.timer", installer)
+        self.assertNotIn("revenue_workplane_supervisor.py --execute --state-dir", installer)
         self.assertNotIn("systemctl restart dominion-revenue-runtime.service", installer)
         self.assertNotIn("systemctl restart dominion-radah-autopilot.timer", installer)
 

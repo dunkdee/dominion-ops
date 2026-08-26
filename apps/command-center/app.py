@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from intelligence import route_intelligence
 from revenue import record_funnel_event, revenue_state
+from runtime_state import runtime_state as canonical_runtime_state
 
 APP_DIR = Path(__file__).resolve().parent
 VAULT_PATH = Path(os.getenv("VAULT_PATH", "/vault"))
@@ -20,7 +21,7 @@ LANE_POLICY_PATH = Path(os.getenv("LANE_POLICY_PATH", "/governance/lane_access_p
 NEMOTRON_BASE_URL = os.getenv("NEMOTRON_BASE_URL", "").rstrip("/")
 NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "nemotron-3")
 
-app = FastAPI(title="Dominion Command Center", version="0.4.1")
+app = FastAPI(title="Dominion Command Center", version="1.0.0")
 
 
 class ChatRequest(BaseModel):
@@ -44,34 +45,22 @@ def list_recent_notes(limit: int = 8) -> list[dict[str, Any]]:
         return []
     notes: list[dict[str, Any]] = []
     try:
-        files = sorted(
-            VAULT_PATH.rglob("*.md"),
-            key=lambda item: item.stat().st_mtime,
-            reverse=True,
-        )[:limit]
+        files = sorted(VAULT_PATH.rglob("*.md"), key=lambda item: item.stat().st_mtime, reverse=True)[:limit]
         for path in files:
             stat = path.stat()
-            notes.append(
-                {
-                    "name": path.stem,
-                    "path": str(path.relative_to(VAULT_PATH)),
-                    "updated": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
-                }
-            )
+            notes.append({
+                "name": path.stem,
+                "path": str(path.relative_to(VAULT_PATH)),
+                "updated": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+            })
     except OSError:
         return []
     return notes
 
 
-def lane_state() -> dict[str, Any]:
+def _policy_lane_state() -> dict[str, Any]:
     if not LANE_POLICY_PATH.exists():
-        return {
-            "connected": False,
-            "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
-            "open_count": 0,
-            "registered_count": 0,
-            "lanes": [],
-        }
+        return {"connected": False, "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה", "open_count": 0, "registered_count": 0, "lanes": []}
     try:
         policy = json.loads(LANE_POLICY_PATH.read_text(encoding="utf-8"))
         lane_map = policy.get("lanes", {})
@@ -81,24 +70,33 @@ def lane_state() -> dict[str, Any]:
                 "name": slug.replace("_", " ").title(),
                 "internal_work_open": bool(state.get("internal_work_open")),
                 "scheduler_eligible": bool(state.get("scheduler_eligible")),
+                "external_readiness": "separate_founder_gate",
             }
             for slug, state in lane_map.items()
         ]
         return {
             "connected": True,
             "governing_name": policy.get("governing_name", "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה"),
-            "open_count": sum(1 for lane in lanes if lane["internal_work_open"]),
+            "open_count": sum(1 for lane in lanes if lane["internal_work_open"] and lane["scheduler_eligible"]),
             "registered_count": len(lanes),
             "lanes": lanes,
         }
     except (OSError, ValueError, TypeError):
+        return {"connected": False, "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה", "open_count": 0, "registered_count": 0, "lanes": []}
+
+
+def lane_state() -> dict[str, Any]:
+    snapshot = canonical_runtime_state()
+    live = snapshot.get("lanes", {}) if isinstance(snapshot, dict) else {}
+    if snapshot.get("connected") and live.get("connected"):
         return {
-            "connected": False,
-            "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
-            "open_count": 0,
-            "registered_count": 0,
-            "lanes": [],
+            "connected": True,
+            "governing_name": live.get("governing_name", "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה"),
+            "open_count": int(live.get("open", 0) or 0),
+            "registered_count": int(live.get("registered", 0) or 0),
+            "lanes": live.get("items", []),
         }
+    return _policy_lane_state()
 
 
 def build_context() -> str:
@@ -106,18 +104,20 @@ def build_context() -> str:
     note_lines = [f"- {item['name']} ({item['path']})" for item in recent]
     revenue = revenue_state()
     lanes = lane_state()
-    return "\n".join(
-        [
-            "Mission: Build Dominion into an elite, truthful, scalable, AI-operated business ecosystem.",
-            "Operating order: cash flow, systems, scale.",
-            "Founder retains final authority over consequential external effects.",
-            f"Lane state: {lanes['open_count']} of {lanes['registered_count']} registered lanes open for bounded internal production.",
-            "Current focus: launch Dominion digital products and close the traffic-to-revenue loop.",
-            f"Revenue vertical status: {revenue['vertical_status']} with {revenue['ready_offer_count']} ready offers.",
-            "Recent Obsidian notes:",
-            *(note_lines or ["- No readable notes available."]),
-        ]
-    )
+    runtime = canonical_runtime_state()
+    metrics = revenue.get("metrics", {})
+    return "\n".join([
+        "Mission: Build Dominion into an elite, truthful, scalable, AI-operated business ecosystem.",
+        "Operating order: cash flow, systems, scale.",
+        "Founder retains final authority over consequential external effects.",
+        f"Lane state: {lanes['open_count']} of {lanes['registered_count']} registered lanes open for bounded internal production.",
+        f"Revenue runtime: {revenue['vertical_status']}.",
+        f"Revenue constraint: {revenue.get('constraint')}.",
+        f"Revenue metrics: visitors={metrics.get('visitors')} clicks={metrics.get('clicks')} purchases={metrics.get('purchases')} revenue_usd={metrics.get('revenue_usd')}.",
+        f"Runtime evidence observed_at: {runtime.get('observed_at')}.",
+        "Recent Obsidian notes:",
+        *(note_lines or ["- No readable notes available."]),
+    ])
 
 
 def record_exchange(message: str, answer: str, source: str) -> None:
@@ -132,14 +132,39 @@ def record_exchange(message: str, answer: str, source: str) -> None:
         pass
 
 
+def _system_summary(runtime: dict[str, Any]) -> dict[str, str]:
+    summary: dict[str, str] = {}
+    systems = runtime.get("systems", {}) if isinstance(runtime.get("systems"), dict) else {}
+    for name, state in systems.items():
+        if not isinstance(state, dict):
+            summary[name] = "unavailable"
+        elif "active" in state:
+            summary[name] = "online" if state.get("active") else state.get("active_state", "not_verified")
+        else:
+            summary[name] = "online" if state.get("ok") else "not_verified"
+    summary["nemotron"] = "configured" if NEMOTRON_BASE_URL else "awaiting_worker"
+    summary["conductor_fallback"] = "configured"
+    return summary
+
+
+def _missions(constraint: str, revenue: dict[str, Any]) -> list[dict[str, str]]:
+    first = {
+        "QUALIFIED_TRAFFIC": "Drive qualified traffic into the live VoltEdge experiment",
+        "OFFER_ENGAGEMENT": "Improve experiment offer engagement and CTA response",
+        "PURCHASE_CONVERSION": "Diagnose click-to-purchase conversion friction",
+        "STATISTICAL_EVIDENCE": "Accumulate clean purchase evidence until the winner gate resolves",
+        "COMPOUND_WINNER": "Compound the verified winner and prepare the next controlled experiment",
+    }.get(constraint, "Restore authoritative revenue runtime evidence")
+    missions = [{"title": first, "state": "active"}]
+    if revenue.get("active_experiment_count", 0):
+        missions.append({"title": "Keep revenue attribution and evaluator receipts current", "state": "active"})
+    missions.append({"title": "Keep all 11 internal production lanes schedulable", "state": "active"})
+    missions.append({"title": "Surface consequential external effects for Founder action", "state": "governed"})
+    return missions
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request) -> HTMLResponse:
-    """Serve one UI at root or behind the protected /command-center path.
-
-    Caddy supplies X-Forwarded-Prefix only for the vault fallback. The HTML is
-    adjusted at response time so API calls remain same-origin and prefix-safe
-    without maintaining two front ends.
-    """
     prefix = request.headers.get("x-forwarded-prefix", "").strip().rstrip("/")
     if prefix and (not prefix.startswith("/") or ".." in prefix):
         prefix = ""
@@ -159,20 +184,27 @@ def dashboard(request: Request) -> HTMLResponse:
 def health() -> dict[str, Any]:
     revenue = revenue_state()
     lanes = lane_state()
+    runtime = canonical_runtime_state()
     return {
         "status": "ok",
         "service": "dominion-command-center",
         "version": app.version,
         "time": utc_now(),
+        "truth_source_connected": bool(runtime.get("connected")),
+        "truth_observed_at": runtime.get("observed_at"),
+        "release_sha": runtime.get("release_sha"),
         "vault_connected": VAULT_PATH.exists(),
         "memory_writable": MEMORY_PATH.exists() and os.access(MEMORY_PATH, os.W_OK),
         "lane_policy_connected": lanes["connected"],
         "open_lane_count": lanes["open_count"],
         "registered_lane_count": lanes["registered_count"],
+        "autopilot_connected": bool(runtime.get("autopilot", {}).get("connected")),
         "nemotron_configured": bool(NEMOTRON_BASE_URL),
         "nemotron_model": NEMOTRON_MODEL,
         "revenue_vertical_status": revenue["vertical_status"],
-        "ready_offer_count": revenue["ready_offer_count"],
+        "revenue_runtime_connected": revenue["runtime_connected"],
+        "revenue_constraint": revenue["constraint"],
+        "active_experiment_count": revenue["active_experiment_count"],
     }
 
 
@@ -187,49 +219,50 @@ def revenue_event(body: FunnelEvent) -> dict[str, Any]:
         saved = record_funnel_event(MEMORY_PATH, body.model_dump())
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"accepted": True, "event": saved}
+    return {"accepted": True, "authoritative": False, "event": saved}
 
 
 @app.get("/api/status")
 def status() -> dict[str, Any]:
+    runtime = canonical_runtime_state()
     revenue = revenue_state()
     lanes = lane_state()
+    metrics = revenue.get("metrics", {})
+    founder_holds = runtime.get("founder_holds", []) if isinstance(runtime.get("founder_holds"), list) else []
+    autopilot = runtime.get("autopilot", {}) if isinstance(runtime.get("autopilot"), dict) else {}
+    receipts = runtime.get("latest_receipts", []) if isinstance(runtime.get("latest_receipts"), list) else []
+    public_receipts = [{"source": item.get("source"), "name": item.get("name"), "observed_at": item.get("observed_at")} for item in receipts if isinstance(item, dict)]
     return {
         "time": utc_now(),
-        "governing_name": lanes["governing_name"],
-        "systems": {
-            "command_center": "online",
-            "obsidian": "online" if VAULT_PATH.exists() else "unavailable",
-            "lane_policy": "online" if lanes["connected"] else "unavailable",
-            "metatron": "configured",
-            "nemotron": "configured" if NEMOTRON_BASE_URL else "awaiting_worker",
-            "conductor": "fallback_ready",
-            "memory": "online" if MEMORY_PATH.exists() else "initializing",
-            "revenue_loop": revenue["vertical_status"],
+        "truth": {
+            "connected": bool(runtime.get("connected")),
+            "observed_at": runtime.get("observed_at"),
+            "release_sha": runtime.get("release_sha"),
+            "rule": "Current production state requires timestamped runtime receipts.",
         },
+        "governing_name": lanes["governing_name"],
+        "systems": _system_summary(runtime),
         "lane_summary": {
             "open": lanes["open_count"],
             "registered": lanes["registered_count"],
             "all_open": lanes["registered_count"] > 0 and lanes["open_count"] == lanes["registered_count"],
         },
         "lanes": lanes["lanes"],
+        "autopilot": autopilot,
         "sprint": {
-            "day": 1,
-            "focus": "Dominion digital products revenue loop",
-            "revenue": 0,
-            "traffic": 0,
-            "published": 0,
-            "approvals": 0,
-            "ready_offers": revenue["ready_offer_count"],
+            "focus": revenue.get("constraint"),
+            "revenue": metrics.get("revenue_usd"),
+            "traffic": metrics.get("visitors"),
+            "clicks": metrics.get("clicks"),
+            "purchases": metrics.get("purchases"),
+            "active_experiments": revenue.get("active_experiment_count"),
+            "founder_holds": len(founder_holds),
         },
         "recent_notes": list_recent_notes(),
-        "missions": [
-            {"title": "Drive qualified traffic into the live VoltEdge experiment", "state": "active"},
-            {"title": "Connect Nemotron primary worker", "state": "active"},
-            {"title": "Configure verified checkout and delivery", "state": "active"},
-            {"title": "Verify purchase-to-delivery telemetry", "state": "queued" if revenue["ready_offer_count"] else "blocked"},
-        ],
+        "missions": _missions(str(revenue.get("constraint")), revenue),
         "revenue": revenue,
+        "founder_holds": founder_holds,
+        "latest_receipts": public_receipts,
     }
 
 
@@ -241,7 +274,6 @@ def chat(body: ChatRequest) -> dict[str, Any]:
         source = str(routed["source"])
         record_exchange(body.message, answer, source)
         return {"answer": answer, "source": source, "time": utc_now()}
-
     answer = (
         "Command Center is online, but neither the Nemotron primary worker nor the "
         "Conductor fallback responded. The command was not marked complete. Check "

@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "autopilot" / "lane_supervisor.py"
 INSTALLER_PATH = ROOT / "scripts" / "autopilot" / "install_autopilot.sh"
+ACTIVATION_WORKFLOW_PATH = ROOT / ".github" / "workflows" / "activate-radah-memshalah-autopilot.yml"
 COMPLETED_CLOSURE_WORKFLOW_PATH = ROOT / ".github" / "workflows" / "authorized-entire-production-closure-20260826.yml"
 spec = importlib.util.spec_from_file_location("lane_supervisor", MODULE_PATH)
 assert spec and spec.loader
@@ -162,12 +163,36 @@ class RadahAutopilotTests(unittest.TestCase):
         self.assertNotIn("ExecStart=/usr/bin/python3", installer)
         self.assertIn("ConditionPathExists=$buddy_python", installer)
 
+    def test_activation_bundle_contains_every_layered_runtime_dependency(self):
+        workflow = ACTIVATION_WORKFLOW_PATH.read_text(encoding="utf-8")
+        required = (
+            "scripts/autopilot/revenue_workplane_supervisor.py",
+            "scripts/autopilot/multilane_supervisor.py",
+            "scripts/autopilot/control_plane_guard.py",
+            "governance/SYSTEM_CONSTITUTION.md",
+            "governance/authority_matrix.json",
+            "governance/five_council_policy.json",
+            "governance/incident_learning_policy.json",
+            "governance/legal_evidence_policy.json",
+            "governance/constitutional_amendment_policy.json",
+            "governance/revenue_workplane.json",
+            "governance/lane_access_policy.json",
+            "governance/lane_runtime_contracts.json",
+            "governance/profitability_lane_contracts.json",
+            "agents/registry.json",
+        )
+        for path in required:
+            self.assertIn(path, workflow, path)
+
     def test_installer_preserves_known_layered_execstart_dependencies_atomically(self):
         installer = INSTALLER_PATH.read_text(encoding="utf-8")
-        self.assertIn("revenue-workplane.conf", installer)
+        self.assertIn('systemctl cat "$service_name"', installer)
+        self.assertIn('systemctl show "$service_name" -p ExecStart --value', installer)
+        self.assertIn("AUTOPILOT_EFFECTIVE_OVERLAY=DETECTED", installer)
         self.assertIn("overlay_mode=\"multilane\"", installer)
         self.assertIn("overlay_mode=\"revenue\"", installer)
-        self.assertIn("unknown_execstart_overlay", installer)
+        self.assertIn("unknown_effective_execstart", installer)
+        self.assertIn("effective_execstart_unresolved", installer)
         self.assertIn("scripts/autopilot/revenue_workplane_supervisor.py", installer)
         self.assertIn("scripts/autopilot/multilane_supervisor.py", installer)
         self.assertIn("scripts/autopilot/control_plane_guard.py", installer)
@@ -176,6 +201,8 @@ class RadahAutopilotTests(unittest.TestCase):
         self.assertIn("governance/profitability_lane_contracts.json", installer)
         self.assertIn("agents/registry.json", installer)
         self.assertIn("AUTOPILOT_LAYERED_OVERLAY=PRESERVED", installer)
+        self.assertIn("expected_entrypoint=", installer)
+        self.assertIn('grep -Fq "$expected_entrypoint"', installer)
         self.assertIn("AUTOPILOT_EFFECTIVE_ENTRYPOINT=PASS", installer)
         self.assertIn("AUTOPILOT_LAYERED_MIGRATION=PASS", installer)
 

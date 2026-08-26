@@ -26,6 +26,28 @@ class RevenueWorkplaneTests(unittest.TestCase):
     def setUp(self):
         self.workplane = json.loads((ROOT / "governance" / "revenue_workplane.json").read_text(encoding="utf-8"))
         self.autopilot = json.loads((ROOT / "governance" / "radah_memshalah_autopilot_policy.json").read_text(encoding="utf-8"))
+        self.access = json.loads((ROOT / "governance" / "lane_access_policy.json").read_text(encoding="utf-8"))
+        self.verticals = json.loads((ROOT / "governance" / "verticals.json").read_text(encoding="utf-8"))
+
+    def test_all_registered_lanes_are_open_and_schedulable(self):
+        registered = {row["id"] for row in self.verticals["verticals"]}
+        self.assertEqual(len(registered), 11)
+        self.assertEqual(set(self.access["lanes"]), registered)
+        self.assertTrue(self.access["all_registered_lanes_internal_open"])
+        self.assertTrue(self.access["readiness_labels_do_not_close_internal_work"])
+        for lane_id, rule in self.access["lanes"].items():
+            with self.subTest(lane=lane_id):
+                self.assertTrue(rule["internal_work_open"])
+                self.assertTrue(rule["scheduler_eligible"])
+        validated = workplane_supervisor.validate_all_lanes_open(self.verticals)
+        self.assertTrue(validated["all_registered_lanes_internal_open"])
+
+    def test_primary_wave_is_priority_not_exclusivity(self):
+        self.assertEqual(len(self.autopilot["primary_wave"]), 2)
+        self.assertTrue(self.autopilot["primary_wave_is_priority_not_exclusivity"])
+        self.assertTrue(self.autopilot["all_registered_lanes_internal_open"])
+        self.assertTrue(self.autopilot["rules"]["every_registered_lane_is_scheduler_eligible"])
+        self.assertTrue(self.autopilot["rules"]["readiness_labels_do_not_close_internal_work"])
 
     def test_workplane_binds_live_canary_to_commerce(self):
         self.assertEqual(self.workplane["primary_lane"], "commerce_fulfillment")
@@ -50,6 +72,7 @@ class RevenueWorkplaneTests(unittest.TestCase):
 
     def test_revenue_objectives_require_runtime_truth(self):
         objectives = self.autopilot["lane_objectives"]
+        self.assertEqual(len(objectives), 11)
         for lane in ("commerce_fulfillment", "content_traffic", "intelligence_orchestration", "infrastructure"):
             self.assertIn("REVENUE_WORKPLANE_SNAPSHOT", objectives[lane])
         self.assertIn("never invent metrics", objectives["commerce_fulfillment"].lower())
@@ -105,7 +128,15 @@ class RevenueWorkplaneTests(unittest.TestCase):
             self.assertFalse(snapshot["automatic_price_change"])
             self.assertFalse(snapshot["automatic_paid_spend"])
 
-    def test_command_center_describes_real_work_plane_not_sales_claim(self):
+    def test_command_center_home_surfaces_open_lanes_and_live_revenue(self):
+        home = (ROOT / "obsidian" / "command-center" / "00-HOME.md").read_text(encoding="utf-8")
+        self.assertIn("11 / 11 LANES OPEN", home)
+        self.assertIn("REVENUE RUNTIME LIVE", home)
+        self.assertIn("QUALIFIED_TRAFFIC", home)
+        self.assertIn("Lane access and external readiness are different facts", home)
+        self.assertIn("voltedge-speaker-offer-v1", home)
+
+    def test_command_center_revenue_describes_real_work_plane_not_sales_claim(self):
         revenue = (ROOT / "obsidian" / "command-center" / "09-Revenue.md").read_text(encoding="utf-8")
         self.assertIn("Production Revenue Work Plane", revenue)
         self.assertIn("voltedge-speaker-offer-v1", revenue)
@@ -113,10 +144,12 @@ class RevenueWorkplaneTests(unittest.TestCase):
         self.assertIn("zero synthetic traffic", revenue.lower())
         self.assertIn("not sales", revenue.lower())
 
-    def test_installer_overrides_only_autopilot_execstart(self):
+    def test_installer_proves_all_lanes_open_without_restarting_runtime(self):
         installer = (ROOT / "scripts" / "autopilot" / "install_revenue_workplane.sh").read_text(encoding="utf-8")
-        self.assertIn("revenue-workplane.conf", installer)
+        self.assertIn("governance/lane_access_policy.json", installer)
+        self.assertIn("RADAH_ALL_LANES=OPEN count=11", installer)
         self.assertIn("revenue_workplane_supervisor.py --execute", installer)
+        self.assertIn("--plan-only --lane", installer)
         self.assertIn("dominion-revenue-runtime.service", installer)
         self.assertIn("dominion-revenue-evaluator.timer", installer)
         self.assertNotIn("systemctl restart dominion-revenue-runtime.service", installer)

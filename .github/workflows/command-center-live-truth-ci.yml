@@ -1,0 +1,110 @@
+name: Dominion Command Center Live Truth CI
+
+on:
+  pull_request:
+    paths:
+      - 'apps/command-center/**'
+      - 'docker-compose.command-center.yml'
+      - 'governance/lane_access_policy.json'
+      - 'governance/revenue_execution_policy.json'
+      - 'scripts/command_center_state_bridge_v2.py'
+      - 'scripts/install_command_center_state_bridge.sh'
+      - 'scripts/deploy_command_center.sh'
+      - 'scripts/deploy_dominion_command_center.sh'
+      - 'tests/test_command_center_live_truth.py'
+      - 'tests/test_dominion_command_center_ui.py'
+      - '.github/workflows/command-center-live-truth-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/command-center/**'
+      - 'docker-compose.command-center.yml'
+      - 'governance/lane_access_policy.json'
+      - 'governance/revenue_execution_policy.json'
+      - 'scripts/command_center_state_bridge_v2.py'
+      - 'scripts/install_command_center_state_bridge.sh'
+      - 'scripts/deploy_command_center.sh'
+      - 'scripts/deploy_dominion_command_center.sh'
+      - 'tests/test_command_center_live_truth.py'
+      - 'tests/test_dominion_command_center_ui.py'
+      - '.github/workflows/command-center-live-truth-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Static and regression gates
+        run: |
+          set -euo pipefail
+          python -m py_compile apps/command-center/app.py apps/command-center/intelligence.py apps/command-center/revenue.py apps/command-center/runtime_state.py scripts/command_center_state_bridge_v2.py
+          bash -n scripts/install_command_center_state_bridge.sh
+          bash -n scripts/deploy_command_center.sh
+          bash -n scripts/deploy_dominion_command_center.sh
+          python -m unittest tests.test_command_center_live_truth -v
+          python tests/test_dominion_command_center_ui.py
+      - name: Build the actual Command Center image
+        run: docker build -t dominion-command-center-ci apps/command-center
+      - name: Boot image against canonical live-state contract
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/command-center-ci"
+          mkdir -p "$root/runtime" "$root/vault" "$root/memory"
+          python - "$root/runtime/runtime-state.json" <<'PY'
+          import json,sys
+          lanes=[]
+          slugs=['commerce_fulfillment','kdp_publishing','analytics_services','digital_products','services_lead_generation','content_traffic','surplus','trading','intelligence_orchestration','governance_legal','infrastructure']
+          for slug in slugs:
+              lanes.append({'slug':slug,'name':slug.replace('_',' ').title(),'internal_work_open':True,'scheduler_eligible':True,'external_readiness':'separate_founder_gate'})
+          state={
+            'schema':'dominion-command-center-runtime-state-v2',
+            'observed_at':'2026-08-26T05:00:00+00:00',
+            'release_sha':'ci-fixture',
+            'systems':{
+              'command_center':{'ok':True,'status':200},'obsidian':{'active':True},
+              'revenue_runtime':{'active':True},'revenue_evaluator':{'active':True},
+              'radah_autopilot':{'active':True},'buddy':{'active':True},
+            },
+            'lanes':{'connected':True,'governing_name':'RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה','registered':11,'open':11,'all_open':True,'items':lanes},
+            'autopilot':{'connected':True,'timer':{'active':True},'cycles':4,'lanes_touched':4,'lanes_progressed':2},
+            'revenue':{
+              'connected':True,'constraint':'QUALIFIED_TRAFFIC','active_experiment_count':1,
+              'experiments':[{'id':'voltedge-speaker-offer-v1','name':'VoltEdge Portable Speaker Offer V1','product_id':'p1','target_url':'https://www.voltedgegoods.com/product-page/test','status':'active','winner':None,'activated_at':'2026-08-26T00:00:00+00:00','decided_at':None,'variants':{}}],
+              'totals':{'visitors':0,'clicks':0,'purchases':0,'revenue_cents':0}
+            },
+            'founder_holds':['price_change','paid_spend','live_trading','external_publish','legal_signature_or_filing'],
+            'latest_receipts':[{'source':'ci','name':'fixture.json','observed_at':'2026-08-26T05:00:00+00:00'}]
+          }
+          json.dump(state,open(sys.argv[1],'w',encoding='utf-8'))
+          PY
+          docker run -d --rm --name dominion-command-center-ci-run -p 127.0.0.1:18091:8000 \
+            -v "$root/runtime:/runtime:ro" \
+            -v "$root/vault:/vault:ro" \
+            -v "$root/memory:/data/memory" \
+            -v "$PWD/governance/lane_access_policy.json:/governance/lane_access_policy.json:ro" \
+            dominion-command-center-ci
+          trap 'docker rm -f dominion-command-center-ci-run >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:18091/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          HEALTH="$(curl -fsS http://127.0.0.1:18091/health)"
+          STATUS="$(curl -fsS http://127.0.0.1:18091/api/status)"
+          python - "$HEALTH" "$STATUS" <<'PY'
+          import json,sys
+          h=json.loads(sys.argv[1]); s=json.loads(sys.argv[2])
+          assert h['status']=='ok' and h['truth_source_connected'] is True, h
+          assert h['open_lane_count']==11 and h['registered_lane_count']==11, h
+          assert h['revenue_runtime_connected'] is True and h['active_experiment_count']==1, h
+          assert s['truth']['connected'] is True and s['truth']['release_sha']=='ci-fixture', s['truth']
+          assert s['lane_summary']=={'open':11,'registered':11,'all_open':True}, s['lane_summary']
+          assert s['revenue']['constraint']=='QUALIFIED_TRAFFIC'
+          assert s['revenue']['metrics']['visitors']==0
+          assert s['founder_holds']
+          assert s['latest_receipts']
+          print('COMMAND_CENTER_CONTAINER_CI=PASS lanes=11/11 revenue=live truth=canonical')
+          PY

@@ -4,32 +4,43 @@ on:
   pull_request:
     paths:
       - 'scripts/autopilot/**'
+      - 'scripts/validate_lane_runtime_contracts.py'
       - 'scripts/deploy_dominion_command_center.sh'
       - 'governance/radah_memshalah_autopilot_policy.json'
+      - 'governance/lane_access_policy.json'
+      - 'governance/lane_runtime_contracts.json'
+      - 'governance/profitability_lane_contracts.json'
+      - 'governance/SYSTEM_CONSTITUTION.md'
+      - 'governance/authority_matrix.json'
+      - 'governance/five_council_policy.json'
+      - 'governance/incident_learning_policy.json'
+      - 'governance/legal_evidence_policy.json'
+      - 'governance/constitutional_amendment_policy.json'
       - 'governance/buddy/buddy_authority_policy.json'
       - 'governance/verticals.json'
+      - 'agents/registry.json'
       - 'obsidian/command-center/**'
       - 'obsidian/dominion*.css'
       - 'tests/test_radah_autopilot.py'
+      - 'tests/test_lane_runtime_contracts.py'
       - 'tests/test_dominion_command_center_ui.py'
       - '.github/workflows/radah-autopilot-*.yml'
       - '.github/workflows/activate-radah-memshalah-autopilot.yml'
       - '.github/workflows/deactivate-radah-memshalah-autopilot.yml'
   push:
-    branches:
-      - 'feature/radah-memshalah-autopilot-v1'
+    branches: [main]
     paths:
       - 'scripts/autopilot/**'
-      - 'scripts/deploy_dominion_command_center.sh'
+      - 'scripts/validate_lane_runtime_contracts.py'
       - 'governance/radah_memshalah_autopilot_policy.json'
-      - 'governance/buddy/buddy_authority_policy.json'
-      - 'obsidian/command-center/**'
-      - 'obsidian/dominion*.css'
+      - 'governance/lane_access_policy.json'
+      - 'governance/lane_runtime_contracts.json'
+      - 'governance/profitability_lane_contracts.json'
+      - 'governance/verticals.json'
+      - 'agents/registry.json'
       - 'tests/test_radah_autopilot.py'
-      - 'tests/test_dominion_command_center_ui.py'
-      - '.github/workflows/radah-autopilot-*.yml'
-      - '.github/workflows/activate-radah-memshalah-autopilot.yml'
-      - '.github/workflows/deactivate-radah-memshalah-autopilot.yml'
+      - 'tests/test_lane_runtime_contracts.py'
+      - '.github/workflows/radah-autopilot-ci.yml'
   workflow_dispatch:
 
 permissions:
@@ -38,7 +49,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -52,28 +63,47 @@ jobs:
         run: |
           set -euo pipefail
           bash -n scripts/autopilot/install_autopilot.sh
+          bash -n scripts/autopilot/install_revenue_workplane.sh
           bash -n scripts/autopilot/disable_autopilot.sh
           bash -n scripts/deploy_dominion_command_center.sh
-          python -m py_compile scripts/autopilot/lane_supervisor.py tests/test_radah_autopilot.py tests/test_dominion_command_center_ui.py
+          python -m py_compile \
+            scripts/autopilot/lane_supervisor.py \
+            scripts/autopilot/revenue_workplane_supervisor.py \
+            scripts/autopilot/control_plane_guard.py \
+            scripts/autopilot/multilane_supervisor.py \
+            scripts/validate_lane_runtime_contracts.py \
+            tests/test_radah_autopilot.py \
+            tests/test_lane_runtime_contracts.py \
+            tests/test_dominion_command_center_ui.py
+
+      - name: Validate Constitution-bound lane runtime contracts
+        run: python scripts/validate_lane_runtime_contracts.py
+
+      - name: Run constitutional lane contract tests
+        run: python -m unittest tests.test_lane_runtime_contracts -v
 
       - name: Run authority and rotation tests
         run: python -m unittest tests.test_radah_autopilot -v
+
+      - name: Prove multi-lane plan is governed and side-effect free
+        env:
+          RADAH_AUTOPILOT_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          state="$RUNNER_TEMP/multilane-state"
+          output="$(python scripts/autopilot/multilane_supervisor.py --plan-only --sweep-size 3 --state-dir "$state")"
+          printf '%s\n' "$output"
+          printf '%s' "$output" | grep -q 'CONSTITUTIONAL_RUNTIME_GUARD\|"constitutional_guard"'
+          printf '%s' "$output" | grep -q 'RADAH_MULTILANE_SWEEP=PLANNED selected=3'
+          printf '%s' "$output" | grep -q '"registered_lanes": 11'
+          printf '%s' "$output" | grep -q '"economic_profitability_contracts": 8'
+          test ! -e "$state/state.json"
 
       - name: Run elite Command Center visual contract
         run: python tests/test_dominion_command_center_ui.py
 
       - name: Validate canonical Buddy authority control
         run: python scripts/validate_buddy_authority_policy.py governance/buddy/buddy_authority_policy.json --root .
-
-      - name: Prove plan-only mode is inert
-        env:
-          RADAH_AUTOPILOT_ENABLED: '0'
-        run: |
-          set -euo pipefail
-          output="$(python scripts/autopilot/lane_supervisor.py --plan-only --state-dir "$RUNNER_TEMP/autopilot-state")"
-          printf '%s\n' "$output"
-          printf '%s' "$output" | grep -q 'RADAH_AUTOPILOT=PLANNED'
-          test ! -e "$RUNNER_TEMP/autopilot-state/state.json"
 
       - name: Static authority guard
         run: |
@@ -84,13 +114,14 @@ jobs:
           p = json.loads(Path('governance/radah_memshalah_autopilot_policy.json').read_text())
           assert p['max_primary_revenue_verticals'] == 2
           assert len(p['primary_wave']) == 2
+          assert p['max_missions_per_cycle'] == 3
           assert p['all_lanes_must_progress'] is True
           assert p['rules']['external_actions_automatic'] is False
           assert p['rules']['no_live_trading'] is True
           assert p['rules']['no_permission_self_expansion'] is True
           assert p['enabled'] is False, 'repository policy must remain inert; runtime activation is separate'
           assert all(not c.startswith('external.') for c in p['allowed_automatic_capabilities'])
-          print('RADAH_AUTOPILOT_AUTHORITY=PASS')
+          print('RADAH_AUTOPILOT_AUTHORITY=PASS constitution_bound=true multilane=3')
           PY
 
       - name: Production gate contract

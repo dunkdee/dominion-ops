@@ -188,7 +188,7 @@ rm -f "$service_tmp" "$eval_service_tmp" "$eval_timer_tmp"
 sudo systemctl daemon-reload
 
 # Add only the two public revenue paths to the existing Dominion origin.
-sudo "$buddy_python" - "$caddy_path" <<'PY'
+sudo python3 - "$caddy_path" <<'PY'
 from pathlib import Path
 import sys
 p=Path(sys.argv[1])
@@ -197,7 +197,7 @@ marker='dominionhealing.org, www.dominionhealing.org {'
 block='''\n\t@dominion_revenue_public path /r /r/* /revenue/events\n\treverse_proxy @dominion_revenue_public 127.0.0.1:8790\n'''
 if '@dominion_revenue_public' not in text:
     if text.count(marker) != 1:
-        raise SystemExit('dominon origin marker is not unique')
+        raise SystemExit('dominion origin marker is not unique')
     text=text.replace(marker, marker + block, 1)
     p.write_text(text)
 PY

@@ -5,26 +5,35 @@ on:
     paths:
       - 'governance/revenue_workplane.json'
       - 'governance/lane_access_policy.json'
+      - 'governance/lane_runtime_contracts.json'
+      - 'governance/profitability_lane_contracts.json'
       - 'governance/radah_memshalah_autopilot_policy.json'
       - 'scripts/autopilot/revenue_workplane_supervisor.py'
+      - 'scripts/autopilot/control_plane_guard.py'
+      - 'scripts/autopilot/multilane_supervisor.py'
       - 'scripts/autopilot/install_revenue_workplane.sh'
+      - 'scripts/validate_lane_runtime_contracts.py'
       - 'obsidian/command-center/00-HOME.md'
       - 'obsidian/command-center/09-Revenue.md'
       - 'obsidian/command-center/16-Production-Matrix.md'
       - 'tests/test_revenue_workplane.py'
+      - 'tests/test_lane_runtime_contracts.py'
       - '.github/workflows/revenue-workplane-ci.yml'
   push:
     branches: [main]
     paths:
       - 'governance/revenue_workplane.json'
       - 'governance/lane_access_policy.json'
+      - 'governance/lane_runtime_contracts.json'
+      - 'governance/profitability_lane_contracts.json'
       - 'governance/radah_memshalah_autopilot_policy.json'
       - 'scripts/autopilot/revenue_workplane_supervisor.py'
+      - 'scripts/autopilot/control_plane_guard.py'
+      - 'scripts/autopilot/multilane_supervisor.py'
       - 'scripts/autopilot/install_revenue_workplane.sh'
-      - 'obsidian/command-center/00-HOME.md'
-      - 'obsidian/command-center/09-Revenue.md'
-      - 'obsidian/command-center/16-Production-Matrix.md'
+      - 'scripts/validate_lane_runtime_contracts.py'
       - 'tests/test_revenue_workplane.py'
+      - 'tests/test_lane_runtime_contracts.py'
       - '.github/workflows/revenue-workplane-ci.yml'
 
 permissions:
@@ -33,7 +42,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
@@ -41,21 +50,46 @@ jobs:
           python-version: '3.12'
       - name: Syntax and contract validation
         run: |
+          set -euo pipefail
           python -m json.tool governance/revenue_workplane.json >/dev/null
           python -m json.tool governance/lane_access_policy.json >/dev/null
+          python -m json.tool governance/lane_runtime_contracts.json >/dev/null
+          python -m json.tool governance/profitability_lane_contracts.json >/dev/null
           python -m json.tool governance/radah_memshalah_autopilot_policy.json >/dev/null
-          python -m py_compile scripts/autopilot/lane_supervisor.py scripts/autopilot/revenue_workplane_supervisor.py
+          python -m py_compile \
+            scripts/autopilot/lane_supervisor.py \
+            scripts/autopilot/revenue_workplane_supervisor.py \
+            scripts/autopilot/control_plane_guard.py \
+            scripts/autopilot/multilane_supervisor.py \
+            scripts/validate_lane_runtime_contracts.py
           bash -n scripts/autopilot/install_revenue_workplane.sh
+      - name: Constitutional lane completeness
+        run: python scripts/validate_lane_runtime_contracts.py
       - name: Work-plane regression tests
         run: python -m unittest tests.test_revenue_workplane -v
+      - name: Lane contract regression tests
+        run: python -m unittest tests.test_lane_runtime_contracts -v
       - name: Preserve autopilot regression suite
         run: python -m unittest tests.test_radah_autopilot -v
+      - name: Prove governed multi-lane preflight
+        env:
+          RADAH_AUTOPILOT_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          state="$RUNNER_TEMP/revenue-multilane"
+          output="$(python scripts/autopilot/multilane_supervisor.py --plan-only --sweep-size 3 --state-dir "$state")"
+          printf '%s\n' "$output"
+          printf '%s' "$output" | grep -q 'RADAH_MULTILANE_SWEEP=PLANNED selected=3'
+          printf '%s' "$output" | grep -q '"economic_profitability_contracts": 8'
+          test ! -e "$state/state.json"
       - name: Static production binding assertions
         run: |
+          set -euo pipefail
           grep -Fq '"all_registered_lanes_internal_open": true' governance/lane_access_policy.json
           test "$(grep -Fc '"internal_work_open": true' governance/lane_access_policy.json)" -eq 11
           test "$(grep -Fc '"scheduler_eligible": true' governance/lane_access_policy.json)" -eq 11
           grep -Fq '"primary_wave_is_priority_not_exclusivity": true' governance/radah_memshalah_autopilot_policy.json
+          grep -Fq '"max_missions_per_cycle": 3' governance/radah_memshalah_autopilot_policy.json
           grep -Fq '"primary_lane": "commerce_fulfillment"' governance/revenue_workplane.json
           grep -Fq '"automatic_price_change": false' governance/revenue_workplane.json
           grep -Fq '"automatic_paid_spend": false' governance/revenue_workplane.json
@@ -63,6 +97,7 @@ jobs:
           grep -Fq '11 / 11 LANES OPEN' obsidian/command-center/00-HOME.md
           grep -Fq 'REVENUE RUNTIME LIVE' obsidian/command-center/00-HOME.md
           grep -Fq 'voltedge-speaker-offer-v1' obsidian/command-center/09-Revenue.md
+          grep -Fq 'RADAH_CONSTITUTIONAL_RUNTIME=PASS' scripts/autopilot/install_revenue_workplane.sh
           grep -Fq 'RADAH_ALL_LANES=OPEN count=11' scripts/autopilot/install_revenue_workplane.sh
-          grep -Fq 'revenue_workplane_supervisor.py --execute' scripts/autopilot/install_revenue_workplane.sh
-          echo 'DOMINION_REVENUE_WORKPLANE_CI=PASS all_lanes=11 command_center=open'
+          grep -Fq 'multilane_supervisor.py --execute' scripts/autopilot/install_revenue_workplane.sh
+          echo 'DOMINION_REVENUE_WORKPLANE_CI=PASS all_lanes=11 economic_lanes=8 constitution_bound=true'

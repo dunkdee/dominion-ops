@@ -28,6 +28,7 @@ mkdir -p "$backup_root"
 chmod 700 "$backup_root"
 for rel in \
   scripts/autopilot/revenue_workplane_supervisor.py \
+  scripts/autopilot/multilane_supervisor.py \
   governance/radah_memshalah_autopilot_policy.json \
   governance/revenue_workplane.json \
   governance/lane_access_policy.json; do
@@ -49,6 +50,7 @@ rollback() {
   echo "REVENUE_WORKPLANE_ROLLBACK=BEGIN rc=$rc"
   for rel in \
     scripts/autopilot/revenue_workplane_supervisor.py \
+    scripts/autopilot/multilane_supervisor.py \
     governance/radah_memshalah_autopilot_policy.json \
     governance/revenue_workplane.json \
     governance/lane_access_policy.json; do
@@ -71,11 +73,14 @@ rollback() {
 trap rollback ERR INT TERM EXIT
 
 install -m 700 "$asset_root/scripts/autopilot/revenue_workplane_supervisor.py" "$runtime_root/scripts/autopilot/revenue_workplane_supervisor.py"
+install -m 700 "$asset_root/scripts/autopilot/multilane_supervisor.py" "$runtime_root/scripts/autopilot/multilane_supervisor.py"
 install -m 600 "$asset_root/governance/radah_memshalah_autopilot_policy.json" "$runtime_root/governance/radah_memshalah_autopilot_policy.json"
 install -m 600 "$asset_root/governance/revenue_workplane.json" "$runtime_root/governance/revenue_workplane.json"
 install -m 600 "$asset_root/governance/lane_access_policy.json" "$runtime_root/governance/lane_access_policy.json"
 
-"$buddy_python" -m py_compile "$runtime_root/scripts/autopilot/revenue_workplane_supervisor.py"
+"$buddy_python" -m py_compile \
+  "$runtime_root/scripts/autopilot/revenue_workplane_supervisor.py" \
+  "$runtime_root/scripts/autopilot/multilane_supervisor.py"
 
 access="$(cd "$runtime_root/scripts/autopilot" && "$buddy_python" revenue_workplane_supervisor.py --inspect-lane-access)"
 printf '%s\n' "$access"
@@ -90,11 +95,22 @@ printf '%s' "$snapshot" | grep -q '"available": true'
 printf '%s' "$snapshot" | grep -q '"experiment_id": "voltedge-speaker-offer-v1"'
 printf '%s' "$snapshot" | grep -q '"constraint": "QUALIFIED_TRAFFIC"\|"constraint": "MESSAGE_MATCH_OR_CTA"\|"constraint": "PRODUCT_OR_CHECKOUT_FRICTION"\|"constraint": "STATISTICAL_EVIDENCE"'
 
+# Prove the new service entrypoint advances multiple distinct lanes in one
+# activation without mutating state during preflight.
+preflight="$state_root/multilane-preflight-$RUN_ID"
+rm -rf "$preflight"
+multi_plan="$(cd "$runtime_root/scripts/autopilot" && RADAH_AUTOPILOT_ENABLED=0 "$buddy_python" multilane_supervisor.py --plan-only --sweep-size 3 --state-dir "$preflight")"
+printf '%s\n' "$multi_plan"
+printf '%s' "$multi_plan" | grep -q '"selected_count": 3'
+printf '%s' "$multi_plan" | grep -q 'RADAH_MULTILANE_SWEEP=PLANNED selected=3'
+test ! -e "$preflight/state.json"
+rm -rf "$preflight"
+
 tmp="$(mktemp)"
 cat > "$tmp" <<EOF
 [Service]
 ExecStart=
-ExecStart=$buddy_python $runtime_root/scripts/autopilot/revenue_workplane_supervisor.py --execute --state-dir $state_root
+ExecStart=$buddy_python $runtime_root/scripts/autopilot/multilane_supervisor.py --execute --state-dir $state_root
 EOF
 sudo install -d -m 755 "$dropin_dir"
 sudo install -m 644 "$tmp" "$dropin_path"
@@ -102,9 +118,9 @@ rm -f "$tmp"
 sudo systemctl daemon-reload
 
 resolved="$(systemctl show "$service" -p ExecStart --value)"
-printf '%s\n' "$resolved" | grep -q 'revenue_workplane_supervisor.py'
+printf '%s\n' "$resolved" | grep -q 'multilane_supervisor.py'
 
-# Prove all 11 registered lanes remain schedulable for internal work.
+# Prove all 11 registered lanes remain independently schedulable and governed.
 for lane in \
   commerce_fulfillment kdp_publishing analytics_services digital_products \
   services_lead_generation content_traffic surplus trading \
@@ -116,19 +132,18 @@ for lane in \
   printf '%s' "$plan" | grep -q "RADAH_AUTOPILOT=PLANNED lane=$lane bounded_cycle=true"
 done
 
-# Revenue-bound lane must also receive current runtime evidence.
 commerce="$(cd "$runtime_root/scripts/autopilot" && RADAH_AUTOPILOT_ENABLED=0 "$buddy_python" revenue_workplane_supervisor.py --plan-only --lane commerce_fulfillment --state-dir "$state_root")"
 printf '%s' "$commerce" | grep -q '"revenue_workplane"'
 printf '%s' "$commerce" | grep -q '"experiment_id": "voltedge-speaker-offer-v1"'
 
-# Existing recurring supervisor remains armed; no unrelated service restart.
 test "$(systemctl is-active "$timer")" = active
 test "$(systemctl is-enabled "$timer")" = enabled
 
 echo 'RADAH_ALL_LANES=OPEN count=11 internal=true scheduler_eligible=true'
+echo 'RADAH_MULTILANE_RUNTIME=BOUND sweep_size=3 cadence=30m isolation=per_lane_receipt'
 echo 'REVENUE_WORKPLANE=BOUND lane=commerce_fulfillment support=content_traffic,intelligence_orchestration,infrastructure'
 echo 'REVENUE_WORKPLANE_RUNTIME=PASS service=dominion-revenue-runtime.service evaluator=10m'
-echo 'REVENUE_WORKPLANE_AUTOPILOT=PASS cadence=30m'
+echo 'REVENUE_WORKPLANE_AUTOPILOT=PASS cadence=30m mode=multilane'
 echo 'REVENUE_WORKPLANE_EXPERIMENT=PASS id=voltedge-speaker-offer-v1'
 
 success=1

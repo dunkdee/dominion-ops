@@ -1,0 +1,27 @@
+{
+  "schema": "dominion-production-authorization-v1",
+  "authorized_by": "Dewayne Singleton",
+  "authorization_date": "2026-08-26",
+  "directive": "Produce the entire Dominion build top to bottom with no gaps or bottlenecks",
+  "one_time": true,
+  "scope": [
+    "foundation_vm",
+    "obsidian",
+    "dominion_brain",
+    "command_center",
+    "revenue_runtime",
+    "autopilot",
+    "live_runtime_acceptance",
+    "runtime_observer"
+  ],
+  "safeguards": [
+    "exact_main_sha",
+    "fail_closed",
+    "protected_environments",
+    "no_secret_logging",
+    "rollback_preserved",
+    "independent_postdeploy_verification"
+  ],
+  "requested_via": "ChatGPT Work",
+  "status": "authorized"
+}

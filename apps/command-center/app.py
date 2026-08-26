@@ -16,10 +16,11 @@ from revenue import record_funnel_event, revenue_state
 APP_DIR = Path(__file__).resolve().parent
 VAULT_PATH = Path(os.getenv("VAULT_PATH", "/vault"))
 MEMORY_PATH = Path(os.getenv("MEMORY_PATH", "/data/memory"))
+LANE_POLICY_PATH = Path(os.getenv("LANE_POLICY_PATH", "/governance/lane_access_policy.json"))
 NEMOTRON_BASE_URL = os.getenv("NEMOTRON_BASE_URL", "").rstrip("/")
 NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "nemotron-3")
 
-app = FastAPI(title="Dominion Command Center", version="0.3.0")
+app = FastAPI(title="Dominion Command Center", version="0.4.0")
 
 
 class ChatRequest(BaseModel):
@@ -62,15 +63,55 @@ def list_recent_notes(limit: int = 8) -> list[dict[str, Any]]:
     return notes
 
 
+def lane_state() -> dict[str, Any]:
+    if not LANE_POLICY_PATH.exists():
+        return {
+            "connected": False,
+            "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+            "open_count": 0,
+            "registered_count": 0,
+            "lanes": [],
+        }
+    try:
+        policy = json.loads(LANE_POLICY_PATH.read_text(encoding="utf-8"))
+        lane_map = policy.get("lanes", {})
+        lanes = [
+            {
+                "slug": slug,
+                "name": slug.replace("_", " ").title(),
+                "internal_work_open": bool(state.get("internal_work_open")),
+                "scheduler_eligible": bool(state.get("scheduler_eligible")),
+            }
+            for slug, state in lane_map.items()
+        ]
+        return {
+            "connected": True,
+            "governing_name": policy.get("governing_name", "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה"),
+            "open_count": sum(1 for lane in lanes if lane["internal_work_open"]),
+            "registered_count": len(lanes),
+            "lanes": lanes,
+        }
+    except (OSError, ValueError, TypeError):
+        return {
+            "connected": False,
+            "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+            "open_count": 0,
+            "registered_count": 0,
+            "lanes": [],
+        }
+
+
 def build_context() -> str:
     recent = list_recent_notes(limit=5)
     note_lines = [f"- {item['name']} ({item['path']})" for item in recent]
     revenue = revenue_state()
+    lanes = lane_state()
     return "\n".join(
         [
             "Mission: Build Dominion into an elite, truthful, scalable, AI-operated business ecosystem.",
             "Operating order: cash flow, systems, scale.",
-            "Founder retains final authority.",
+            "Founder retains final authority over consequential external effects.",
+            f"Lane state: {lanes['open_count']} of {lanes['registered_count']} registered lanes open for bounded internal production.",
             "Current focus: launch Dominion digital products and close the traffic-to-revenue loop.",
             f"Revenue vertical status: {revenue['vertical_status']} with {revenue['ready_offer_count']} ready offers.",
             "Recent Obsidian notes:",
@@ -99,6 +140,7 @@ def dashboard() -> FileResponse:
 @app.get("/health")
 def health() -> dict[str, Any]:
     revenue = revenue_state()
+    lanes = lane_state()
     return {
         "status": "ok",
         "service": "dominion-command-center",
@@ -106,6 +148,9 @@ def health() -> dict[str, Any]:
         "time": utc_now(),
         "vault_connected": VAULT_PATH.exists(),
         "memory_writable": MEMORY_PATH.exists() and os.access(MEMORY_PATH, os.W_OK),
+        "lane_policy_connected": lanes["connected"],
+        "open_lane_count": lanes["open_count"],
+        "registered_lane_count": lanes["registered_count"],
         "nemotron_configured": bool(NEMOTRON_BASE_URL),
         "nemotron_model": NEMOTRON_MODEL,
         "revenue_vertical_status": revenue["vertical_status"],
@@ -130,17 +175,26 @@ def revenue_event(body: FunnelEvent) -> dict[str, Any]:
 @app.get("/api/status")
 def status() -> dict[str, Any]:
     revenue = revenue_state()
+    lanes = lane_state()
     return {
         "time": utc_now(),
+        "governing_name": lanes["governing_name"],
         "systems": {
             "command_center": "online",
             "obsidian": "online" if VAULT_PATH.exists() else "unavailable",
+            "lane_policy": "online" if lanes["connected"] else "unavailable",
             "metatron": "configured",
             "nemotron": "configured" if NEMOTRON_BASE_URL else "awaiting_worker",
             "conductor": "fallback_ready",
             "memory": "online" if MEMORY_PATH.exists() else "initializing",
             "revenue_loop": revenue["vertical_status"],
         },
+        "lane_summary": {
+            "open": lanes["open_count"],
+            "registered": lanes["registered_count"],
+            "all_open": lanes["registered_count"] > 0 and lanes["open_count"] == lanes["registered_count"],
+        },
+        "lanes": lanes["lanes"],
         "sprint": {
             "day": 1,
             "focus": "Dominion digital products revenue loop",
@@ -152,10 +206,10 @@ def status() -> dict[str, Any]:
         },
         "recent_notes": list_recent_notes(),
         "missions": [
+            {"title": "Drive qualified traffic into the live VoltEdge experiment", "state": "active"},
             {"title": "Connect Nemotron primary worker", "state": "active"},
             {"title": "Configure verified checkout and delivery", "state": "active"},
-            {"title": "Publish tracked traffic campaigns", "state": "blocked" if not revenue["ready_offer_count"] else "queued"},
-            {"title": "Verify purchase-to-delivery telemetry", "state": "blocked" if not revenue["ready_offer_count"] else "queued"},
+            {"title": "Verify purchase-to-delivery telemetry", "state": "queued" if revenue["ready_offer_count"] else "blocked"},
         ],
         "revenue": revenue,
     }

@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
 """RADAH MEMSHALAH coordinated multi-lane production supervisor.
 
-The existing lane worker remains the authority boundary for each mission. This
-supervisor changes orchestration, not permissions: one systemd activation can
-advance multiple due lanes in a bounded sweep while each lane still receives
-its own mission, receipts, rotation state, and fail-closed validation.
+The scheduler is subordinate to the Dominion constitutional control plane. It
+cannot plan or execute a sweep unless the runtime copy of the Constitution,
+authority matrix, Five Council, agent registry, 11 lane contracts, and economic
+profitability contracts all pass the fail-closed constitutional guard.
+
+The existing lane worker remains the bounded mission executor. This supervisor
+changes orchestration, not permissions: one activation can advance multiple due
+lanes while each lane keeps its own mission, receipts, state, recovery boundary,
+and Founder-held external gates.
 """
 from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import control_plane_guard
 import revenue_workplane_supervisor as revenue
 
 base = revenue.base
@@ -40,12 +46,20 @@ def _summary_path(state_dir: Path, now: datetime) -> Path:
     return state_dir / "sweeps" / (now.strftime("%Y%m%dT%H%M%SZ") + "-multilane.json")
 
 
+def constitutional_preflight() -> dict[str, Any]:
+    try:
+        return control_plane_guard.validate_runtime_root(base.REPO_ROOT)
+    except control_plane_guard.ConstitutionalGuardError as exc:
+        raise base.AutopilotError(f"constitutional control-plane guard failed: {exc}") from exc
+
+
 def run_sweep(
     *,
     execute: bool,
     state_dir: Path,
     sweep_size: int | None = None,
 ) -> dict[str, Any]:
+    constitutional = constitutional_preflight()
     policy = base.load_json(base.POLICY_PATH)
     verticals = base.load_json(base.VERTICALS_PATH)
     access = revenue.validate_all_lanes_open(verticals)
@@ -79,6 +93,7 @@ def run_sweep(
             "status": "PLANNED",
             "execution_requested": False,
             "external_actions_authorized": False,
+            "constitutional_guard": constitutional,
             "registered_lanes": len(lanes),
             "open_lanes": len(access.get("lanes") or {}),
             "selected_count": len(selected),
@@ -91,8 +106,8 @@ def run_sweep(
 
     results: list[dict[str, Any]] = []
     for lane in selected:
-        # Each lane execution is isolated and persisted by the existing governed
-        # worker. A degraded lane cannot erase another lane's valid receipts.
+        # Each lane is isolated and persisted by the governed worker. A failure
+        # in one lane cannot erase another lane's receipts or grant authority.
         result = revenue.run_cycle(
             execute=True,
             state_dir=state_dir,
@@ -111,6 +126,7 @@ def run_sweep(
         "status": "HEALTHY" if healthy else "DEGRADED",
         "execution_requested": True,
         "external_actions_authorized": False,
+        "constitutional_guard": constitutional,
         "registered_lanes": len(lanes),
         "open_lanes": len(access.get("lanes") or {}),
         "selected_count": len(selected),
@@ -128,14 +144,25 @@ def run_sweep(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="RADAH MEMSHALAH coordinated multi-lane production sweep"
+        description="RADAH MEMSHALAH constitution-bound coordinated multi-lane production sweep"
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--execute", action="store_true")
     mode.add_argument("--plan-only", action="store_true")
     parser.add_argument("--state-dir", default=str(base.DEFAULT_STATE_DIR))
     parser.add_argument("--sweep-size", type=int, default=None)
+    parser.add_argument("--constitutional-check", action="store_true")
     args = parser.parse_args()
+
+    if args.constitutional_check:
+        try:
+            result = constitutional_preflight()
+        except base.AutopilotError as exc:
+            print(json.dumps({"CONSTITUTIONAL_RUNTIME_GUARD": "BLOCKED", "reason": str(exc)}, sort_keys=True))
+            return 2
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        print("CONSTITUTIONAL_RUNTIME_GUARD=PASS")
+        return 0
 
     try:
         summary = run_sweep(

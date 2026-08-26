@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import html
-import json
 import os
 import re
 import uuid
@@ -21,7 +20,6 @@ from .store import RevenueStore
 from . import wix_adapter
 
 
-ROOT = Path(__file__).resolve().parents[2]
 POLICY = load_policy()
 DB_PATH = Path(os.getenv("DOMINION_REVENUE_DB", str(Path.home() / ".dominion/revenue-runtime/revenue.db"))).expanduser()
 STORE = RevenueStore(DB_PATH)
@@ -75,9 +73,9 @@ def _guard_text(value: str) -> None:
 
 
 def _variant_guard(value: dict[str, Any]) -> None:
-    required = {"headline", "body_html", "cta_text", "wix_value"}
+    required = {"headline", "body_text", "cta_text", "wix_value"}
     if set(value) != required:
-        raise HTTPException(status_code=422, detail="variant fields must be headline, body_html, cta_text, wix_value")
+        raise HTTPException(status_code=422, detail="variant fields must be headline, body_text, cta_text, wix_value")
     for key in required:
         if not isinstance(value[key], str) or not value[key].strip():
             raise HTTPException(status_code=422, detail=f"variant field invalid: {key}")
@@ -172,12 +170,12 @@ def offer(experiment_id: str, request: Request):
     page = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(copy['headline'])} | VoltEdge</title>
-<style>body{{margin:0;background:#090a0c;color:#f5f1e8;font:16px/1.55 system-ui,sans-serif}}main{{max-width:760px;margin:0 auto;padding:64px 24px}}.eyebrow{{letter-spacing:.16em;text-transform:uppercase;color:#c6a65b;font-size:12px}}h1{{font-size:clamp(36px,7vw,64px);line-height:1.02;margin:16px 0 24px}}.copy{{font-size:18px;color:#d9d5cc}}a{{display:inline-block;margin-top:28px;padding:15px 22px;background:#e7c66f;color:#111;text-decoration:none;border-radius:14px;font-weight:750}}small{{display:block;margin-top:32px;color:#8f8b82}}</style></head>
-<body><main><div class="eyebrow">VoltEdge · governed offer experiment</div><h1>{html.escape(copy['headline'])}</h1><div class="copy">{copy['body_html']}</div><a href="{html.escape(click_url, quote=True)}">{html.escape(copy['cta_text'])}</a><small>Secure checkout is completed on VoltEdge.</small></main></body></html>"""
+<style>body{{margin:0;background:#090a0c;color:#f5f1e8;font:16px/1.55 system-ui,sans-serif}}main{{max-width:760px;margin:0 auto;padding:64px 24px}}.eyebrow{{letter-spacing:.16em;text-transform:uppercase;color:#c6a65b;font-size:12px}}h1{{font-size:clamp(36px,7vw,64px);line-height:1.02;margin:16px 0 24px}}.copy{{font-size:18px;color:#d9d5cc;white-space:pre-line}}a{{display:inline-block;margin-top:28px;padding:15px 22px;background:#e7c66f;color:#111;text-decoration:none;border-radius:14px;font-weight:750}}small{{display:block;margin-top:32px;color:#8f8b82}}</style></head>
+<body><main><div class="eyebrow">VoltEdge · governed offer experiment</div><h1>{html.escape(copy['headline'])}</h1><div class="copy">{html.escape(copy['body_text'])}</div><a href="{html.escape(click_url, quote=True)}">{html.escape(copy['cta_text'])}</a><small>Secure checkout is completed on VoltEdge.</small></main></body></html>"""
     response = HTMLResponse(page)
     response.set_cookie(COOKIE_NAME, visitor_id, max_age=COOKIE_MAX_AGE, httponly=True, secure=True, samesite="lax")
     response.headers["Cache-Control"] = "no-store"
-    response.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+    response.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
     response.headers["X-Robots-Tag"] = "noindex, nofollow"
     return response
 

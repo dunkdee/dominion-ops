@@ -27,7 +27,7 @@ jobs:
       inputs.commit_sha == github.sha &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     environment: foundation-vm-production
     steps:
       - name: Checkout exact release
@@ -36,19 +36,29 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Validate command center assets
+      - name: Validate complete command center release
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           bash -n scripts/deploy_dominion_command_center.sh
+          bash -n scripts/deploy_command_center.sh
+          python -m py_compile apps/command-center/app.py apps/command-center/intelligence.py apps/command-center/revenue.py
+          test -s apps/command-center/index.html
+          test -s apps/command-center/Dockerfile
+          test -s docker-compose.command-center.yml
+          test -s governance/lane_access_policy.json
+          test "$(grep -Fc '"'"'"internal_work_open"'"'": true' governance/lane_access_policy.json)" -eq 11
           test -s obsidian/00-DOMINION-COMMAND-CENTER.md
           test -s obsidian/dominion.css
           test -s obsidian/command-center/00-HOME.md
           test -s obsidian/command-center/14-Daily-State.md
           test -s obsidian/command-center/09-Revenue.md
+          test -s obsidian/command-center/16-Production-Matrix.md
           python tests/test_dominion_command_center_ui.py
-          echo 'DOMINION_UI_ASSETS=PASS'
+          grep -Fq 'All Dominion lanes' apps/command-center/index.html
+          grep -Fq 'lane_summary' apps/command-center/app.py
+          echo 'DOMINION_COMPLETE_COMMAND_CENTER_ASSETS=PASS'
 
       - name: Require protected VM access
         env:
@@ -64,7 +74,7 @@ jobs:
           test -n "$VM_SSH_KEY"
           test -n "$OBSIDIAN_PASSWORD"
 
-      - name: Stage exact UI bundle
+      - name: Stage Obsidian knowledge surface
         id: stage
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -97,7 +107,7 @@ jobs:
           echo "remote_root=$remote_root" >> "$GITHUB_OUTPUT"
           echo "remote_password=$remote_password" >> "$GITHUB_OUTPUT"
 
-      - name: Install Dominion UI and verify invariants
+      - name: Install knowledge layer and full web control surface
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -108,13 +118,14 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
-            "REMOTE_BUNDLE='$REMOTE_BUNDLE' REMOTE_ROOT='$REMOTE_ROOT' PASSWORD_FILE='$REMOTE_PASSWORD' RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
+            "REMOTE_BUNDLE='$REMOTE_BUNDLE' REMOTE_ROOT='$REMOTE_ROOT' PASSWORD_FILE='$REMOTE_PASSWORD' RUN_ID='$GITHUB_RUN_ID' RUN_SHA='$GITHUB_SHA' bash -s" <<'REMOTE'
           set -Eeuo pipefail
           cleanup() {
             rm -rf "$REMOTE_ROOT"
             rm -f "$REMOTE_BUNDLE" "$PASSWORD_FILE"
           }
           trap cleanup EXIT
+
           test -f "$REMOTE_BUNDLE"
           test -f "$PASSWORD_FILE"
           mkdir -m 700 "$REMOTE_ROOT"
@@ -122,7 +133,20 @@ jobs:
           password="$(cat "$PASSWORD_FILE")"
           test -n "$password"
           export OBSIDIAN_PASSWORD="$password"
+
           ASSET_ROOT="$REMOTE_ROOT" RUN_ID="$RUN_ID" bash "$REMOTE_ROOT/scripts/deploy_dominion_command_center.sh"
+
+          repo="$HOME/dominion-ops"
+          test -d "$repo/.git"
+          cd "$repo"
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          test "$(git rev-parse HEAD)" = "$RUN_SHA"
+          EXPECTED_SHA="$RUN_SHA" COMMAND_CENTER_BRANCH=main bash scripts/deploy_command_center.sh
+
+          curl -fsS http://127.0.0.1:8091/health
+          curl -fsS http://127.0.0.1:8091/api/status | python3 -m json.tool
           REMOTE
 
       - name: Cleanup runner access material

@@ -99,10 +99,11 @@ jobs:
           test "$(git rev-parse HEAD)" = "$DEPLOY_SHA" || { echo "OBSIDIAN_VERIFY=FAIL reason=vm_sha_mismatch"; exit 1; }
           state="$(docker inspect --format '{{.State.Status}}' obsidian-remote 2>/dev/null || true)"
           test "$state" = "running" || { echo "OBSIDIAN_VERIFY=FAIL reason=backend_not_running"; exit 1; }
-          curl -fsS --max-time 10 http://127.0.0.1:8083/ >/dev/null || { echo "OBSIDIAN_VERIFY=FAIL reason=backend_unhealthy"; exit 1; }
+          backend_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8083/ || true)"
+          test "$backend_status" = "401" || { echo "OBSIDIAN_VERIFY=FAIL reason=backend_auth_contract expected=401 actual=${backend_status:-000}"; exit 1; }
           ss -tln | grep -Eq '127\.0\.0\.1:8083[[:space:]]' || { echo "OBSIDIAN_VERIFY=FAIL reason=backend_not_loopback_bound"; exit 1; }
           sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null || { echo "OBSIDIAN_VERIFY=FAIL reason=caddy_invalid"; exit 1; }
-          echo "OBSIDIAN_BACKEND_VERIFY=PASS sha=$DEPLOY_SHA boundary=loopback"
+          echo "OBSIDIAN_BACKEND_VERIFY=PASS sha=$DEPLOY_SHA boundary=loopback auth=required"
           REMOTE
 
       - name: Verify public Caddy authentication boundary

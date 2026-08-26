@@ -1,4 +1,4 @@
-name: Dominion Revenue Authority Gate Diagnostic Once
+name: Dominion Revenue Authority Contract Diagnostic Once
 
 on:
   push:
@@ -33,7 +33,7 @@ jobs:
           ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Inspect live Buddy authority gate read-only
+      - name: Read exact live authority contract without mutation
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -42,20 +42,29 @@ jobs:
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
           root="$HOME/buddy_core"
-          test -d "$root"
-          echo '=== LIVE BUDDY SERVICE ==='
-          systemctl show dominion-buddy-web.service -p WorkingDirectory -p ExecStart --no-pager
-          echo '=== AUTHORITY GATE LOCATIONS ==='
-          grep -R -n -E 'CURRENT_AUTHORITY|L2_FIELD_NOT_CURRENT|L2_STALE|VOLTEDGE_STOREFRONT_LIVE' "$root" \
-            --include='*.py' --include='*.json' --exclude-dir='__pycache__' | head -120 || true
-          echo '=== REVENUE PREPARE REFERENCES ==='
-          grep -R -n -E 'revenue\.prepare|current.authority|current_authority' "$root" \
-            --include='*.py' --include='*.json' --exclude-dir='__pycache__' | head -160 || true
-          echo '=== TARGET FILE HASHES ==='
-          for f in "$root/core/operator.py" "$root/core/current_authority.py" "$root/config/capability_registry.json"; do
-            if [ -f "$f" ]; then sha256sum "$f"; fi
-          done
-          echo 'BUDDY_REVENUE_AUTHORITY_DIAG=PASS'
+          test -f "$root/core/radah_governance.py"
+          test -f "$root/config/capability_registry.json"
+          echo '=== REVENUE CAPABILITY LIVE JSON ==='
+          python3 - "$root/config/capability_registry.json" <<'PY'
+          import json,sys
+          p=sys.argv[1]
+          data=json.load(open(p,encoding='utf-8'))
+          cap=next(c for c in data['capabilities'] if c.get('id')=='revenue.prepare')
+          print(json.dumps(cap,indent=2,sort_keys=True))
+          PY
+          echo '=== L2 OBSERVATION MODEL ==='
+          sed -n '400,465p' "$root/core/radah_governance.py"
+          echo '=== REQUIRED FIELD VALIDATION ==='
+          sed -n '570,625p' "$root/core/radah_governance.py"
+          echo '=== AUTHORIZATION DECISION ==='
+          sed -n '675,765p' "$root/core/radah_governance.py"
+          echo '=== GOVERNANCE IMPORTS/CONSTANTS ==='
+          sed -n '1,90p' "$root/core/radah_governance.py"
+          echo '=== L2 VOLTEDGE REFRESH ==='
+          sed -n '135,195p' "$root/core/layer2_refresh.py"
+          echo '=== LIVE FILE HASHES ==='
+          sha256sum "$root/core/radah_governance.py" "$root/core/layer2_refresh.py" "$root/config/capability_registry.json"
+          echo 'BUDDY_REVENUE_AUTHORITY_CONTRACT_DIAG=PASS'
           REMOTE
 
       - name: Cleanup access material

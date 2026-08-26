@@ -24,14 +24,28 @@ test "$(systemctl is-active "$timer")" = active || { echo 'REVENUE_WORKPLANE=HOL
 test "$(systemctl is-active dominion-revenue-runtime.service)" = active || { echo 'REVENUE_WORKPLANE=HOLD reason=revenue_runtime_inactive'; exit 23; }
 test "$(systemctl is-active dominion-revenue-evaluator.timer)" = active || { echo 'REVENUE_WORKPLANE=HOLD reason=revenue_evaluator_inactive'; exit 24; }
 
+runtime_files=(
+  scripts/autopilot/revenue_workplane_supervisor.py
+  scripts/autopilot/multilane_supervisor.py
+  scripts/autopilot/control_plane_guard.py
+  governance/SYSTEM_CONSTITUTION.md
+  governance/authority_matrix.json
+  governance/five_council_policy.json
+  governance/incident_learning_policy.json
+  governance/legal_evidence_policy.json
+  governance/constitutional_amendment_policy.json
+  governance/radah_memshalah_autopilot_policy.json
+  governance/revenue_workplane.json
+  governance/lane_access_policy.json
+  governance/lane_runtime_contracts.json
+  governance/profitability_lane_contracts.json
+  governance/verticals.json
+  agents/registry.json
+)
+
 mkdir -p "$backup_root"
 chmod 700 "$backup_root"
-for rel in \
-  scripts/autopilot/revenue_workplane_supervisor.py \
-  scripts/autopilot/multilane_supervisor.py \
-  governance/radah_memshalah_autopilot_policy.json \
-  governance/revenue_workplane.json \
-  governance/lane_access_policy.json; do
+for rel in "${runtime_files[@]}"; do
   if [ -f "$runtime_root/$rel" ]; then
     mkdir -p "$backup_root/$(dirname "$rel")"
     cp -a "$runtime_root/$rel" "$backup_root/$rel"
@@ -48,12 +62,7 @@ rollback() {
   trap - ERR INT TERM EXIT
   set +e
   echo "REVENUE_WORKPLANE_ROLLBACK=BEGIN rc=$rc"
-  for rel in \
-    scripts/autopilot/revenue_workplane_supervisor.py \
-    scripts/autopilot/multilane_supervisor.py \
-    governance/radah_memshalah_autopilot_policy.json \
-    governance/revenue_workplane.json \
-    governance/lane_access_policy.json; do
+  for rel in "${runtime_files[@]}"; do
     if [ -f "$backup_root/$rel" ]; then
       mkdir -p "$runtime_root/$(dirname "$rel")"
       cp -a "$backup_root/$rel" "$runtime_root/$rel"
@@ -72,15 +81,41 @@ rollback() {
 }
 trap rollback ERR INT TERM EXIT
 
+mkdir -p "$runtime_root/scripts/autopilot" "$runtime_root/governance" "$runtime_root/agents"
+chmod 700 "$runtime_root/scripts/autopilot" "$runtime_root/governance" "$runtime_root/agents"
+
 install -m 700 "$asset_root/scripts/autopilot/revenue_workplane_supervisor.py" "$runtime_root/scripts/autopilot/revenue_workplane_supervisor.py"
 install -m 700 "$asset_root/scripts/autopilot/multilane_supervisor.py" "$runtime_root/scripts/autopilot/multilane_supervisor.py"
+install -m 700 "$asset_root/scripts/autopilot/control_plane_guard.py" "$runtime_root/scripts/autopilot/control_plane_guard.py"
+install -m 600 "$asset_root/governance/SYSTEM_CONSTITUTION.md" "$runtime_root/governance/SYSTEM_CONSTITUTION.md"
+install -m 600 "$asset_root/governance/authority_matrix.json" "$runtime_root/governance/authority_matrix.json"
+install -m 600 "$asset_root/governance/five_council_policy.json" "$runtime_root/governance/five_council_policy.json"
+install -m 600 "$asset_root/governance/incident_learning_policy.json" "$runtime_root/governance/incident_learning_policy.json"
+install -m 600 "$asset_root/governance/legal_evidence_policy.json" "$runtime_root/governance/legal_evidence_policy.json"
+install -m 600 "$asset_root/governance/constitutional_amendment_policy.json" "$runtime_root/governance/constitutional_amendment_policy.json"
 install -m 600 "$asset_root/governance/radah_memshalah_autopilot_policy.json" "$runtime_root/governance/radah_memshalah_autopilot_policy.json"
 install -m 600 "$asset_root/governance/revenue_workplane.json" "$runtime_root/governance/revenue_workplane.json"
 install -m 600 "$asset_root/governance/lane_access_policy.json" "$runtime_root/governance/lane_access_policy.json"
+install -m 600 "$asset_root/governance/lane_runtime_contracts.json" "$runtime_root/governance/lane_runtime_contracts.json"
+install -m 600 "$asset_root/governance/profitability_lane_contracts.json" "$runtime_root/governance/profitability_lane_contracts.json"
+install -m 600 "$asset_root/governance/verticals.json" "$runtime_root/governance/verticals.json"
+install -m 600 "$asset_root/agents/registry.json" "$runtime_root/agents/registry.json"
 
 "$buddy_python" -m py_compile \
   "$runtime_root/scripts/autopilot/revenue_workplane_supervisor.py" \
-  "$runtime_root/scripts/autopilot/multilane_supervisor.py"
+  "$runtime_root/scripts/autopilot/multilane_supervisor.py" \
+  "$runtime_root/scripts/autopilot/control_plane_guard.py"
+
+constitutional="$(cd "$runtime_root/scripts/autopilot" && "$buddy_python" multilane_supervisor.py --constitutional-check)"
+printf '%s\n' "$constitutional"
+printf '%s' "$constitutional" | grep -q 'CONSTITUTIONAL_RUNTIME_GUARD=PASS'
+printf '%s' "$constitutional" | grep -q '"registered_lanes": 11'
+printf '%s' "$constitutional" | grep -q '"runtime_contracts": 11'
+printf '%s' "$constitutional" | grep -q '"economic_profitability_contracts": 8'
+printf '%s' "$constitutional" | grep -q '"default_deny": true'
+printf '%s' "$constitutional" | grep -q '"human_final_authority": "human_overseer"'
+printf '%s' "$constitutional" | grep -q '"incident_learning": true'
+printf '%s' "$constitutional" | grep -q '"legal_fail_closed": true'
 
 access="$(cd "$runtime_root/scripts/autopilot" && "$buddy_python" revenue_workplane_supervisor.py --inspect-lane-access)"
 printf '%s\n' "$access"
@@ -95,13 +130,12 @@ printf '%s' "$snapshot" | grep -q '"available": true'
 printf '%s' "$snapshot" | grep -q '"experiment_id": "voltedge-speaker-offer-v1"'
 printf '%s' "$snapshot" | grep -q '"constraint": "QUALIFIED_TRAFFIC"\|"constraint": "MESSAGE_MATCH_OR_CTA"\|"constraint": "PRODUCT_OR_CHECKOUT_FRICTION"\|"constraint": "STATISTICAL_EVIDENCE"'
 
-# Prove the new service entrypoint advances multiple distinct lanes in one
-# activation without mutating state during preflight.
 preflight="$state_root/multilane-preflight-$RUN_ID"
 rm -rf "$preflight"
 multi_plan="$(cd "$runtime_root/scripts/autopilot" && RADAH_AUTOPILOT_ENABLED=0 "$buddy_python" multilane_supervisor.py --plan-only --sweep-size 3 --state-dir "$preflight")"
 printf '%s\n' "$multi_plan"
 printf '%s' "$multi_plan" | grep -q '"selected_count": 3'
+printf '%s' "$multi_plan" | grep -q '"constitutional_guard"'
 printf '%s' "$multi_plan" | grep -q 'RADAH_MULTILANE_SWEEP=PLANNED selected=3'
 test ! -e "$preflight/state.json"
 rm -rf "$preflight"
@@ -120,7 +154,6 @@ sudo systemctl daemon-reload
 resolved="$(systemctl show "$service" -p ExecStart --value)"
 printf '%s\n' "$resolved" | grep -q 'multilane_supervisor.py'
 
-# Prove all 11 registered lanes remain independently schedulable and governed.
 for lane in \
   commerce_fulfillment kdp_publishing analytics_services digital_products \
   services_lead_generation content_traffic surplus trading \
@@ -139,11 +172,13 @@ printf '%s' "$commerce" | grep -q '"experiment_id": "voltedge-speaker-offer-v1"'
 test "$(systemctl is-active "$timer")" = active
 test "$(systemctl is-enabled "$timer")" = enabled
 
-echo 'RADAH_ALL_LANES=OPEN count=11 internal=true scheduler_eligible=true'
+echo 'RADAH_CONSTITUTIONAL_RUNTIME=PASS default_deny=true human_final_authority=human_overseer five_council=true incident_learning=true legal_fail_closed=true'
+echo 'RADAH_ALL_LANES=OPEN count=11 internal=true scheduler_eligible=true runtime_contracts=11'
+echo 'RADAH_PROFITABILITY_CONTRACTS=PASS economic_lanes=8 no_hidden_gaps=true'
 echo 'RADAH_MULTILANE_RUNTIME=BOUND sweep_size=3 cadence=30m isolation=per_lane_receipt'
 echo 'REVENUE_WORKPLANE=BOUND lane=commerce_fulfillment support=content_traffic,intelligence_orchestration,infrastructure'
 echo 'REVENUE_WORKPLANE_RUNTIME=PASS service=dominion-revenue-runtime.service evaluator=10m'
-echo 'REVENUE_WORKPLANE_AUTOPILOT=PASS cadence=30m mode=multilane'
+echo 'REVENUE_WORKPLANE_AUTOPILOT=PASS cadence=30m mode=multilane constitution_bound=true'
 echo 'REVENUE_WORKPLANE_EXPERIMENT=PASS id=voltedge-speaker-offer-v1'
 
 success=1

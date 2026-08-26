@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 REPO_DIR="${REPO_DIR:-$HOME/dominion-ops}"
 DOMAIN="${COMMAND_CENTER_DOMAIN:-command.dominionhealing.org}"
+VAULT_HOST="${VAULT_HOST:-vault.dominionhealing.org}"
 ENV_FILE="${COMMAND_CENTER_ENV_FILE:-$HOME/.config/dominion/command-center.env}"
 BRANCH="${COMMAND_CENTER_BRANCH:-main}"
 EXPECTED_SHA="${EXPECTED_SHA:-}"
@@ -22,9 +23,8 @@ if [[ -n "$EXPECTED_SHA" ]]; then
   }
 fi
 
-# The control plane must be able to boot even when an individual revenue offer
-# is not yet configured. Missing checkout/delivery values remain truthfully
-# BLOCKED in /api/revenue; they must never take the whole Command Center down.
+# The control plane must boot even while individual offers are incomplete.
+# Missing checkout/delivery values remain truthfully BLOCKED in /api/revenue.
 if [[ ! -f "$ENV_FILE" ]]; then
   test -f "$ENV_EXAMPLE"
   install -d -m 700 "$(dirname "$ENV_FILE")"
@@ -78,37 +78,92 @@ PY
 )"
 echo "DOMINION_COMMAND_CENTER_REVENUE_STATE=$REVENUE_GATE_STATE"
 
-if [[ ! -f "$CADDYFILE" ]]; then
-  echo "Caddyfile not found: $CADDYFILE" >&2
-  exit 1
-fi
+[[ -f "$CADDYFILE" ]] || { echo "Caddyfile not found: $CADDYFILE" >&2; exit 1; }
+[[ -n "${OBSIDIAN_PASSWORD:-}" ]] || { echo "OBSIDIAN_PASSWORD is required to protect public Command Center access" >&2; exit 1; }
 
-if ! sudo grep -Fq "$DOMAIN" "$CADDYFILE"; then
-  cat <<EOF | sudo tee -a "$CADDYFILE" >/dev/null
+# Keep the dedicated hostname ready, but never expose the control surface without auth.
+password_hash="$(sudo caddy hash-password --plaintext "$OBSIDIAN_PASSWORD")"
+test -n "$password_hash"
+sudo env COMMAND_CENTER_PASSWORD_HASH="$password_hash" COMMAND_CENTER_DOMAIN="$DOMAIN" python3 - "$CADDYFILE" <<'PY'
+import os
+from pathlib import Path
 
-$DOMAIN {
-  encode gzip zstd
-  reverse_proxy 127.0.0.1:8091
-}
-EOF
-fi
+path = Path(__import__('sys').argv[1])
+host = os.environ['COMMAND_CENTER_DOMAIN']
+password_hash = os.environ['COMMAND_CENTER_PASSWORD_HASH']
+text = path.read_text(encoding='utf-8')
+lines = text.splitlines(keepends=True)
+starts = [i for i, line in enumerate(lines) if line.strip() == f'{host} {{']
+if len(starts) > 1:
+    raise SystemExit('COMMAND_CENTER_CADDY_ROUTE_DUPLICATE')
+block = (
+    f'{host} {{\n'
+    '    basicauth {\n'
+    f'        dominion {password_hash}\n'
+    '    }\n'
+    '    encode gzip zstd\n'
+    '    reverse_proxy 127.0.0.1:8091\n'
+    '}\n'
+)
+if starts:
+    start = starts[0]
+    depth = 0
+    end = None
+    for i in range(start, len(lines)):
+        depth += lines[i].count('{') - lines[i].count('}')
+        if depth == 0:
+            end = i + 1
+            break
+    if end is None:
+        raise SystemExit('COMMAND_CENTER_CADDY_ROUTE_UNBALANCED')
+    new = ''.join(lines[:start]) + block + ''.join(lines[end:])
+else:
+    suffix = '' if text.endswith('\n') or not text else '\n'
+    new = text + suffix + '\n' + block
+path.write_text(new, encoding='utf-8', newline='\n')
+PY
+unset password_hash
 
-sudo caddy validate --config "$CADDYFILE" >/dev/null
+# Immediate protected fallback: the vault hostname already resolves to this VM.
+bash scripts/converge_command_center_vault_route.sh
+
+sudo caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null
 sudo systemctl reload caddy
 sudo systemctl is-active --quiet caddy
 
-PUBLIC_STATE="pending"
+PUBLIC_ENDPOINT=""
+PUBLIC_MODE=""
+
+# Prefer the dedicated hostname whenever its DNS exists and HTTPS proves healthy.
 if getent ahostsv4 "$DOMAIN" >/dev/null 2>&1; then
-  if curl -fsS --max-time 20 "https://$DOMAIN/health" >/dev/null 2>&1; then
-    PUBLIC_STATE="online"
-  else
-    echo "Command Center is healthy locally and Caddy is configured, but public HTTPS did not pass." >&2
-    echo "Check DNS/TLS for $DOMAIN." >&2
-    exit 1
+  if curl -fsS --max-time 20 -u "dominion:$OBSIDIAN_PASSWORD" "https://$DOMAIN/health" >/dev/null 2>&1; then
+    PUBLIC_ENDPOINT="https://$DOMAIN"
+    PUBLIC_MODE="dedicated_host"
   fi
-else
-  echo "Command Center is healthy locally and Caddy is configured, but DNS does not resolve for $DOMAIN." >&2
-  exit 1
+fi
+
+# Otherwise use the already-live authenticated vault hostname under a protected path.
+if [[ -z "$PUBLIC_ENDPOINT" ]]; then
+  getent ahostsv4 "$VAULT_HOST" >/dev/null 2>&1 || {
+    echo "Neither $DOMAIN nor $VAULT_HOST resolves to a usable public route" >&2
+    exit 1
+  }
+  fallback="https://$VAULT_HOST/command-center"
+  curl -fsS --max-time 20 -u "dominion:$OBSIDIAN_PASSWORD" "$fallback/health" >/dev/null
+  html="$(curl -fsS --max-time 20 -u "dominion:$OBSIDIAN_PASSWORD" "$fallback/")"
+  grep -Fq 'All Dominion lanes' <<<"$html"
+  public_status="$(curl -fsS --max-time 20 -u "dominion:$OBSIDIAN_PASSWORD" "$fallback/api/status")"
+  python3 - "$public_status" <<'PY'
+import json,sys
+state=json.loads(sys.argv[1])
+summary=state.get('lane_summary',{})
+assert summary.get('open') == 11
+assert summary.get('registered') == 11
+assert summary.get('all_open') is True
+print('DOMINION_COMMAND_CENTER_PUBLIC_LANES=PASS open=11 registered=11')
+PY
+  PUBLIC_ENDPOINT="$fallback"
+  PUBLIC_MODE="vault_protected_path"
 fi
 
 cat <<EOF
@@ -117,6 +172,7 @@ release_sha=$(git rev-parse HEAD)
 lanes=11/11
 revenue_state=$REVENUE_GATE_STATE
 local_endpoint=http://127.0.0.1:8091
-public_endpoint=https://$DOMAIN
-public_state=$PUBLIC_STATE
+public_endpoint=$PUBLIC_ENDPOINT
+public_mode=$PUBLIC_MODE
+public_state=online
 EOF

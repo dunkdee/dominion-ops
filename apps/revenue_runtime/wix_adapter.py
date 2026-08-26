@@ -4,8 +4,6 @@ import os
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
-import httpx
-
 
 BASE = "https://www.wixapis.com/stores/v3"
 ORDERS_URL = "https://www.wixapis.com/ecom/v1/orders/search"
@@ -29,9 +27,13 @@ def _headers() -> dict[str, str]:
     }
 
 
-def _request(method: str, url: str, **kwargs: Any) -> httpx.Response:
+def _request(method: str, url: str, **kwargs: Any):
     if not url.startswith("https://www.wixapis.com/"):
         raise WixActuatorError("non-Wix destination rejected")
+    try:
+        import httpx
+    except ImportError as exc:  # keeps policy/ledger imports stdlib-only
+        raise WixActuatorError("httpx runtime dependency unavailable") from exc
     response = httpx.request(method, url, headers=_headers(), timeout=TIMEOUT, **kwargs)
     response.raise_for_status()
     return response

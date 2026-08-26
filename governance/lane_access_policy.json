@@ -1,13 +1,12 @@
 {
   "schema": "dominion-lane-access-v1",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
   "purpose": "Keep every registered Dominion lane open for bounded internal production while preserving truthful external-readiness and Founder-held consequence gates.",
   "all_registered_lanes_internal_open": true,
   "readiness_labels_do_not_close_internal_work": true,
-  "scheduler_uses_access_policy_not_readiness_status": true,
+  "scheduler_eligibility_is_independent_of_readiness_status": true,
   "external_actions_require_explicit_authority": true,
-  "max_lane_gap_hours": 6,
   "lanes": {
     "commerce_fulfillment": {"internal_work_open": true, "scheduler_eligible": true},
     "kdp_publishing": {"internal_work_open": true, "scheduler_eligible": true},

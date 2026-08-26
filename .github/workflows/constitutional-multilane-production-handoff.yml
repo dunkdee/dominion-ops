@@ -84,6 +84,7 @@ jobs:
             "RUN_ID='$GITHUB_RUN_ID' RELEASE_SHA='$RELEASE_SHA' bash -s" <<'REMOTE'
           set -Eeuo pipefail
           repo="$HOME/dominion-ops"
+          service="dominion-radah-autopilot.service"
           test -d "$repo/.git"
           cd "$repo"
           git fetch origin main
@@ -91,12 +92,40 @@ jobs:
           git pull --ff-only origin main
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
 
-          ASSET_ROOT="$repo" RUN_ID="${RUN_ID}-base" bash scripts/autopilot/install_autopilot.sh
+          base_rc=0
+          ASSET_ROOT="$repo" RUN_ID="${RUN_ID}-base" bash scripts/autopilot/install_autopilot.sh || base_rc=$?
+          if [ "$base_rc" -ne 0 ]; then
+            echo "RADAH_BASE_INSTALL=FAILED rc=$base_rc"
+            echo '--- systemd status ---'
+            sudo systemctl status "$service" --no-pager -l || true
+            echo '--- systemd result/environment/command ---'
+            sudo systemctl show "$service" \
+              -p Result -p ExecMainStatus -p ExecMainCode -p ExecStart -p User \
+              -p WorkingDirectory -p Environment -p EnvironmentFiles --no-pager || true
+            echo '--- recent journal ---'
+            sudo journalctl -u "$service" --since '10 minutes ago' --no-pager -o short-precise || true
+            echo '--- latest persisted lane receipt ---'
+            latest_receipt="$(find "$HOME/.dominion/autopilot/receipts" -maxdepth 1 -type f -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2- || true)"
+            if [ -n "$latest_receipt" ] && [ -s "$latest_receipt" ]; then
+              echo "receipt=$latest_receipt"
+              python3 -m json.tool "$latest_receipt" || cat "$latest_receipt"
+            else
+              echo 'receipt=missing'
+            fi
+            echo '--- scheduler state ---'
+            if [ -s "$HOME/.dominion/autopilot/state.json" ]; then
+              python3 -m json.tool "$HOME/.dominion/autopilot/state.json" || true
+            else
+              echo 'state=missing'
+            fi
+            exit "$base_rc"
+          fi
+
           ASSET_ROOT="$repo" RUN_ID="${RUN_ID}-multilane" bash scripts/autopilot/install_revenue_workplane.sh
 
-          sudo systemctl reset-failed dominion-radah-autopilot.service >/dev/null 2>&1 || true
-          sudo systemctl start dominion-radah-autopilot.service
-          test "$(sudo systemctl show dominion-radah-autopilot.service -p Result --value)" = success
+          sudo systemctl reset-failed "$service" >/dev/null 2>&1 || true
+          sudo systemctl start "$service"
+          test "$(sudo systemctl show "$service" -p Result --value)" = success
           test "$(sudo systemctl is-active dominion-radah-autopilot.timer)" = active
           test "$(sudo systemctl is-enabled dominion-radah-autopilot.timer)" = enabled
           test "$(sudo systemctl is-active dominion-revenue-runtime.service)" = active
@@ -145,7 +174,7 @@ jobs:
           print('EXTERNAL_ACTIONS_AUTHORIZED=false')
           PY
 
-          resolved="$(systemctl show dominion-radah-autopilot.service -p ExecStart --value)"
+          resolved="$(systemctl show "$service" -p ExecStart --value)"
           printf '%s\n' "$resolved" | grep -q 'multilane_supervisor.py'
           echo 'RADAH_AUTOPILOT_SERVICE_BINDING=PASS entrypoint=multilane_supervisor.py cadence=30m'
           REMOTE

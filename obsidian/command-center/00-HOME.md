@@ -115,7 +115,7 @@ aliases:
 
 <section class="dominion-boundary">
   <div class="dominion-boundary__mark" aria-hidden="true">!</div>
-  <div><span class="dominion-kicker">TRUTH BOUNDARY</span><p><strong>Open lane</strong> means internal production may run. <strong>External-ready</strong> means a specific consequential action has cleared its separate evidence and Founder gate. GitHub governs policy and code. Foundation VM proves runtime. Obsidian displays the operating picture. Motion never invents status.</p></div>
+  <div><span class="dominion-kicker">TRUTH BOUNDARY</span><p><strong>Open lane</strong> means internal production may run. <strong>External-ready</strong> means a specific consequential action has cleared its separate evidence and Founder gate. GitHub governs policy and code. Foundation VM proves runtime. Obsidian displays the operating picture. Motion and design communicate hierarchy; they do not invent status or grant authority.</p></div>
 </section>
 
 <nav class="dominion-mobile-dock" aria-label="Mobile quick navigation">

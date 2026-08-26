@@ -1,0 +1,54 @@
+name: Dominion Revenue Work Plane CI
+
+on:
+  pull_request:
+    paths:
+      - 'governance/revenue_workplane.json'
+      - 'governance/radah_memshalah_autopilot_policy.json'
+      - 'scripts/autopilot/revenue_workplane_supervisor.py'
+      - 'scripts/autopilot/install_revenue_workplane.sh'
+      - 'obsidian/command-center/09-Revenue.md'
+      - 'tests/test_revenue_workplane.py'
+      - '.github/workflows/revenue-workplane-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'governance/revenue_workplane.json'
+      - 'governance/radah_memshalah_autopilot_policy.json'
+      - 'scripts/autopilot/revenue_workplane_supervisor.py'
+      - 'scripts/autopilot/install_revenue_workplane.sh'
+      - 'obsidian/command-center/09-Revenue.md'
+      - 'tests/test_revenue_workplane.py'
+      - '.github/workflows/revenue-workplane-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: '3.12'
+      - name: Syntax and contract validation
+        run: |
+          python -m json.tool governance/revenue_workplane.json >/dev/null
+          python -m json.tool governance/radah_memshalah_autopilot_policy.json >/dev/null
+          python -m py_compile scripts/autopilot/lane_supervisor.py scripts/autopilot/revenue_workplane_supervisor.py
+          bash -n scripts/autopilot/install_revenue_workplane.sh
+      - name: Work-plane regression tests
+        run: python -m unittest tests.test_revenue_workplane -v
+      - name: Preserve autopilot regression suite
+        run: python -m unittest tests.test_radah_autopilot -v
+      - name: Static production binding assertions
+        run: |
+          grep -Fq '"primary_lane": "commerce_fulfillment"' governance/revenue_workplane.json
+          grep -Fq '"automatic_price_change": false' governance/revenue_workplane.json
+          grep -Fq '"automatic_paid_spend": false' governance/revenue_workplane.json
+          grep -Fq 'REVENUE_WORKPLANE_SNAPSHOT' governance/radah_memshalah_autopilot_policy.json
+          grep -Fq 'voltedge-speaker-offer-v1' obsidian/command-center/09-Revenue.md
+          grep -Fq 'revenue_workplane_supervisor.py --execute' scripts/autopilot/install_revenue_workplane.sh
+          echo 'DOMINION_REVENUE_WORKPLANE_CI=PASS'

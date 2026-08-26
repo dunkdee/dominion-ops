@@ -1,0 +1,76 @@
+name: One-time Authorized Entire Dominion Production Closure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/authorizations/entire-production-closure-20260826.json'
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: one-time-entire-dominion-production-closure-20260826
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event.head_commit.message == 'ops: authorize entire Dominion production closure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - name: Checkout exact authorized release
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Validate one-time founder authorization receipt
+        env:
+          AUTHORIZED_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$AUTHORIZED_SHA"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path('runtime/authorizations/entire-production-closure-20260826.json')
+          doc=json.loads(path.read_text())
+          assert doc['schema']=='dominion-production-authorization-v1'
+          assert doc['authorized_by']=='Dewayne Singleton'
+          assert doc['directive']=='Produce the entire Dominion build top to bottom with no gaps or bottlenecks'
+          assert doc['one_time'] is True
+          assert doc['scope']==['foundation_vm','obsidian','dominion_brain','command_center','revenue_runtime','autopilot','live_runtime_acceptance','runtime_observer']
+          print('FOUNDER_AUTHORIZATION=PASS scope=entire_build one_time=true')
+          PY
+
+      - name: Dispatch and prove the protected top-to-bottom closure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          previous="$(gh run list --workflow finish-production-activation.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          gh workflow run finish-production-activation.yml --ref main \
+            -f commit_sha="$TARGET_SHA" \
+            -f confirm='FINISH PRODUCTION ACTIVATION'
+          run_id=""
+          for _ in {1..36}; do
+            current="$(gh run list --workflow finish-production-activation.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+            if [[ -n "$current" && "$current" != "$previous" ]]; then
+              run_id="$current"
+              break
+            fi
+            sleep 5
+          done
+          test -n "$run_id"
+          echo "Protected closure run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+          gh run watch "$run_id" --exit-status
+          conclusion="$(gh run view "$run_id" --json conclusion --jq .conclusion)"
+          test "$conclusion" = 'success'
+          echo "ENTIRE_DOMINION_PRODUCTION_CLOSURE=PASS sha=$TARGET_SHA run_id=$run_id"

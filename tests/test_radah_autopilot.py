@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "autopilot" / "lane_supervisor.py"
 INSTALLER_PATH = ROOT / "scripts" / "autopilot" / "install_autopilot.sh"
+COMPLETED_CLOSURE_WORKFLOW_PATH = ROOT / ".github" / "workflows" / "authorized-entire-production-closure-20260826.yml"
 spec = importlib.util.spec_from_file_location("lane_supervisor", MODULE_PATH)
 assert spec and spec.loader
 lane_supervisor = importlib.util.module_from_spec(spec)
@@ -32,6 +33,9 @@ class RadahAutopilotTests(unittest.TestCase):
     def setUp(self):
         self.policy = lane_supervisor.load_json(ROOT / "governance" / "radah_memshalah_autopilot_policy.json")
         self.verticals = lane_supervisor.load_json(ROOT / "governance" / "verticals.json")
+
+    def test_completed_one_time_production_trigger_is_absent(self):
+        self.assertFalse(COMPLETED_CLOSURE_WORKFLOW_PATH.exists())
 
     def test_policy_covers_every_registered_lane_exactly_once(self):
         lanes = lane_supervisor.validate_policy(self.policy, self.verticals)

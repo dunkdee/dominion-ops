@@ -1,0 +1,53 @@
+name: Dominion Revenue Execution Runtime CI
+
+on:
+  pull_request:
+    paths:
+      - 'apps/revenue_runtime/**'
+      - 'governance/revenue_execution_policy.json'
+      - 'scripts/revenue_runtime/**'
+      - 'tests/test_revenue_execution_runtime.py'
+      - '.github/workflows/revenue-execution-runtime-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/revenue_runtime/**'
+      - 'governance/revenue_execution_policy.json'
+      - 'scripts/revenue_runtime/**'
+      - 'tests/test_revenue_execution_runtime.py'
+      - '.github/workflows/revenue-execution-runtime-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: '3.12'
+      - name: Install runtime test dependencies
+        run: python -m pip install --disable-pip-version-check 'httpx>=0.28.1' 'fastapi>=0.116' 'pydantic>=2.0' 'uvicorn>=0.30'
+      - name: Syntax and shell validation
+        run: |
+          python -m compileall -q apps/revenue_runtime
+          bash -n scripts/revenue_runtime/install_revenue_runtime.sh
+          bash -n scripts/revenue_runtime/disable_revenue_runtime.sh
+          python -m json.tool governance/revenue_execution_policy.json >/dev/null
+      - name: Revenue execution contract tests
+        run: python -m unittest tests.test_revenue_execution_runtime -v
+      - name: Preserve original simulation boundary tests
+        run: python -m unittest tests.test_revenue_runtime -v
+      - name: Static authority assertions
+        run: |
+          grep -Fq '"cro_reversible": true' governance/revenue_execution_policy.json
+          grep -Fq '"price_change": false' governance/revenue_execution_policy.json
+          grep -Fq '"paid_spend": false' governance/revenue_execution_policy.json
+          grep -Fq '"destructive_change": false' governance/revenue_execution_policy.json
+          grep -Fq 'require_current_revision' governance/revenue_execution_policy.json
+          grep -Fq 'AMBIGUOUS_CANDIDATES' apps/revenue_runtime/evaluator.py
+          grep -Fq 'DOMINION_REVENUE_RUNTIME=DISABLED' scripts/revenue_runtime/disable_revenue_runtime.sh
+          echo 'DOMINION_REVENUE_EXECUTION_CI=PASS'

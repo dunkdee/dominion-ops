@@ -15,27 +15,32 @@ service_name="dominion-radah-autopilot.service"
 timer_name="dominion-radah-autopilot.timer"
 service_path="/etc/systemd/system/$service_name"
 timer_path="/etc/systemd/system/$timer_name"
-dropin_dir="/etc/systemd/system/$service_name.d"
-revenue_dropin="$dropin_dir/revenue-workplane.conf"
 success=0
 
-# A base-layer replacement must remain compatible with an already-active
-# revenue/multilane ExecStart override. The overlay is authoritative until the
-# revenue installer atomically replaces it, so never create a runtime tree that
-# makes the active override point at a missing file.
+# Inspect the effective service definition before any runtime mutation. systemctl
+# show resolves every active drop-in by precedence; systemctl cat gives us the
+# complete base-unit/drop-in evidence set for fail-closed diagnostics.
 overlay_mode="none"
-overlay_text=""
-if sudo test -f "$revenue_dropin"; then
-  overlay_text="$(sudo cat "$revenue_dropin")"
-  if printf '%s' "$overlay_text" | grep -q 'multilane_supervisor.py'; then
+unit_definition="$(systemctl cat "$service_name" 2>/dev/null || true)"
+effective_exec="$(systemctl show "$service_name" -p ExecStart --value 2>/dev/null || true)"
+if [ -n "$effective_exec" ]; then
+  if printf '%s' "$effective_exec" | grep -Fq "$runtime_root/scripts/autopilot/multilane_supervisor.py"; then
     overlay_mode="multilane"
-  elif printf '%s' "$overlay_text" | grep -q 'revenue_workplane_supervisor.py'; then
+  elif printf '%s' "$effective_exec" | grep -Fq "$runtime_root/scripts/autopilot/revenue_workplane_supervisor.py"; then
     overlay_mode="revenue"
+  elif printf '%s' "$effective_exec" | grep -Fq "$runtime_root/scripts/autopilot/lane_supervisor.py"; then
+    overlay_mode="none"
   else
-    echo 'RADAH_AUTOPILOT=HOLD reason=unknown_execstart_overlay'
+    echo 'RADAH_AUTOPILOT=HOLD reason=unknown_effective_execstart'
     exit 23
   fi
+elif [ -n "$unit_definition" ] && printf '%s\n' "$unit_definition" | grep -Eq '^[[:space:]]*ExecStart='; then
+  echo 'RADAH_AUTOPILOT=HOLD reason=effective_execstart_unresolved'
+  exit 23
 fi
+
+dropin_count="$(printf '%s\n' "$unit_definition" | grep -Ec '^# /.*/[^/]+\.d/[^/]+\.conf$' || true)"
+echo "AUTOPILOT_EFFECTIVE_OVERLAY=DETECTED mode=$overlay_mode dropins=$dropin_count"
 
 # Reuse the exact Python entrypoint already proven by the healthy Buddy service.
 # This avoids creating a second dependency universe for the same operator.
@@ -222,10 +227,14 @@ sudo systemctl enable "$timer_name" >/dev/null
 
 resolved_exec="$(systemctl show "$service_name" -p ExecStart --value)"
 case "$overlay_mode" in
-  multilane) printf '%s' "$resolved_exec" | grep -q 'multilane_supervisor.py' ;;
-  revenue) printf '%s' "$resolved_exec" | grep -q 'revenue_workplane_supervisor.py' ;;
-  none) printf '%s' "$resolved_exec" | grep -q 'lane_supervisor.py' ;;
+  multilane) expected_entrypoint="$runtime_root/scripts/autopilot/multilane_supervisor.py" ;;
+  revenue) expected_entrypoint="$runtime_root/scripts/autopilot/revenue_workplane_supervisor.py" ;;
+  none) expected_entrypoint="$runtime_root/scripts/autopilot/lane_supervisor.py" ;;
 esac
+printf '%s' "$resolved_exec" | grep -Fq "$expected_entrypoint" || {
+  echo "RADAH_AUTOPILOT=HOLD reason=effective_entrypoint_mismatch mode=$overlay_mode"
+  exit 25
+}
 echo "AUTOPILOT_EFFECTIVE_ENTRYPOINT=PASS mode=$overlay_mode"
 
 cycles_before="$("$buddy_python" - "$state_root/state.json" <<'PY'

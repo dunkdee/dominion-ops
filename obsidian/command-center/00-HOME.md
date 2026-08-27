@@ -38,7 +38,7 @@ aliases:
     <div class="dominion-metric"><span class="dominion-metric__value">11</span><span class="dominion-metric__label">Open internal production lanes</span></div>
     <div class="dominion-metric"><span class="dominion-metric__value">2</span><span class="dominion-metric__label">Priority revenue lanes · not exclusive</span></div>
     <div class="dominion-metric"><span class="dominion-metric__value dominion-metric__value--text">LIVE</span><span class="dominion-metric__label">VoltEdge revenue experiment runtime</span></div>
-    <div class="dominion-metric"><span class="dominion-metric__value dominion-metric__value--text">TRAFFIC</span><span class="dominion-metric__label">Last verified revenue constraint</span></div>
+    <div class="dominion-metric"><span class="dominion-metric__value dominion-metric__value--text">MCP</span><span class="dominion-metric__label">Governed CLI/API connector fabric</span></div>
   </div>
   <p class="dominion-snapshot__notice"><strong>Lane access and external readiness are different facts.</strong> Labels such as draft-only, paper-only, blocked, or unverified restrict specific external effects; they do not close internal work. Current production state requires timestamped runtime receipts. Last verified revenue baseline after deployment-probe cleanup: 0 real visitors, 0 clicks, 0 paid purchases, $0 attributed revenue → <strong>QUALIFIED_TRAFFIC</strong>.</p>
 </section>
@@ -65,22 +65,30 @@ aliases:
     <div class="dominion-flow" aria-hidden="true"></div>
     <span class="dominion-card__action">Open revenue control <span aria-hidden="true">→</span></span>
   </a>
+  <a class="internal-link dominion-card dominion-card--featured dominion-card--active" data-href="Dominion-Command-Center/17-MCP-CLI-Connector" href="Dominion-Command-Center/17-MCP-CLI-Connector">
+    <span class="dominion-card__top"><span class="dominion-card__index">03</span><span class="dominion-pill dominion-pill--green dominion-pill--live">MCP</span></span>
+    <span class="dominion-card__icon" aria-hidden="true">⌬</span>
+    <strong>MCP CLI Connector Fabric</strong>
+    <span>Governed MCP 2026-07-28 server for CLI tools, local services, APIs, and evidence paths. Default-deny registry, loopback runtime, no arbitrary shell or URL execution, and invocation receipts.</span>
+    <div class="dominion-flow" aria-hidden="true"></div>
+    <span class="dominion-card__action">Open connector fabric <span aria-hidden="true">→</span></span>
+  </a>
   <a class="internal-link dominion-card" data-href="Dominion-Command-Center/15-Founder-Oversight" href="Dominion-Command-Center/15-Founder-Oversight">
-    <span class="dominion-card__top"><span class="dominion-card__index">03</span><span class="dominion-pill dominion-pill--gold">FOUNDER</span></span>
+    <span class="dominion-card__top"><span class="dominion-card__index">04</span><span class="dominion-pill dominion-pill--gold">FOUNDER</span></span>
     <span class="dominion-card__icon" aria-hidden="true">◈</span>
     <strong>Founder Oversight</strong>
     <span>Only consequential external effects belong here: spend, prices, publishing, customer contact, live trading, legal filings, credential/network changes, destructive changes, and governance changes.</span>
     <span class="dominion-card__action">Open control surface <span aria-hidden="true">→</span></span>
   </a>
   <a class="internal-link dominion-card" data-href="Dominion-Command-Center/14-Daily-State" href="Dominion-Command-Center/14-Daily-State">
-    <span class="dominion-card__top"><span class="dominion-card__index">04</span><span class="dominion-pill dominion-pill--green">NOW</span></span>
+    <span class="dominion-card__top"><span class="dominion-card__index">05</span><span class="dominion-pill dominion-pill--green">NOW</span></span>
     <span class="dominion-card__icon" aria-hidden="true">◎</span>
     <strong>Daily State</strong>
     <span>Current priorities, verified state, blockers, and the next exact action.</span>
     <span class="dominion-card__action">Review today <span aria-hidden="true">→</span></span>
   </a>
   <a class="internal-link dominion-card" data-href="Dominion-Command-Center/06-Operations" href="Dominion-Command-Center/06-Operations">
-    <span class="dominion-card__top"><span class="dominion-card__index">05</span><span class="dominion-pill">EXECUTION</span></span>
+    <span class="dominion-card__top"><span class="dominion-card__index">06</span><span class="dominion-pill">EXECUTION</span></span>
     <span class="dominion-card__icon" aria-hidden="true">◇</span>
     <strong>Operations</strong>
     <span>Assigned work, verified outcomes, handoffs, service state, and restoration.</span>
@@ -115,13 +123,13 @@ aliases:
 
 <section class="dominion-boundary">
   <div class="dominion-boundary__mark" aria-hidden="true">!</div>
-  <div><span class="dominion-kicker">TRUTH BOUNDARY</span><p><strong>Open lane</strong> means internal production may run. <strong>External-ready</strong> means a specific consequential action has cleared its separate evidence and Founder gate. GitHub governs policy and code. Foundation VM proves runtime. Obsidian displays the operating picture. Motion and design communicate hierarchy; they do not invent status or grant authority.</p></div>
+  <div><span class="dominion-kicker">TRUTH BOUNDARY</span><p><strong>Open lane</strong> means internal production may run. <strong>External-ready</strong> means a specific consequential action has cleared its separate evidence and Founder gate. GitHub governs policy and code. Foundation VM proves runtime. Obsidian displays the operating picture. The MCP CLI fabric exposes only reviewed connector capabilities. Motion and design communicate hierarchy; they do not invent status or grant authority.</p></div>
 </section>
 
 <nav class="dominion-mobile-dock" aria-label="Mobile quick navigation">
   <a class="internal-link" data-href="Dominion-Command-Center/00-HOME" href="Dominion-Command-Center/00-HOME"><span aria-hidden="true">⌂</span><small>Home</small></a>
   <a class="internal-link" data-href="Dominion-Command-Center/16-Production-Matrix" href="Dominion-Command-Center/16-Production-Matrix"><span aria-hidden="true">◆</span><small>Produce</small></a>
-  <a class="internal-link" data-href="Dominion-Command-Center/09-Revenue" href="Dominion-Command-Center/09-Revenue"><span aria-hidden="true">↗</span><small>Revenue</small></a>
+  <a class="internal-link" data-href="Dominion-Command-Center/17-MCP-CLI-Connector" href="Dominion-Command-Center/17-MCP-CLI-Connector"><span aria-hidden="true">⌬</span><small>MCP</small></a>
   <a class="internal-link" data-href="Dominion-Command-Center/15-Founder-Oversight" href="Dominion-Command-Center/15-Founder-Oversight"><span aria-hidden="true">◈</span><small>Founder</small></a>
 </nav>
 

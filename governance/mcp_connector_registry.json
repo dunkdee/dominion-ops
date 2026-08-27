@@ -1,0 +1,115 @@
+{
+  "schema": "dominion-mcp-connector-registry-v1",
+  "version": "1.0.0",
+  "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+  "default_mode": "deny",
+  "external_mutation_enabled": false,
+  "authority": {
+    "registry_changes_require_review": true,
+    "arbitrary_url_invocation": false,
+    "arbitrary_shell_invocation": false,
+    "receipt_body_storage": false,
+    "founder_gate_required_for_external_mutation": true
+  },
+  "supported_adapter_types": [
+    "http_get",
+    "exec",
+    "file_read"
+  ],
+  "connectors": {
+    "alpha_engine_health": {
+      "title": "Alpha Engine health",
+      "description": "Read the local Alpha Engine health endpoint.",
+      "adapter": "http_get",
+      "effect": "read_only",
+      "classification": "internal_runtime",
+      "target": "http://127.0.0.1:8787/health",
+      "timeout_seconds": 5,
+      "allowed_params": {},
+      "query_params": {}
+    },
+    "command_center_status": {
+      "title": "Command Center canonical status",
+      "description": "Read the live canonical Dominion Command Center status snapshot.",
+      "adapter": "http_get",
+      "effect": "read_only",
+      "classification": "internal_runtime",
+      "target": "http://127.0.0.1:8091/api/status",
+      "timeout_seconds": 5,
+      "allowed_params": {},
+      "query_params": {}
+    },
+    "conductor_health": {
+      "title": "Conductor health",
+      "description": "Read the local Conductor health endpoint.",
+      "adapter": "http_get",
+      "effect": "read_only",
+      "classification": "internal_runtime",
+      "target": "http://127.0.0.1:5060/health",
+      "timeout_seconds": 5,
+      "allowed_params": {},
+      "query_params": {}
+    },
+    "dominion_web_health": {
+      "title": "Dominion web health",
+      "description": "Read the local Dominion web root health response.",
+      "adapter": "http_get",
+      "effect": "read_only",
+      "classification": "internal_runtime",
+      "target": "http://127.0.0.1:8090/",
+      "timeout_seconds": 5,
+      "allowed_params": {},
+      "query_params": {}
+    },
+    "n8n_health": {
+      "title": "n8n health",
+      "description": "Read the local n8n health endpoint.",
+      "adapter": "http_get",
+      "effect": "read_only",
+      "classification": "internal_runtime",
+      "target": "http://127.0.0.1:5678/healthz",
+      "timeout_seconds": 5,
+      "allowed_params": {},
+      "query_params": {}
+    },
+    "radah_autopilot_timer": {
+      "title": "RADAH MEMSHALAH autopilot timer",
+      "description": "Read the active state of the governed autopilot timer without mutating it.",
+      "adapter": "exec",
+      "effect": "read_only",
+      "classification": "internal_runtime",
+      "argv": [
+        "/usr/bin/systemctl",
+        "is-active",
+        "dominion-radah-autopilot.timer"
+      ],
+      "timeout_seconds": 5,
+      "allowed_params": {}
+    },
+    "revenue_runtime_service": {
+      "title": "Revenue Runtime service",
+      "description": "Read the active state of the governed Revenue Runtime service without mutating it.",
+      "adapter": "exec",
+      "effect": "read_only",
+      "classification": "internal_runtime",
+      "argv": [
+        "/usr/bin/systemctl",
+        "is-active",
+        "dominion-revenue-runtime.service"
+      ],
+      "timeout_seconds": 5,
+      "allowed_params": {}
+    },
+    "wix_agent_health": {
+      "title": "Wix agent readiness",
+      "description": "Read the local Wix agent readiness endpoint.",
+      "adapter": "http_get",
+      "effect": "read_only",
+      "classification": "internal_runtime",
+      "target": "http://127.0.0.1:8082/ready",
+      "timeout_seconds": 5,
+      "allowed_params": {},
+      "query_params": {}
+    }
+  }
+}

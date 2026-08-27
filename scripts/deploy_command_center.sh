@@ -67,6 +67,26 @@ ready=0
 for _ in $(seq 1 45); do curl -fsS --max-time 5 http://127.0.0.1:8091/health >/dev/null 2>&1 && { ready=1; break; }; sleep 2; done
 [[ "$ready" -eq 1 ]] || { docker logs --tail 160 dominion-command-center 2>&1 || true; echo "Dominion Command Center failed local health gate" >&2; exit 1; }
 
+# A healthy HTTP surface is not sufficient. Prove that Buddy can obtain a real
+# governed intelligence answer. The probe asks for reasoning only and explicitly
+# forbids external action. command-center-fallback is a deployment failure.
+INTELLIGENCE_PROBE="$(curl -fsS --max-time 90 \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"INTELLIGENCE_ACCEPTANCE_PROBE. Reply with a short acknowledgement only. Do not execute, publish, spend, message, trade, change credentials, or perform any external action."}' \
+  http://127.0.0.1:8091/api/chat)"
+INTELLIGENCE_SOURCE="$(python3 - "$INTELLIGENCE_PROBE" <<'PY'
+import json,sys
+p=json.loads(sys.argv[1])
+source=str(p.get('source') or '')
+answer=str(p.get('answer') or '').strip()
+assert source in {'conductor','nemotron'}, p
+assert answer, p
+assert 'neither the Nemotron primary worker nor the Conductor fallback responded' not in answer, p
+print(source)
+PY
+)"
+echo "COMMAND_CENTER_INTELLIGENCE=PASS source=$INTELLIGENCE_SOURCE"
+
 # Refresh after boot so both surfaces report the same post-boot service state.
 sudo systemctl start dominion-command-center-state.service
 test "$(sudo systemctl show dominion-command-center-state.service -p Result --value)" = success
@@ -183,11 +203,11 @@ PY
 # Successful builds become governed receipts and are immediately indexed.
 mkdir -p "$RECEIPTS"; chmod 700 "$STATE_ROOT" "$RECEIPTS"
 receipt_stamp="$(date -u +%Y%m%dT%H%M%SZ)"; receipt="$RECEIPTS/${receipt_stamp}-command-center-${actual_sha:0:12}.json"
-RUN_ID_VALUE="${RUN_ID:-unknown}" PUBLIC_ENDPOINT_VALUE="$PUBLIC_ENDPOINT" PUBLIC_MODE_VALUE="$PUBLIC_MODE" ACCEPTANCE_VALUE="$ACCEPTANCE" python3 - "$receipt" "$actual_sha" <<'PY'
+RUN_ID_VALUE="${RUN_ID:-unknown}" PUBLIC_ENDPOINT_VALUE="$PUBLIC_ENDPOINT" PUBLIC_MODE_VALUE="$PUBLIC_MODE" ACCEPTANCE_VALUE="$ACCEPTANCE" INTELLIGENCE_SOURCE_VALUE="$INTELLIGENCE_SOURCE" python3 - "$receipt" "$actual_sha" <<'PY'
 import json,os,sys,tempfile
 from datetime import datetime,timezone
 from pathlib import Path
-path=Path(sys.argv[1]); data={'schema':'dominion-command-center-build-receipt-v1','component':'dominion-command-center','status':'PASS','release_sha':sys.argv[2],'run_id':os.environ.get('RUN_ID_VALUE','unknown'),'public_endpoint':os.environ['PUBLIC_ENDPOINT_VALUE'],'public_mode':os.environ['PUBLIC_MODE_VALUE'],'acceptance':os.environ.get('ACCEPTANCE_VALUE',''),'mcp_cli':'online','observed_at':datetime.now(timezone.utc).isoformat()}
+path=Path(sys.argv[1]); data={'schema':'dominion-command-center-build-receipt-v1','component':'dominion-command-center','status':'PASS','release_sha':sys.argv[2],'run_id':os.environ.get('RUN_ID_VALUE','unknown'),'public_endpoint':os.environ['PUBLIC_ENDPOINT_VALUE'],'public_mode':os.environ['PUBLIC_MODE_VALUE'],'acceptance':os.environ.get('ACCEPTANCE_VALUE',''),'intelligence_source':os.environ.get('INTELLIGENCE_SOURCE_VALUE',''),'mcp_cli':'online','observed_at':datetime.now(timezone.utc).isoformat()}
 fd,tmp=tempfile.mkstemp(prefix='.receipt.',dir=str(path.parent))
 try:
   with os.fdopen(fd,'w',encoding='utf-8') as h: json.dump(data,h,indent=2,sort_keys=True); h.write('\n'); h.flush(); os.fsync(h.fileno())
@@ -211,6 +231,7 @@ DOMINION_COMMAND_CENTER=PASS
 release_sha=$actual_sha
 lanes=11/11
 live_state=$ACCEPTANCE
+intelligence_source=$INTELLIGENCE_SOURCE
 truth_bridge=active cadence=60s
 mcp_cli=online protocol=2026-07-28 loopback=http://127.0.0.1:8390 cli=$HOME/.local/bin/dominion-mcp
 obsidian_daily_state=$daily_state

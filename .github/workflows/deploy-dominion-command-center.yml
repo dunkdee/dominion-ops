@@ -1,25 +1,6 @@
 name: Deploy Dominion Command Center
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'apps/command-center/**'
-      - 'apps/mcp-cli-server/**'
-      - 'obsidian/**'
-      - 'scripts/deploy_dominion_command_center.sh'
-      - 'scripts/deploy_command_center.sh'
-      - 'scripts/install_command_center_state_bridge.sh'
-      - 'scripts/install_mcp_cli_server.sh'
-      - 'scripts/converge_command_center_vault_route.sh'
-      - 'scripts/command_center_state_bridge_v2.py'
-      - 'scripts/command_center_state_bridge_v3.py'
-      - 'governance/lane_access_policy.json'
-      - 'governance/revenue_execution_policy.json'
-      - 'governance/mcp_connector_registry.json'
-      - 'docker-compose.command-center.yml'
-      - '.github/workflows/deploy-dominion-command-center.yml'
   workflow_dispatch:
     inputs:
       confirm:
@@ -41,15 +22,10 @@ concurrency:
 jobs:
   deploy:
     if: >-
+      github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
-      (
-        github.event_name == 'push' ||
-        (
-          github.event_name == 'workflow_dispatch' &&
-          inputs.confirm == 'DEPLOY DOMINION COMMAND CENTER' &&
-          inputs.commit_sha == github.sha
-        )
-      )
+      inputs.confirm == 'DEPLOY DOMINION COMMAND CENTER' &&
+      inputs.commit_sha == github.sha
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: foundation-vm-production

@@ -11,8 +11,10 @@ receipts="$state_root/receipts"
 server="$runtime_root/server.py"
 registry="$runtime_root/connector_registry.json"
 wrapper="$HOME/.local/bin/dominion-mcp"
-unit_dir="$HOME/.config/systemd/user"
-unit="$unit_dir/dominion-mcp-cli.service"
+service_name="dominion-mcp-cli.service"
+unit="/etc/systemd/system/$service_name"
+user_name="$(id -un)"
+group_name="$(id -gn)"
 
 cd "$repo"
 test "$(git rev-parse HEAD)" = "$RUN_SHA"
@@ -32,8 +34,8 @@ for name,spec in p['connectors'].items():
 print(f"MCP_REGISTRY=PASS connectors={len(p['connectors'])} mutation=disabled")
 PY
 
-mkdir -p "$runtime_root" "$receipts" "$HOME/.local/bin" "$unit_dir"
-chmod 700 "$state_root" "$runtime_root" "$receipts" "$HOME/.local/bin" "$unit_dir"
+mkdir -p "$runtime_root" "$receipts" "$HOME/.local/bin"
+chmod 700 "$state_root" "$runtime_root" "$receipts" "$HOME/.local/bin"
 install -m 700 "$server_src" "$server"
 install -m 600 "$registry_src" "$registry"
 
@@ -52,9 +54,13 @@ cat > "$unit_tmp" <<EOF
 Description=Dominion governed MCP CLI connector server
 After=network-online.target
 Wants=network-online.target
+ConditionPathExists=$server
+ConditionPathExists=$registry
 
 [Service]
 Type=simple
+User=$user_name
+Group=$group_name
 Environment=DOMINION_MCP_REGISTRY=$registry
 Environment=DOMINION_MCP_STATE_DIR=$state_root
 ExecStart=/usr/bin/python3 $server --http --host 127.0.0.1 --port 8390
@@ -62,24 +68,28 @@ Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=$state_root
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 UMask=0077
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
 EOF
-install -m 600 "$unit_tmp" "$unit"
+sudo install -m 644 "$unit_tmp" "$unit"
 rm -f "$unit_tmp"
 
-systemctl --user daemon-reload
-systemctl --user reset-failed dominion-mcp-cli.service >/dev/null 2>&1 || true
-systemctl --user enable --now dominion-mcp-cli.service >/dev/null
+sudo systemctl daemon-reload
+sudo systemctl reset-failed "$service_name" >/dev/null 2>&1 || true
+sudo systemctl enable --now "$service_name" >/dev/null
 
 ready=0
 for _ in $(seq 1 30); do
   if curl -fsS --max-time 4 http://127.0.0.1:8390/health >/tmp/dominion-mcp-health.$$ 2>/dev/null; then ready=1; break; fi
   sleep 1
 done
-test "$ready" -eq 1 || { systemctl --user status dominion-mcp-cli.service --no-pager || true; journalctl --user -u dominion-mcp-cli.service -n 120 --no-pager || true; echo 'MCP_CLI=FAIL reason=health_unavailable'; exit 1; }
+test "$ready" -eq 1 || { sudo systemctl status "$service_name" --no-pager || true; sudo journalctl -u "$service_name" -n 120 --no-pager || true; echo 'MCP_CLI=FAIL reason=health_unavailable'; exit 1; }
 python3 - /tmp/dominion-mcp-health.$$ <<'PY'
 import json,sys
 h=json.load(open(sys.argv[1],encoding='utf-8'))
@@ -131,6 +141,6 @@ p.write_text(json.dumps(data,indent=2,sort_keys=True)+'\n',encoding='utf-8')
 os.chmod(p,0o600)
 PY
 
-systemctl --user is-active --quiet dominion-mcp-cli.service
-systemctl --user is-enabled --quiet dominion-mcp-cli.service
-printf 'DOMINION_MCP_CLI=PASS release_sha=%s protocol=2026-07-28 endpoint=http://127.0.0.1:8390 cli=%s registry=%s\n' "$RUN_SHA" "$wrapper" "$registry"
+sudo systemctl is-active --quiet "$service_name"
+sudo systemctl is-enabled --quiet "$service_name"
+printf 'DOMINION_MCP_CLI=PASS release_sha=%s protocol=2026-07-28 endpoint=http://127.0.0.1:8390 cli=%s registry=%s service=%s\n' "$RUN_SHA" "$wrapper" "$registry" "$service_name"

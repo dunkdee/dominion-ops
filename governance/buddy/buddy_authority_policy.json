@@ -145,6 +145,16 @@
         "production_mutation": false,
         "evidence_required": true
       },
+      "system_integrity_agent": {
+        "automatic": true,
+        "service": "dominion-system-integrity.timer",
+        "cadence_seconds": 89,
+        "single_responsibility": "SYSTEM_RELIABILITY_ONLY",
+        "production_mutation": false,
+        "repair_mode": "REQUEST_EXISTING_BOUNDED_RECOVERY_ONLY",
+        "independent_verifier": "sentinel",
+        "evidence_required": true
+      },
       "buddy_bounded_self_repair": {
         "automatic": true,
         "workflow": ".github/workflows/fix-buddy-brains.yml",

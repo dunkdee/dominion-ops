@@ -171,6 +171,7 @@
       }
     },
     "manual_only_workflows": {
+      ".github/workflows/activate-alpha-paper-24x7.yml": "ACTIVATE ALPHA PAPER 24X7",
       ".github/workflows/activate-email-drip-production.yml": "ACTIVATE EMAIL DRIP LIVE",
       ".github/workflows/activate-radah-memshalah-autopilot.yml": "ACTIVATE RADAH MEMSHALAH AUTOPILOT",
       ".github/workflows/deactivate-radah-memshalah-autopilot.yml": "DEACTIVATE RADAH MEMSHALAH AUTOPILOT",

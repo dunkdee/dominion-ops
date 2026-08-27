@@ -123,6 +123,30 @@ jobs:
           check_http buddy_auth_boundary 401 http://127.0.0.1:5070/buddy
           check_http proposal_queue 200 http://127.0.0.1:5101/api/proposals
 
+          echo '=== SYSTEM INTEGRITY AGENT ==='
+          check_active dominion-system-integrity.timer
+          integrity_state="$HOME/.dominion/system-integrity/latest.json"
+          if python3 - "$integrity_state" <<'PY'
+          import json,sys
+          from datetime import datetime,timezone
+          from pathlib import Path
+          path=Path(sys.argv[1])
+          state=json.loads(path.read_text(encoding='utf-8'))
+          assert state['schema']=='dominion-system-integrity-state-v1'
+          assert state['agent']=='system-integrity-agent'
+          assert state['ok'] is True and state['status']=='PASS' and state['defect_count']==0
+          assert state['authority']=='OBSERVE_VERIFY_REQUEST_RECOVERY'
+          assert state['self_mutation'] is False
+          observed=datetime.fromisoformat(str(state['observed_at']).replace('Z','+00:00')).astimezone(timezone.utc)
+          age=max(0.0,(datetime.now(timezone.utc)-observed).total_seconds())
+          assert age <= 240, age
+          PY
+          then
+            pass "system_integrity=online cadence=89s receipt=fresh"
+          else
+            fail "system_integrity=invalid_or_stale file=$integrity_state"
+          fi
+
           echo '=== CONTAINMENT ==='
           check_held dominion-nemotron.service
           check_held dominion-email-monitor.service
@@ -152,10 +176,11 @@ jobs:
           assert state['revenue']['runtime_connected'] is True
           assert state['revenue']['active_experiment_count'] >= 1
           assert state['autopilot']['connected'] is True
+          assert state['systems']['system_integrity'] == 'online'
           assert state['latest_receipts']
           PY
           then
-            pass "command_center_truth=canonical sha=$repo_sha lanes=11/11 revenue=connected autopilot=connected receipts=present"
+            pass "command_center_truth=canonical sha=$repo_sha lanes=11/11 revenue=connected autopilot=connected system_integrity=online receipts=present"
           else
             fail "command_center_truth=invalid sha=${repo_sha:-unknown}"
           fi

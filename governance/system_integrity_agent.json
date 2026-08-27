@@ -1,0 +1,71 @@
+{
+  "schema": "dominion-system-integrity-agent-v1",
+  "agent_id": "system-integrity-agent",
+  "name": "Dominion System Integrity Agent",
+  "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+  "single_responsibility": "Maintain continuous evidence of ecosystem reliability by detecting faults, regressions, drift, stale truth, broken routes, and failed intelligence paths; create recovery evidence; never perform business work.",
+  "cadence_seconds": 89,
+  "deep_probe_every_cycles": 10,
+  "authority": {
+    "mode": "OBSERVE_VERIFY_REQUEST_RECOVERY",
+    "founder_final_authority": true,
+    "self_expand_authority": false,
+    "may_restart_services": false,
+    "may_patch_source": false,
+    "may_deploy": false,
+    "may_change_credentials": false,
+    "may_change_networking": false,
+    "may_publish": false,
+    "may_spend": false,
+    "may_trade": false,
+    "may_file_legal": false
+  },
+  "repair_delegation": {
+    "lane": ".github/workflows/fix-buddy-brains.yml",
+    "allowlisted_services": [
+      "dominion-buddy-web.service",
+      "dominion-proposal-queue.service",
+      "dominion-sentinel.service"
+    ],
+    "rule": "The integrity agent may create a recovery request only. The existing bounded recovery lane owns any allowed restart. Sentinel independently verifies recovery."
+  },
+  "http_checks": [
+    {"id": "baby_api", "url": "http://127.0.0.1:8080/", "expected_status": 200},
+    {"id": "dominion_web", "url": "http://127.0.0.1:8090/", "expected_status": 200},
+    {"id": "wix_agent", "url": "http://127.0.0.1:8082/ready", "expected_status": 200},
+    {"id": "n8n", "url": "http://127.0.0.1:5678/healthz", "expected_status": 200},
+    {"id": "alpha_engine", "url": "http://127.0.0.1:8787/health", "expected_status": 200},
+    {"id": "conductor", "url": "http://127.0.0.1:5060/health", "expected_status": 200},
+    {"id": "command_center", "url": "http://127.0.0.1:8091/health", "expected_status": 200},
+    {"id": "mcp_cli", "url": "http://127.0.0.1:8390/health", "expected_status": 200}
+  ],
+  "active_units": [
+    "dominion-buddy-web.service",
+    "dominion-proposal-queue.service",
+    "dominion-sentinel.service"
+  ],
+  "containment_holds": [
+    "dominion-nemotron.service",
+    "dominion-email-monitor.service",
+    "dominion-affiliate.timer",
+    "dominion-scout.timer",
+    "dominion-wholesale.timer"
+  ],
+  "absent_listeners": [11435],
+  "command_center_truth": {
+    "url": "http://127.0.0.1:8091/api/status",
+    "max_age_seconds": 180,
+    "required_open_lanes": 11,
+    "require_revenue_runtime": true,
+    "require_autopilot": true,
+    "require_mcp": true,
+    "require_receipt": true
+  },
+  "intelligence_probe": {
+    "url": "http://127.0.0.1:8091/api/chat",
+    "message": "SYSTEM_INTEGRITY_HEALTH_PROBE. Return a short readiness acknowledgement. Do not perform any external action.",
+    "accepted_sources": ["nemotron", "conductor"]
+  },
+  "state_root": ".dominion/system-integrity",
+  "status_vocabulary": ["PASS", "DEGRADED", "BLOCKED", "UNKNOWN"]
+}

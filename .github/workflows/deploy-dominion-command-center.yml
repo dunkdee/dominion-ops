@@ -45,6 +45,7 @@ jobs:
           bash -n scripts/deploy_command_center.sh
           bash -n scripts/install_command_center_state_bridge.sh
           bash -n scripts/install_mcp_cli_server.sh
+          bash -n scripts/install_system_integrity_agent.sh
           bash -n scripts/converge_command_center_vault_route.sh
           python -m py_compile \
             apps/command-center/app.py \
@@ -53,15 +54,20 @@ jobs:
             apps/command-center/runtime_state.py \
             apps/mcp-cli-server/server.py \
             scripts/command_center_state_bridge_v2.py \
-            scripts/command_center_state_bridge_v3.py
+            scripts/command_center_state_bridge_v3.py \
+            scripts/system_integrity_agent.py
           test -s apps/command-center/index.html
           test -s apps/command-center/Dockerfile
           test -s docker-compose.command-center.yml
           test -s governance/lane_access_policy.json
           test -s governance/revenue_execution_policy.json
           test -s governance/mcp_connector_registry.json
+          test -s governance/system_integrity_agent.json
+          test -s deploy/systemd/dominion-system-integrity.service
+          test -s deploy/systemd/dominion-system-integrity.timer
           python -c 'import json; d=json.load(open("governance/lane_access_policy.json")); assert len(d["lanes"]) == 11 and all(v["internal_work_open"] and v["scheduler_eligible"] for v in d["lanes"].values())'
           python -c 'import json; d=json.load(open("governance/mcp_connector_registry.json")); assert d["default_mode"] == "deny" and d["external_mutation_enabled"] is False and len(d["connectors"]) >= 8 and all(v["effect"] == "read_only" for v in d["connectors"].values())'
+          python -c 'import json; d=json.load(open("governance/system_integrity_agent.json")); assert d["cadence_seconds"] == 89 and d["authority"]["mode"] == "OBSERVE_VERIFY_REQUEST_RECOVERY" and all(v is False for k,v in d["authority"].items() if k.startswith("may_"))'
           test -s obsidian/00-DOMINION-COMMAND-CENTER.md
           test -s obsidian/dominion.css
           test -s obsidian/dominion-motion.css
@@ -73,6 +79,8 @@ jobs:
           python -m unittest tests.test_command_center_live_truth -v
           python -m unittest tests.test_mcp_cli_server -v
           python -m unittest tests.test_buddy_voice_contract -v
+          python -m unittest tests.test_system_integrity_agent -v
+          python scripts/system_integrity_agent.py --contract governance/system_integrity_agent.json --self-test
           python tests/test_dominion_command_center_ui.py
           grep -Fq 'RADAH MEMSHALAH' apps/command-center/index.html
           grep -Fq 'AGENTS NETWORK / GOVERNED OPERATORS' apps/command-center/index.html
@@ -80,9 +88,11 @@ jobs:
           grep -Fq 'canonical_runtime_state' apps/command-center/app.py
           grep -Fq 'dominion-command-center-runtime-state-v2' scripts/command_center_state_bridge_v2.py
           grep -Fq 'systems["mcp_cli"]' scripts/command_center_state_bridge_v3.py
+          grep -Fq 'systems["system_integrity"]' scripts/command_center_state_bridge_v3.py
+          grep -Fq 'OnUnitActiveSec=89s' deploy/systemd/dominion-system-integrity.timer
           grep -Fq 'MCP 2026-07-28' obsidian/command-center/17-MCP-CLI-Connector.md
           docker build -t dominion-command-center-release-check apps/command-center
-          echo 'DOMINION_COMPLETE_COMMAND_CENTER_ASSETS=PASS truth=canonical image=radah_memshalah buddy=personal_voice obsidian=canonical mcp=governed_2026_07_28'
+          echo 'DOMINION_COMPLETE_COMMAND_CENTER_ASSETS=PASS truth=canonical image=radah_memshalah buddy=personal_voice obsidian=canonical mcp=governed_2026_07_28 integrity=single_responsibility_89s'
 
       - name: Require protected VM access
         env:
@@ -137,8 +147,29 @@ jobs:
           repo="$HOME/dominion-ops"; test -d "$repo/.git"; cd "$repo"
           git fetch origin main; git checkout main; git pull --ff-only origin main; test "$(git rev-parse HEAD)" = "$RUN_SHA"
           EXPECTED_SHA="$RUN_SHA" COMMAND_CENTER_BRANCH=main RUN_ID="$RUN_ID" bash scripts/deploy_command_center.sh
+
+          # Reliability is a dedicated production lane. Install only after the
+          # Command Center intelligence path has passed its own acceptance probe.
+          REPO_DIR="$repo" bash scripts/install_system_integrity_agent.sh
+          RUN_SHA="$RUN_SHA" REPO_DIR="$repo" bash scripts/install_command_center_state_bridge.sh
+
           curl -fsS http://127.0.0.1:8091/health | python3 -m json.tool
           curl -fsS http://127.0.0.1:8390/health | python3 -m json.tool
+          sudo systemctl is-active --quiet dominion-system-integrity.timer
+          sudo systemctl is-enabled --quiet dominion-system-integrity.timer
+          INTEGRITY="$(cat "$HOME/.dominion/system-integrity/latest.json")"
+          python3 - "$INTEGRITY" <<'PY'
+          import json,sys
+          s=json.loads(sys.argv[1])
+          assert s['schema']=='dominion-system-integrity-state-v1'
+          assert s['agent']=='system-integrity-agent'
+          assert s['ok'] is True and s['status']=='PASS' and s['defect_count']==0
+          assert s['deep_probe_executed'] is True
+          assert s['authority']=='OBSERVE_VERIFY_REQUEST_RECOVERY'
+          assert s['self_mutation'] is False
+          print(f"SYSTEM_INTEGRITY_PRODUCTION=PASS cycle={s['cycle']} checks={s['checks_total']} cadence=89s")
+          PY
+
           STATUS="$(curl -fsS http://127.0.0.1:8091/api/status)"
           python3 - "$STATUS" "$RUN_SHA" <<'PY'
           import json,sys
@@ -148,8 +179,9 @@ jobs:
           assert s['revenue']['runtime_connected'] is True and s['revenue']['active_experiment_count']>=1
           assert s['autopilot']['connected'] is True
           assert s['systems']['mcp_cli']=='online'
+          assert s['systems']['system_integrity']=='online'
           assert s['latest_receipts']
-          print('DOMINION_COMMAND_CENTER_FINAL_ACCEPTANCE=PASS mcp_cli=online obsidian=canonical_visual')
+          print('DOMINION_COMMAND_CENTER_FINAL_ACCEPTANCE=PASS mcp_cli=online system_integrity=online obsidian=canonical_visual')
           PY
           REMOTE
 

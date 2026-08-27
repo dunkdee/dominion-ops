@@ -111,9 +111,9 @@ def call_conductor(message: str, context: str = "") -> dict[str, Any] | None:
         "source": "dominion-command-center",
         "persona": "buddy",
     }
-    # These are read/reasoning interfaces only. Do not route chat through
-    # Conductor execution endpoints such as /execute-next.
-    for endpoint in ("/chat", "/api/chat", "/invoke"):
+    # Reasoning-only fallback. Never probe generic execution endpoints such as
+    # /invoke or /execute-next to manufacture a chat response.
+    for endpoint in ("/chat", "/api/chat"):
         try:
             parsed = _post_json(f"{cfg.conductor_url}{endpoint}", payload, {}, cfg.timeout_seconds)
             answer = parsed.get("response") or parsed.get("answer") or parsed.get("message")

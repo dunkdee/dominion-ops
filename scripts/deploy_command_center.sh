@@ -121,17 +121,55 @@ unset password_hash
 bash scripts/converge_command_center_vault_route.sh
 sudo caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null; sudo systemctl reload caddy; sudo systemctl is-active --quiet caddy
 
+probe_public_health() {
+  local endpoint="$1"
+  for _ in $(seq 1 12); do
+    if curl -fsS --max-time 20 -u "dominion:$OBSIDIAN_PASSWORD" "$endpoint/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
 PUBLIC_ENDPOINT=""; PUBLIC_MODE=""
-if getent ahostsv4 "$DOMAIN" >/dev/null 2>&1 && curl -fsS --max-time 20 -u "dominion:$OBSIDIAN_PASSWORD" "https://$DOMAIN/health" >/dev/null 2>&1; then
+if getent ahostsv4 "$DOMAIN" >/dev/null 2>&1 && probe_public_health "https://$DOMAIN"; then
   PUBLIC_ENDPOINT="https://$DOMAIN"; PUBLIC_MODE="dedicated_host"
 fi
 if [[ -z "$PUBLIC_ENDPOINT" ]]; then
   getent ahostsv4 "$VAULT_HOST" >/dev/null 2>&1 || { echo "Neither $DOMAIN nor $VAULT_HOST resolves to a usable public route" >&2; exit 1; }
   PUBLIC_ENDPOINT="https://$VAULT_HOST/command-center"; PUBLIC_MODE="vault_protected_path"
-  curl -fsS --max-time 20 -u "dominion:$OBSIDIAN_PASSWORD" "$PUBLIC_ENDPOINT/health" >/dev/null
+  probe_public_health "$PUBLIC_ENDPOINT" || { echo "Public Command Center health probe failed after bounded retries: $PUBLIC_ENDPOINT/health" >&2; exit 1; }
 fi
-public_html="$(curl -fsS --max-time 20 -u "dominion:$OBSIDIAN_PASSWORD" "$PUBLIC_ENDPOINT/")"; grep -Fq 'All Dominion lanes' <<<"$public_html"
-PUBLIC_STATUS="$(curl -fsS --max-time 20 -u "dominion:$OBSIDIAN_PASSWORD" "$PUBLIC_ENDPOINT/api/status")"
+
+echo "COMMAND_CENTER_PUBLIC_ROUTE=PASS mode=$PUBLIC_MODE endpoint=$PUBLIC_ENDPOINT"
+
+public_html=""
+for _ in $(seq 1 6); do
+  candidate="$(curl -fsS --max-time 20 -u "dominion:$OBSIDIAN_PASSWORD" "$PUBLIC_ENDPOINT/" 2>/dev/null || true)"
+  if grep -Fq 'RADAH MEMSHALAH' <<<"$candidate" && grep -Fq 'AGENTS NETWORK / GOVERNED OPERATORS' <<<"$candidate"; then
+    public_html="$candidate"
+    break
+  fi
+  sleep 2
+done
+[[ -n "$public_html" ]] || { echo "Public Command Center UI marker check failed: expected RADAH MEMSHALAH governed-operators surface" >&2; exit 1; }
+
+PUBLIC_STATUS=""
+for _ in $(seq 1 6); do
+  candidate="$(curl -fsS --max-time 20 -u "dominion:$OBSIDIAN_PASSWORD" "$PUBLIC_ENDPOINT/api/status" 2>/dev/null || true)"
+  if [[ -n "$candidate" ]] && python3 - "$candidate" <<'PY' >/dev/null 2>&1
+import json,sys
+json.loads(sys.argv[1])
+PY
+  then
+    PUBLIC_STATUS="$candidate"
+    break
+  fi
+  sleep 2
+done
+[[ -n "$PUBLIC_STATUS" ]] || { echo "Public Command Center status probe failed after bounded retries: $PUBLIC_ENDPOINT/api/status" >&2; exit 1; }
+
 python3 - "$PUBLIC_STATUS" "$actual_sha" <<'PY'
 import json,sys
 s=json.loads(sys.argv[1]); expected=sys.argv[2]

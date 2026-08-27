@@ -4,6 +4,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,11 @@ spec = importlib.util.spec_from_file_location("system_integrity_agent", AGENT)
 assert spec and spec.loader
 agent = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(agent)
+
+bridge_spec = importlib.util.spec_from_file_location("command_center_state_bridge_v3_test", BRIDGE)
+assert bridge_spec and bridge_spec.loader
+bridge = importlib.util.module_from_spec(bridge_spec)
+bridge_spec.loader.exec_module(bridge)
 
 
 class SystemIntegrityAgentTests(unittest.TestCase):
@@ -74,11 +80,33 @@ class SystemIntegrityAgentTests(unittest.TestCase):
         self.assertIn("dominion-system-integrity.timer", text)
         self.assertIn("cadence=89s", text)
 
-    def test_command_center_truth_surfaces_fresh_integrity_state(self):
+    def test_command_center_truth_surfaces_fresh_and_rejects_stale_integrity(self):
         text = BRIDGE.read_text(encoding="utf-8")
         self.assertIn('systems["system_integrity"]', text)
         self.assertIn("age <= 240", text)
-        self.assertIn('"status": "STALE"', text)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "system-integrity/latest.json"
+            path.parent.mkdir(parents=True)
+            now = datetime.now(timezone.utc)
+            state = {
+                "ok": True,
+                "status": "PASS",
+                "observed_at": now.isoformat(),
+                "defect_count": 0,
+                "cycle": 1,
+                "authority": "OBSERVE_VERIFY_REQUEST_RECOVERY",
+            }
+            path.write_text(json.dumps(state), encoding="utf-8")
+            fresh = bridge._integrity_state(root)
+            self.assertTrue(fresh["ok"])
+            self.assertEqual(fresh["status"], "PASS")
+
+            state["observed_at"] = (now - timedelta(seconds=300)).isoformat()
+            path.write_text(json.dumps(state), encoding="utf-8")
+            stale = bridge._integrity_state(root)
+            self.assertFalse(stale["ok"])
+            self.assertEqual(stale["status"], "STALE")
 
 
 if __name__ == "__main__":

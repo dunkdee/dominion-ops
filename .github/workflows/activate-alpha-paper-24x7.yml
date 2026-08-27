@@ -1,12 +1,19 @@
 name: Activate Alpha 24x7 Paper Trading
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'alpha_engine/**'
-      - '.github/workflows/activate-alpha-paper-24x7.yml'
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type ACTIVATE ALPHA PAPER 24X7"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 concurrency:
   group: alpha-paper-production
@@ -14,14 +21,21 @@ concurrency:
 
 jobs:
   validate:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.confirm == 'ACTIVATE ALPHA PAPER 24X7' &&
+      inputs.commit_sha == github.sha
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.commit_sha }}
           fetch-depth: 1
       - name: Validate paper-only contract
         run: |
           set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "${{ inputs.commit_sha }}"
           python -m py_compile alpha_engine/dominion_alpha/*.py
           grep -Fq '"mode": "paper"' alpha_engine/dominion_alpha/api.py
           grep -Fq '"live_trading": False' alpha_engine/dominion_alpha/api.py
@@ -32,10 +46,18 @@ jobs:
           echo 'ALPHA_PAPER_STATIC_GATE=PASS real_market_data=dexscreener execution=simulated live_money=disabled'
 
   deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.confirm == 'ACTIVATE ALPHA PAPER 24X7' &&
+      inputs.commit_sha == github.sha
     needs: validate
     runs-on: ubuntu-latest
+    environment: foundation-vm-production
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
       - name: Require VM access
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -56,11 +78,14 @@ jobs:
             repo="$HOME/dominion-ops"
             runtime="$HOME/dominion/alpha_engine"
             receipts="$HOME/.dominion/alpha/receipts"
+            expected_sha="${{ inputs.commit_sha }}"
             mkdir -p "$receipts"
             cd "$repo"
             git fetch origin main
-            git reset --hard origin/main
+            git cat-file -e "$expected_sha^{commit}"
+            git reset --hard "$expected_sha"
             release_sha="$(git rev-parse HEAD)"
+            test "$release_sha" = "$expected_sha"
 
             mkdir -p "$runtime"
             if [ ! -d "$runtime/.venv" ]; then python3 -m venv "$runtime/.venv"; fi

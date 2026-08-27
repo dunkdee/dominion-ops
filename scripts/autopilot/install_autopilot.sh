@@ -44,8 +44,10 @@ echo "AUTOPILOT_EFFECTIVE_OVERLAY=DETECTED mode=$overlay_mode dropins=$dropin_co
 
 # Reuse the exact Python entrypoint already proven by the healthy Buddy service.
 # This avoids creating a second dependency universe for the same operator.
+# sed -n '1p' reads the full stream instead of closing it early like head -1,
+# avoiding SIGPIPE under set -o pipefail.
 buddy_exec="$(systemctl show dominion-buddy-web.service -p ExecStart --value 2>/dev/null || true)"
-buddy_python="$(printf '%s\n' "$buddy_exec" | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)"
+buddy_python="$(printf '%s\n' "$buddy_exec" | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | sed -n '1p')"
 test -n "$buddy_python" || { echo 'RADAH_AUTOPILOT=HOLD reason=buddy_python_unresolved'; exit 20; }
 case "$buddy_python" in
   *[[:space:]]*) echo 'RADAH_AUTOPILOT=HOLD reason=buddy_python_invalid'; exit 21 ;;
@@ -158,7 +160,7 @@ rollback() {
   if [ -d "$backup_root/runtime" ]; then
     mv "$backup_root/runtime" "$runtime_root"
   fi
-  if sudo test -f "$timer_path"; then
+  if sudo test -f "$timer_path" ]; then
     sudo systemctl enable --now "$timer_name" >/dev/null 2>&1 || true
   fi
   rm -rf "$new_runtime"
@@ -253,7 +255,9 @@ PY
 
 validate_latest_cycle() {
   expected_not_lane="${1:-}"
-  latest_receipt="$(find "$state_root/receipts" -maxdepth 1 -type f -name '*.json' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+  # Do not use head -1 here. With pipefail, head can close the pipe early and
+  # make sort exit 141 (SIGPIPE), falsely failing a healthy production cycle.
+  latest_receipt="$(find "$state_root/receipts" -maxdepth 1 -type f -name '*.json' -printf '%T@ %p\n' | sort -nr | sed -n '1p' | cut -d' ' -f2-)"
   test -n "$latest_receipt" && test -s "$latest_receipt"
   "$buddy_python" - "$latest_receipt" "$expected_not_lane" <<'PY'
 import json,sys

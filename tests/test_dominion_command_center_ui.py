@@ -168,8 +168,8 @@ def test_css_is_phone_first_accessible_offline_motion_safe_and_phi_governed() ->
     for marker in golden_required:
         assert marker in golden
     deploy = DEPLOY_UI.read_text(encoding="utf-8")
-    assert 'dominion-golden-ratio.css" > "$snippet"' not in deploy
-    assert '"$asset_root/obsidian/dominion-golden-ratio.css" > "$snippet"' in deploy
+    expected_concat = 'cat "$asset_root/obsidian/dominion.css" "$asset_root/obsidian/dominion-motion.css" "$asset_root/obsidian/dominion-golden-ratio.css" > "$snippet"'
+    assert expected_concat in deploy
     assert "golden_ratio=locked" in deploy
     combined = css + "\n" + motion + "\n" + golden
     assert "@import" not in combined

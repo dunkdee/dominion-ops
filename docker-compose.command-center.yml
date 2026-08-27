@@ -22,7 +22,7 @@ services:
       NEMOTRON_MODEL: ${NEMOTRON_MODEL:-nemotron-3}
       NEMOTRON_API_KEY: ${NEMOTRON_API_KEY:-}
       # Canonical fallback remains private on the VM. Do not inherit a stale
-      # host.docker.internal value from older command-center.env files.
+      # legacy bridge-host value from older command-center.env files.
       CONDUCTOR_URL: http://127.0.0.1:5060
       INTELLIGENCE_TIMEOUT_SECONDS: ${INTELLIGENCE_TIMEOUT_SECONDS:-60}
     healthcheck:

@@ -12,6 +12,7 @@ MCP = OBSIDIAN / "command-center" / "17-MCP-CLI-Connector.md"
 ROOT_NOTE = OBSIDIAN / "00-DOMINION-COMMAND-CENTER.md"
 CSS = OBSIDIAN / "dominion.css"
 MOTION_CSS = OBSIDIAN / "dominion-motion.css"
+WEB_INDEX = ROOT / "apps" / "command-center" / "index.html"
 
 
 class DashboardParser(HTMLParser):
@@ -63,7 +64,6 @@ def test_dashboard_structure_and_visual_contract() -> None:
         "dominion-flow",
     }
     assert required_classes <= parser.classes
-    # 6 executive controls + 4 control/intelligence + 5 knowledge/resilience + 4 mobile dock links.
     assert len(parser.internal_targets) >= 19
     assert len(parser.nav_labels) >= 4
     assert "RADAH MEMSHALAH" in home
@@ -158,6 +158,33 @@ def test_css_is_phone_first_accessible_offline_and_motion_safe() -> None:
     assert "javascript:" not in combined.lower()
 
 
+def test_web_command_center_is_reference_locked_to_golden_ratio() -> None:
+    web = WEB_INDEX.read_text(encoding="utf-8")
+    for marker in (
+        "--phi:1.61803398875",
+        "--invphi:.61803398875",
+        "--s1:8px",
+        "--s2:13px",
+        "--s3:21px",
+        "--s4:34px",
+        "--s5:55px",
+        "--s6:89px",
+        "--s7:144px",
+        "--s8:233px",
+        "--s9:377px",
+        "grid-template-columns:minmax(0,1.618fr) minmax(320px,1fr)",
+        "grid-template-columns:1fr 1fr 1.618fr",
+        "width:var(--s7);height:var(--s7)",
+        "width:var(--s6);height:var(--s6)",
+        "RADAH MEMSHALAH",
+        "GOLDEN RATIO GOVERNANCE",
+        "AGENTS NETWORK / GOVERNED OPERATORS",
+    ):
+        assert marker in web, marker
+    assert "border-radius:18px" not in web
+    assert "rounded" not in web.lower()
+
+
 def test_root_note_is_a_clean_styled_entrypoint() -> None:
     root = ROOT_NOTE.read_text(encoding="utf-8")
     assert "dominion-command-center-root" in root
@@ -171,8 +198,9 @@ def main() -> int:
     test_production_matrix_covers_every_governed_lane()
     test_mcp_connector_page_is_full_visual_canopy_not_plain_shell()
     test_css_is_phone_first_accessible_offline_and_motion_safe()
+    test_web_command_center_is_reference_locked_to_golden_ratio()
     test_root_note_is_a_clean_styled_entrypoint()
-    print("DOMINION_UI_V4_TESTS=PASS production_matrix=11_lanes mcp_canopy=full motion=natural accessibility=pass")
+    print("DOMINION_UI_V5_TESTS=PASS production_matrix=11_lanes golden_ratio=locked mcp_canopy=full motion=natural accessibility=pass")
     return 0
 
 

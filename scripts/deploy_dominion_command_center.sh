@@ -11,10 +11,19 @@ test -d "$asset_root/obsidian/command-center"
 test -f "$asset_root/obsidian/dominion.css"
 test -f "$asset_root/obsidian/dominion-motion.css"
 
-vault="$(docker inspect obsidian-remote --format '{{range .Mounts}}{{if eq .Destination "/vaults/Dominion"}}{{.Source}}{{end}}{{end}}')"
+mount_sources="$(docker inspect obsidian-remote --format '{{range .Mounts}}{{if eq .Destination "/vaults/Dominion"}}{{println .Source}}{{end}}{{end}}')"
+mount_count="$(printf '%s\n' "$mount_sources" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+test "$mount_count" = 1 || { echo "DOMINION_UI=FAIL reason=canonical_vault_mount_count count=$mount_count"; exit 1; }
+vault="$(printf '%s\n' "$mount_sources" | sed '/^[[:space:]]*$/d' | head -n1)"
 test -n "$vault"
 test -d "$vault"
+test ! -L "$vault"
 test -d "$vault/Dominion-Brain"
+test ! -L "$vault/Dominion-Brain"
+
+canonical_vault="$(cd "$vault" && pwd -P)"
+brain_root="$(cd "$vault/Dominion-Brain" && pwd -P)"
+case "$brain_root" in "$canonical_vault"/*) ;; *) echo "DOMINION_UI=FAIL reason=brain_outside_canonical_vault"; exit 1;; esac
 
 target="$vault/Dominion-Command-Center"
 root_note="$vault/00-DOMINION-COMMAND-CENTER.md"
@@ -84,7 +93,7 @@ on_error() {
 trap on_error ERR
 
 cp -a "$asset_root/obsidian/command-center/." "$stage/"
-for required in 00-HOME.md 03-Control-Plane.md 04-Agents.md 06-Operations.md 07-Incidents.md 08-Evidence.md 09-Revenue.md 10-Architecture.md 11-SOPs.md 12-Decisions.md 13-Learning.md 14-Daily-State.md 15-Founder-Oversight.md 16-Production-Matrix.md 99-System-Map.md; do
+for required in 00-HOME.md 03-Control-Plane.md 04-Agents.md 06-Operations.md 07-Incidents.md 08-Evidence.md 09-Revenue.md 10-Architecture.md 11-SOPs.md 12-Decisions.md 13-Learning.md 14-Daily-State.md 15-Founder-Oversight.md 16-Production-Matrix.md 17-MCP-CLI-Connector.md 99-System-Map.md; do
   test -s "$stage/$required"
 done
 
@@ -94,6 +103,9 @@ cp -a "$asset_root/obsidian/00-DOMINION-COMMAND-CENTER.md" "$root_note"
 mkdir -p "$snippet_dir"
 cat "$asset_root/obsidian/dominion.css" "$asset_root/obsidian/dominion-motion.css" > "$snippet"
 chmod 600 "$root_note" "$snippet"
+
+target_root="$(cd "$target" && pwd -P)"
+case "$target_root" in "$canonical_vault"/*) ;; *) echo "DOMINION_UI=FAIL reason=command_center_outside_canonical_vault"; false;; esac
 
 python3 - "$appearance" <<'PY'
 import json,os,sys,tempfile
@@ -129,14 +141,19 @@ test -s "$target/00-HOME.md"
 test -s "$target/14-Daily-State.md"
 test -s "$target/09-Revenue.md"
 test -s "$target/16-Production-Matrix.md"
+test -s "$target/17-MCP-CLI-Connector.md"
 test -s "$snippet"
 grep -Fq 'dominion-command-center-root' "$root_note"
 grep -Fq 'class="dominion-shell"' "$target/00-HOME.md"
 grep -Fq '16-Production-Matrix' "$target/00-HOME.md"
+grep -Fq '17-MCP-CLI-Connector' "$target/00-HOME.md"
 grep -Fq 'class="dominion-card-grid' "$target/16-Production-Matrix.md"
+grep -Fq 'MCP 2026-07-28' "$target/17-MCP-CLI-Connector.md"
 grep -Fq '@media (max-width: 720px)' "$snippet"
 grep -Fq '.dominion-mobile-dock' "$snippet"
 grep -Fq '@keyframes dominion-ambient-drift' "$snippet"
+grep -Fq '@keyframes dominion-orbit' "$snippet"
+grep -Fq '@keyframes dominion-production-sweep' "$snippet"
 grep -Fq '@media (prefers-reduced-motion: reduce)' "$snippet"
 python3 - "$appearance" <<'PY'
 import json,sys
@@ -148,6 +165,7 @@ PY
 
 brain_after="$(hash_brain)"
 test "$brain_after" = "$brain_before" || { echo "DOMINION_UI=FAIL reason=governed_brain_changed before=$brain_before after=$brain_after"; false; }
+echo "DOMINION_VAULT_CANONICAL=PASS root=$canonical_vault brain=$brain_root command_center=$target_root"
 
 docker restart obsidian-remote >/dev/null
 ready=0
@@ -174,4 +192,4 @@ test "$unauth" = 401 || { echo "DOMINION_UI=FAIL reason=public_auth_not_enforced
 
 rm -rf "$backup"
 trap - ERR
-printf 'DOMINION_UI=PASS vault=%s command_center=installed production_matrix=installed css=enabled motion=natural_restrained brain_hash=%s public_auth=pass legacy_rdp=absent\n' "$vault" "$brain_after"
+printf 'DOMINION_UI=PASS vault=%s command_center=installed mcp_canopy=installed production_matrix=installed css=enabled motion=natural_restrained brain_hash=%s public_auth=pass legacy_rdp=absent\n' "$vault" "$brain_after"

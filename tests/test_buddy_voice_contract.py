@@ -6,10 +6,12 @@ APP = (ROOT / "apps/command-center/app.py").read_text(encoding="utf-8")
 
 
 def test_buddy_persona_is_governed_and_non_caricatured():
-    assert "You are Buddy, Dominion Intelligence" in INTELLIGENCE
+    assert "You are Buddy: the Founder's personal AI operator" in INTELLIGENCE
+    assert "not a generic assistant" in INTELLIGENCE
     assert "Black American conversational register" in INTELLIGENCE
     assert "Never force slang" in INTELLIGENCE
     assert "Never fabricate completion" in INTELLIGENCE
+    assert "Do not pretend to remember" in INTELLIGENCE
     assert "return call_conductor(message, context)" in INTELLIGENCE
 
 

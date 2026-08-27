@@ -1,0 +1,21 @@
+[Unit]
+Description=Dominion System Integrity Agent
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=malachisingleton8
+Group=malachisingleton8
+WorkingDirectory=/home/malachisingleton8/dominion-ops
+ExecStart=/usr/bin/python3 /home/malachisingleton8/.local/lib/dominion/system_integrity_agent.py --contract /home/malachisingleton8/.config/dominion/system-integrity-agent.json --repo /home/malachisingleton8/dominion-ops --state-root /home/malachisingleton8/.dominion/system-integrity
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/malachisingleton8/.dominion/system-integrity
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true

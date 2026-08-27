@@ -91,5 +91,15 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
         install = INSTALL.read_text(encoding="utf-8"); self.assertIn("OnUnitActiveSec=60s", install); self.assertIn("command_center_state_bridge_v3.py", install)
         mcp_install = MCP_INSTALL.read_text(encoding="utf-8"); self.assertIn("2026-07-28", mcp_install); self.assertIn("loopback", mcp_install.lower())
 
+    def test_public_acceptance_uses_current_ui_and_bounded_retries(self):
+        text = DEPLOY.read_text(encoding="utf-8")
+        self.assertIn("probe_public_health()", text)
+        self.assertIn("COMMAND_CENTER_PUBLIC_ROUTE=PASS", text)
+        self.assertIn("RADAH MEMSHALAH", text)
+        self.assertIn("AGENTS NETWORK / GOVERNED OPERATORS", text)
+        self.assertIn("Public Command Center health probe failed after bounded retries", text)
+        self.assertIn("Public Command Center status probe failed after bounded retries", text)
+        self.assertNotIn("grep -Fq 'All Dominion lanes'", text)
+
 
 if __name__ == "__main__": unittest.main()

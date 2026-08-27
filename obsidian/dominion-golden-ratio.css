@@ -1,0 +1,107 @@
+/* RADAH MEMSHALAH — Golden Ratio visual governance layer.
+   Loaded after the canonical Dominion base and motion layers. */
+:root,
+body,
+.theme-light,
+.theme-dark {
+  --dominion-phi: 1.61803398875;
+  --dominion-invphi: 0.61803398875;
+  --dominion-s1: 8px;
+  --dominion-s2: 13px;
+  --dominion-s3: 21px;
+  --dominion-s4: 34px;
+  --dominion-s5: 55px;
+  --dominion-s6: 89px;
+  --dominion-s7: 144px;
+  --dominion-s8: 233px;
+  --dominion-s9: 377px;
+  --dominion-radius: 0px;
+}
+
+/* One geometric law for the entire Command Center surface. */
+.dominion-shell {
+  width: min(100%, 1597px);
+  padding: clamp(var(--dominion-s2), 2.1vw, var(--dominion-s4));
+}
+
+.dominion-hero,
+.dominion-boundary,
+.dominion-card,
+.dominion-flow,
+.dominion-status-row,
+.dominion-metric-grid,
+.dominion-card-grid,
+.callout {
+  border-radius: 0 !important;
+}
+
+.dominion-hero,
+.dominion-boundary,
+.dominion-card,
+.dominion-flow {
+  outline: 1px solid rgba(240, 203, 114, 0.08);
+  outline-offset: -5px;
+}
+
+.dominion-hero {
+  gap: var(--dominion-s3);
+  padding: clamp(var(--dominion-s3), 3vw, var(--dominion-s5));
+}
+
+.dominion-status-row,
+.dominion-metric-grid,
+.dominion-card-grid,
+.dominion-flow {
+  gap: var(--dominion-s2);
+}
+
+.dominion-metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(var(--dominion-s8), 1fr));
+}
+
+.dominion-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(var(--dominion-s8), 1fr));
+}
+
+.dominion-card,
+.dominion-boundary,
+.dominion-flow {
+  padding: var(--dominion-s3);
+}
+
+.dominion-card h2,
+.dominion-card h3,
+.dominion-boundary h2,
+.dominion-boundary h3 {
+  margin-bottom: var(--dominion-s2);
+}
+
+.dominion-mobile-dock {
+  gap: var(--dominion-s1);
+  padding: var(--dominion-s1) var(--dominion-s2);
+}
+
+/* Fibonacci type hierarchy keeps visual scale coherent with the web cockpit. */
+.dominion-hero h1 {
+  font-size: clamp(var(--dominion-s4), 5vw, var(--dominion-s5));
+  line-height: 1;
+}
+
+.dominion-hero h2,
+.dominion-hero .dominion-kicker {
+  line-height: var(--dominion-phi);
+}
+
+/* Preserve touch and accessibility floors even when ratio math would go smaller. */
+.dominion-shell a,
+.dominion-shell button,
+.dominion-mobile-dock a {
+  min-height: 52px;
+}
+
+@media (max-width: 720px) {
+  .dominion-shell { padding: var(--dominion-s2); }
+  .dominion-metric-grid,
+  .dominion-card-grid { grid-template-columns: 1fr; }
+  .dominion-hero { padding: var(--dominion-s3) var(--dominion-s2); }
+}

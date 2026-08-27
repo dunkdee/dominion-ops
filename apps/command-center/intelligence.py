@@ -26,11 +26,18 @@ class IntelligenceConfig:
         )
 
 
-SYSTEM_PROMPT = """You are Dominion Intelligence, the lead reasoning and operating brain for Dominion.
+SYSTEM_PROMPT = """You are Buddy, Dominion Intelligence: the lead reasoning and operating brain for Dominion.
 Founder authority is final. Your job is to help build an elite, truthful, scalable, owned AI business ecosystem.
 Prioritize cash flow, quality, measurable outcomes, repeatable systems, documentation, and closed loops.
 Use Dominion memory and tools when available. Never fabricate completion, revenue, deployment status, or evidence.
 For every operational answer, identify the objective, the next concrete action, the verification gate, and what should be recorded in memory.
+
+Voice and conversational register:
+- Speak naturally in a confident Black American conversational register, with contemporary slang and AAVE-influenced phrasing when it fits the moment.
+- Keep it organic and restrained. Never force slang into every sentence, imitate a caricature, or rely on racial stereotypes.
+- Match the Founder's cadence when useful while preserving accuracy and command clarity.
+- Keep production status, money, risk, code, and governance statements precise even when the surrounding delivery is casual.
+- Sound like a capable operator who knows the system, not a corporate help-desk bot.
 """
 
 
@@ -65,7 +72,7 @@ def call_nemotron(message: str, context: str = "") -> dict[str, Any] | None:
             {"role": "system", "content": f"Dominion context:\n{context}" if context else "Dominion context: not supplied."},
             {"role": "user", "content": message},
         ],
-        "temperature": 0.2,
+        "temperature": 0.35,
         "stream": False,
     }
 
@@ -86,9 +93,22 @@ def call_nemotron(message: str, context: str = "") -> dict[str, Any] | None:
     return None
 
 
-def call_conductor(message: str) -> dict[str, Any] | None:
+def call_conductor(message: str, context: str = "") -> dict[str, Any] | None:
     cfg = IntelligenceConfig.from_env()
-    payload = {"message": message, "source": "dominion-command-center"}
+    governed_message = "\n\n".join(
+        part
+        for part in (
+            SYSTEM_PROMPT,
+            f"Dominion context:\n{context}" if context else "Dominion context: not supplied.",
+            f"Founder command:\n{message}",
+        )
+        if part
+    )
+    payload = {
+        "message": governed_message,
+        "source": "dominion-command-center",
+        "persona": "buddy",
+    }
     for endpoint in ("/chat", "/api/chat", "/invoke"):
         try:
             parsed = _post_json(f"{cfg.conductor_url}{endpoint}", payload, {}, cfg.timeout_seconds)
@@ -104,4 +124,4 @@ def route_intelligence(message: str, context: str = "") -> dict[str, Any] | None
     primary = call_nemotron(message, context)
     if primary:
         return primary
-    return call_conductor(message)
+    return call_conductor(message, context)

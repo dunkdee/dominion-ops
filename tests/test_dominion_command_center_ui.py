@@ -117,7 +117,7 @@ def test_mcp_connector_page_is_full_visual_canopy_not_plain_shell() -> None:
         "LOOPBACK ONLY",
         "Registered Connectors",
         "How “Connects to Anything” Works",
-        "No arbitrary shell or URL execution",
+        "arbitrary shell commands or arbitrary target URLs",
     ):
         assert marker.lower() in text.lower(), marker
     required_classes = {"dominion-shell", "dominion-hero", "dominion-metric-grid", "dominion-card-grid", "dominion-flow", "dominion-mobile-dock"}

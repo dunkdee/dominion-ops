@@ -36,6 +36,10 @@ Runs on pull requests and selected pushes. It receives no production credentials
 
 `.github/workflows/watchdog.yml` runs on a schedule and by manual request. It may use the VM connection only to read service state, listeners, HTTP health contracts, containment holds, and firewall-rule absence. It may not restart, rebuild, deploy, write configuration, or repair.
 
+The **Dominion System Integrity Agent** is the dedicated reliability sub-agent inside this observation lane. Its canonical contract is `governance/system_integrity_agent.json`. It runs locally from `dominion-system-integrity.timer` every **89 seconds**, checks the defined runtime/containment/truth contracts, and performs an end-to-end Command Center intelligence probe on its deeper cadence. Its single responsibility is system reliability; it does not perform revenue, content, trading, research, publishing, legal, credential, network, or product work.
+
+The System Integrity Agent may write only its own integrity receipts and recovery-request record. It does not restart services, patch source, deploy, change configuration, or expand its own authority. When a failure belongs to the existing Buddy repair allowlist, it may request the already-governed bounded recovery lane; Sentinel remains the independent verifier. Its latest receipt is surfaced through Command Center truth and becomes `NOT VERIFIED` when stale.
+
 An observer failure is evidence, not permission to improvise a fix.
 
 ### 3. Buddy bounded self-repair
@@ -92,9 +96,10 @@ The first does not imply the second.
 1. Merge policy and workflow changes only after CI passes.
 2. Run the observer manually and preserve its output.
 3. Confirm all known containment holds remain enforced.
-4. Run Buddy self-heal once while healthy; it must make no restart.
-5. Conduct a controlled failure test for one allowlisted Buddy service, confirm one bounded restart and recovery, then restore the pre-test state.
-6. Confirm the circuit breaker blocks a repeated unresolved failure after two attempts.
-7. Reconcile Buddy live source before claiming canonical self-evolution or full live conformance.
+4. Confirm `dominion-system-integrity.timer` is enabled and active, the first deep probe returns `PASS`, the integrity receipt is fresh, and Command Center reports `system_integrity: online`.
+5. Run Buddy self-heal once while healthy; it must make no restart.
+6. Conduct a controlled failure test for one allowlisted Buddy service, confirm one bounded restart and recovery, then restore the pre-test state.
+7. Confirm the circuit breaker blocks a repeated unresolved failure after two attempts.
+8. Reconcile Buddy live source before claiming canonical self-evolution or full live conformance.
 
 Until those runtime steps pass, the repository contains the control plane, but production autonomy remains `UNVERIFIED`.

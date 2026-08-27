@@ -206,6 +206,11 @@ class RadahAutopilotTests(unittest.TestCase):
         self.assertIn("AUTOPILOT_EFFECTIVE_ENTRYPOINT=PASS", installer)
         self.assertIn("AUTOPILOT_LAYERED_MIGRATION=PASS", installer)
 
+    def test_installer_latest_receipt_selection_is_pipefail_safe(self):
+        installer = INSTALLER_PATH.read_text(encoding="utf-8")
+        self.assertIn("sort -nr | sed -n '1p' | cut", installer)
+        self.assertNotIn("sort -nr | head -1 | cut", installer)
+
     def test_installer_validates_multilane_overlay_as_multilane_not_single_lane(self):
         installer = INSTALLER_PATH.read_text(encoding="utf-8")
         self.assertIn("validate_latest_multilane_sweep", installer)

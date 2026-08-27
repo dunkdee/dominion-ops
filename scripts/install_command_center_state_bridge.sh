@@ -6,7 +6,9 @@ repo="${REPO_DIR:-$HOME/dominion-ops}"
 state_root="$HOME/.dominion/command-center"
 runtime_root="$state_root/runtime"
 receipts="$state_root/receipts"
-bridge_src="$repo/scripts/command_center_state_bridge_v2.py"
+bridge_v2_src="$repo/scripts/command_center_state_bridge_v2.py"
+bridge_v3_src="$repo/scripts/command_center_state_bridge_v3.py"
+bridge_v2="$runtime_root/command_center_state_bridge_v2.py"
 bridge="$runtime_root/command_center_state_bridge.py"
 service_name="dominion-command-center-state.service"
 timer_name="dominion-command-center-state.timer"
@@ -14,14 +16,17 @@ service_path="/etc/systemd/system/$service_name"
 timer_path="/etc/systemd/system/$timer_name"
 user_name="$(id -un)"; group_name="$(id -gn)"
 
-test -f "$bridge_src"
+test -f "$bridge_v2_src"
+test -f "$bridge_v3_src"
 test "$(git -C "$repo" rev-parse HEAD)" = "$RUN_SHA"
 vault="$(docker inspect obsidian-remote --format '{{range .Mounts}}{{if eq .Destination "/vaults/Dominion"}}{{.Source}}{{end}}{{end}}')"
 test -n "$vault"; test -d "$vault/Dominion-Command-Center"
 daily_state="$vault/Dominion-Command-Center/14-Daily-State.md"; test -f "$daily_state"
 
 mkdir -p "$runtime_root" "$receipts"; chmod 700 "$state_root" "$runtime_root" "$receipts"
-install -m 700 "$bridge_src" "$bridge"; python3 -m py_compile "$bridge"
+install -m 700 "$bridge_v2_src" "$bridge_v2"
+install -m 700 "$bridge_v3_src" "$bridge"
+python3 -m py_compile "$bridge_v2" "$bridge"
 service_tmp="$(mktemp)"; timer_tmp="$(mktemp)"
 cat > "$service_tmp" <<EOF
 [Unit]
@@ -72,5 +77,6 @@ assert s['schema']=='dominion-command-center-runtime-state-v2'
 assert s['release_sha']==sys.argv[2]
 assert s['lanes']['registered']==11 and s['lanes']['open']==11 and s['lanes']['all_open'] is True
 assert s['founder_holds']
-print(f"COMMAND_CENTER_STATE_BRIDGE=PASS lanes=11/11 cadence=60s receipts={len(s['latest_receipts'])}")
+assert s['systems']['mcp_cli']['ok'] is True, s['systems']['mcp_cli']
+print(f"COMMAND_CENTER_STATE_BRIDGE=PASS lanes=11/11 mcp_cli=online cadence=60s receipts={len(s['latest_receipts'])}")
 PY

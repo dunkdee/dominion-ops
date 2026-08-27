@@ -103,9 +103,25 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
         self.assertIn("command_center_state_bridge_v3.py", install)
         self.assertIn("s['systems']['mcp_cli']['ok'] is True", install)
 
-    def test_deploy_requires_full_live_acceptance_routing_mcp_and_build_receipt(self):
+    def test_deploy_requires_full_live_acceptance_routing_mcp_intelligence_and_build_receipt(self):
         text = DEPLOY.read_text(encoding="utf-8")
-        for marker in ("install_mcp_cli_server.sh", "COMMAND_CENTER_MCP_PREBOOT=PASS", "COMMAND_CENTER_PREBOOT_TRUTH=PASS", "active_experiment_count", "dominion-command-center-state.service", "COMMAND_CENTER_PUBLIC_TRUTH=PASS", "converge_command_center_vault_route.sh", "dominion-command-center-build-receipt-v1", "COMMAND_CENTER_BUILD_RECEIPT=PASS", "mcp_cli=online"):
+        for marker in (
+            "install_mcp_cli_server.sh",
+            "COMMAND_CENTER_MCP_PREBOOT=PASS",
+            "COMMAND_CENTER_PREBOOT_TRUTH=PASS",
+            "INTELLIGENCE_ACCEPTANCE_PROBE",
+            "COMMAND_CENTER_INTELLIGENCE=PASS",
+            "source in {'conductor','nemotron'}",
+            "command-center-fallback",
+            "intelligence_source",
+            "active_experiment_count",
+            "dominion-command-center-state.service",
+            "COMMAND_CENTER_PUBLIC_TRUTH=PASS",
+            "converge_command_center_vault_route.sh",
+            "dominion-command-center-build-receipt-v1",
+            "COMMAND_CENTER_BUILD_RECEIPT=PASS",
+            "mcp_cli=online",
+        ):
             self.assertIn(marker, text)
         install = INSTALL.read_text(encoding="utf-8"); self.assertIn("OnUnitActiveSec=60s", install); self.assertIn("command_center_state_bridge_v3.py", install)
         mcp_install = MCP_INSTALL.read_text(encoding="utf-8"); self.assertIn("2026-07-28", mcp_install); self.assertIn("loopback", mcp_install.lower())

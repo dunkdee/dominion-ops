@@ -12,7 +12,9 @@ MCP = OBSIDIAN / "command-center" / "17-MCP-CLI-Connector.md"
 ROOT_NOTE = OBSIDIAN / "00-DOMINION-COMMAND-CENTER.md"
 CSS = OBSIDIAN / "dominion.css"
 MOTION_CSS = OBSIDIAN / "dominion-motion.css"
+GOLDEN_CSS = OBSIDIAN / "dominion-golden-ratio.css"
 WEB_INDEX = ROOT / "apps" / "command-center" / "index.html"
+DEPLOY_UI = ROOT / "scripts" / "deploy_dominion_command_center.sh"
 
 
 class DashboardParser(HTMLParser):
@@ -126,8 +128,9 @@ def test_mcp_connector_page_is_full_visual_canopy_not_plain_shell() -> None:
     assert len(parser.internal_targets) >= 10
 
 
-def test_css_is_phone_first_accessible_offline_and_motion_safe() -> None:
+def test_css_is_phone_first_accessible_offline_motion_safe_and_phi_governed() -> None:
     _, css, motion, _ = load_dashboard()
+    golden = GOLDEN_CSS.read_text(encoding="utf-8")
     required = (
         ".dominion-shell",
         ".dominion-hero",
@@ -152,7 +155,23 @@ def test_css_is_phone_first_accessible_offline_and_motion_safe() -> None:
     )
     for marker in motion_required:
         assert marker in motion
-    combined = css + "\n" + motion
+    golden_required = (
+        "--dominion-phi: 1.61803398875",
+        "--dominion-invphi: 0.61803398875",
+        "--dominion-s1: 8px",
+        "--dominion-s9: 377px",
+        "--dominion-radius: 0px",
+        ".dominion-metric-grid",
+        ".dominion-card-grid",
+        "min-height: 52px",
+    )
+    for marker in golden_required:
+        assert marker in golden
+    deploy = DEPLOY_UI.read_text(encoding="utf-8")
+    assert 'dominion-golden-ratio.css" > "$snippet"' not in deploy
+    assert '"$asset_root/obsidian/dominion-golden-ratio.css" > "$snippet"' in deploy
+    assert "golden_ratio=locked" in deploy
+    combined = css + "\n" + motion + "\n" + golden
     assert "@import" not in combined
     assert "url(http" not in combined
     assert "javascript:" not in combined.lower()
@@ -197,10 +216,10 @@ def main() -> int:
     test_every_dashboard_link_resolves()
     test_production_matrix_covers_every_governed_lane()
     test_mcp_connector_page_is_full_visual_canopy_not_plain_shell()
-    test_css_is_phone_first_accessible_offline_and_motion_safe()
+    test_css_is_phone_first_accessible_offline_motion_safe_and_phi_governed()
     test_web_command_center_is_reference_locked_to_golden_ratio()
     test_root_note_is_a_clean_styled_entrypoint()
-    print("DOMINION_UI_V5_TESTS=PASS production_matrix=11_lanes golden_ratio=locked mcp_canopy=full motion=natural accessibility=pass")
+    print("DOMINION_UI_V5_TESTS=PASS production_matrix=11_lanes golden_ratio=locked web_and_obsidian=true mcp_canopy=full motion=natural accessibility=pass")
     return 0
 
 

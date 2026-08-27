@@ -1,0 +1,55 @@
+name: System Integrity Agent CI
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/system_integrity_agent.py'
+      - 'scripts/install_system_integrity_agent.sh'
+      - 'governance/system_integrity_agent.json'
+      - 'deploy/systemd/dominion-system-integrity.service'
+      - 'deploy/systemd/dominion-system-integrity.timer'
+      - 'scripts/command_center_state_bridge_v3.py'
+      - 'tests/test_system_integrity_agent.py'
+      - '.github/workflows/system-integrity-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/system_integrity_agent.py'
+      - 'scripts/install_system_integrity_agent.sh'
+      - 'governance/system_integrity_agent.json'
+      - 'deploy/systemd/dominion-system-integrity.service'
+      - 'deploy/systemd/dominion-system-integrity.timer'
+      - 'scripts/command_center_state_bridge_v3.py'
+      - 'tests/test_system_integrity_agent.py'
+      - '.github/workflows/system-integrity-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Validate dedicated reliability boundary
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/system_integrity_agent.py scripts/command_center_state_bridge_v3.py
+          bash -n scripts/install_system_integrity_agent.sh
+          python -m unittest tests.test_system_integrity_agent -v
+          python scripts/system_integrity_agent.py --contract governance/system_integrity_agent.json --self-test
+      - name: Enforce no direct mutation authority
+        run: |
+          set -euo pipefail
+          ! grep -Eiq 'systemctl[[:space:]]+restart|docker[[:space:]]+(restart|start)|git[[:space:]]+push|gcloud[[:space:]]+compute[[:space:]]+firewall-rules' scripts/system_integrity_agent.py
+          python - <<'PY'
+          import json
+          c=json.load(open('governance/system_integrity_agent.json',encoding='utf-8'))
+          assert c['single_responsibility']
+          assert c['cadence_seconds']==89
+          assert c['authority']['mode']=='OBSERVE_VERIFY_REQUEST_RECOVERY'
+          assert all(v is False for k,v in c['authority'].items() if k.startswith('may_'))
+          assert c['authority']['founder_final_authority'] is True
+          print('SYSTEM_INTEGRITY_POLICY=PASS single_responsibility=reliability mutation_authority=false cadence=89s')
+          PY

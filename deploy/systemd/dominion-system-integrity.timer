@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Dominion System Integrity Agent every 89 seconds
+
+[Timer]
+OnBootSec=55s
+OnUnitActiveSec=89s
+AccuracySec=5s
+Persistent=true
+Unit=dominion-system-integrity.service
+
+[Install]
+WantedBy=timers.target

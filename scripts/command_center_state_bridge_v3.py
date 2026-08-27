@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 BASE_PATH = Path(__file__).with_name("command_center_state_bridge_v2.py")
@@ -14,10 +15,34 @@ base = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(base)
 
 
+def _integrity_state(root: Path) -> dict:
+    latest = base.load_json(root / "system-integrity/latest.json")
+    if not isinstance(latest, dict):
+        return {"ok": False, "status": "UNVERIFIED", "observed_at": None, "defect_count": None, "cycle": None}
+    observed_at = latest.get("observed_at")
+    age = None
+    try:
+        observed = datetime.fromisoformat(str(observed_at).replace("Z", "+00:00")).astimezone(timezone.utc)
+        age = max(0.0, (datetime.now(timezone.utc) - observed).total_seconds())
+    except (TypeError, ValueError):
+        pass
+    fresh = age is not None and age <= 240
+    return {
+        "ok": latest.get("ok") is True and latest.get("status") == "PASS" and fresh,
+        "status": latest.get("status") if fresh else "STALE",
+        "observed_at": observed_at,
+        "age_seconds": None if age is None else int(age),
+        "defect_count": latest.get("defect_count"),
+        "cycle": latest.get("cycle"),
+        "authority": latest.get("authority"),
+    }
+
+
 def build_state(repo: Path, root: Path):
     state = base.build_state(repo, root)
     systems = state.setdefault("systems", {})
     systems["mcp_cli"] = base.http("http://127.0.0.1:8390/health")
+    systems["system_integrity"] = _integrity_state(root)
     return state
 
 
@@ -39,10 +64,13 @@ def main() -> int:
     lanes = state["lanes"]
     revenue = state["revenue"]
     mcp = state.get("systems", {}).get("mcp_cli", {})
+    integrity = state.get("systems", {}).get("system_integrity", {})
     print(
         f"COMMAND_CENTER_STATE=PASS lanes={lanes['open']}/{lanes['registered']} "
         f"revenue_connected={str(revenue['connected']).lower()} constraint={revenue['constraint']} "
-        f"mcp_cli={str(bool(mcp.get('ok'))).lower()} receipts={len(state['latest_receipts'])}"
+        f"mcp_cli={str(bool(mcp.get('ok'))).lower()} "
+        f"system_integrity={str(bool(integrity.get('ok'))).lower()} "
+        f"receipts={len(state['latest_receipts'])}"
     )
     return 0
 

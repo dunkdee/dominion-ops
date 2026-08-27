@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OBSIDIAN = ROOT / "obsidian"
 HOME = OBSIDIAN / "command-center" / "00-HOME.md"
 PRODUCTION = OBSIDIAN / "command-center" / "16-Production-Matrix.md"
+MCP = OBSIDIAN / "command-center" / "17-MCP-CLI-Connector.md"
 ROOT_NOTE = OBSIDIAN / "00-DOMINION-COMMAND-CENTER.md"
 CSS = OBSIDIAN / "dominion.css"
 MOTION_CSS = OBSIDIAN / "dominion-motion.css"
@@ -62,11 +63,13 @@ def test_dashboard_structure_and_visual_contract() -> None:
         "dominion-flow",
     }
     assert required_classes <= parser.classes
-    assert len(parser.internal_targets) >= 18
+    assert len(parser.internal_targets) >= 20
     assert len(parser.nav_labels) >= 4
     assert "RADAH MEMSHALAH" in home
     assert "Production Matrix" in home
     assert "Dominion-Command-Center/16-Production-Matrix" in home
+    assert "MCP CLI Connector Fabric" in home
+    assert "Dominion-Command-Center/17-MCP-CLI-Connector" in home
     assert "Current production state requires timestamped runtime receipts." in home
     assert "they do not invent status or grant authority" in home
 
@@ -102,6 +105,24 @@ def test_production_matrix_covers_every_governed_lane() -> None:
         assert lane in production
     assert "dominion-card--productive" in parser.classes
     assert "dominion-flow" in parser.classes
+
+
+def test_mcp_connector_page_is_full_visual_canopy_not_plain_shell() -> None:
+    text, parser = parse_page(MCP)
+    for marker in (
+        "RADAH MEMSHALAH · CONNECTOR FABRIC",
+        "MCP CLI Server",
+        "MCP 2026-07-28",
+        "DEFAULT DENY",
+        "LOOPBACK ONLY",
+        "Registered Connectors",
+        "How “Connects to Anything” Works",
+        "No arbitrary shell or URL execution",
+    ):
+        assert marker.lower() in text.lower(), marker
+    required_classes = {"dominion-shell", "dominion-hero", "dominion-metric-grid", "dominion-card-grid", "dominion-flow", "dominion-mobile-dock"}
+    assert required_classes <= parser.classes
+    assert len(parser.internal_targets) >= 10
 
 
 def test_css_is_phone_first_accessible_offline_and_motion_safe() -> None:
@@ -147,9 +168,10 @@ def main() -> int:
     test_dashboard_structure_and_visual_contract()
     test_every_dashboard_link_resolves()
     test_production_matrix_covers_every_governed_lane()
+    test_mcp_connector_page_is_full_visual_canopy_not_plain_shell()
     test_css_is_phone_first_accessible_offline_and_motion_safe()
     test_root_note_is_a_clean_styled_entrypoint()
-    print("DOMINION_UI_V3_TESTS=PASS production_matrix=11_lanes motion=natural accessibility=pass")
+    print("DOMINION_UI_V4_TESTS=PASS production_matrix=11_lanes mcp_canopy=full motion=natural accessibility=pass")
     return 0
 
 

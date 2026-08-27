@@ -10,6 +10,7 @@ test -f "$asset_root/obsidian/00-DOMINION-COMMAND-CENTER.md"
 test -d "$asset_root/obsidian/command-center"
 test -f "$asset_root/obsidian/dominion.css"
 test -f "$asset_root/obsidian/dominion-motion.css"
+test -f "$asset_root/obsidian/dominion-golden-ratio.css"
 
 mount_sources="$(docker inspect obsidian-remote --format '{{range .Mounts}}{{if eq .Destination "/vaults/Dominion"}}{{println .Source}}{{end}}{{end}}')"
 mount_count="$(printf '%s\n' "$mount_sources" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
@@ -101,7 +102,7 @@ if [ -e "$target" ]; then rm -rf "$target"; fi
 mv "$stage" "$target"
 cp -a "$asset_root/obsidian/00-DOMINION-COMMAND-CENTER.md" "$root_note"
 mkdir -p "$snippet_dir"
-cat "$asset_root/obsidian/dominion.css" "$asset_root/obsidian/dominion-motion.css" > "$snippet"
+cat "$asset_root/obsidian/dominion.css" "$asset_root/obsidian/dominion-motion.css" "$asset_root/obsidian/dominion-golden-ratio.css" > "$snippet"
 chmod 600 "$root_note" "$snippet"
 
 target_root="$(cd "$target" && pwd -P)"
@@ -155,12 +156,14 @@ grep -Fq '@keyframes dominion-ambient-drift' "$snippet"
 grep -Fq '@keyframes dominion-orbit' "$snippet"
 grep -Fq '@keyframes dominion-production-sweep' "$snippet"
 grep -Fq '@media (prefers-reduced-motion: reduce)' "$snippet"
+grep -Fq -- '--dominion-phi: 1.61803398875' "$snippet"
+grep -Fq -- '--dominion-s9: 377px' "$snippet"
 python3 - "$appearance" <<'PY'
 import json,sys
 from pathlib import Path
 data=json.loads(Path(sys.argv[1]).read_text())
 assert 'dominion' in data.get('enabledCssSnippets',[])
-print('DOMINION_CSS_ENABLE=PASS')
+print('DOMINION_CSS_ENABLE=PASS golden_ratio=locked')
 PY
 
 brain_after="$(hash_brain)"
@@ -192,4 +195,4 @@ test "$unauth" = 401 || { echo "DOMINION_UI=FAIL reason=public_auth_not_enforced
 
 rm -rf "$backup"
 trap - ERR
-printf 'DOMINION_UI=PASS vault=%s command_center=installed mcp_canopy=installed production_matrix=installed css=enabled motion=natural_restrained brain_hash=%s public_auth=pass legacy_rdp=absent\n' "$vault" "$brain_after"
+printf 'DOMINION_UI=PASS vault=%s command_center=installed mcp_canopy=installed production_matrix=installed css=enabled motion=natural_restrained golden_ratio=locked brain_hash=%s public_auth=pass legacy_rdp=absent\n' "$vault" "$brain_after"

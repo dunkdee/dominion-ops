@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BRIDGE_PATH = ROOT / "scripts/command_center_state_bridge_v2.py"
+BRIDGE_V3_PATH = ROOT / "scripts/command_center_state_bridge_v3.py"
 DOCKERFILE = ROOT / "apps/command-center/Dockerfile"
 COMPOSE = ROOT / "docker-compose.command-center.yml"
 APP = ROOT / "apps/command-center/app.py"
@@ -16,6 +17,7 @@ INDEX = ROOT / "apps/command-center/index.html"
 REVENUE = ROOT / "apps/command-center/revenue.py"
 DEPLOY = ROOT / "scripts/deploy_command_center.sh"
 INSTALL = ROOT / "scripts/install_command_center_state_bridge.sh"
+MCP_INSTALL = ROOT / "scripts/install_mcp_cli_server.sh"
 
 spec = importlib.util.spec_from_file_location("command_center_state_bridge_v2", BRIDGE_PATH)
 assert spec and spec.loader
@@ -48,10 +50,10 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
     def test_receipt_index_scans_all_governed_receipt_trees_without_bodies(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for rel in ("autopilot/receipts/a.json", "revenue-runtime/receipts/r.json", "command-center/receipts/c.json"):
+            for rel in ("autopilot/receipts/a.json", "revenue-runtime/receipts/r.json", "command-center/receipts/c.json", "mcp-cli/receipts/m.json"):
                 path = root / rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_text('{"secret":"must-not-be-indexed"}', encoding="utf-8")
             receipts = bridge.receipt_index(root, limit=10)
-            self.assertEqual(len(receipts), 3); self.assertTrue(all(set(item) == {"source", "name", "observed_at"} for item in receipts)); self.assertNotIn("secret", json.dumps(receipts))
+            self.assertEqual(len(receipts), 4); self.assertTrue(all(set(item) == {"source", "name", "observed_at"} for item in receipts)); self.assertNotIn("secret", json.dumps(receipts))
 
     def test_docker_image_packages_every_app_import(self):
         text = DOCKERFILE.read_text(encoding="utf-8")
@@ -74,11 +76,20 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
         text = REVENUE.read_text(encoding="utf-8")
         self.assertIn('"vertical": "voltedge-commerce"', text); self.assertIn("canonical_runtime_state", text); self.assertNotIn("Credit Dispute Toolkit", text); self.assertNotIn("AI Automation Blueprint", text)
 
-    def test_deploy_requires_full_live_acceptance_routing_and_build_receipt(self):
+    def test_mcp_is_part_of_canonical_bridge_and_not_a_sidecar_truth_source(self):
+        v3 = BRIDGE_V3_PATH.read_text(encoding="utf-8")
+        self.assertIn('systems["mcp_cli"]', v3)
+        self.assertIn("http://127.0.0.1:8390/health", v3)
+        install = INSTALL.read_text(encoding="utf-8")
+        self.assertIn("command_center_state_bridge_v3.py", install)
+        self.assertIn("s['systems']['mcp_cli']['ok'] is True", install)
+
+    def test_deploy_requires_full_live_acceptance_routing_mcp_and_build_receipt(self):
         text = DEPLOY.read_text(encoding="utf-8")
-        for marker in ("COMMAND_CENTER_PREBOOT_TRUTH=PASS", "active_experiment_count", "dominion-command-center-state.service", "COMMAND_CENTER_PUBLIC_TRUTH=PASS", "converge_command_center_vault_route.sh", "dominion-command-center-build-receipt-v1", "COMMAND_CENTER_BUILD_RECEIPT=PASS"):
+        for marker in ("install_mcp_cli_server.sh", "COMMAND_CENTER_MCP_PREBOOT=PASS", "COMMAND_CENTER_PREBOOT_TRUTH=PASS", "active_experiment_count", "dominion-command-center-state.service", "COMMAND_CENTER_PUBLIC_TRUTH=PASS", "converge_command_center_vault_route.sh", "dominion-command-center-build-receipt-v1", "COMMAND_CENTER_BUILD_RECEIPT=PASS", "mcp_cli=online"):
             self.assertIn(marker, text)
-        install = INSTALL.read_text(encoding="utf-8"); self.assertIn("OnUnitActiveSec=60s", install); self.assertIn("command_center_state_bridge_v2.py", install)
+        install = INSTALL.read_text(encoding="utf-8"); self.assertIn("OnUnitActiveSec=60s", install); self.assertIn("command_center_state_bridge_v3.py", install)
+        mcp_install = MCP_INSTALL.read_text(encoding="utf-8"); self.assertIn("2026-07-28", mcp_install); self.assertIn("loopback", mcp_install.lower())
 
 
 if __name__ == "__main__": unittest.main()

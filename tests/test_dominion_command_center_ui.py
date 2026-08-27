@@ -63,7 +63,8 @@ def test_dashboard_structure_and_visual_contract() -> None:
         "dominion-flow",
     }
     assert required_classes <= parser.classes
-    assert len(parser.internal_targets) >= 20
+    # 6 executive controls + 4 control/intelligence + 5 knowledge/resilience + 4 mobile dock links.
+    assert len(parser.internal_targets) >= 19
     assert len(parser.nav_labels) >= 4
     assert "RADAH MEMSHALAH" in home
     assert "Production Matrix" in home

@@ -2,8 +2,11 @@ services:
   dominion-command-center:
     build: ./apps/command-center
     container_name: dominion-command-center
-    ports:
-      - "127.0.0.1:8091:8000"
+    # Production intelligence workers are private host-loopback services.
+    # Host networking lets this container reach them without opening those ports
+    # on a public interface. Uvicorn itself remains bound to host loopback only.
+    network_mode: host
+    command: ["uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8091"]
     volumes:
       - ${VAULT_PATH:-/home/malachisingleton8/vault}:/vault:ro
       - ${COMMAND_CENTER_MEMORY_PATH:-/home/malachisingleton8/dominion-memory}:/data/memory
@@ -18,12 +21,10 @@ services:
       NEMOTRON_BASE_URL: ${NEMOTRON_BASE_URL:-}
       NEMOTRON_MODEL: ${NEMOTRON_MODEL:-nemotron-3}
       NEMOTRON_API_KEY: ${NEMOTRON_API_KEY:-}
-      CONDUCTOR_URL: ${CONDUCTOR_URL:-http://host.docker.internal:5060}
+      CONDUCTOR_URL: ${CONDUCTOR_URL:-http://127.0.0.1:5060}
       INTELLIGENCE_TIMEOUT_SECONDS: ${INTELLIGENCE_TIMEOUT_SECONDS:-60}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\").read()' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8091/health\").read()' || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

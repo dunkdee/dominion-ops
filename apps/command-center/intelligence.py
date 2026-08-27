@@ -21,7 +21,7 @@ class IntelligenceConfig:
             primary_url=os.getenv("NEMOTRON_BASE_URL", "").rstrip("/"),
             primary_model=os.getenv("NEMOTRON_MODEL", "nemotron-3"),
             primary_api_key=os.getenv("NEMOTRON_API_KEY", ""),
-            conductor_url=os.getenv("CONDUCTOR_URL", "http://host.docker.internal:5060").rstrip("/"),
+            conductor_url=os.getenv("CONDUCTOR_URL", "http://127.0.0.1:5060").rstrip("/"),
             timeout_seconds=int(os.getenv("INTELLIGENCE_TIMEOUT_SECONDS", "60")),
         )
 
@@ -111,6 +111,8 @@ def call_conductor(message: str, context: str = "") -> dict[str, Any] | None:
         "source": "dominion-command-center",
         "persona": "buddy",
     }
+    # These are read/reasoning interfaces only. Do not route chat through
+    # Conductor execution endpoints such as /execute-next.
     for endpoint in ("/chat", "/api/chat", "/invoke"):
         try:
             parsed = _post_json(f"{cfg.conductor_url}{endpoint}", payload, {}, cfg.timeout_seconds)

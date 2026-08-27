@@ -28,8 +28,22 @@ source "$ENV_FILE"
 set +a
 
 vault="$(docker inspect obsidian-remote --format '{{range .Mounts}}{{if eq .Destination "/vaults/Dominion"}}{{.Source}}{{end}}{{end}}')"
-test -n "$vault"; test -d "$vault/Dominion-Command-Center"
+test -n "$vault"; test -d "$vault/Dominion-Command-Center"; test -d "$vault/Dominion-Brain"
 export VAULT_PATH="$vault" COMMAND_CENTER_RUNTIME_DIR="$STATE_ROOT"
+
+# MCP CLI is part of the Command Center release boundary, not a separate loose deploy.
+RUN_SHA="$actual_sha" REPO_DIR="$REPO_DIR" bash scripts/install_mcp_cli_server.sh
+MCP_HEALTH="$(curl -fsS http://127.0.0.1:8390/health)"
+python3 - "$MCP_HEALTH" <<'PY'
+import json,sys
+h=json.loads(sys.argv[1])
+assert h['status']=='ok'
+assert h['protocol']=='2026-07-28'
+assert h['connector_count'] >= 8
+assert h['external_mutation_enabled'] is False
+assert h['binding']=='loopback-only'
+print('COMMAND_CENTER_MCP_PREBOOT=PASS')
+PY
 
 # One canonical host snapshot feeds both the web cockpit and Obsidian.
 RUN_SHA="$actual_sha" REPO_DIR="$REPO_DIR" bash scripts/install_command_center_state_bridge.sh
@@ -42,8 +56,9 @@ assert s['release_sha']==sys.argv[2]
 assert s['lanes']['registered']==11 and s['lanes']['open']==11 and s['lanes']['all_open'] is True
 assert s['revenue']['connected'] is True and s['revenue']['active_experiment_count'] >= 1, s['revenue']
 assert s['autopilot']['connected'] is True and s['autopilot']['timer']['active'] is True, s['autopilot']
+assert s['systems']['mcp_cli']['ok'] is True, s['systems']['mcp_cli']
 assert len(s['founder_holds']) >= 5, s['founder_holds']
-print('COMMAND_CENTER_PREBOOT_TRUTH=PASS lanes=11/11 revenue=live autopilot=connected')
+print('COMMAND_CENTER_PREBOOT_TRUTH=PASS lanes=11/11 revenue=live autopilot=connected mcp_cli=online')
 PY
 
 # The Dockerfile contains an image-level import test, so missing modules fail here.
@@ -57,7 +72,7 @@ sudo systemctl start dominion-command-center-state.service
 test "$(sudo systemctl show dominion-command-center-state.service -p Result --value)" = success
 
 daily_state="$vault/Dominion-Command-Center/14-Daily-State.md"
-test -s "$daily_state"; grep -Fq '# Live Daily State' "$daily_state"; grep -Fq "$actual_sha" "$daily_state"; grep -Fq 'Current production state requires timestamped runtime receipts.' "$daily_state"
+test -s "$daily_state"; grep -Fq '# Live Daily State' "$daily_state"; grep -Fq "$actual_sha" "$daily_state"; grep -Fq 'Current production state requires timestamped runtime receipts.' "$daily_state"; grep -Fq 'mcp_cli: **ONLINE**' "$daily_state"
 
 STATUS_JSON="$(curl -fsS http://127.0.0.1:8091/api/status)"
 ACCEPTANCE="$(python3 - "$STATUS_JSON" "$actual_sha" <<'PY'
@@ -69,11 +84,11 @@ r=s.get('revenue',{}); assert r.get('runtime_connected') is True and int(r.get('
 assert r.get('constraint') not in (None,'RUNTIME_STATE_UNAVAILABLE','NO_ACTIVE_EXPERIMENT'), r
 ap=s.get('autopilot',{}); assert ap.get('connected') is True and ap.get('timer',{}).get('active') is True, ap
 systems=s.get('systems',{})
-for key in ('revenue_runtime','revenue_evaluator','radah_autopilot','obsidian'): assert systems.get(key)=='online', (key,systems.get(key))
+for key in ('revenue_runtime','revenue_evaluator','radah_autopilot','obsidian','mcp_cli'): assert systems.get(key)=='online', (key,systems.get(key))
 assert len(s.get('founder_holds',[]))>=5
 assert s.get('latest_receipts'), 'runtime receipt index empty'
 m=r.get('metrics',{})
-print(' '.join(['truth=live','lanes=11/11',f"constraint={r.get('constraint')}",f"experiments={r.get('active_experiment_count')}",f"visitors={m.get('visitors')}",f"clicks={m.get('clicks')}",f"purchases={m.get('purchases')}",f"revenue_usd={m.get('revenue_usd')}",f"receipts={len(s.get('latest_receipts',[]))}"]))
+print(' '.join(['truth=live','lanes=11/11','mcp_cli=online',f"constraint={r.get('constraint')}",f"experiments={r.get('active_experiment_count')}",f"visitors={m.get('visitors')}",f"clicks={m.get('clicks')}",f"purchases={m.get('purchases')}",f"revenue_usd={m.get('revenue_usd')}",f"receipts={len(s.get('latest_receipts',[]))}"]))
 PY
 )"
 echo "DOMINION_COMMAND_CENTER_LIVE_STATE=$ACCEPTANCE"
@@ -123,7 +138,8 @@ s=json.loads(sys.argv[1]); expected=sys.argv[2]
 assert s['truth']['connected'] is True and s['truth']['release_sha']==expected
 assert s['lane_summary']=={'open':11,'registered':11,'all_open':True}
 assert s['revenue']['runtime_connected'] is True and s['revenue']['active_experiment_count']>=1
-print('COMMAND_CENTER_PUBLIC_TRUTH=PASS')
+assert s['systems']['mcp_cli']=='online'
+print('COMMAND_CENTER_PUBLIC_TRUTH=PASS mcp_cli=online')
 PY
 
 # Successful builds become governed receipts and are immediately indexed.
@@ -133,7 +149,7 @@ RUN_ID_VALUE="${RUN_ID:-unknown}" PUBLIC_ENDPOINT_VALUE="$PUBLIC_ENDPOINT" PUBLI
 import json,os,sys,tempfile
 from datetime import datetime,timezone
 from pathlib import Path
-path=Path(sys.argv[1]); data={'schema':'dominion-command-center-build-receipt-v1','component':'dominion-command-center','status':'PASS','release_sha':sys.argv[2],'run_id':os.environ.get('RUN_ID_VALUE','unknown'),'public_endpoint':os.environ['PUBLIC_ENDPOINT_VALUE'],'public_mode':os.environ['PUBLIC_MODE_VALUE'],'acceptance':os.environ.get('ACCEPTANCE_VALUE',''),'observed_at':datetime.now(timezone.utc).isoformat()}
+path=Path(sys.argv[1]); data={'schema':'dominion-command-center-build-receipt-v1','component':'dominion-command-center','status':'PASS','release_sha':sys.argv[2],'run_id':os.environ.get('RUN_ID_VALUE','unknown'),'public_endpoint':os.environ['PUBLIC_ENDPOINT_VALUE'],'public_mode':os.environ['PUBLIC_MODE_VALUE'],'acceptance':os.environ.get('ACCEPTANCE_VALUE',''),'mcp_cli':'online','observed_at':datetime.now(timezone.utc).isoformat()}
 fd,tmp=tempfile.mkstemp(prefix='.receipt.',dir=str(path.parent))
 try:
   with os.fdopen(fd,'w',encoding='utf-8') as h: json.dump(data,h,indent=2,sort_keys=True); h.write('\n'); h.flush(); os.fsync(h.fileno())
@@ -147,7 +163,8 @@ python3 - "$FINAL_STATUS" "$(basename "$receipt")" <<'PY'
 import json,sys
 s=json.loads(sys.argv[1]); name=sys.argv[2]
 assert any(x.get('name')==name for x in s.get('latest_receipts',[])), (name,s.get('latest_receipts'))
-print('COMMAND_CENTER_BUILD_RECEIPT=PASS indexed=true')
+assert s['systems']['mcp_cli']=='online'
+print('COMMAND_CENTER_BUILD_RECEIPT=PASS indexed=true mcp_cli=online')
 PY
 grep -Fq "$(basename "$receipt")" "$daily_state"
 
@@ -157,6 +174,7 @@ release_sha=$actual_sha
 lanes=11/11
 live_state=$ACCEPTANCE
 truth_bridge=active cadence=60s
+mcp_cli=online protocol=2026-07-28 loopback=http://127.0.0.1:8390 cli=$HOME/.local/bin/dominion-mcp
 obsidian_daily_state=$daily_state
 local_endpoint=http://127.0.0.1:8091
 public_endpoint=$PUBLIC_ENDPOINT

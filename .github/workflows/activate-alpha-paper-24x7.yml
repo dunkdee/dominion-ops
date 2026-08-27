@@ -1,0 +1,129 @@
+name: Activate Alpha 24x7 Paper Trading
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'alpha_engine/**'
+      - '.github/workflows/activate-alpha-paper-24x7.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: alpha-paper-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Validate paper-only contract
+        run: |
+          set -Eeuo pipefail
+          python -m py_compile alpha_engine/dominion_alpha/*.py
+          grep -Fq '"mode": "paper"' alpha_engine/dominion_alpha/api.py
+          grep -Fq '"live_trading": False' alpha_engine/dominion_alpha/api.py
+          grep -Fq 'paper_buy' alpha_engine/dominion_alpha/governor.py
+          grep -Fq 'paper_sell' alpha_engine/dominion_alpha/governor.py
+          grep -Fq 'https://api.dexscreener.com' alpha_engine/dominion_alpha/scanner.py
+          grep -Fq 'Restart=always' alpha_engine/dominion-alpha.service
+          echo 'ALPHA_PAPER_STATIC_GATE=PASS real_market_data=dexscreener execution=simulated live_money=disabled'
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require VM access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
+      - name: Activate fail-closed paper runtime
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          command_timeout: 360s
+          script: |
+            set -Eeuo pipefail
+            repo="$HOME/dominion-ops"
+            runtime="$HOME/dominion/alpha_engine"
+            receipts="$HOME/.dominion/alpha/receipts"
+            mkdir -p "$receipts"
+            cd "$repo"
+            git fetch origin main
+            git reset --hard origin/main
+            release_sha="$(git rev-parse HEAD)"
+
+            mkdir -p "$runtime"
+            if [ ! -d "$runtime/.venv" ]; then python3 -m venv "$runtime/.venv"; fi
+            cp -a "$repo/alpha_engine/dominion_alpha" "$runtime/"
+            cp "$repo/alpha_engine/requirements.txt" "$runtime/requirements.txt"
+            "$runtime/.venv/bin/pip" install -q -r "$runtime/requirements.txt"
+
+            if [ ! -f "$runtime/.env" ]; then
+              cp "$repo/alpha_engine/.env.example" "$runtime/.env"
+            fi
+            if grep -Eq '^LIVE_TRADING=' "$runtime/.env"; then
+              sed -i 's/^LIVE_TRADING=.*/LIVE_TRADING=false/' "$runtime/.env"
+            else
+              printf '\nLIVE_TRADING=false\n' >> "$runtime/.env"
+            fi
+            grep -Fxq 'LIVE_TRADING=false' "$runtime/.env"
+
+            sudo cp "$repo/alpha_engine/dominion-alpha.service" /etc/systemd/system/dominion-alpha.service
+            sudo systemctl daemon-reload
+            sudo systemctl enable dominion-alpha >/dev/null
+            sudo systemctl restart dominion-alpha
+
+            for _ in $(seq 1 45); do
+              if curl -fsS http://127.0.0.1:8787/health >/tmp/alpha-health.json; then break; fi
+              sleep 2
+            done
+            python3 - <<'PY'
+            import json
+            h=json.load(open('/tmp/alpha-health.json'))
+            assert h['status']=='ok', h
+            assert h['mode']=='paper', h
+            assert h['live_trading'] is False, h
+            print('ALPHA_HEALTH=PASS mode=paper live_trading=false')
+            PY
+
+            before="$(curl -fsS http://127.0.0.1:8787/status)"
+            curl -fsS http://127.0.0.1:8787/cycle >/tmp/alpha-cycle.json
+            after="$(curl -fsS http://127.0.0.1:8787/status)"
+            perf="$(curl -fsS http://127.0.0.1:8787/performance)"
+            capital="$(curl -fsS http://127.0.0.1:8787/capital)"
+            positions="$(curl -fsS http://127.0.0.1:8787/positions)"
+
+            python3 - "$release_sha" "$before" "$after" "$perf" "$capital" "$positions" <<'PY'
+            import json,sys,datetime,pathlib
+            release,before,after,perf,capital,positions=sys.argv[1:]
+            before=json.loads(before); after=json.loads(after)
+            assert after['live_trading'] is False, after
+            assert after['cycles_run'] >= before['cycles_run'], (before,after)
+            receipt={
+              'schema':'dominion-alpha-paper-activation-v1',
+              'observed_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              'release_sha':release,
+              'mode':'paper',
+              'live_trading':False,
+              'real_market_data':'DexScreener',
+              'service':'dominion-alpha.service',
+              'restart_policy':'always',
+              'status':after,
+              'performance':json.loads(perf),
+              'capital':json.loads(capital),
+              'positions':json.loads(positions),
+            }
+            p=pathlib.Path.home()/'.dominion/alpha/receipts'/f"activation-{release[:12]}.json"
+            p.write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+            print(f'ALPHA_PAPER_24X7=PASS release_sha={release} cycles={after.get("cycles_run")} live_trading=false receipt={p}')
+            PY

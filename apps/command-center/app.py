@@ -24,6 +24,106 @@ NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "nemotron-3")
 app = FastAPI(title="Dominion Command Center", version="1.0.0")
 
 
+BUDDY_VOICE_SCRIPT = r"""
+<script id="buddy-voice-runtime">
+(() => {
+  const synth = window.speechSynthesis;
+  const supported = !!(synth && window.SpeechSynthesisUtterance);
+  const stateKey = 'dominion.buddy.voice.enabled';
+  let enabled = localStorage.getItem(stateKey) !== 'off';
+  let selectedVoice = null;
+
+  const scoreVoice = (voice) => {
+    const name = String(voice.name || '').toLowerCase();
+    const lang = String(voice.lang || '').toLowerCase();
+    let score = 0;
+    if (lang === 'en-us') score += 100;
+    else if (lang.startsWith('en-')) score += 40;
+    if (/guy|davis|christopher|eric|andrew|aaron|roger|male/.test(name)) score += 18;
+    if (/natural|online|neural|premium/.test(name)) score += 8;
+    return score;
+  };
+
+  const refreshVoice = () => {
+    if (!supported) return;
+    const voices = synth.getVoices();
+    selectedVoice = voices.slice().sort((a, b) => scoreVoice(b) - scoreVoice(a))[0] || null;
+  };
+
+  const speak = (text) => {
+    if (!supported || !enabled || !text) return;
+    synth.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    refreshVoice();
+    if (selectedVoice) utterance.voice = selectedVoice;
+    utterance.lang = (selectedVoice && selectedVoice.lang) || 'en-US';
+    utterance.rate = 0.96;
+    utterance.pitch = 0.82;
+    utterance.volume = 1.0;
+    synth.speak(utterance);
+  };
+
+  const install = () => {
+    const chat = document.getElementById('chat');
+    const head = document.querySelector('.chathead');
+    if (!chat || !head) return;
+
+    const control = document.createElement('button');
+    control.type = 'button';
+    control.id = 'buddyVoiceToggle';
+    control.setAttribute('aria-pressed', String(enabled));
+    control.style.marginLeft = 'auto';
+    control.style.border = '1px solid rgba(244,214,124,.58)';
+    control.style.background = '#171006';
+    control.style.color = '#f4d67c';
+    control.style.padding = '8px 10px';
+    control.style.fontFamily = 'Georgia, serif';
+    control.style.fontSize = '9px';
+    control.style.letterSpacing = '.08em';
+
+    const updateLabel = () => {
+      control.textContent = supported ? `BUDDY VOICE: ${enabled ? 'ON' : 'OFF'}` : 'BUDDY VOICE: UNSUPPORTED';
+      control.setAttribute('aria-pressed', String(enabled));
+    };
+    updateLabel();
+    head.appendChild(control);
+
+    control.addEventListener('click', () => {
+      if (!supported) return;
+      enabled = !enabled;
+      localStorage.setItem(stateKey, enabled ? 'on' : 'off');
+      if (!enabled) synth.cancel();
+      updateLabel();
+    });
+
+    const seen = new WeakSet(Array.from(chat.querySelectorAll('.msg')));
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          const messages = node.matches('.msg') ? [node] : Array.from(node.querySelectorAll('.msg'));
+          for (const message of messages) {
+            if (seen.has(message)) continue;
+            seen.add(message);
+            if (!message.classList.contains('user')) speak(message.textContent.trim());
+          }
+        }
+      }
+    });
+    observer.observe(chat, {childList: true, subtree: true});
+  };
+
+  if (supported) {
+    refreshVoice();
+    if ('onvoiceschanged' in synth) synth.onvoiceschanged = refreshVoice;
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, {once: true});
+  else install();
+})();
+</script>
+"""
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
 
@@ -177,6 +277,9 @@ def dashboard(request: Request) -> HTMLResponse:
     html = html.replace(marker, replacement, 1)
     html = html.replace("fetch('/api/status'", "fetch(API_BASE+'/api/status'", 1)
     html = html.replace("fetch('/api/chat'", "fetch(API_BASE+'/api/chat'", 1)
+    if "</body>" not in html:
+        raise HTTPException(status_code=500, detail="command-center-body-marker-missing")
+    html = html.replace("</body>", BUDDY_VOICE_SCRIPT + "\n</body>", 1)
     return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
 
 
@@ -205,6 +308,8 @@ def health() -> dict[str, Any]:
         "revenue_runtime_connected": revenue["runtime_connected"],
         "revenue_constraint": revenue["constraint"],
         "active_experiment_count": revenue["active_experiment_count"],
+        "buddy_voice_surface": True,
+        "buddy_voice_engine": "browser-speech-synthesis",
     }
 
 
@@ -263,6 +368,12 @@ def status() -> dict[str, Any]:
         "revenue": revenue,
         "founder_holds": founder_holds,
         "latest_receipts": public_receipts,
+        "buddy": {
+            "voice_surface": True,
+            "voice_engine": "browser-speech-synthesis",
+            "voice_default": "on",
+            "register": "natural Black American conversational; slang when appropriate; no caricature",
+        },
     }
 
 
@@ -273,11 +384,23 @@ def chat(body: ChatRequest) -> dict[str, Any]:
         answer = str(routed["answer"])
         source = str(routed["source"])
         record_exchange(body.message, answer, source)
-        return {"answer": answer, "source": source, "time": utc_now()}
+        return {
+            "answer": answer,
+            "source": source,
+            "time": utc_now(),
+            "speaker": "Buddy",
+            "voice": "enabled",
+        }
     answer = (
         "Command Center is online, but neither the Nemotron primary worker nor the "
         "Conductor fallback responded. The command was not marked complete. Check "
         "NEMOTRON_BASE_URL and CONDUCTOR_URL, then retry."
     )
     record_exchange(body.message, answer, "command-center-fallback")
-    return {"answer": answer, "source": "command-center-fallback", "time": utc_now()}
+    return {
+        "answer": answer,
+        "source": "command-center-fallback",
+        "time": utc_now(),
+        "speaker": "Buddy",
+        "voice": "enabled",
+    }

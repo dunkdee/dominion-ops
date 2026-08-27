@@ -14,6 +14,12 @@
 
 Human Overseer → Five Council → Governor → Coordinator → Conductor → Specialists / Workers → Guardian / Sentinel / Learning
 
+## Connector Fabric
+
+- [[Dominion-Command-Center/17-MCP-CLI-Connector|MCP CLI Server]] is the governed tool-and-service connector layer used by agents and operators.
+- The connector fabric is **not an agent** and does not grant authority. It exposes reviewed capabilities to the existing chain of command.
+- Launch connectors are read-only, registry-bound, fail-closed, and receipted. Consequential external effects remain Founder-held.
+
 ## Operator Notes
 
 `Dominion-Operator-Notes` is the preserved working layer for sanitized current-state notes, incidents, lessons, and change logs. Generated agent files inside `Dominion-Brain` remain governed mirrors.

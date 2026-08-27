@@ -13,6 +13,8 @@ BRIDGE_V3_PATH = ROOT / "scripts/command_center_state_bridge_v3.py"
 DOCKERFILE = ROOT / "apps/command-center/Dockerfile"
 COMPOSE = ROOT / "docker-compose.command-center.yml"
 APP = ROOT / "apps/command-center/app.py"
+INTELLIGENCE = ROOT / "apps/command-center/intelligence.py"
+ENV_EXAMPLE = ROOT / "config/command-center.env.example"
 INDEX = ROOT / "apps/command-center/index.html"
 REVENUE = ROOT / "apps/command-center/revenue.py"
 DEPLOY = ROOT / "scripts/deploy_command_center.sh"
@@ -62,6 +64,23 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
     def test_compose_mounts_canonical_runtime_snapshot(self):
         text = COMPOSE.read_text(encoding="utf-8")
         self.assertIn("COMMAND_CENTER_RUNTIME_DIR", text); self.assertIn("/runtime:ro", text); self.assertIn("RUNTIME_STATE_PATH: /runtime/runtime-state.json", text); self.assertNotIn("CHECKOUT_ART_OF_TRUE_HEALING", text)
+
+    def test_intelligence_fallback_is_private_host_loopback_and_reasoning_only(self):
+        compose = COMPOSE.read_text(encoding="utf-8")
+        intelligence = INTELLIGENCE.read_text(encoding="utf-8")
+        env_example = ENV_EXAMPLE.read_text(encoding="utf-8")
+        self.assertIn("network_mode: host", compose)
+        self.assertIn('["uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8091"]', compose)
+        self.assertNotIn("ports:\n", compose)
+        self.assertIn("CONDUCTOR_URL: http://127.0.0.1:5060", compose)
+        self.assertNotIn("host.docker.internal", compose)
+        self.assertIn('conductor_url=os.getenv("CONDUCTOR_URL", "http://127.0.0.1:5060")', intelligence)
+        self.assertIn('for endpoint in ("/chat", "/api/chat")', intelligence)
+        self.assertNotIn('"/invoke"', intelligence)
+        self.assertNotIn('"/execute-next"', intelligence)
+        self.assertIn("NEMOTRON_BASE_URL=\n", env_example)
+        self.assertIn("Recovery hold", env_example)
+        self.assertIn("CONDUCTOR_URL=http://127.0.0.1:5060", env_example)
 
     def test_api_has_no_hardcoded_sprint_revenue_or_traffic(self):
         text = APP.read_text(encoding="utf-8")

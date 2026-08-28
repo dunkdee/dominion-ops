@@ -23,7 +23,6 @@ if str(_REPO_ROOT) not in sys.path:
 
 from apps.revenue_engine import (  # noqa: E402
     AffiliateProgram,
-    AffiliateRegistry,
     CampaignAsset,
     DraftInput,
     EvidenceState,
@@ -178,13 +177,19 @@ def _asset(raw: Any, index: int) -> CampaignAsset:
 def _draft_input(raw: Any, index: int) -> DraftInput:
     name = f"draft_inputs[{index}]"
     value = _mapping(raw, name)
+    if "evidence_refs" in value:
+        raise ValueError(
+            f"{name}.evidence_refs is no longer supported for DraftInput; "
+            "use measurement_dimensions and governed asset/program evidence paths"
+        )
     _keys(
         value,
         name,
-        required=("asset_id", "channel", "proposed_text", "cta", "evidence_refs"),
+        required=("asset_id", "channel", "proposed_text", "cta", "measurement_dimensions"),
         optional=(
             "has_affiliate_links",
             "affiliate_program_id",
+            "affiliate_terms_ref",
             "original_value_signals",
         ),
     )
@@ -193,9 +198,12 @@ def _draft_input(raw: Any, index: int) -> DraftInput:
         channel=value["channel"],
         proposed_text=value["proposed_text"],
         cta=value["cta"],
-        evidence_refs=_strings(value["evidence_refs"], f"{name}.evidence_refs"),
+        measurement_dimensions=_strings(
+            value["measurement_dimensions"], f"{name}.measurement_dimensions"
+        ),
         has_affiliate_links=value.get("has_affiliate_links", False),
         affiliate_program_id=value.get("affiliate_program_id"),
+        affiliate_terms_ref=value.get("affiliate_terms_ref"),
         original_value_signals=_strings(
             value.get("original_value_signals", ()),
             f"{name}.original_value_signals",
@@ -254,8 +262,11 @@ def _keyword_evidence(raw: Any, index: int) -> KeywordEvidence:
             "ttl_seconds",
         ),
     )
+    head_term = value["head_term"]
+    cluster_id = value.get("cluster_id") or head_term.replace(" ", "-")
     return KeywordEvidence(
-        head_term=value["head_term"],
+        cluster_id=cluster_id,
+        head_term=head_term,
         variants=_strings(value["variants"], f"{name}.variants"),
         buyer_intent_score=value["buyer_intent_score"],
         evidence_state=_enum(
@@ -364,11 +375,7 @@ def run_fast_cash_payload(payload: Any) -> dict[str, Any]:
         value,
         "FAST CASH payload",
         required=("opportunity", "assets", "draft_inputs"),
-        optional=(
-            "affiliate_programs",
-            "extra_evidence_refs",
-            "measurement_definitions",
-        ),
+        optional=("affiliate_programs",),
     )
     opportunity = _opportunity(value["opportunity"])
     assets = tuple(
@@ -387,22 +394,11 @@ def run_fast_cash_payload(payload: Any) -> dict[str, Any]:
             _sequence(value.get("affiliate_programs", ()), "affiliate_programs")
         )
     )
-    registry = None
-    if programs:
-        registry = AffiliateRegistry()
-        for program in programs:
-            registry.register(program)
     result = run_fast_cash_lane(
         opportunity,
         assets,
         draft_inputs,
-        affiliate_registry=registry,
-        extra_evidence_refs=_strings(
-            value.get("extra_evidence_refs", ()), "extra_evidence_refs"
-        ),
-        measurement_definitions=_strings(
-            value.get("measurement_definitions", ()), "measurement_definitions"
-        ),
+        programs,
     )
     return _envelope("FAST_CASH", result)
 
@@ -420,7 +416,6 @@ def run_compounding_payload(payload: Any) -> dict[str, Any]:
             "keyword_evidence",
             "consent_mechanism",
             "value_exchange",
-            "email_evidence_refs",
             "as_of",
         ),
         optional=("prior_metrics",),
@@ -445,13 +440,10 @@ def run_compounding_payload(payload: Any) -> dict[str, Any]:
     )
     result = run_compounding_lane(
         opportunity,
-        programs,
         keyword_evidence,
+        programs,
         consent_mechanism=value["consent_mechanism"],
         value_exchange=value["value_exchange"],
-        email_evidence_refs=_strings(
-            value["email_evidence_refs"], "email_evidence_refs"
-        ),
         prior_metrics=prior_metrics,
         as_of=_as_of(value["as_of"]),
     )

@@ -69,7 +69,7 @@ def fast_cash_payload() -> dict:
                     "evidence before deciding whether this guide fits your needs."
                 ),
                 "cta": "Review the sourced comparison",
-                "evidence_refs": ["evidence://draft/1"],
+                "measurement_dimensions": ["clicks", "conversions"],
             }
         ],
     }
@@ -92,7 +92,6 @@ def compounding_payload() -> dict:
         ],
         "consent_mechanism": "Unchecked explicit opt-in checkbox",
         "value_exchange": "A sourced comparison worksheet",
-        "email_evidence_refs": ["evidence://email/consent/1"],
         "as_of": "2026-08-25T12:10:00Z",
     }
 
@@ -129,17 +128,43 @@ class RevenueRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported fields"):
             run_fast_cash_payload(payload)
 
+    def test_legacy_draft_evidence_refs_are_rejected(self) -> None:
+        payload = fast_cash_payload()
+        payload["draft_inputs"][0]["evidence_refs"] = ["evidence://draft/legacy"]
+        with self.assertRaisesRegex(ValueError, "evidence_refs is no longer supported"):
+            run_fast_cash_payload(payload)
+
+    def test_draft_missing_measurement_dimensions_is_rejected(self) -> None:
+        payload = fast_cash_payload()
+        del payload["draft_inputs"][0]["measurement_dimensions"]
+        with self.assertRaisesRegex(ValueError, "missing required fields"):
+            run_fast_cash_payload(payload)
+
+    def test_affiliate_draft_missing_terms_ref_is_rejected(self) -> None:
+        payload = fast_cash_payload()
+        draft = payload["draft_inputs"][0]
+        draft["has_affiliate_links"] = True
+        draft["affiliate_program_id"] = "program-1"
+        draft["proposed_text"] = (
+            "Affiliate disclosure: we may earn a commission. Compare the "
+            "documented evidence and limitations before deciding."
+        )
+        # affiliate_terms_ref absent → DraftInput.__post_init__ rejects
+        with self.assertRaisesRegex(ValueError, "affiliate_terms_ref is required"):
+            run_fast_cash_payload(payload)
+
     def test_affiliate_draft_requires_registry_evidence(self) -> None:
         payload = fast_cash_payload()
         draft = payload["draft_inputs"][0]
         draft["has_affiliate_links"] = True
         draft["affiliate_program_id"] = "program-1"
+        draft["affiliate_terms_ref"] = "evidence://program/terms/1"
         draft["original_value_signals"] = ["structured comparison criteria"]
         draft["proposed_text"] = (
             "Affiliate disclosure: we may earn a commission. Compare the "
             "documented evidence and limitations before deciding."
         )
-        with self.assertRaisesRegex(ValueError, "affiliate_registry"):
+        with self.assertRaisesRegex(ValueError, "not found in programs"):
             run_fast_cash_payload(payload)
 
     def test_compounding_payload_is_draft_shadow(self) -> None:

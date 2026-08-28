@@ -1,0 +1,151 @@
+name: Alpaca Paper Read-Only Bridge CI
+
+on:
+  pull_request:
+    paths:
+      - 'apps/command-center/alpaca_bridge.py'
+      - 'apps/command-center/trading_api.py'
+      - 'apps/command-center/trading_evidence.py'
+      - 'apps/command-center/app.py'
+      - 'apps/command-center/Dockerfile'
+      - 'control_plane/**'
+      - 'docker-compose.command-center.yml'
+      - 'governance/alpaca_paper_readonly_bridge_policy.json'
+      - 'governance/runtime_activation_gates.json'
+      - 'scripts/verify_alpaca_paper_bridge.sh'
+      - 'tests/test_alpaca_paper_readonly_bridge.py'
+      - 'tests/test_alpaca_bridge_live_parity.py'
+      - '.github/workflows/alpaca-paper-readonly-bridge-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/command-center/alpaca_bridge.py'
+      - 'apps/command-center/trading_api.py'
+      - 'apps/command-center/trading_evidence.py'
+      - 'apps/command-center/app.py'
+      - 'control_plane/**'
+      - 'governance/alpaca_paper_readonly_bridge_policy.json'
+      - 'tests/test_alpaca_paper_readonly_bridge.py'
+      - 'tests/test_alpaca_bridge_live_parity.py'
+      - '.github/workflows/alpaca-paper-readonly-bridge-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Static gates
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            apps/command-center/alpaca_bridge.py \
+            apps/command-center/trading_api.py \
+            apps/command-center/trading_evidence.py \
+            apps/command-center/app.py
+          bash -n scripts/verify_alpaca_paper_bridge.sh
+
+      - name: Read-only source guarantee
+        run: |
+          set -euo pipefail
+          # No write verb may appear in the bridge modules at all.
+          if grep -nE "\"(POST|PUT|PATCH|DELETE)\"|'(POST|PUT|PATCH|DELETE)'|router\.(post|put|patch|delete)" \
+              apps/command-center/alpaca_bridge.py \
+              apps/command-center/trading_api.py \
+              apps/command-center/trading_evidence.py; then
+            echo "FAIL: a write verb exists in the read-only trading bridge"
+            exit 1
+          fi
+          echo "READ_ONLY_SOURCE_GUARANTEE=PASS"
+
+      - name: Live-trading gate must stay closed
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          gates = json.load(open("governance/runtime_activation_gates.json"))
+          assert "live_trading" in gates["blocked_capabilities"], "live_trading gate opened"
+          assert "live_financial_execution" in gates["blocked_capabilities"]
+          assert gates["external_execution_enabled"] is False
+          policy = json.load(open("governance/alpaca_paper_readonly_bridge_policy.json"))
+          assert policy["mode"] == "paper"
+          for blocked in ("live_trading", "order_submission", "order_cancellation",
+                          "position_liquidation", "fund_transfer"):
+              assert blocked in policy["blocked_capabilities"], blocked
+          print("LIVE_TRADING_GATE=CLOSED")
+          PY
+
+      - name: Bridge and parity suites
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet fastapi==0.116.1 pydantic==2.11.7 httpx
+          python -m unittest tests.test_alpaca_paper_readonly_bridge -v
+          python -m unittest tests.test_alpaca_bridge_live_parity -v
+
+      - name: Command Center image still builds with the bridge packaged
+        run: docker build -t dominion-command-center-alpaca-ci apps/command-center
+
+      - name: Boot the image and prove the governed contract
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/alpaca-bridge-ci"
+          mkdir -p "$root/runtime/ledger" "$root/vault" "$root/memory"
+          echo '{"schema":"dominion-command-center-runtime-state-v2","observed_at":"2026-08-28T00:00:00+00:00","release_sha":"alpaca-ci"}' \
+            > "$root/runtime/runtime-state.json"
+          KEY="dominion-ci-phone-key-0123456789abc"
+          docker run -d --rm --name alpaca-bridge-ci-run -p 127.0.0.1:18099:8000 \
+            -e COMMAND_CENTER_API_KEY="$KEY" \
+            -e TRADING_LEDGER_PATH=/runtime/ledger/observations.jsonl \
+            -e RUNTIME_STATE_PATH=/runtime/runtime-state.json \
+            -v "$root/runtime:/runtime" \
+            -v "$root/vault:/vault:ro" \
+            -v "$root/memory:/data/memory" \
+            -v "$PWD/control_plane:/app/control_plane:ro" \
+            dominion-command-center-alpaca-ci
+          trap 'docker rm -f alpaca-bridge-ci-run >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:18099/health >/dev/null 2>&1 && break; sleep 1; done
+
+          # Pre-existing surfaces must still answer.
+          for path in /health /api/status /api/revenue; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:18099$path")"
+            [ "$code" = "200" ] || { echo "FAIL: $path returned $code"; exit 1; }
+          done
+
+          # Authentication must be enforced, and write verbs must not route.
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18099/api/trading/paper/summary)" = "401" ]
+          for method in POST PUT PATCH DELETE; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' -X "$method" -H "X-Dominion-Key: $KEY" \
+              http://127.0.0.1:18099/api/trading/paper/summary)"
+            [ "$code" = "405" ] || { echo "FAIL: $method routed ($code)"; exit 1; }
+          done
+
+          HEALTH="$(curl -fsS http://127.0.0.1:18099/health)"
+          BRIDGE="$(curl -fsS -H "X-Dominion-Key: $KEY" http://127.0.0.1:18099/api/trading/paper/health)"
+          SUMMARY="$(curl -fsS -H "X-Dominion-Key: $KEY" http://127.0.0.1:18099/api/trading/paper/summary)"
+          python - "$HEALTH" "$BRIDGE" "$SUMMARY" <<'PY'
+          import json, sys
+          health, bridge, summary = (json.loads(a) for a in sys.argv[1:4])
+          assert health["status"] == "ok"
+          # The bridge must be mounted, not silently absent.
+          assert health["trading_bridge"]["mounted"] is True, health["trading_bridge"]
+          assert health["trading_bridge"]["live_trading_enabled"] is False
+          assert bridge["config"]["mode"] == "paper"
+          assert bridge["config"]["read_only"] is True
+          assert bridge["config"]["live_trading_enabled"] is False
+          assert "paper-api.alpaca.markets" in bridge["config"]["base_url"]
+          # With no credentials the surface must say so rather than fabricate.
+          assert summary["connected"] is False
+          assert summary["account"] is None
+          assert summary["live_trading_enabled"] is False
+          assert summary["evidence"]["sequence"] >= 1
+          print("ALPACA_PAPER_BRIDGE_CONTAINER_CI=PASS mode=paper read_only=true live_trading=false")
+          PY
+
+          # Verify with the canonical control-plane implementation mounted in
+          # the container. This keeps ledger lock ownership in one UID domain.
+          docker exec alpaca-bridge-ci-run \
+            python -m control_plane.cli verify-ledger --ledger /runtime/ledger/observations.jsonl

@@ -12,6 +12,10 @@ services:
       - ${COMMAND_CENTER_MEMORY_PATH:-/home/malachisingleton8/dominion-memory}:/data/memory
       - ${COMMAND_CENTER_RUNTIME_DIR:-/home/malachisingleton8/.dominion/command-center}:/runtime:ro
       - ./governance/lane_access_policy.json:/governance/lane_access_policy.json:ro
+      # Read-only reuse of the canonical hash-chained evidence ledger so
+      # trading observations verify with the same control-plane tooling.
+      - ./control_plane:/app/control_plane:ro
+      - ${COMMAND_CENTER_LEDGER_DIR:-/home/malachisingleton8/.dominion/ledger}:/runtime/ledger
     secrets:
       - buddy_web_token
     restart: unless-stopped
@@ -26,6 +30,16 @@ services:
       BUDDY_FALLBACK_URL: http://127.0.0.1:5070
       BUDDY_FALLBACK_TOKEN_FILE: /run/secrets/buddy_web_token
       INTELLIGENCE_TIMEOUT_SECONDS: ${INTELLIGENCE_TIMEOUT_SECONDS:-60}
+      # Phone-facing auth for the read-only trading surface. The surface
+      # fails closed with HTTP 503 when this is unset.
+      COMMAND_CENTER_API_KEY: ${COMMAND_CENTER_API_KEY:-}
+      # Alpaca PAPER credentials stay server-side and are never returned.
+      ALPACA_PAPER_KEY_ID: ${ALPACA_PAPER_KEY_ID:-}
+      ALPACA_PAPER_SECRET_KEY: ${ALPACA_PAPER_SECRET_KEY:-}
+      ALPACA_PAPER_BASE_URL: ${ALPACA_PAPER_BASE_URL:-https://paper-api.alpaca.markets}
+      ALPHA_ENGINE_BASE_URL: ${ALPHA_ENGINE_BASE_URL:-http://127.0.0.1:8787}
+      TRADING_LEDGER_PATH: /runtime/ledger/alpaca-paper-observations.jsonl
+      TRADING_SNAPSHOT_TTL_SECONDS: ${TRADING_SNAPSHOT_TTL_SECONDS:-15}
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8091/health\").read()' || exit 1"]
       interval: 30s

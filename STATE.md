@@ -2,7 +2,7 @@
 > Session memory. Read this first. Update before every push.
 
 ## Last Updated
-2026-07-20 — Security redaction and Wix guardrail review
+2026-08-28 — Alpaca PAPER read-only bridge (phone-hub closure)
 
 > Security notice: a provider credential had been recorded in this file. The current copy is redacted. Rotate the provider credential and update only the encrypted GitHub secret; repository history may still contain the old value.
 
@@ -27,6 +27,25 @@ Walk in divine power, wisdom, and sovereignty. Every project aligns with abundan
 > **ONE MANUAL STEP REMAINING:** Go to https://app.gumroad.com/products/Rgc4gza-8hLx7YSIu3vBQA==/edit
 > Download the PDF from the GitHub Release URL above and upload it there (or paste the URL into the Custom Delivery URL field).
 > Then hit Save & Publish. That makes the product live and purchasable.
+
+### Trading — Alpaca PAPER read-only bridge (NEW this session)
+| Item | Status | Notes |
+|---|---|---|
+| Alpaca integration (before this session) | **DID NOT EXIST** | Zero references anywhere in the repo. Verified by search, not assumed. |
+| Read-only paper bridge | **BUILT + TESTED** | `apps/command-center/alpaca_bridge.py`, `trading_api.py`, `trading_evidence.py`. Stdlib only — no new dependency. |
+| Phone endpoints | **LIVE IN CODE** | 9 authenticated `GET` routes under `/api/trading/paper/*`, header `X-Dominion-Key`. |
+| Credentials | **SERVER-SIDE ONLY** | Read from env, sent only in outbound Alpaca headers, scanned out of every response. |
+| Live trading | **BLOCKED — STOPPED HERE** | No order-execution code path exists. `api.alpaca.markets` refused by name (proven at runtime). Gates unchanged. |
+| Evidence | **HASH-CHAINED** | Reuses `control_plane.ledger.AppendOnlyLedger`. Verified by `control-plane verify-ledger`; tamper detection confirmed. |
+| Parity with live engine | **PROVEN** | 10 tests run the shipped `alpha_engine/.../performance.py` side by side. Two divergences deliberate and pinned. |
+| Alpha engine | **UNTOUCHED** | Observed read-only for bot health. Never restarted, modified, or duplicated. |
+| Live Alpaca call from this container | **IMPOSSIBLE** | `paper-api.alpaca.markets` returns 403 CONNECT at the proxy. Data path proven by injected-transport tests. |
+| Runtime proof | **PASS=13 FAIL=0** | `scripts/verify_alpaca_paper_bridge.sh` against a booted instance. |
+
+> **ONE MANUAL STEP REMAINING:** On the Foundation VM, set `COMMAND_CENTER_API_KEY`,
+> `ALPACA_PAPER_KEY_ID`, and `ALPACA_PAPER_SECRET_KEY` in `~/.config/dominion/command-center.env`
+> (chmod 600), then redeploy the Command Center. No code change is required, and no
+> configuration can enable live trading. Runbook and rollback: `docs/ALPACA_PAPER_READONLY_BRIDGE.md`
 
 ### GitHub Secrets status
 | Secret | Status |
@@ -71,11 +90,12 @@ Walk in divine power, wisdom, and sovereignty. Every project aligns with abundan
 ---
 
 ## In Progress
+- [ ] **Activate the Alpaca paper bridge** — set the three env vars server-side on the Foundation VM and redeploy the Command Center, then run `scripts/verify_alpaca_paper_bridge.sh`. Expect `activation_state: ready`. This is the only remaining step; it is deliberately not automated.
 - [ ] **Gumroad product file attach** — PDF is at `https://github.com/dunkdee/dominion-ops/releases/download/blueprint-v1/divine-sovereignty-blueprint.pdf`. Go to https://app.gumroad.com/products/Rgc4gza-8hLx7YSIu3vBQA==/edit, download PDF, upload it there, and publish. This is the ONLY remaining step to make the product purchasable.
 - [ ] **Update GUMROAD_TOKEN secret** — Go to GitHub → dunkdee/dominion-ops → Settings → Secrets → update `GUMROAD_TOKEN` to `[REDACTED]`
 - [ ] **Set VM SSH secrets** — Add `VM_HOST=34.73.72.30`, `VM_USER=malachisingleton8`, `VM_SSH_KEY=<private key>` to GitHub Secrets so baby.yml SSH deploy works
 - [ ] **TikTok worker** — Code complete but OAuth flow not tested.
-- [ ] **Trading paper-mode tests** — OANDA integration exists. Not live-tested.
+- [ ] **Trading paper-mode tests** — OANDA integration exists. Not live-tested. (Alpaca paper is separate and now has 62 passing tests plus a runtime verification script.)
 - [ ] **Next.js frontend** — `apps/frontend/pages/` not populated. Shell only.
 
 ## Blocked

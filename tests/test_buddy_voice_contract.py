@@ -14,7 +14,9 @@ class BuddyVoiceContractTests(unittest.TestCase):
         self.assertIn("Never force slang", INTELLIGENCE)
         self.assertIn("Never fabricate completion", INTELLIGENCE)
         self.assertIn("Do not pretend to remember", INTELLIGENCE)
-        self.assertIn("return call_conductor(message, context)", INTELLIGENCE)
+        self.assertIn("return call_buddy_operator(message, context)", INTELLIGENCE)
+        self.assertIn('"source": "buddy_operator"', INTELLIGENCE)
+        self.assertNotIn("return call_conductor(message, context)", INTELLIGENCE)
 
     def test_buddy_voice_surface_is_present_and_default_on(self):
         self.assertIn("BUDDY_VOICE_SCRIPT", APP)

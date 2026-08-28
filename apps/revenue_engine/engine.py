@@ -29,6 +29,7 @@ from .models import (
     ScoredOpportunity,
     SitePage,
     SitePlan,
+    _normalize_str_tuple,
     normalize_evidence_refs,
 )
 from .policy import evaluate_action
@@ -36,16 +37,7 @@ from .policy import evaluate_action
 
 _SCORE_QUANTUM = Decimal("0.01")
 _RATE_QUANTUM = Decimal("0.0001")
-_CLOCK_SKEW_SECONDS = 300
-
-_STANDARD_MEASUREMENT_DIMENSIONS = (
-    "impressions",
-    "visits",
-    "affiliate_clicks",
-    "conversions",
-    "commission_accrued",
-    "payout_received",
-)
+_CLOCK_SKEW_SECONDS = 300  # allowance for future-dated verified_at
 
 _WEIGHTS = {
     "buyer_intent": Decimal("0.25"),
@@ -76,13 +68,45 @@ _UNSUPPORTED_EXPERIENCE_PATTERNS = (
 )
 
 
+# ---------------------------------------------------------------------------
+# SHA-256 helpers
+# ---------------------------------------------------------------------------
+
+def _sha256_of(payload: object) -> str:
+    """Deterministic SHA-256 of a JSON-serializable payload. allow_nan=False
+    ensures unexpected float values raise TypeError rather than silently
+    serializing as non-standard JSON."""
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _tracking_id_of(
+    asset_id: str,
+    opportunity_id: str,
+    channel: str,
+    proposed_text: str,
+    cta: str,
+    affiliate_program_id: str | None,
+) -> str:
+    """16-hex tracking ID unique per distinct draft (includes text+CTA+affiliate
+    to prevent collision when multiple drafts share asset+opportunity+channel)."""
+    return _sha256_of({
+        "affiliate_program_id": affiliate_program_id,
+        "asset_id": asset_id,
+        "channel": channel,
+        "cta": cta,
+        "opportunity_id": opportunity_id,
+        "proposed_text": proposed_text,
+    })[:16]
+
+
 def _d(value: float) -> Decimal:
     return Decimal(str(value))
 
 
-def _normalized_strings(values: Iterable[str]) -> tuple[str, ...]:
-    return tuple(dict.fromkeys(value.strip() for value in values if value and value.strip()))
-
+# ---------------------------------------------------------------------------
+# Opportunity scoring and ranking
+# ---------------------------------------------------------------------------
 
 def score_opportunity(opportunity: Opportunity) -> ScoredOpportunity:
     components = {
@@ -95,9 +119,7 @@ def score_opportunity(opportunity: Opportunity) -> ScoredOpportunity:
         "original_value_fit": _d(opportunity.original_value_fit),
     }
     raw = sum(components[key] * weight for key, weight in _WEIGHTS.items())
-    score = (raw * Decimal("100")).quantize(
-        _SCORE_QUANTUM, rounding=ROUND_HALF_UP
-    )
+    score = (raw * Decimal("100")).quantize(_SCORE_QUANTUM, rounding=ROUND_HALF_UP)
     score = min(Decimal("100.00"), max(Decimal("0.00"), score))
     strongest = max(components, key=lambda key: (components[key], key))
     weakest = min(components, key=lambda key: (components[key], key))
@@ -105,14 +127,10 @@ def score_opportunity(opportunity: Opportunity) -> ScoredOpportunity:
         f"Strongest factor={strongest}; largest constraint={weakest}; "
         f"evidence={opportunity.evidence_state.value}."
     )
-    return ScoredOpportunity(
-        opportunity=opportunity, score=score, rank_reason=reason
-    )
+    return ScoredOpportunity(opportunity=opportunity, score=score, rank_reason=reason)
 
 
-def rank_opportunities(
-    opportunities: Iterable[Opportunity],
-) -> tuple[ScoredOpportunity, ...]:
+def rank_opportunities(opportunities: Iterable[Opportunity]) -> tuple[ScoredOpportunity, ...]:
     scored = [score_opportunity(item) for item in opportunities]
     evidence_priority = {
         EvidenceState.VERIFIED: 0,
@@ -131,6 +149,10 @@ def rank_opportunities(
     )
 
 
+# ---------------------------------------------------------------------------
+# Affiliate registry
+# ---------------------------------------------------------------------------
+
 class AffiliateRegistry:
     """In-memory evidence registry. It never enrolls programs or calls a network."""
 
@@ -138,14 +160,7 @@ class AffiliateRegistry:
         self._programs: dict[str, AffiliateProgram] = {}
 
     def register(self, program: AffiliateProgram) -> None:
-        existing = self._programs.get(program.program_id)
-        if existing is None:
-            self._programs[program.program_id] = program
-            return
-        if existing != program:
-            raise ValueError(
-                "program_id collision: same ID supplied with different facts"
-            )
+        self._programs[program.program_id] = program
 
     def get(self, program_id: str) -> AffiliateProgram:
         try:
@@ -156,107 +171,78 @@ class AffiliateRegistry:
     def approved_programs(self) -> tuple[AffiliateProgram, ...]:
         return tuple(
             sorted(
-                (
-                    program
-                    for program in self._programs.values()
-                    if program.status is ProgramStatus.APPROVED
-                ),
-                key=lambda program: program.program_id,
+                (p for p in self._programs.values() if p.status is ProgramStatus.APPROVED),
+                key=lambda p: p.program_id,
             )
         )
 
     def tracking_link(self, program_id: str) -> str:
         program = self.get(program_id)
         if program.status is not ProgramStatus.APPROVED:
-            raise PermissionError(
-                "tracking link unavailable: program is not APPROVED"
-            )
+            raise PermissionError("tracking link unavailable: program is not APPROVED")
         if program.evidence_state is not EvidenceState.VERIFIED:
-            raise PermissionError(
-                "tracking link unavailable: approval is not VERIFIED"
-            )
-        if (
-            not program.tracking_url
-            or not program.terms_ref
-            or not program.evidence_refs
-        ):
-            raise PermissionError(
-                "tracking link unavailable: required approval evidence is incomplete"
-            )
+            raise PermissionError("tracking link unavailable: approval is not VERIFIED")
+        if not program.tracking_url or not program.terms_ref or not program.evidence_refs:
+            raise PermissionError("tracking link unavailable: required approval evidence is incomplete")
         return program.tracking_url
 
+
+# ---------------------------------------------------------------------------
+# Site plan builder
+# ---------------------------------------------------------------------------
 
 def build_site_plan(
     opportunity: Opportunity,
     programs: Iterable[AffiliateProgram],
 ) -> SitePlan:
     if opportunity.evidence_state is EvidenceState.UNKNOWN:
-        raise ValueError(
-            "site planning requires at least INFERRED opportunity evidence"
-        )
+        raise ValueError("site planning requires at least INFERRED opportunity evidence")
+
+    programs_tuple = tuple(programs)
+
+    # Reject duplicate program IDs before building
+    program_ids = [p.program_id for p in programs_tuple]
+    if len(program_ids) != len(set(program_ids)):
+        dupes = sorted({pid for pid in program_ids if program_ids.count(pid) > 1})
+        raise ValueError(f"duplicate program_ids in programs: {dupes}")
+
     approved = tuple(
         sorted(
-            program.program_id
-            for program in programs
-            if program.status is ProgramStatus.APPROVED
-            and program.evidence_state is EvidenceState.VERIFIED
-            and program.tracking_url
-            and program.terms_ref
-            and program.evidence_refs
+            p.program_id
+            for p in programs_tuple
+            if p.status is ProgramStatus.APPROVED
+            and p.evidence_state is EvidenceState.VERIFIED
+            and p.tracking_url
+            and p.terms_ref
+            and p.evidence_refs
         )
     )
     if not approved:
-        raise ValueError(
-            "site plan requires at least one VERIFIED approved affiliate program"
-        )
+        raise ValueError("site plan requires at least one VERIFIED approved affiliate program")
 
-    evidence = opportunity.evidence_refs or (
-        "source-required-before-publication",
-    )
+    evidence = opportunity.evidence_refs or ("source-required-before-publication",)
     pages = (
-        SitePage(
-            "/",
-            "home",
-            "Explain the audience problem and route users to useful decision pages.",
-            evidence,
-        ),
-        SitePage(
-            "/best/",
-            "comparison",
-            "Compare qualified options using explicit decision criteria.",
-            evidence,
-        ),
-        SitePage(
-            "/reviews/",
-            "review-index",
-            "Index evidence-backed reviews without invented first-hand claims.",
-            evidence,
-        ),
-        SitePage(
-            "/guides/",
-            "supporting-guide",
-            "Answer pre-purchase questions and build topical depth.",
-            evidence,
-        ),
-        SitePage(
-            "/disclosure/",
-            "disclosure",
-            "Disclose affiliate relationships clearly and conspicuously.",
-            evidence,
-        ),
+        SitePage("/", "home", "Explain the audience problem and route users to useful decision pages.", evidence),
+        SitePage("/best/", "comparison", "Compare qualified options using explicit decision criteria.", evidence),
+        SitePage("/reviews/", "review-index", "Index evidence-backed reviews without invented first-hand claims.", evidence),
+        SitePage("/guides/", "supporting-guide", "Answer pre-purchase questions and build topical depth.", evidence),
+        SitePage("/disclosure/", "disclosure", "Disclose affiliate relationships clearly and conspicuously.", evidence),
     )
     return SitePlan(
         opportunity_id=opportunity.opportunity_id,
         publication_state="DRAFT_SHADOW",
         affiliate_disclosure=(
-            "Affiliate disclosure: this site may earn a commission when a reader "
-            "purchases through qualifying links. Compensation does not change the "
-            "evidence standard."
+            "Affiliate disclosure: this site may earn a commission when a reader purchases "
+            "through qualifying links. Compensation does not change the evidence standard."
         ),
         pages=pages,
         approved_program_ids=approved,
     )
 
+
+# ---------------------------------------------------------------------------
+# Content review
+# ---------------------------------------------------------------------------
 
 def review_content(
     text: str,
@@ -269,61 +255,50 @@ def review_content(
     refs = normalize_evidence_refs(evidence_refs)
     value_signals = normalize_evidence_refs(original_value_signals)
     reasons: list[str] = []
-    fixes: list[str] = []
+    # draft_blocking: violations that prevent even a DRAFT_SHADOW from being created.
+    # publication_only: problems that must be resolved before publication, but do not
+    #                   block the draft itself.
+    draft_blocking: list[str] = []
+    publication_only: list[str] = []
 
     if not text:
         reasons.append("Empty content.")
-        fixes.append("Provide substantive content.")
+        draft_blocking.append("Provide substantive content.")
     if any(pattern.search(text) for pattern in _GUARANTEED_INCOME_PATTERNS):
         reasons.append("Guaranteed-income or no-loss claim detected.")
-        fixes.append(
-            "Remove guaranteed-income/no-loss language and state uncertainty truthfully."
-        )
-    if (
-        any(pattern.search(text) for pattern in _UNSUPPORTED_EXPERIENCE_PATTERNS)
-        and not refs
-    ):
+        draft_blocking.append("Remove guaranteed-income/no-loss language and state uncertainty truthfully.")
+    if any(pattern.search(text) for pattern in _UNSUPPORTED_EXPERIENCE_PATTERNS) and not refs:
         reasons.append("First-hand testing/use claim lacks evidence.")
-        fixes.append(
-            "Attach evidence for the first-hand claim or rewrite it as sourced analysis."
-        )
+        draft_blocking.append("Attach evidence for the first-hand claim or rewrite it as sourced analysis.")
     if has_affiliate_links:
         lower = text.lower()
-        if not (
-            "affiliate" in lower
-            and ("commission" in lower or "may earn" in lower)
-        ):
-            reasons.append(
-                "Affiliate relationship is not clearly disclosed in the content."
-            )
-            fixes.append(
-                "Add a clear affiliate disclosure close to the recommendation/link."
-            )
+        if not ("affiliate" in lower and ("commission" in lower or "may earn" in lower)):
+            reasons.append("Affiliate relationship is not clearly disclosed in the content.")
+            publication_only.append("Add a clear affiliate disclosure close to the recommendation/link.")
         if not value_signals:
             reasons.append("Affiliate content lacks declared original-value signals.")
-            fixes.append(
-                "Add measurable original value such as structured comparison "
-                "criteria, source-backed analysis, original data, or verified "
-                "hands-on evidence."
+            publication_only.append(
+                "Add measurable original value such as structured comparison criteria, "
+                "source-backed analysis, original data, or verified hands-on evidence."
             )
     if not refs:
         reasons.append("No source/evidence references supplied.")
-        fixes.append("Attach source/evidence references before drafting.")
+        publication_only.append("Attach source/evidence references before publication review.")
 
     return ContentReview(
-        allowed_for_draft=bool(text) and not fixes,
+        allowed_for_draft=bool(text) and not draft_blocking,
         allowed_for_publication=False,
-        reasons=(
-            tuple(reasons)
-            if reasons
-            else ("Draft passes deterministic content checks.",)
-        ),
-        required_fixes=tuple(fixes),
+        reasons=tuple(reasons) if reasons else ("Draft passes deterministic content checks.",),
+        required_fixes=tuple(draft_blocking + publication_only),
     )
 
 
+# ---------------------------------------------------------------------------
+# Revenue ledger
+# ---------------------------------------------------------------------------
+
 class RevenueLedger:
-    """Idempotent in-memory ledger of upstream, evidence-bound revenue facts."""
+    """Idempotent in-memory event ledger. Events are facts supplied by upstream evidence sources."""
 
     def __init__(self) -> None:
         self._events: dict[str, RevenueEvent] = {}
@@ -335,46 +310,32 @@ class RevenueLedger:
             return True
         if existing == event:
             return False
-        raise ValueError(
-            "event_id collision: same ID supplied with different facts"
-        )
+        raise ValueError("event_id collision: same id supplied with different facts")
 
     def metrics(self, opportunity_id: str) -> MetricSnapshot:
-        opportunity_id = opportunity_id.strip()
-        if not opportunity_id:
-            raise ValueError("opportunity_id is required")
-        events = [
-            event
-            for event in self._events.values()
-            if event.opportunity_id == opportunity_id
-        ]
-        impressions = sum(event.impressions for event in events)
-        visits = sum(event.visits for event in events)
-        clicks = sum(event.affiliate_clicks for event in events)
-        conversions = sum(event.conversions for event in events)
-        accrued = sum(
-            (event.commission_accrued for event in events), Decimal("0")
-        )
-        payout = sum(
-            (event.payout_received for event in events), Decimal("0")
-        )
+        events = [e for e in self._events.values() if e.opportunity_id == opportunity_id]
+        impressions = sum(e.impressions for e in events)
+        visits = sum(e.visits for e in events)
+        clicks = sum(e.affiliate_clicks for e in events)
+        conversions = sum(e.conversions for e in events)
+        accrued = sum((e.commission_accrued for e in events), Decimal("0"))
+        payout = sum((e.payout_received for e in events), Decimal("0"))
 
-        def rate(
-            numerator: int | Decimal, denominator: int
-        ) -> Decimal | None:
+        def rate(numerator: int | Decimal, denominator: int) -> Decimal | None:
             if denominator == 0:
                 return None
-            return (Decimal(numerator) / Decimal(denominator)).quantize(
-                _RATE_QUANTUM, rounding=ROUND_HALF_UP
-            )
+            return (Decimal(numerator) / Decimal(denominator)).quantize(_RATE_QUANTUM, rounding=ROUND_HALF_UP)
 
-        states = {event.evidence_state for event in events}
+        states = {e.evidence_state for e in events}
         if events and states == {EvidenceState.VERIFIED}:
             evidence_state = EvidenceState.VERIFIED
         elif events and EvidenceState.UNKNOWN not in states:
             evidence_state = EvidenceState.INFERRED
         else:
             evidence_state = EvidenceState.UNKNOWN
+
+        # Collect all evidence refs from events
+        all_refs = normalize_evidence_refs(ref for e in events for ref in e.evidence_refs)
 
         return MetricSnapshot(
             opportunity_id=opportunity_id,
@@ -389,97 +350,85 @@ class RevenueLedger:
             earnings_per_click=rate(accrued, clicks),
             revenue_per_visit=rate(accrued, visits),
             evidence_state=evidence_state,
-            evidence_refs=normalize_evidence_refs(
-                ref for event in events for ref in event.evidence_refs
-            ),
+            evidence_refs=all_refs,
         )
 
-    def first_verified_revenue(
-        self, opportunity_id: str
-    ) -> RevenueEvent | None:
-        """Return the earliest timestamped, verified positive-payout event."""
+    def first_verified_revenue(self, opportunity_id: str) -> RevenueEvent | None:
+        """Return the earliest verified revenue event with a known timestamp.
 
-        opportunity_id = opportunity_id.strip()
-        if not opportunity_id:
-            raise ValueError("opportunity_id is required")
+        Excludes events without event_timestamp (timestamp ordering would be
+        untrustworthy). Sorted by parsed UTC datetime, then event_id as tiebreaker.
+        """
         qualifying = [
-            event
-            for event in self._events.values()
-            if event.opportunity_id == opportunity_id
-            and event.payout_received > Decimal("0")
-            and event.evidence_state is EvidenceState.VERIFIED
-            and bool(event.evidence_refs)
-            and bool(event.event_timestamp)
+            e for e in self._events.values()
+            if e.opportunity_id == opportunity_id
+            and e.payout_received > Decimal("0")
+            and e.evidence_state is EvidenceState.VERIFIED
+            and bool(e.evidence_refs)
+            and bool(e.event_timestamp)
         ]
         if not qualifying:
             return None
+        return min(
+            qualifying,
+            key=lambda e: (datetime.fromisoformat(e.event_timestamp), e.event_id),
+        )
 
-        def sort_key(event: RevenueEvent) -> tuple[datetime, str]:
-            return (
-                datetime.fromisoformat(event.event_timestamp),
-                event.event_id,
-            )
 
-        return min(qualifying, key=sort_key)
-
+# ---------------------------------------------------------------------------
+# Learning proposal
+# ---------------------------------------------------------------------------
 
 def propose_single_change(metrics: MetricSnapshot) -> LearningProposal:
-    """Choose one constraint only; never issue an execution instruction."""
-
+    """Choose one constraint only. This is a proposal, never an execution instruction."""
+    refs = normalize_evidence_refs(metrics.evidence_refs)
     if metrics.visits == 0:
         return LearningProposal(
             constraint="traffic",
             variable_to_change="distribution_channel_or_keyword_target",
-            rationale=(
-                "No visits are recorded; improve one acquisition variable before "
-                "changing the offer."
-            ),
+            rationale="No visits are recorded; improve one acquisition variable before changing the offer.",
             evidence_state=metrics.evidence_state,
+            evidence_refs=refs,
         )
     if metrics.affiliate_clicks == 0:
         return LearningProposal(
             constraint="click_intent",
             variable_to_change="primary_call_to_action",
-            rationale=(
-                "Visits exist but affiliate clicks do not; test one CTA variable."
-            ),
+            rationale="Visits exist but affiliate clicks do not; test one CTA variable.",
             evidence_state=metrics.evidence_state,
+            evidence_refs=refs,
         )
     if metrics.conversions == 0:
         return LearningProposal(
             constraint="merchant_conversion",
             variable_to_change="recommended_offer",
-            rationale=(
-                "Clicks exist but conversions do not; test one offer while holding "
-                "traffic/CTA constant."
-            ),
+            rationale="Clicks exist but conversions do not; test one offer while holding traffic/CTA constant.",
             evidence_state=metrics.evidence_state,
+            evidence_refs=refs,
         )
     if metrics.payout_received == Decimal("0"):
         return LearningProposal(
             constraint="cash_realization",
             variable_to_change="payout_reconciliation",
-            rationale=(
-                "Conversions/commissions exist without received payout; reconcile "
-                "before scaling."
-            ),
+            rationale="Conversions/commissions exist without received payout; reconcile before scaling.",
             evidence_state=metrics.evidence_state,
+            evidence_refs=refs,
         )
     return LearningProposal(
         constraint="scale_after_proof",
         variable_to_change="winning_distribution_input",
-        rationale=(
-            "Verified cash is the next gate; scale only one proven acquisition "
-            "input and re-measure."
-        ),
+        rationale="Verified cash is the next gate; scale only one proven acquisition input and re-measure.",
         evidence_state=metrics.evidence_state,
+        evidence_refs=refs,
     )
 
 
-def decision_receipt(
-    action: str, evidence_refs: Iterable[str] = ()
-) -> DecisionReceipt:
-    refs = tuple(sorted(normalize_evidence_refs(evidence_refs)))
+# ---------------------------------------------------------------------------
+# Decision receipt (policy gateway)
+# ---------------------------------------------------------------------------
+
+def decision_receipt(action: str, evidence_refs: Iterable[str] = ()) -> DecisionReceipt:
+    refs = normalize_evidence_refs(evidence_refs)
     policy = evaluate_action(action, refs)
     canonical = json.dumps(
         {
@@ -490,6 +439,7 @@ def decision_receipt(
         },
         sort_keys=True,
         separators=(",", ":"),
+        allow_nan=False,
     )
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return DecisionReceipt(
@@ -501,407 +451,138 @@ def decision_receipt(
     )
 
 
-def _sha256_of(payload: object) -> str:
-    """Hash strict canonical JSON; unsupported values and NaN fail closed."""
-
-    canonical = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _asset_to_dict(asset: CampaignAsset) -> dict[str, object]:
-    return {
-        "asset_id": asset.asset_id,
-        "asset_type": asset.asset_type,
-        "evidence_refs": sorted(asset.evidence_refs),
-        "evidence_state": asset.evidence_state.value,
-        "restrictions": sorted(asset.restrictions),
-        "title": asset.title,
-        "url_slug": asset.url_slug,
-    }
-
-
-def _draft_to_dict(draft: ContentDraft) -> dict[str, object]:
-    return {
-        "affiliate_evidence_refs": sorted(draft.affiliate_evidence_refs),
-        "affiliate_program_id": draft.affiliate_program_id,
-        "affiliate_terms_ref": draft.affiliate_terms_ref,
-        "asset_id": draft.asset_id,
-        "buyer_intent_cta": draft.buyer_intent_cta,
-        "channel": draft.channel,
-        "draft_id": draft.draft_id,
-        "evidence_refs": sorted(draft.evidence_refs),
-        "has_affiliate_links": draft.has_affiliate_links,
-        "measurement_dimensions": sorted(draft.measurement_dimensions),
-        "opportunity_id": draft.opportunity_id,
-        "original_value_signals": sorted(draft.original_value_signals),
-        "publication_state": draft.publication_state,
-        "short_form_text": draft.short_form_text,
-        "tracking_id": draft.tracking_id,
-    }
-
-
-def _cluster_to_dict(cluster: KeywordCluster) -> dict[str, object]:
-    return {
-        "buyer_intent_score": str(cluster.buyer_intent_score),
-        "cluster_id": cluster.cluster_id,
-        "evidence_refs": sorted(cluster.evidence_refs),
-        "evidence_state": cluster.evidence_state.value,
-        "head_term": cluster.head_term,
-        "ttl_seconds": cluster.ttl_seconds,
-        "variants": sorted(cluster.variants),
-        "verified_at": cluster.verified_at,
-    }
-
-
-def _receipt_to_dict(receipt: DecisionReceipt) -> dict[str, object]:
-    return {
-        "action": receipt.action,
-        "decision": receipt.decision.value,
-        "evidence_refs": sorted(receipt.evidence_refs),
-        "reason": receipt.reason,
-        "receipt_sha256": receipt.receipt_sha256,
-    }
-
-
-def _site_plan_to_dict(plan: SitePlan) -> dict[str, object]:
-    pages = [
-        {
-            "page_type": page.page_type,
-            "purpose": page.purpose,
-            "required_evidence": sorted(page.required_evidence),
-            "slug": page.slug,
-        }
-        for page in plan.pages
-    ]
-    return {
-        "affiliate_disclosure": plan.affiliate_disclosure,
-        "approved_program_ids": sorted(plan.approved_program_ids),
-        "opportunity_id": plan.opportunity_id,
-        "pages": sorted(pages, key=lambda page: str(page["slug"])),
-        "publication_state": plan.publication_state,
-    }
-
-
-def _email_plan_to_dict(plan: EmailCapturePlan) -> dict[str, object]:
-    return {
-        "consent_mechanism": plan.consent_mechanism,
-        "evidence_refs": sorted(plan.evidence_refs),
-        "opportunity_id": plan.opportunity_id,
-        "plan_id": plan.plan_id,
-        "publication_state": plan.publication_state,
-        "value_exchange": plan.value_exchange,
-    }
-
-
-def _learning_to_dict(proposal: LearningProposal) -> dict[str, object]:
-    return {
-        "constraint": proposal.constraint,
-        "evidence_state": proposal.evidence_state.value,
-        "rationale": proposal.rationale,
-        "variable_to_change": proposal.variable_to_change,
-    }
-
-
-def _metrics_to_dict(snapshot: MetricSnapshot) -> dict[str, object]:
-    def decimal_or_none(value: Decimal | None) -> str | None:
-        return str(value) if value is not None else None
-
-    return {
-        "affiliate_clicks": snapshot.affiliate_clicks,
-        "click_through_rate": decimal_or_none(snapshot.click_through_rate),
-        "commission_accrued": str(snapshot.commission_accrued),
-        "conversion_rate": decimal_or_none(snapshot.conversion_rate),
-        "conversions": snapshot.conversions,
-        "earnings_per_click": decimal_or_none(snapshot.earnings_per_click),
-        "evidence_refs": sorted(snapshot.evidence_refs),
-        "evidence_state": snapshot.evidence_state.value,
-        "impressions": snapshot.impressions,
-        "opportunity_id": snapshot.opportunity_id,
-        "payout_received": str(snapshot.payout_received),
-        "revenue_per_visit": decimal_or_none(snapshot.revenue_per_visit),
-        "visits": snapshot.visits,
-    }
-
-
-def _approved_program_snapshot_to_dict(
-    snapshot: ApprovedProgramSnapshot,
-) -> dict[str, object]:
-    return {
-        "evidence_refs": sorted(snapshot.evidence_refs),
-        "evidence_state": snapshot.evidence_state.value,
-        "program_id": snapshot.program_id,
-        "restrictions": sorted(snapshot.restrictions),
-        "status": snapshot.status.value,
-        "terms_ref": snapshot.terms_ref,
-        "tracking_url": snapshot.tracking_url,
-    }
-
-
-def _tracking_id_of(
-    asset_id: str,
-    opportunity_id: str,
-    channel: str,
-    proposed_text: str,
-    cta: str,
-    affiliate_program_id: str | None,
-) -> str:
-    return _sha256_of(
-        {
-            "affiliate_program_id": affiliate_program_id,
-            "asset_id": asset_id,
-            "channel": channel,
-            "cta": cta,
-            "opportunity_id": opportunity_id,
-            "proposed_text": proposed_text,
-        }
-    )[:16]
-
-
-def _draft_id_of(
-    asset: CampaignAsset,
-    opportunity_id: str,
-    channel: str,
-    short_form_text: str,
-    buyer_intent_cta: str,
-    tracking_id: str,
-    measurement_dimensions: tuple[str, ...],
-    evidence_refs: tuple[str, ...],
-    has_affiliate_links: bool,
-    affiliate_program_id: str | None,
-    affiliate_terms_ref: str | None,
-    affiliate_evidence_refs: tuple[str, ...],
-    original_value_signals: tuple[str, ...],
-) -> str:
-    return _sha256_of(
-        {
-            "affiliate_evidence_refs": sorted(affiliate_evidence_refs),
-            "affiliate_program_id": affiliate_program_id,
-            "affiliate_terms_ref": affiliate_terms_ref,
-            "asset": _asset_to_dict(asset),
-            "buyer_intent_cta": buyer_intent_cta,
-            "channel": channel,
-            "evidence_refs": sorted(evidence_refs),
-            "has_affiliate_links": has_affiliate_links,
-            "measurement_dimensions": sorted(measurement_dimensions),
-            "opportunity_id": opportunity_id,
-            "original_value_signals": sorted(original_value_signals),
-            "short_form_text": short_form_text,
-            "tracking_id": tracking_id,
-        }
-    )
-
-
-def _plan_id_of(
-    opportunity_id: str,
-    consent_mechanism: str,
-    value_exchange: str,
-    evidence_refs: tuple[str, ...],
-) -> str:
-    return _sha256_of(
-        {
-            "consent_mechanism": consent_mechanism,
-            "evidence_refs": sorted(evidence_refs),
-            "opportunity_id": opportunity_id,
-            "value_exchange": value_exchange,
-        }
-    )
-
-
-def _package_sha256_of(
-    opportunity_id: str,
-    assets: tuple[CampaignAsset, ...],
-    drafts: tuple[ContentDraft, ...],
-    measurement_definitions: tuple[str, ...],
-    decision_receipts: tuple[DecisionReceipt, ...],
-    restrictions_held_for_review: tuple[tuple[str, str], ...],
-    review_hold: bool,
-    publication_state: str,
-) -> str:
-    return _sha256_of(
-        {
-            "assets": sorted(
-                (_asset_to_dict(asset) for asset in assets),
-                key=lambda asset: str(asset["asset_id"]),
-            ),
-            "decision_receipts": sorted(
-                (_receipt_to_dict(receipt) for receipt in decision_receipts),
-                key=lambda receipt: str(receipt["receipt_sha256"]),
-            ),
-            "drafts": sorted(
-                (_draft_to_dict(draft) for draft in drafts),
-                key=lambda draft: str(draft["draft_id"]),
-            ),
-            "measurement_definitions": sorted(measurement_definitions),
-            "opportunity_id": opportunity_id,
-            "publication_state": publication_state,
-            "restrictions_held_for_review": sorted(
-                [source_id, restriction]
-                for source_id, restriction in restrictions_held_for_review
-            ),
-            "review_hold": review_hold,
-        }
-    )
-
-
-def _result_sha256_of(
-    opportunity_id: str,
-    clusters: tuple[KeywordCluster, ...],
-    site_plan: SitePlan,
-    email_capture_plan: EmailCapturePlan,
-    learning_proposal: LearningProposal | None,
-    decision_receipts: tuple[DecisionReceipt, ...],
-    restrictions_held_for_review: tuple[tuple[str, str], ...],
-    metrics_snapshot: MetricSnapshot | None,
-    review_hold: bool,
-    publication_state: str,
-    approved_program_snapshots: tuple[ApprovedProgramSnapshot, ...],
-) -> str:
-    return _sha256_of(
-        {
-            "approved_program_snapshots": sorted(
-                (
-                    _approved_program_snapshot_to_dict(snapshot)
-                    for snapshot in approved_program_snapshots
-                ),
-                key=lambda snapshot: str(snapshot["program_id"]),
-            ),
-            "decision_receipts": sorted(
-                (_receipt_to_dict(receipt) for receipt in decision_receipts),
-                key=lambda receipt: str(receipt["receipt_sha256"]),
-            ),
-            "email_capture_plan": _email_plan_to_dict(email_capture_plan),
-            "keyword_clusters": sorted(
-                (_cluster_to_dict(cluster) for cluster in clusters),
-                key=lambda cluster: str(cluster["cluster_id"]),
-            ),
-            "learning_proposal": (
-                _learning_to_dict(learning_proposal)
-                if learning_proposal is not None
-                else None
-            ),
-            "metrics_snapshot": (
-                _metrics_to_dict(metrics_snapshot)
-                if metrics_snapshot is not None
-                else None
-            ),
-            "opportunity_id": opportunity_id,
-            "publication_state": publication_state,
-            "restrictions_held_for_review": sorted(
-                [source_id, restriction]
-                for source_id, restriction in restrictions_held_for_review
-            ),
-            "review_hold": review_hold,
-            "site_plan": _site_plan_to_dict(site_plan),
-        }
-    )
-
+# ---------------------------------------------------------------------------
+# Keyword clustering (COMPOUNDING lane input stage)
+# ---------------------------------------------------------------------------
 
 def cluster_keywords(
-    opportunity: Opportunity,
-    keyword_evidence: Iterable[KeywordEvidence],
-    *,
+    evidence_items: Iterable[KeywordEvidence],
     as_of: datetime | None = None,
 ) -> tuple[KeywordCluster, ...]:
-    """Create clusters only from explicitly VERIFIED, fresh keyword evidence."""
+    """Convert KeywordEvidence records into KeywordCluster objects.
 
-    if opportunity.evidence_state is not EvidenceState.VERIFIED:
-        raise ValueError("cluster_keywords requires a VERIFIED opportunity")
-    if as_of is not None and as_of.utcoffset() is None:
+    Validates freshness at as_of (defaults to now UTC). Rejects stale evidence.
+    Preserves verified_at and ttl_seconds from evidence into each cluster.
+    _CLOCK_SKEW_SECONDS allows for evidence dated slightly in the future.
+    """
+    if as_of is None:
+        as_of = datetime.now(timezone.utc)
+    elif as_of.tzinfo is None:
         raise ValueError("as_of must be timezone-aware")
-    reference_time = (
-        as_of.astimezone(timezone.utc)
-        if as_of is not None
-        else datetime.now(timezone.utc)
-    )
 
-    seen_heads: set[str] = set()
     clusters: list[KeywordCluster] = []
-    for evidence in keyword_evidence:
-        if evidence.evidence_state is not EvidenceState.VERIFIED:
+    for ev in evidence_items:
+        if ev.evidence_state is not EvidenceState.VERIFIED:
             raise ValueError(
-                f"keyword evidence for {evidence.head_term!r} must be VERIFIED"
+                f"keyword evidence for {ev.cluster_id!r} must be VERIFIED; "
+                f"got {ev.evidence_state.value}"
             )
-        verified_at = datetime.fromisoformat(evidence.verified_at).astimezone(
-            timezone.utc
-        )
-        if verified_at > reference_time + timedelta(
-            seconds=_CLOCK_SKEW_SECONDS
-        ):
+        verified_dt = datetime.fromisoformat(ev.verified_at)
+        expires_at = verified_dt + timedelta(seconds=ev.ttl_seconds)
+        # Reject future-dated evidence (beyond clock skew allowance)
+        if verified_dt > as_of + timedelta(seconds=_CLOCK_SKEW_SECONDS):
             raise ValueError(
-                f"keyword evidence for {evidence.head_term!r} is future-dated"
+                f"KeywordEvidence for cluster {ev.cluster_id!r} is future-dated: "
+                f"verified_at={ev.verified_at}, as_of={as_of.isoformat()}"
             )
-        expires_at = verified_at + timedelta(seconds=evidence.ttl_seconds)
-        if expires_at <= reference_time:
+        # Reject stale evidence
+        if as_of > expires_at + timedelta(seconds=_CLOCK_SKEW_SECONDS):
             raise ValueError(
-                f"keyword evidence for {evidence.head_term!r} is stale"
+                f"KeywordEvidence for cluster {ev.cluster_id!r} is stale: "
+                f"expired at {expires_at.isoformat()}, as_of={as_of.isoformat()}"
             )
-        normalized_head = evidence.head_term.casefold()
-        if normalized_head in seen_heads:
-            raise ValueError(
-                f"duplicate normalized head_term: {normalized_head!r}"
-            )
-        seen_heads.add(normalized_head)
-        cluster_id = _sha256_of(
-            {
-                "head_term": normalized_head,
-                "opportunity_id": opportunity.opportunity_id,
-            }
-        )[:16]
         clusters.append(
             KeywordCluster(
-                cluster_id=cluster_id,
-                head_term=evidence.head_term,
-                variants=evidence.variants,
-                buyer_intent_score=evidence.buyer_intent_score,
+                cluster_id=ev.cluster_id,
+                head_term=ev.head_term,
+                variants=ev.variants,
+                buyer_intent_score=ev.buyer_intent_score,
                 evidence_state=EvidenceState.VERIFIED,
-                evidence_refs=evidence.evidence_refs,
-                verified_at=verified_at.isoformat(),
-                ttl_seconds=evidence.ttl_seconds,
+                evidence_refs=ev.evidence_refs,
+                verified_at=ev.verified_at,
+                ttl_seconds=ev.ttl_seconds,
             )
         )
-    if not clusters:
-        raise ValueError(
-            "cluster_keywords requires at least one keyword evidence record"
-        )
-    return tuple(sorted(clusters, key=lambda cluster: cluster.cluster_id))
+    return tuple(clusters)
 
+
+# ---------------------------------------------------------------------------
+# Email capture plan builder (COMPOUNDING lane)
+# ---------------------------------------------------------------------------
 
 def plan_email_capture(
     opportunity: Opportunity,
     consent_mechanism: str,
     value_exchange: str,
-    evidence_refs: Iterable[str] = (),
 ) -> EmailCapturePlan:
-    """Build a consent plan only. No enrollment, contact, or network I/O."""
-
-    if opportunity.evidence_state is EvidenceState.UNKNOWN:
-        raise ValueError(
-            "plan_email_capture requires at least INFERRED opportunity evidence"
-        )
+    """Build a consent-based email capture plan. Always DRAFT_SHADOW.
+    plan_id is a deterministic SHA-256 of the canonical plan payload.
+    """
     consent_mechanism = consent_mechanism.strip()
     value_exchange = value_exchange.strip()
-    if not consent_mechanism or not value_exchange:
-        raise ValueError("consent_mechanism and value_exchange are required")
-    refs = normalize_evidence_refs(evidence_refs)
-    if not refs:
-        raise ValueError("plan_email_capture requires evidence_refs")
-    plan_id = _plan_id_of(
-        opportunity.opportunity_id,
-        consent_mechanism,
-        value_exchange,
-        refs,
-    )
+    if not consent_mechanism:
+        raise ValueError("consent_mechanism is required")
+    if not value_exchange:
+        raise ValueError("value_exchange is required")
+    if not opportunity.evidence_refs:
+        raise ValueError("plan_email_capture requires opportunity with evidence_refs")
+
+    payload = {
+        "consent_mechanism": consent_mechanism,
+        "evidence_refs": sorted(opportunity.evidence_refs),
+        "opportunity_id": opportunity.opportunity_id,
+        "value_exchange": value_exchange,
+    }
+    plan_id = _sha256_of(payload)
+
     return EmailCapturePlan(
         plan_id=plan_id,
         opportunity_id=opportunity.opportunity_id,
         consent_mechanism=consent_mechanism,
         value_exchange=value_exchange,
-        evidence_refs=refs,
+        evidence_refs=opportunity.evidence_refs,
+        publication_state="DRAFT_SHADOW",
+    )
+
+
+# ---------------------------------------------------------------------------
+# FAST CASH lane orchestrator
+# ---------------------------------------------------------------------------
+
+def _build_approved_snapshot(program: AffiliateProgram) -> ApprovedProgramSnapshot:
+    """Build an ApprovedProgramSnapshot from a fully qualified AffiliateProgram.
+    Raises ValueError/PermissionError if program does not meet snapshot requirements.
+    """
+    if program.status is not ProgramStatus.APPROVED:
+        raise ValueError(
+            f"affiliate program {program.program_id!r} must be APPROVED; "
+            f"got {program.status.value}"
+        )
+    if program.evidence_state is not EvidenceState.VERIFIED:
+        raise ValueError(
+            f"affiliate program {program.program_id!r} must be VERIFIED; "
+            f"got {program.evidence_state.value}"
+        )
+    if not program.evidence_refs:
+        raise ValueError(
+            f"affiliate program {program.program_id!r} requires evidence_refs"
+        )
+    if not program.terms_ref or not program.terms_ref.strip():
+        raise ValueError(
+            f"affiliate program {program.program_id!r} requires nonempty terms_ref"
+        )
+    if not program.tracking_url or not program.tracking_url.strip():
+        raise ValueError(
+            f"affiliate program {program.program_id!r} requires nonempty tracking_url"
+        )
+    return ApprovedProgramSnapshot(
+        program_id=program.program_id,
+        status=program.status,
+        evidence_state=program.evidence_state,
+        evidence_refs=program.evidence_refs,
+        terms_ref=program.terms_ref,
+        tracking_url=program.tracking_url,
+        restrictions=program.restrictions,
     )
 
 
@@ -909,345 +590,397 @@ def run_fast_cash_lane(
     opportunity: Opportunity,
     assets: Iterable[CampaignAsset],
     draft_inputs: Iterable[DraftInput],
-    *,
-    affiliate_registry: AffiliateRegistry | None = None,
-    extra_evidence_refs: Iterable[str] = (),
-    measurement_definitions: Iterable[str] = (),
+    programs: Iterable[AffiliateProgram],
 ) -> FastCashCampaignPackage:
-    """Return a governed DRAFT_SHADOW package without external side effects."""
+    """FAST CASH lane: score opportunity, review content, build governed draft package.
 
+    Never publishes, never contacts merchants, never spends money.
+    All output is DRAFT_SHADOW.
+    """
     if opportunity.evidence_state is not EvidenceState.VERIFIED:
-        raise ValueError("FAST CASH lane requires a VERIFIED opportunity")
-
+        raise ValueError(
+            f"FAST CASH lane requires a VERIFIED opportunity; "
+            f"got {opportunity.evidence_state.value}"
+        )
     assets_tuple = tuple(assets)
-    if not assets_tuple:
-        raise ValueError("FAST CASH lane requires at least one asset")
-    asset_ids = [asset.asset_id for asset in assets_tuple]
-    if len(asset_ids) != len(set(asset_ids)):
-        raise ValueError("duplicate asset_id in assets")
+    inputs_tuple = tuple(draft_inputs)
+    programs_tuple = tuple(programs)
+
+    # Index programs by ID for affiliate lookup
+    program_map: dict[str, AffiliateProgram] = {p.program_id: p for p in programs_tuple}
+
+    # Index assets by ID
+    asset_map: dict[str, CampaignAsset] = {a.asset_id: a for a in assets_tuple}
+
+    # Collect opportunity evidence for analyze_funnel receipt
+    opp_evidence_refs = opportunity.evidence_refs
+
+    # Collect all restriction strings from assets and programs (deduplicated)
+    restriction_set: set[str] = set()
     for asset in assets_tuple:
-        if (
-            asset.evidence_state is not EvidenceState.VERIFIED
-            or not asset.evidence_refs
-        ):
-            raise ValueError("every FAST CASH asset must be VERIFIED with evidence")
-    asset_map = {asset.asset_id: asset for asset in assets_tuple}
+        for r in asset.restrictions:
+            restriction_set.add(r.strip())
+    for prog in programs_tuple:
+        for r in prog.restrictions:
+            restriction_set.add(r.strip())
+    restriction_set.discard("")
+    restrictions_held = tuple(sorted(restriction_set))
 
-    inputs = tuple(draft_inputs)
-    if not inputs:
-        raise ValueError("FAST CASH lane requires at least one DraftInput")
-    extra_refs = normalize_evidence_refs(extra_evidence_refs)
-    dimensions = _normalized_strings(measurement_definitions)
-    if not dimensions:
-        dimensions = _STANDARD_MEASUREMENT_DIMENSIONS
+    # Build analyze_funnel receipt (opportunity evidence)
+    analyze_refs = normalize_evidence_refs(list(opp_evidence_refs))
+    analyze_receipt = decision_receipt("analyze_funnel", analyze_refs)
 
-    drafts: list[ContentDraft] = []
-    restrictions: set[tuple[str, str]] = set()
-    used_evidence: list[str] = []
-    for asset in assets_tuple:
-        restrictions.update(
-            (asset.asset_id, restriction)
-            for restriction in asset.restrictions
-        )
+    # Build all drafts
+    built_drafts: list[ContentDraft] = []
+    approved_snapshots: dict[str, ApprovedProgramSnapshot] = {}
+    draft_offer_refs_accumulator: list[str] = []
 
-    for draft_input in inputs:
-        try:
-            asset = asset_map[draft_input.asset_id]
-        except KeyError as exc:
-            raise ValueError(
-                f"DraftInput references unknown asset_id {draft_input.asset_id!r}"
-            ) from exc
+    for inp in inputs_tuple:
+        # Resolve asset
+        if inp.asset_id not in asset_map:
+            raise ValueError(f"DraftInput references unknown asset_id {inp.asset_id!r}")
+        asset = asset_map[inp.asset_id]
 
-        affiliate_program_id: str | None = None
-        affiliate_terms_ref: str | None = None
+        # Affiliate program validation
+        affiliate_snapshot: ApprovedProgramSnapshot | None = None
         affiliate_evidence_refs: tuple[str, ...] = ()
-        if draft_input.has_affiliate_links:
-            if affiliate_registry is None:
-                raise ValueError(
-                    "affiliate_registry is required for affiliate DraftInput"
-                )
-            program_id = draft_input.affiliate_program_id
-            if program_id is None:
-                raise ValueError(
-                    "affiliate DraftInput requires affiliate_program_id"
-                )
-            try:
-                program = affiliate_registry.get(program_id)
-            except KeyError as exc:
-                raise ValueError(str(exc)) from exc
-            if program.status is not ProgramStatus.APPROVED:
-                raise ValueError("affiliate program must be APPROVED")
-            if program.evidence_state is not EvidenceState.VERIFIED:
-                raise ValueError("affiliate program must be VERIFIED")
-            if (
-                not program.tracking_url
-                or not program.terms_ref
-                or not program.evidence_refs
-            ):
-                raise ValueError(
-                    "affiliate program approval evidence is incomplete"
-                )
-            affiliate_program_id = program.program_id
-            affiliate_terms_ref = program.terms_ref
-            affiliate_evidence_refs = program.evidence_refs
-            restrictions.update(
-                (program.program_id, restriction)
-                for restriction in program.restrictions
-            )
+        affiliate_terms_ref: str | None = None
 
+        if inp.has_affiliate_links:
+            if inp.affiliate_program_id not in program_map:
+                raise ValueError(
+                    f"DraftInput affiliate_program_id {inp.affiliate_program_id!r} "
+                    f"not found in programs"
+                )
+            prog = program_map[inp.affiliate_program_id]
+            affiliate_snapshot = _build_approved_snapshot(prog)
+            approved_snapshots[prog.program_id] = affiliate_snapshot
+            affiliate_evidence_refs = prog.evidence_refs
+            affiliate_terms_ref = prog.terms_ref
+
+        # Merge evidence refs: asset + affiliate program
         merged_refs = normalize_evidence_refs(
-            (
-                *asset.evidence_refs,
-                *draft_input.evidence_refs,
-                *extra_refs,
-                *affiliate_evidence_refs,
-                *((affiliate_terms_ref,) if affiliate_terms_ref else ()),
-            )
+            list(asset.evidence_refs) + list(affiliate_evidence_refs)
         )
+
+        # Content review gate — use allowed_for_draft
         review = review_content(
-            draft_input.proposed_text,
+            inp.proposed_text,
             evidence_refs=merged_refs,
-            has_affiliate_links=draft_input.has_affiliate_links,
-            original_value_signals=draft_input.original_value_signals,
+            has_affiliate_links=inp.has_affiliate_links,
+            original_value_signals=inp.original_value_signals,
         )
         if not review.allowed_for_draft:
             raise ValueError(
-                f"content for asset {asset.asset_id!r} failed content gate: "
-                + "; ".join(review.reasons)
+                f"Content review blocked draft for asset {inp.asset_id!r}: "
+                f"{'; '.join(review.reasons)}"
             )
 
+        # Deterministic tracking ID (unique per distinct draft)
         tracking_id = _tracking_id_of(
-            asset.asset_id,
-            opportunity.opportunity_id,
-            draft_input.channel,
-            draft_input.proposed_text,
-            draft_input.cta,
-            affiliate_program_id,
+            asset_id=inp.asset_id,
+            opportunity_id=opportunity.opportunity_id,
+            channel=inp.channel,
+            proposed_text=inp.proposed_text,
+            cta=inp.cta,
+            affiliate_program_id=inp.affiliate_program_id,
         )
-        draft_id = _draft_id_of(
-            asset,
-            opportunity.opportunity_id,
-            draft_input.channel,
-            draft_input.proposed_text,
-            draft_input.cta,
-            tracking_id,
-            dimensions,
-            merged_refs,
-            draft_input.has_affiliate_links,
-            affiliate_program_id,
-            affiliate_terms_ref,
-            affiliate_evidence_refs,
-            draft_input.original_value_signals,
-        )
-        drafts.append(
-            ContentDraft(
-                draft_id=draft_id,
-                asset_id=asset.asset_id,
-                channel=draft_input.channel,
-                opportunity_id=opportunity.opportunity_id,
-                short_form_text=draft_input.proposed_text,
-                buyer_intent_cta=draft_input.cta,
-                tracking_id=tracking_id,
-                measurement_dimensions=dimensions,
-                evidence_refs=merged_refs,
-                has_affiliate_links=draft_input.has_affiliate_links,
-                affiliate_program_id=affiliate_program_id,
-                affiliate_terms_ref=affiliate_terms_ref,
-                affiliate_evidence_refs=affiliate_evidence_refs,
-                original_value_signals=draft_input.original_value_signals,
-            )
-        )
-        used_evidence.extend(merged_refs)
 
-    drafts_tuple = tuple(drafts)
-    restrictions_tuple = tuple(sorted(restrictions))
-    all_draft_refs = normalize_evidence_refs(
-        (*opportunity.evidence_refs, *extra_refs, *used_evidence)
+        # Build draft payload for SHA-256
+        draft_payload = {
+            "affiliate_program_id": inp.affiliate_program_id,
+            "affiliate_terms_ref": affiliate_terms_ref,
+            "asset_id": asset.asset_id,
+            "buyer_intent_cta": inp.cta,
+            "channel": inp.channel,
+            "evidence_refs": sorted(merged_refs),
+            "has_affiliate_links": inp.has_affiliate_links,
+            "measurement_dimensions": sorted(inp.measurement_dimensions),
+            "opportunity_id": opportunity.opportunity_id,
+            "original_value_signals": sorted(inp.original_value_signals),
+            "publication_state": "DRAFT_SHADOW",
+            "short_form_text": inp.proposed_text,
+            "tracking_id": tracking_id,
+        }
+        draft_id = _sha256_of(draft_payload)
+
+        draft = ContentDraft(
+            draft_id=draft_id,
+            asset_id=asset.asset_id,
+            opportunity_id=opportunity.opportunity_id,
+            channel=inp.channel,
+            short_form_text=inp.proposed_text,
+            buyer_intent_cta=inp.cta,
+            tracking_id=tracking_id,
+            measurement_dimensions=inp.measurement_dimensions,
+            evidence_refs=merged_refs,
+            publication_state="DRAFT_SHADOW",
+            has_affiliate_links=inp.has_affiliate_links,
+            affiliate_program_id=inp.affiliate_program_id,
+            affiliate_terms_ref=affiliate_terms_ref,
+            affiliate_evidence_refs=affiliate_evidence_refs,
+            original_value_signals=inp.original_value_signals,
+        )
+        built_drafts.append(draft)
+
+        # Accumulate approved-program evidence + terms_refs for draft_offer receipt
+        if inp.has_affiliate_links and affiliate_snapshot:
+            draft_offer_refs_accumulator.extend(affiliate_snapshot.evidence_refs)
+            draft_offer_refs_accumulator.append(affiliate_snapshot.terms_ref)
+
+    # draft_offer receipt: approved-program evidence_refs + terms_refs
+    draft_offer_refs = normalize_evidence_refs(draft_offer_refs_accumulator)
+    draft_offer_receipt = decision_receipt("draft_offer", draft_offer_refs)
+
+    # Package receipts
+    receipts = (analyze_receipt, draft_offer_receipt)
+
+    # Package SHA-256 covering all security-relevant fields
+    snap_list = sorted(
+        [
+            {
+                "evidence_refs": sorted(s.evidence_refs),
+                "evidence_state": s.evidence_state.value,
+                "program_id": s.program_id,
+                "restrictions": sorted(s.restrictions),
+                "status": s.status.value,
+                "terms_ref": s.terms_ref,
+                "tracking_url": s.tracking_url,
+            }
+            for s in approved_snapshots.values()
+        ],
+        key=lambda x: x["program_id"],
     )
-    receipts = (
-        decision_receipt(
-            "analyze_funnel",
-            (*opportunity.evidence_refs, *extra_refs),
+    package_payload = {
+        "approved_program_snapshots": snap_list,
+        "assets": sorted(
+            [
+                {
+                    "asset_id": a.asset_id,
+                    "evidence_refs": sorted(a.evidence_refs),
+                    "evidence_state": a.evidence_state.value,
+                    "title": a.title,
+                }
+                for a in assets_tuple
+            ],
+            key=lambda x: x["asset_id"],
         ),
-        decision_receipt("draft_offer", all_draft_refs),
-        decision_receipt("prepare_experiment", all_draft_refs),
-    )
-    review_hold = bool(restrictions_tuple)
-    package_sha256 = _package_sha256_of(
-        opportunity.opportunity_id,
-        assets_tuple,
-        drafts_tuple,
-        dimensions,
-        receipts,
-        restrictions_tuple,
-        review_hold,
-        "DRAFT_SHADOW",
-    )
+        "decision_receipts": [r.receipt_sha256 for r in receipts],
+        "drafts": sorted(d.draft_id for d in built_drafts),
+        "opportunity_id": opportunity.opportunity_id,
+        "publication_state": "DRAFT_SHADOW",
+        "restrictions_held_for_review": sorted(restrictions_held),
+        "review_hold": bool(restrictions_held),
+    }
+    package_sha256 = _sha256_of(package_payload)
+    package_id = package_sha256[:16]
+
     return FastCashCampaignPackage(
-        package_id=package_sha256[:16],
+        package_id=package_id,
         opportunity_id=opportunity.opportunity_id,
         assets=assets_tuple,
-        drafts=drafts_tuple,
-        measurement_definitions=dimensions,
+        drafts=tuple(built_drafts),
+        measurement_definitions=tuple(
+            dict.fromkeys(dim for inp in inputs_tuple for dim in inp.measurement_dimensions)
+        ),
         publication_state="DRAFT_SHADOW",
         package_sha256=package_sha256,
         decision_receipts=receipts,
-        restrictions_held_for_review=restrictions_tuple,
-        review_hold=review_hold,
+        restrictions_held_for_review=restrictions_held,
+        approved_program_snapshots=tuple(
+            sorted(approved_snapshots.values(), key=lambda s: s.program_id)
+        ),
     )
 
+
+# ---------------------------------------------------------------------------
+# COMPOUNDING lane orchestrator
+# ---------------------------------------------------------------------------
 
 def run_compounding_lane(
     opportunity: Opportunity,
-    programs: Iterable[AffiliateProgram],
     keyword_evidence: Iterable[KeywordEvidence],
-    *,
+    programs: Iterable[AffiliateProgram],
     consent_mechanism: str,
     value_exchange: str,
-    email_evidence_refs: Iterable[str] = (),
-    prior_metrics: MetricSnapshot | RevenueLedger | None = None,
+    prior_metrics: MetricSnapshot | None = None,
     as_of: datetime | None = None,
 ) -> CompoundingLaneResult:
-    """Return the evidence-bound COMPOUNDING lane result in DRAFT_SHADOW."""
+    """COMPOUNDING lane: keyword clustering → site plan → email capture → learning proposal.
 
-    if opportunity.evidence_state is not EvidenceState.VERIFIED:
-        raise ValueError("COMPOUNDING lane requires a VERIFIED opportunity")
+    Never publishes, never contacts affiliates, never spends money.
+    All output is DRAFT_SHADOW.
 
-    programs_tuple = tuple(programs)
-    program_ids = [program.program_id for program in programs_tuple]
-    if len(program_ids) != len(set(program_ids)):
-        raise ValueError("duplicate program_id in programs")
+    prior_metrics: if provided, must match opportunity_id, be non-UNKNOWN,
+                   have nonempty evidence_refs. Generates learning proposal
+                   and measure_metrics receipt. If None: no proposal, no
+                   measure_metrics receipt.
+    """
+    # Cluster keywords
+    clusters = cluster_keywords(keyword_evidence, as_of=as_of)
+    if not clusters:
+        raise ValueError("run_compounding_lane requires at least one KeywordEvidence item")
 
-    clusters = cluster_keywords(
-        opportunity, keyword_evidence, as_of=as_of
-    )
-    site_plan = build_site_plan(opportunity, programs_tuple)
-    email_plan = plan_email_capture(
-        opportunity,
-        consent_mechanism,
-        value_exchange,
-        email_evidence_refs,
-    )
-
+    # Validate prior_metrics scope and state
     resolved_metrics: MetricSnapshot | None = None
-    proposal: LearningProposal | None = None
     if prior_metrics is not None:
-        if isinstance(prior_metrics, RevenueLedger):
-            resolved_metrics = prior_metrics.metrics(
-                opportunity.opportunity_id
-            )
-        else:
-            resolved_metrics = prior_metrics
-        if resolved_metrics.opportunity_id != opportunity.opportunity_id:
+        if prior_metrics.opportunity_id != opportunity.opportunity_id:
             raise ValueError(
-                "prior_metrics opportunity_id does not match lane opportunity"
+                f"prior_metrics.opportunity_id {prior_metrics.opportunity_id!r} "
+                f"does not match opportunity {opportunity.opportunity_id!r}"
             )
-        if (
-            resolved_metrics.evidence_state is EvidenceState.UNKNOWN
-            or not resolved_metrics.evidence_refs
-        ):
+        if prior_metrics.evidence_state is not EvidenceState.VERIFIED:
             raise ValueError(
-                "prior_metrics requires non-UNKNOWN evidence and evidence_refs"
+                "prior_metrics.evidence_state must be VERIFIED; "
+                f"got {prior_metrics.evidence_state.value}"
             )
-        proposal = propose_single_change(resolved_metrics)
+        if not prior_metrics.evidence_refs:
+            raise ValueError("prior_metrics must have nonempty evidence_refs")
+        resolved_metrics = prior_metrics
 
-    approved_ids = set(site_plan.approved_program_ids)
-    approved_snapshots = tuple(
-        sorted(
-            (
-                ApprovedProgramSnapshot(
-                    program_id=program.program_id,
-                    status=program.status,
-                    evidence_state=program.evidence_state,
-                    evidence_refs=program.evidence_refs,
-                    terms_ref=program.terms_ref or "",
-                    tracking_url=program.tracking_url or "",
-                    restrictions=program.restrictions,
-                )
-                for program in programs_tuple
-                if program.program_id in approved_ids
-            ),
-            key=lambda snapshot: snapshot.program_id,
-        )
+    # Build site plan (also rejects duplicate program IDs)
+    programs_tuple = tuple(programs)
+    site_plan = build_site_plan(opportunity, programs_tuple)
+
+    # Build approved program snapshots with exact coverage of site_plan.approved_program_ids
+    program_map = {p.program_id: p for p in programs_tuple}
+    approved_snapshots: list[ApprovedProgramSnapshot] = []
+    for pid in site_plan.approved_program_ids:
+        prog = program_map[pid]
+        approved_snapshots.append(_build_approved_snapshot(prog))
+    approved_snapshots_tuple = tuple(
+        sorted(approved_snapshots, key=lambda s: s.program_id)
     )
 
-    restrictions = {
-        (snapshot.program_id, restriction)
-        for snapshot in approved_snapshots
-        for restriction in snapshot.restrictions
-    }
-    restrictions_tuple = tuple(sorted(restrictions))
-    review_hold = bool(restrictions_tuple)
+    # Collect restrictions from programs
+    restriction_set: set[str] = set()
+    for prog in programs_tuple:
+        for r in prog.restrictions:
+            restriction_set.add(r.strip())
+    restriction_set.discard("")
+    restrictions_held = tuple(sorted(restriction_set))
 
-    keyword_refs = normalize_evidence_refs(
-        ref for cluster in clusters for ref in cluster.evidence_refs
+    # Build email capture plan
+    email_plan = plan_email_capture(opportunity, consent_mechanism, value_exchange)
+
+    # Collect evidence refs
+    keyword_evidence_refs = normalize_evidence_refs(
+        ref for c in clusters for ref in c.evidence_refs
     )
-    program_refs = normalize_evidence_refs(
-        (
-            ref
-            for snapshot in approved_snapshots
-            for ref in (*snapshot.evidence_refs, snapshot.terms_ref)
-        )
+    approved_program_evidence_refs = normalize_evidence_refs(
+        ref for s in approved_snapshots_tuple for ref in s.evidence_refs
     )
-    analyze_refs = normalize_evidence_refs(
-        (*opportunity.evidence_refs, *keyword_refs)
-    )
-    draft_offer_refs = normalize_evidence_refs(
-        (*keyword_refs, *program_refs, *email_plan.evidence_refs)
-    )
-    prepare_refs = normalize_evidence_refs(
-        (
-            *opportunity.evidence_refs,
-            *keyword_refs,
-            *program_refs,
-            *email_plan.evidence_refs,
-            *(
-                resolved_metrics.evidence_refs
-                if resolved_metrics is not None
-                else ()
-            ),
-        )
+    approved_terms_refs = normalize_evidence_refs(
+        s.terms_ref for s in approved_snapshots_tuple if s.terms_ref
     )
 
-    receipt_list = [decision_receipt("analyze_funnel", analyze_refs)]
+    # Learning proposal and measure_metrics receipt — only when metrics present
+    learning_proposal: LearningProposal | None = None
+    measure_metrics_receipt: DecisionReceipt | None = None
+
     if resolved_metrics is not None:
-        receipt_list.append(
-            decision_receipt(
-                "measure_metrics", resolved_metrics.evidence_refs
-            )
-        )
-    receipt_list.extend(
-        (
-            decision_receipt("draft_offer", draft_offer_refs),
-            decision_receipt("prepare_experiment", prepare_refs),
-        )
-    )
-    receipts = tuple(receipt_list)
+        learning_proposal = propose_single_change(resolved_metrics)
+        measure_refs = normalize_evidence_refs(list(resolved_metrics.evidence_refs))
+        measure_metrics_receipt = decision_receipt("measure_metrics", measure_refs)
 
-    result_sha256 = _result_sha256_of(
-        opportunity.opportunity_id,
-        clusters,
-        site_plan,
-        email_plan,
-        proposal,
-        receipts,
-        restrictions_tuple,
-        resolved_metrics,
-        review_hold,
-        "DRAFT_SHADOW",
-        approved_snapshots,
+    # analyze_funnel receipt: opportunity + keyword evidence
+    analyze_refs = normalize_evidence_refs(
+        list(opportunity.evidence_refs) + list(keyword_evidence_refs)
     )
+    analyze_receipt = decision_receipt("analyze_funnel", analyze_refs)
+
+    # draft_offer receipt: approved-program evidence + terms_refs + email + keyword
+    draft_offer_refs = normalize_evidence_refs(
+        list(approved_program_evidence_refs)
+        + list(approved_terms_refs)
+        + list(email_plan.evidence_refs)
+        + list(keyword_evidence_refs)
+    )
+    draft_offer_receipt = decision_receipt("draft_offer", draft_offer_refs)
+
+    # prepare_experiment receipt: all combined
+    prepare_refs = normalize_evidence_refs(
+        list(opportunity.evidence_refs)
+        + list(keyword_evidence_refs)
+        + list(approved_program_evidence_refs)
+        + list(approved_terms_refs)
+        + list(email_plan.evidence_refs)
+        + (list(resolved_metrics.evidence_refs) if resolved_metrics else [])
+    )
+    prepare_receipt = decision_receipt("prepare_experiment", prepare_refs)
+
+    # Assemble receipts tuple
+    receipts_list: list[DecisionReceipt] = [analyze_receipt, draft_offer_receipt, prepare_receipt]
+    if measure_metrics_receipt is not None:
+        receipts_list.append(measure_metrics_receipt)
+    receipts = tuple(receipts_list)
+
+    # Result SHA-256 covering all security-relevant fields
+    snap_list = sorted(
+        [
+            {
+                "evidence_refs": sorted(s.evidence_refs),
+                "evidence_state": s.evidence_state.value,
+                "program_id": s.program_id,
+                "restrictions": sorted(s.restrictions),
+                "status": s.status.value,
+                "terms_ref": s.terms_ref,
+                "tracking_url": s.tracking_url,
+            }
+            for s in approved_snapshots_tuple
+        ],
+        key=lambda x: x["program_id"],
+    )
+    result_payload = {
+        "approved_program_snapshots": snap_list,
+        "decision_receipts": [r.receipt_sha256 for r in receipts],
+        "email_capture_plan_id": email_plan.plan_id,
+        "keyword_clusters": sorted(
+            [
+                {
+                    "cluster_id": c.cluster_id,
+                    "evidence_refs": sorted(c.evidence_refs),
+                    "evidence_state": c.evidence_state.value,
+                    "head_term": c.head_term,
+                    "ttl_seconds": c.ttl_seconds,
+                    "variants": sorted(c.variants),
+                    "verified_at": c.verified_at,
+                }
+                for c in clusters
+            ],
+            key=lambda x: x["cluster_id"],
+        ),
+        "learning_proposal_constraint": learning_proposal.constraint if learning_proposal else None,
+        "opportunity_id": opportunity.opportunity_id,
+        "prior_metrics_digest": {
+            "affiliate_clicks": resolved_metrics.affiliate_clicks,
+            "commission_accrued": str(resolved_metrics.commission_accrued),
+            "conversions": resolved_metrics.conversions,
+            "earnings_per_click": str(resolved_metrics.earnings_per_click),
+            "evidence_refs": sorted(resolved_metrics.evidence_refs),
+            "evidence_state": resolved_metrics.evidence_state.value,
+            "impressions": resolved_metrics.impressions,
+            "opportunity_id": resolved_metrics.opportunity_id,
+            "payout_received": str(resolved_metrics.payout_received),
+            "revenue_per_visit": str(resolved_metrics.revenue_per_visit),
+            "visits": resolved_metrics.visits,
+        } if resolved_metrics is not None else None,
+        "publication_state": "DRAFT_SHADOW",
+        "restrictions_held_for_review": sorted(restrictions_held),
+        "review_hold": bool(restrictions_held),
+        "site_plan_opportunity_id": site_plan.opportunity_id,
+    }
+    result_sha256 = _sha256_of(result_payload)
+
     return CompoundingLaneResult(
         opportunity_id=opportunity.opportunity_id,
         keyword_clusters=clusters,
         site_plan=site_plan,
         email_capture_plan=email_plan,
-        learning_proposal=proposal,
+        learning_proposal=learning_proposal,
         publication_state="DRAFT_SHADOW",
         result_sha256=result_sha256,
         decision_receipts=receipts,
-        restrictions_held_for_review=restrictions_tuple,
-        approved_program_snapshots=approved_snapshots,
-        metrics_snapshot=resolved_metrics,
-        review_hold=review_hold,
+        approved_program_snapshots=approved_snapshots_tuple,
+        restrictions_held_for_review=restrictions_held,
     )

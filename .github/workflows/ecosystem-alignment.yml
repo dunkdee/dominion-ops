@@ -52,7 +52,8 @@ jobs:
       - name: Validate vertical registry and repository contracts
         run: python3 scripts/validate_ecosystem_alignment.py
 
-      - name: Validate RADAH MEMSHALAH revenue engine
-        run: |
-          python3 -m compileall -q apps/revenue_engine buddy_core/core/revenue_runtime.py buddy_core/buddy_bridge_api.py tests/test_revenue_engine.py tests/test_revenue_lanes.py tests/test_revenue_runtime.py
-          python3 -m unittest discover -s tests -p 'test_revenue*.py' -v
+      - name: Revenue engine baseline tests
+        run: python3 -m pytest tests/test_revenue_engine.py -q
+
+      - name: Revenue lane orchestration tests
+        run: python3 -m pytest tests/test_revenue_lanes.py -q

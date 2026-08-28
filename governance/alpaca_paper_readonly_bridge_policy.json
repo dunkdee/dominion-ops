@@ -1,0 +1,77 @@
+{
+  "schema": "dominion-alpaca-paper-readonly-bridge-policy-v1",
+  "version": "1.0.0",
+  "lane": "trading",
+  "capability": "alpaca_paper_readonly_observation",
+  "mode": "paper",
+  "status": "built_pending_founder_activation",
+  "summary": "Server-side, read-only bridge that reads Alpaca PAPER account state and derives governed performance evidence for an authenticated phone surface.",
+  "permitted_capabilities": [
+    "read_paper_account_equity_and_buying_power",
+    "read_paper_positions",
+    "read_paper_open_and_closed_orders",
+    "read_paper_fill_activities",
+    "read_paper_portfolio_history",
+    "derive_realized_and_unrealized_pnl",
+    "derive_win_loss_metrics",
+    "derive_drawdown",
+    "derive_per_symbol_strategy_performance",
+    "observe_existing_alpha_engine_bot_health",
+    "append_readonly_observation_evidence"
+  ],
+  "blocked_capabilities": [
+    "live_trading",
+    "order_submission",
+    "order_cancellation",
+    "position_liquidation",
+    "position_modification",
+    "fund_transfer",
+    "account_configuration_mutation",
+    "live_account_credential_use",
+    "client_side_credential_exposure",
+    "unauthenticated_account_data_access"
+  ],
+  "enforcement": [
+    "http_get_only_no_write_verb_code_path_exists",
+    "endpoint_allow_list_enforced_in_client",
+    "paper_host_allow_list_enforced",
+    "live_alpaca_host_explicitly_refused",
+    "https_scheme_required",
+    "credentials_read_from_server_environment_only",
+    "credentials_never_serialized_into_responses",
+    "outbound_payload_credential_scan_before_emit",
+    "phone_surface_requires_x_dominion_key",
+    "phone_surface_fails_closed_when_api_key_unset",
+    "phone_surface_requires_minimum_24_character_key"
+  ],
+  "evidence": {
+    "ledger": "append_only_hash_chained",
+    "implementation": "control_plane.ledger.AppendOnlyLedger",
+    "default_path": "/runtime/ledger/alpaca-paper-observations.jsonl",
+    "event_type": "alpaca_paper_readonly_observation",
+    "secret_material_recorded": false,
+    "snapshot_binding": "sha256_of_served_snapshot"
+  },
+  "surface": {
+    "service": "dominion-command-center",
+    "prefix": "/api/trading/paper",
+    "auth_header": "X-Dominion-Key",
+    "methods": ["GET"],
+    "routes": [
+      "/api/trading/paper/health",
+      "/api/trading/paper/summary",
+      "/api/trading/paper/account",
+      "/api/trading/paper/positions",
+      "/api/trading/paper/orders",
+      "/api/trading/paper/fills",
+      "/api/trading/paper/history",
+      "/api/trading/paper/performance",
+      "/api/trading/paper/evidence"
+    ]
+  },
+  "founder_holds_preserved": [
+    "live_trading"
+  ],
+  "remaining_activation_step": "Founder sets ALPACA_PAPER_KEY_ID, ALPACA_PAPER_SECRET_KEY, and COMMAND_CENTER_API_KEY in the private server-side environment file on the Foundation VM, then redeploys the Command Center. No code change is required to activate, and no change in this bridge can enable live trading.",
+  "stop_line": "This bridge stops before any live-trading capability or order execution. Enabling live trading remains blocked by governance/runtime_activation_gates.json and requires a separate Founder authorization and Five-Council release."
+}

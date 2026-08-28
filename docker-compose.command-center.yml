@@ -3,8 +3,8 @@ services:
     build: ./apps/command-center
     container_name: dominion-command-center
     # Production intelligence workers are private host-loopback services.
-    # Host networking lets this container reach them without opening those ports
-    # on a public interface. Uvicorn itself remains bound to host loopback only.
+    # Host networking keeps the Command Center and governed fallback private;
+    # Uvicorn itself remains bound to host loopback only.
     network_mode: host
     command: ["uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8091"]
     volumes:
@@ -12,6 +12,8 @@ services:
       - ${COMMAND_CENTER_MEMORY_PATH:-/home/malachisingleton8/dominion-memory}:/data/memory
       - ${COMMAND_CENTER_RUNTIME_DIR:-/home/malachisingleton8/.dominion/command-center}:/runtime:ro
       - ./governance/lane_access_policy.json:/governance/lane_access_policy.json:ro
+    secrets:
+      - buddy_web_token
     restart: unless-stopped
     environment:
       VAULT_PATH: /vault
@@ -21,9 +23,8 @@ services:
       NEMOTRON_BASE_URL: ${NEMOTRON_BASE_URL:-}
       NEMOTRON_MODEL: ${NEMOTRON_MODEL:-nemotron-3}
       NEMOTRON_API_KEY: ${NEMOTRON_API_KEY:-}
-      # Canonical fallback remains private on the VM. Do not inherit a stale
-      # legacy bridge-host value from older command-center.env files.
-      CONDUCTOR_URL: http://127.0.0.1:5060
+      BUDDY_FALLBACK_URL: http://127.0.0.1:5070
+      BUDDY_FALLBACK_TOKEN_FILE: /run/secrets/buddy_web_token
       INTELLIGENCE_TIMEOUT_SECONDS: ${INTELLIGENCE_TIMEOUT_SECONDS:-60}
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8091/health\").read()' || exit 1"]
@@ -31,3 +32,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+secrets:
+  buddy_web_token:
+    file: ${COMMAND_CENTER_BUDDY_TOKEN_FILE}

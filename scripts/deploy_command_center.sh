@@ -12,6 +12,7 @@ ENV_EXAMPLE="$REPO_DIR/config/command-center.env.example"
 STATE_ROOT="$HOME/.dominion/command-center"
 STATE_FILE="$STATE_ROOT/runtime-state.json"
 RECEIPTS="$STATE_ROOT/receipts"
+BUDDY_SECRET_FILE="$STATE_ROOT/buddy-web-token"
 
 cd "$REPO_DIR"
 git fetch origin "$BRANCH"; git checkout "$BRANCH"; git pull --ff-only origin "$BRANCH"
@@ -30,6 +31,60 @@ set +a
 vault="$(docker inspect obsidian-remote --format '{{range .Mounts}}{{if eq .Destination "/vaults/Dominion"}}{{.Source}}{{end}}{{end}}')"
 test -n "$vault"; test -d "$vault/Dominion-Command-Center"; test -d "$vault/Dominion-Brain"
 export VAULT_PATH="$vault" COMMAND_CENTER_RUNTIME_DIR="$STATE_ROOT"
+
+# Provision only the existing Buddy auth token as a Docker secret. Mirror the
+# dotenv precedence used by buddy_web.py without sourcing unrelated secrets into
+# the deployment environment.
+install -d -m 700 "$STATE_ROOT"
+python3 - "$BUDDY_SECRET_FILE" "$HOME/buddy_core/.env" "$HOME/conductor/.env" "$HOME/.env" <<'PY'
+import os, shlex, sys, tempfile
+from pathlib import Path
+out = Path(sys.argv[1])
+token = ""
+for candidate in map(Path, sys.argv[2:]):
+    if not candidate.is_file():
+        continue
+    for raw in candidate.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if not line.startswith("BUDDY_WEB_TOKEN="):
+            continue
+        value = line.split("=", 1)[1].strip()
+        parsed = shlex.split(value, comments=True, posix=True) if value else []
+        token = parsed[0] if parsed else ""
+        break
+    if token:
+        break
+if not token:
+    raise SystemExit("BUDDY_FALLBACK_TOKEN_MISSING")
+out.parent.mkdir(parents=True, exist_ok=True)
+fd, tmp = tempfile.mkstemp(prefix=".buddy-token.", dir=str(out.parent))
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(token)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, out)
+finally:
+    if os.path.exists(tmp):
+        os.unlink(tmp)
+PY
+chmod 600 "$BUDDY_SECRET_FILE"
+export COMMAND_CENTER_BUDDY_TOKEN_FILE="$BUDDY_SECRET_FILE"
+BUDDY_TOKEN="$(cat "$BUDDY_SECRET_FILE")"
+BUDDY_STATUS="$(curl -fsS --max-time 20 -H "Authorization: Bearer $BUDDY_TOKEN" http://127.0.0.1:5070/buddy/api/status)"
+unset BUDDY_TOKEN
+python3 - "$BUDDY_STATUS" <<'PY'
+import json, sys
+s = json.loads(sys.argv[1])
+assert s.get("operator") == "v2", s
+assert int(s.get("capability_count", 0)) > 0, s
+print(f"COMMAND_CENTER_BUDDY_FALLBACK_PREBOOT=PASS operator={s['operator']} capabilities={s['capability_count']}")
+PY
 
 # MCP CLI is part of the Command Center release boundary, not a separate loose deploy.
 RUN_SHA="$actual_sha" REPO_DIR="$REPO_DIR" bash scripts/install_mcp_cli_server.sh
@@ -79,9 +134,9 @@ import json,sys
 p=json.loads(sys.argv[1])
 source=str(p.get('source') or '')
 answer=str(p.get('answer') or '').strip()
-assert source in {'conductor','nemotron'}, p
+assert source in {'buddy_operator','nemotron'}, p
 assert answer, p
-assert 'neither the Nemotron primary worker nor the Conductor fallback responded' not in answer, p
+assert source != 'command-center-fallback', p
 print(source)
 PY
 )"

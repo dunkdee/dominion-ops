@@ -14,6 +14,17 @@ from intelligence import route_intelligence
 from revenue import record_funnel_event, revenue_state
 from runtime_state import runtime_state as canonical_runtime_state
 
+# The read-only Alpaca paper bridge is additive. If it cannot load, the
+# Command Center must still serve every pre-existing surface, so the failure is
+# recorded and reported rather than raised at import time.
+try:
+    from trading_api import router as trading_router
+
+    TRADING_BRIDGE_IMPORT_ERROR: str | None = None
+except Exception as exc:  # noqa: BLE001 - must never break the live service
+    trading_router = None
+    TRADING_BRIDGE_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
 APP_DIR = Path(__file__).resolve().parent
 VAULT_PATH = Path(os.getenv("VAULT_PATH", "/vault"))
 MEMORY_PATH = Path(os.getenv("MEMORY_PATH", "/data/memory"))
@@ -22,6 +33,9 @@ NEMOTRON_BASE_URL = os.getenv("NEMOTRON_BASE_URL", "").rstrip("/")
 NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "nemotron-3")
 
 app = FastAPI(title="Dominion Command Center", version="1.0.0")
+
+if trading_router is not None:
+    app.include_router(trading_router)
 
 
 BUDDY_VOICE_SCRIPT = r"""
@@ -283,6 +297,30 @@ def dashboard(request: Request) -> HTMLResponse:
     return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
 
 
+def trading_bridge_state() -> dict[str, Any]:
+    """Non-secret mount state for the read-only paper trading bridge."""
+    if trading_router is None:
+        return {
+            "mounted": False,
+            "read_only": True,
+            "live_trading_enabled": False,
+            "error": TRADING_BRIDGE_IMPORT_ERROR,
+        }
+    import alpaca_bridge
+
+    config = alpaca_bridge.bridge_config()
+    return {
+        "mounted": True,
+        "mode": config["mode"],
+        "read_only": True,
+        "live_trading_enabled": False,
+        "order_execution_enabled": False,
+        "credentials_present": config["credentials_present"],
+        "authenticated": True,
+        "prefix": "/api/trading/paper",
+    }
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     revenue = revenue_state()
@@ -310,6 +348,7 @@ def health() -> dict[str, Any]:
         "active_experiment_count": revenue["active_experiment_count"],
         "buddy_voice_surface": True,
         "buddy_voice_engine": "browser-speech-synthesis",
+        "trading_bridge": trading_bridge_state(),
     }
 
 

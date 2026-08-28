@@ -145,6 +145,7 @@ jobs:
           print("ALPACA_PAPER_BRIDGE_CONTAINER_CI=PASS mode=paper read_only=true live_trading=false")
           PY
 
-          # The observation ledger written inside the container must verify
-          # with the canonical control-plane implementation.
-          python -m control_plane.cli verify-ledger --ledger "$root/runtime/ledger/observations.jsonl"
+          # Verify with the canonical control-plane implementation mounted in
+          # the container. This keeps ledger lock ownership in one UID domain.
+          docker exec alpaca-bridge-ci-run \
+            python -m control_plane.cli verify-ledger --ledger /runtime/ledger/observations.jsonl

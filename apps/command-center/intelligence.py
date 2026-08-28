@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib import error, request
 
@@ -12,7 +13,8 @@ class IntelligenceConfig:
     primary_url: str
     primary_model: str
     primary_api_key: str
-    conductor_url: str
+    buddy_fallback_url: str
+    buddy_fallback_token_file: str
     timeout_seconds: int
 
     @classmethod
@@ -21,7 +23,10 @@ class IntelligenceConfig:
             primary_url=os.getenv("NEMOTRON_BASE_URL", "").rstrip("/"),
             primary_model=os.getenv("NEMOTRON_MODEL", "nemotron-3"),
             primary_api_key=os.getenv("NEMOTRON_API_KEY", ""),
-            conductor_url=os.getenv("CONDUCTOR_URL", "http://127.0.0.1:5060").rstrip("/"),
+            buddy_fallback_url=os.getenv("BUDDY_FALLBACK_URL", "http://127.0.0.1:5070").rstrip("/"),
+            buddy_fallback_token_file=os.getenv(
+                "BUDDY_FALLBACK_TOKEN_FILE", "/run/secrets/buddy_web_token"
+            ),
             timeout_seconds=int(os.getenv("INTELLIGENCE_TIMEOUT_SECONDS", "60")),
         )
 
@@ -56,6 +61,13 @@ def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str], timeo
         if not isinstance(parsed, dict):
             raise ValueError("Provider returned a non-object response")
         return parsed
+
+
+def _read_secret(path: str) -> str:
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 def call_nemotron(message: str, context: str = "") -> dict[str, Any] | None:
@@ -95,32 +107,37 @@ def call_nemotron(message: str, context: str = "") -> dict[str, Any] | None:
     return None
 
 
-def call_conductor(message: str, context: str = "") -> dict[str, Any] | None:
+def call_buddy_operator(message: str, context: str = "") -> dict[str, Any] | None:
+    """Use the canonical authenticated Buddy operator as the reasoning fallback.
+
+    Conductor on port 5060 is an orchestration service and does not expose a
+    supported chat contract. Buddy Web on port 5070 owns the canonical
+    /buddy/api/chat contract and calls get_operator().handle() behind the
+    existing Buddy bearer-token boundary.
+    """
     cfg = IntelligenceConfig.from_env()
-    governed_message = "\n\n".join(
-        part
-        for part in (
-            SYSTEM_PROMPT,
-            f"Dominion context:\n{context}" if context else "Dominion context: not supplied.",
-            f"Founder command:\n{message}",
-        )
-        if part
-    )
+    token = _read_secret(cfg.buddy_fallback_token_file)
+    if not cfg.buddy_fallback_url or not token:
+        return None
+
     payload = {
-        "message": governed_message,
-        "source": "dominion-command-center",
-        "persona": "buddy",
+        "message": message,
+        "session_id": "dominion-command-center",
     }
-    # Reasoning-only fallback. Never probe generic execution endpoints such as
-    # /invoke or /execute-next to manufacture a chat response.
-    for endpoint in ("/chat", "/api/chat"):
-        try:
-            parsed = _post_json(f"{cfg.conductor_url}{endpoint}", payload, {}, cfg.timeout_seconds)
-            answer = parsed.get("response") or parsed.get("answer") or parsed.get("message")
-            if answer:
-                return {"answer": answer, "source": "conductor", "raw": parsed}
-        except (error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
-            continue
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        parsed = _post_json(
+            f"{cfg.buddy_fallback_url}/buddy/api/chat",
+            payload,
+            headers,
+            cfg.timeout_seconds,
+        )
+        status = str(parsed.get("status") or "").upper()
+        answer = str(parsed.get("response") or "").strip()
+        if answer and status not in {"BLOCKED", "ERROR"}:
+            return {"answer": answer, "source": "buddy_operator", "raw": parsed}
+    except (error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
+        return None
     return None
 
 
@@ -128,4 +145,4 @@ def route_intelligence(message: str, context: str = "") -> dict[str, Any] | None
     primary = call_nemotron(message, context)
     if primary:
         return primary
-    return call_conductor(message, context)
+    return call_buddy_operator(message, context)

@@ -8,7 +8,7 @@ from script_generator import generate_script, generate_title_and_description
 from pipeline import run_pipeline, PipelineResult
 from youtube_uploader import get_oauth_url, exchange_code
 
-app = FastAPI(title="Movie Generator", description="Claude Fable 5 + Higgins → YouTube")
+app = FastAPI(title="Movie Generator", description="Governed AI scripting + Higgins → YouTube")
 
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 _jobs: dict[str, PipelineResult] = {}
@@ -34,7 +34,7 @@ def health():
 
 @app.post("/script/generate")
 def create_script(req: ScriptRequest):
-    """Generate a full screenplay using Claude Fable 5."""
+    """Generate a full screenplay through the governed AI scripting path."""
     script = generate_script(req.prompt, req.title)
     meta = generate_title_and_description(script, req.title)
     return {"title": req.title, "script": script, "youtube_meta": meta}

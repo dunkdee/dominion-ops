@@ -195,6 +195,20 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
         self.assertNotIn("echo $BUDDY_TOKEN", text)
         self.assertNotIn("echo ${BUDDY_TOKEN}", text)
 
+    def test_system_integrity_accepted_sources_includes_buddy_operator(self):
+        """Prove the integrity contract accepts the live intelligence source."""
+        policy = json.loads((ROOT / "governance/system_integrity_agent.json").read_text(encoding="utf-8"))
+        accepted = set(policy["intelligence_probe"]["accepted_sources"])
+        # buddy_operator is the live fallback intelligence source
+        self.assertIn("buddy_operator", accepted)
+        # nemotron remains valid when active
+        self.assertIn("nemotron", accepted)
+        # conductor is not the intelligence source — it was removed when Buddy took over
+        self.assertNotIn("conductor", accepted)
+        # deploy marker agrees: deploy script validates exactly this set
+        deploy = DEPLOY.read_text(encoding="utf-8")
+        self.assertIn("source in {'buddy_operator','nemotron'}", deploy)
+
     def test_public_acceptance_uses_current_ui_and_bounded_retries(self):
         text = DEPLOY.read_text(encoding="utf-8")
         self.assertIn("probe_public_health()", text)

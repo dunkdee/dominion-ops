@@ -86,7 +86,6 @@ def _rotate_log() -> None:
                 source.replace(Path(f"{LOG}.{index + 1}"))
         LOG.replace(Path(f"{LOG}.1"))
     except OSError:
-        # Logging must never take Buddy offline.
         return
 
 
@@ -145,8 +144,6 @@ def _mcp_invoke(connector_id: str, params: dict | None = None) -> dict:
     if len(encoded) > MAX_MCP_REQUEST_BYTES:
         raise ValueError("MCP request too large")
 
-    # Verify the selected connector is present in the current read-only registry
-    # before asking MCP to invoke it. The MCP server independently re-validates.
     registry = _mcp_connectors()
     allowed = {
         item.get("id")
@@ -225,12 +222,24 @@ def _governed_revenue_request(runner, lane: str):
 
 @app.get("/health")
 def health():
+    operator = get_operator()
+    self_heal_connected = (
+        "system.self_repair" in operator.capabilities
+        and "native:self_repair" in operator._executors
+    )
+    mcp_connected = (
+        "mcp.connector_invoke" in operator.capabilities
+        and "native:mcp_invoke" in operator._executors
+    )
     return jsonify(
         ok=True,
         service="buddy_bridge",
         port=5052,
         operator="v2",
         canonical_repo=bool(DOMINION_REPO_ROOT),
+        capability_count=len(operator.capabilities),
+        self_heal_connected=self_heal_connected,
+        mcp_operator_connected=mcp_connected,
     )
 
 
@@ -244,6 +253,28 @@ def buddy_capabilities():
     except Exception as exc:
         log(f"[CAPABILITY_AUDIT_ERROR] {type(exc).__name__}")
         return jsonify(status="DEGRADED", error=type(exc).__name__), 503
+
+
+@app.post("/webhook/buddy/self-heal")
+def buddy_self_heal():
+    if not _authorized(request):
+        return jsonify(error="unauthorized"), 401
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify(status="BLOCKED", error="JSON object required"), 400
+    simulate = bool(payload.get("simulate", False))
+    try:
+        result = get_operator().handle(
+            "fix yourself",
+            session_id=str(payload.get("session_id") or "bridge-self-heal")[:120],
+            simulate=simulate,
+        )
+        log(f"[SELF_HEAL] status={result.get('status')} mission={result.get('mission_id','none')}")
+        code = 200 if result.get("status") in {"COMPLETE", "PLANNED"} else 409
+        return jsonify(result), code
+    except Exception as exc:
+        log(f"[SELF_HEAL_ERROR] {type(exc).__name__}")
+        return jsonify(status="BLOCKED", error=type(exc).__name__), 500
 
 
 @app.get("/webhook/buddy/connectors")

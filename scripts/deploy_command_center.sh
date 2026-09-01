@@ -36,15 +36,25 @@ export VAULT_PATH="$vault" COMMAND_CENTER_RUNTIME_DIR="$STATE_ROOT"
 # dotenv precedence used by buddy_web.py without sourcing unrelated secrets into
 # the deployment environment.
 install -d -m 700 "$STATE_ROOT"
-python3 - "$BUDDY_SECRET_FILE" "$HOME/buddy_core/.env" "$HOME/conductor/.env" "$HOME/.env" <<'PY'
-import os, shlex, sys, tempfile
+BUDDY_SVC_USER="$(systemctl show dominion-buddy-web.service -p User --value)"
+BUDDY_SVC_HOME="$(getent passwd "$BUDDY_SVC_USER" | cut -d: -f6)"
+python3 - "$BUDDY_SECRET_FILE" "$BUDDY_SVC_USER" "$BUDDY_SVC_HOME/buddy_core/.env" "$BUDDY_SVC_HOME/conductor/.env" "$BUDDY_SVC_HOME/.env" <<'PY'
+import os, shlex, subprocess, sys, tempfile
 from pathlib import Path
 out = Path(sys.argv[1])
+svc_user = sys.argv[2]
 token = ""
-for candidate in map(Path, sys.argv[2:]):
-    if not candidate.is_file():
+for candidate in map(Path, sys.argv[3:]):
+    try:
+        result = subprocess.run(
+            ["sudo", "-u", svc_user, "cat", str(candidate)],
+            capture_output=True,
+            check=True,
+        )
+        lines = result.stdout.decode("utf-8").splitlines()
+    except subprocess.CalledProcessError:
         continue
-    for raw in candidate.read_text(encoding="utf-8").splitlines():
+    for raw in lines:
         line = raw.strip()
         if not line or line.startswith("#"):
             continue

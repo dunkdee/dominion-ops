@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT = ROOT / "scripts/system_integrity_agent.py"
@@ -27,6 +28,44 @@ bridge_spec.loader.exec_module(bridge)
 
 
 class SystemIntegrityAgentTests(unittest.TestCase):
+    def _evaluation_contract(self) -> dict:
+        return {
+            "agent_id": "system-integrity-agent",
+            "single_responsibility": "Reliability observation only; never perform business work.",
+            "governing_name": "RADAH MEMSHALAH",
+            "deep_probe_every_cycles": 10,
+            "http_checks": [],
+            "active_units": [],
+            "containment_holds": [],
+            "absent_listeners": [],
+            "command_center_truth": {
+                "url": "http://127.0.0.1:8091/api/status",
+                "required_open_lanes": 0,
+                "max_age_seconds": 180,
+            },
+            "intelligence_probe": {
+                "url": "http://127.0.0.1:8091/api/chat",
+                "message": "SYSTEM_INTEGRITY_HEALTH_PROBE",
+                "accepted_sources": ["buddy_operator", "nemotron"],
+            },
+        }
+
+    def _http_side_effect(self, url: str, *, method: str = "GET", payload=None, timeout: int = 8):
+        if method == "POST":
+            return 200, {"source": "buddy_operator", "answer": "ready"}
+        return 200, {
+            "truth": {
+                "connected": True,
+                "release_sha": "a" * 40,
+                "observed_at": datetime.now(timezone.utc).isoformat(),
+            },
+            "lane_summary": {"open": 0, "registered": 0, "all_open": True},
+            "revenue": {},
+            "autopilot": {},
+            "systems": {},
+            "latest_receipts": [],
+        }
+
     def test_contract_is_single_responsibility_and_non_mutating(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         self.assertEqual(contract["schema"], "dominion-system-integrity-agent-v1")
@@ -77,8 +116,49 @@ class SystemIntegrityAgentTests(unittest.TestCase):
         text = INSTALL.read_text(encoding="utf-8")
         self.assertIn("SYSTEM_INTEGRITY_FIRST_CYCLE=PASS", text)
         self.assertIn("deep_probe_executed", text)
-        self.assertIn("dominion-system-integrity.timer", text)
+        self.assertIn("--force-deep-probe", text)
+        self.assertNotIn('rm -f "$STATE_ROOT/latest.json"', text)
+        self.assertNotIn("systemctl enable --now dominion-system-integrity.timer", text)
+        self.assertIn("systemctl enable dominion-system-integrity.timer", text)
+        self.assertIn("systemctl start dominion-system-integrity.timer", text)
         self.assertIn("cadence=89s", text)
+
+    def test_force_deep_probe_preserves_cycle_and_executes_probe(self):
+        contract = self._evaluation_contract()
+        previous = {"cycle": 4}
+        with (
+            mock.patch.object(agent, "http_json", side_effect=self._http_side_effect),
+            mock.patch.object(agent, "git_sha", return_value="a" * 40),
+            mock.patch.object(agent.shutil, "disk_usage", return_value=mock.Mock(used=10, total=100)),
+        ):
+            state = agent.evaluate(contract, ROOT, previous, force_deep_probe=True)
+
+        self.assertEqual(state["cycle"], 5)
+        self.assertTrue(state["deep_probe_executed"])
+        intelligence = next(item for item in state["checks"] if item["id"] == "intelligence:end-to-end")
+        self.assertTrue(intelligence["ok"])
+        self.assertIn("source=buddy_operator", intelligence["detail"])
+
+    def test_normal_deep_probe_cadence_is_unchanged(self):
+        contract = self._evaluation_contract()
+        with (
+            mock.patch.object(agent, "http_json", side_effect=self._http_side_effect),
+            mock.patch.object(agent, "git_sha", return_value="a" * 40),
+            mock.patch.object(agent.shutil, "disk_usage", return_value=mock.Mock(used=10, total=100)),
+        ):
+            deferred = agent.evaluate(contract, ROOT, {"cycle": 4})
+            scheduled = agent.evaluate(contract, ROOT, {"cycle": 9})
+
+        self.assertEqual(deferred["cycle"], 5)
+        self.assertFalse(deferred["deep_probe_executed"])
+        deferred_check = next(item for item in deferred["checks"] if item["id"] == "intelligence:end-to-end")
+        self.assertEqual(deferred_check["severity"], "informational")
+        self.assertIn("deferred cycle=5", deferred_check["detail"])
+
+        self.assertEqual(scheduled["cycle"], 10)
+        self.assertTrue(scheduled["deep_probe_executed"])
+        scheduled_check = next(item for item in scheduled["checks"] if item["id"] == "intelligence:end-to-end")
+        self.assertTrue(scheduled_check["ok"])
 
     def test_command_center_truth_surfaces_fresh_and_rejects_stale_integrity(self):
         text = BRIDGE.read_text(encoding="utf-8")

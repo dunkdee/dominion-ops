@@ -47,7 +47,7 @@
   "evidence": {
     "ledger": "append_only_hash_chained",
     "implementation": "control_plane.ledger.AppendOnlyLedger",
-    "default_path": "/runtime/ledger/alpaca-paper-observations.jsonl",
+    "default_path": "/ledger/alpaca-paper-observations.jsonl",
     "event_type": "alpaca_paper_readonly_observation",
     "secret_material_recorded": false,
     "snapshot_binding": "sha256_of_served_snapshot"

@@ -16,6 +16,7 @@ import requests
 
 ROOT = Path(__file__).resolve().parents[1]
 CAPABILITY_FILE = ROOT / "config" / "capability_registry.json"
+EXTENSION_FILE = ROOT / "config" / "capability_extensions.json"
 MCP_BASE_URL = os.getenv("BUDDY_MCP_BASE_URL", "http://127.0.0.1:8390").rstrip("/")
 
 
@@ -23,15 +24,39 @@ class CapabilityHealthError(RuntimeError):
     pass
 
 
-def _load_registry() -> dict[str, Any]:
+def _read_json(path: Path, label: str) -> dict[str, Any]:
     try:
-        data = json.loads(CAPABILITY_FILE.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError) as exc:
-        raise CapabilityHealthError(f"capability_registry_unavailable:{type(exc).__name__}") from exc
-    caps = data.get("capabilities")
+        raise CapabilityHealthError(f"{label}_unavailable:{type(exc).__name__}") from exc
+    if not isinstance(data, dict):
+        raise CapabilityHealthError(f"{label}_invalid")
+    return data
+
+
+def _load_registry() -> dict[str, Any]:
+    base = _read_json(CAPABILITY_FILE, "capability_registry")
+    caps = base.get("capabilities")
     if not isinstance(caps, list) or not caps:
         raise CapabilityHealthError("capability_registry_invalid")
-    return data
+
+    extensions: list[dict[str, Any]] = []
+    extension_version = None
+    if EXTENSION_FILE.is_file():
+        ext = _read_json(EXTENSION_FILE, "capability_extensions")
+        if ext.get("schema") != "dominion-buddy-capability-extensions-v1":
+            raise CapabilityHealthError("capability_extensions_schema_invalid")
+        raw = ext.get("capabilities")
+        if not isinstance(raw, list):
+            raise CapabilityHealthError("capability_extensions_invalid")
+        extensions = [c for c in raw if isinstance(c, dict)]
+        extension_version = ext.get("version")
+
+    return {
+        "version": base.get("version"),
+        "extension_version": extension_version,
+        "capabilities": [*caps, *extensions],
+    }
 
 
 def _loopback_url(url: str) -> bool:
@@ -84,7 +109,7 @@ def _mcp_health(timeout: float = 4.0) -> dict[str, Any]:
 def audit_capabilities(operator: Any | None = None) -> dict[str, Any]:
     """Return a fail-visible capability inventory.
 
-    `operator` is optional so CI can validate the registry without starting the
+    `operator` is optional so CI can validate declarations without starting the
     full runtime. When supplied, native executor declarations are checked
     against the operator's actual executor map.
     """
@@ -135,6 +160,7 @@ def audit_capabilities(operator: Any | None = None) -> dict[str, Any]:
     return {
         "schema": "dominion-buddy-capability-health-v1",
         "registry_version": registry.get("version"),
+        "extension_version": registry.get("extension_version"),
         "registered_enabled": len(capabilities),
         "native_connected": len(connected_native),
         "boundary_only": len(boundary_only),

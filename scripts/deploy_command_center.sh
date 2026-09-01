@@ -32,61 +32,55 @@ vault="$(docker inspect obsidian-remote --format '{{range .Mounts}}{{if eq .Dest
 test -n "$vault"; test -d "$vault/Dominion-Command-Center"; test -d "$vault/Dominion-Brain"
 export VAULT_PATH="$vault" COMMAND_CENTER_RUNTIME_DIR="$STATE_ROOT"
 
-# Provision only the existing Buddy auth token as a Docker secret. Mirror the
-# dotenv precedence used by buddy_web.py without sourcing unrelated secrets into
-# the deployment environment.
-install -d -m 700 "$STATE_ROOT"
+# Provision only the existing Buddy auth token as a Docker secret. Use Buddy's
+# own runtime interpreter and python-dotenv to mirror buddy_web.py exactly.
 BUDDY_SVC_USER="$(systemctl show dominion-buddy-web.service -p User --value)"
 BUDDY_SVC_HOME="$(getent passwd "$BUDDY_SVC_USER" | cut -d: -f6)"
-python3 - "$BUDDY_SECRET_FILE" "$BUDDY_SVC_USER" "$BUDDY_SVC_HOME/buddy_core/.env" "$BUDDY_SVC_HOME/conductor/.env" "$BUDDY_SVC_HOME/.env" <<'PY'
-import os, shlex, subprocess, sys, tempfile
+BUDDY_PYTHON="$BUDDY_SVC_HOME/dominion_env/bin/python3"
+test -n "$BUDDY_SVC_USER"
+test -n "$BUDDY_SVC_HOME"
+test -x "$BUDDY_PYTHON"
+
+BUDDY_TOKEN="$(
+  sudo -n -u "$BUDDY_SVC_USER" "$BUDDY_PYTHON" - \
+    "$BUDDY_SVC_HOME/buddy_core/.env" \
+    "$BUDDY_SVC_HOME/conductor/.env" \
+    "$BUDDY_SVC_HOME/.env" <<'PY'
+import os
+import sys
 from pathlib import Path
-out = Path(sys.argv[1])
-svc_user = sys.argv[2]
-token = ""
-for candidate in map(Path, sys.argv[3:]):
-    try:
-        result = subprocess.run(
-            ["sudo", "-u", svc_user, "cat", str(candidate)],
-            capture_output=True,
-            check=True,
-        )
-        lines = result.stdout.decode("utf-8").splitlines()
-    except subprocess.CalledProcessError:
-        continue
-    for raw in lines:
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[7:].lstrip()
-        if not line.startswith("BUDDY_WEB_TOKEN="):
-            continue
-        value = line.split("=", 1)[1].strip()
-        parsed = shlex.split(value, comments=True, posix=True) if value else []
-        token = parsed[0] if parsed else ""
-        break
-    if token:
-        break
+from dotenv import load_dotenv
+
+# Match buddy_web.py exactly: sequential files, override=False.
+for candidate in map(Path, sys.argv[1:]):
+    if candidate.is_file():
+        load_dotenv(candidate, override=False)
+
+token = os.getenv("BUDDY_WEB_TOKEN", "").strip()
+
 if not token:
     raise SystemExit("BUDDY_FALLBACK_TOKEN_MISSING")
-out.parent.mkdir(parents=True, exist_ok=True)
-fd, tmp = tempfile.mkstemp(prefix=".buddy-token.", dir=str(out.parent))
-try:
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(token)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, out)
-finally:
-    if os.path.exists(tmp):
-        os.unlink(tmp)
+
+# stdout is captured by command substitution; never logged.
+print(token, end="")
 PY
+)"
+
+test -n "$BUDDY_TOKEN"
+
+install -d -m 700 "$STATE_ROOT"
+umask 077
+printf '%s' "$BUDDY_TOKEN" > "$BUDDY_SECRET_FILE"
 chmod 600 "$BUDDY_SECRET_FILE"
+
 export COMMAND_CENTER_BUDDY_TOKEN_FILE="$BUDDY_SECRET_FILE"
-BUDDY_TOKEN="$(cat "$BUDDY_SECRET_FILE")"
-BUDDY_STATUS="$(curl -fsS --max-time 20 -H "Authorization: Bearer $BUDDY_TOKEN" http://127.0.0.1:5070/buddy/api/status)"
+
+BUDDY_STATUS="$(
+  curl -fsS --max-time 20 \
+    -H "Authorization: Bearer $BUDDY_TOKEN" \
+    http://127.0.0.1:5070/buddy/api/status
+)"
+
 unset BUDDY_TOKEN
 python3 - "$BUDDY_STATUS" <<'PY'
 import json, sys

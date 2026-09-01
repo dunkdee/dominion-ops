@@ -140,21 +140,36 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
     def test_deploy_discovers_buddy_token_from_service_identity_not_deploy_home(self):
         text = DEPLOY.read_text(encoding="utf-8")
 
-        # Derive Buddy identity/home from the live service.
+        # Derive Buddy service user and home from the live service identity.
         self.assertIn("dominion-buddy-web.service", text)
         self.assertIn("BUDDY_SVC_USER", text)
         self.assertIn("BUDDY_SVC_HOME", text)
         self.assertIn("getent passwd", text)
 
-        # Use Buddy's service home, not the deployment SSH user's HOME.
+        # Use Buddy's runtime interpreter, not the deploy-user system python3.
+        self.assertIn("BUDDY_PYTHON", text)
+        self.assertIn('dominion_env/bin/python3', text)
+        self.assertIn("test -x", text)
+
+        # Use noninteractive sudo under the Buddy service identity.
+        self.assertIn('sudo -n -u "$BUDDY_SVC_USER"', text)
+
+        # Parse with python-dotenv exactly as buddy_web.py does.
+        self.assertIn("from dotenv import load_dotenv", text)
+        self.assertIn("load_dotenv(candidate, override=False)", text)
+        self.assertIn("BUDDY_FALLBACK_TOKEN_MISSING", text)
+
+        # Fail-closed interpreter path proofs.
         self.assertIn("$BUDDY_SVC_HOME/buddy_core/.env", text)
         self.assertIn("$BUDDY_SVC_HOME/conductor/.env", text)
         self.assertIn("$BUDDY_SVC_HOME/.env", text)
+
+        # No stale deploy-user $HOME paths for Buddy credential discovery.
         self.assertNotIn('"$HOME/buddy_core/.env"', text)
         self.assertNotIn('"$HOME/conductor/.env"', text)
 
-        # Read protected dotenv files under Buddy's service identity.
-        self.assertIn('"sudo", "-u", svc_user,', text)
+        # No manual shlex parser — that was the source of the mismatch.
+        self.assertNotIn("shlex.split(value", text)
 
         # Never expose the Buddy credential.
         self.assertNotIn("echo $BUDDY_TOKEN", text)

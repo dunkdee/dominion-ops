@@ -73,7 +73,7 @@ Walk in divine power, wisdom, and sovereignty. Every project aligns with abundan
 | Blueprint PDF generator | `scripts/gen_blueprint.py` | Python + fpdf2 | **NEW** — generates 5-page Divine Sovereignty Blueprint PDF |
 | Jarvis orchestrator | `apps/jarvis/worker.py` | Python + Redis | Code complete. Redis heartbeat loop |
 | FastAPI notify (email) | `apps/api/main.py` | FastAPI + Brevo | Code complete. `/notify` + `/healthz` |
-| YouTube pipeline | `apps/youtube/` | Python + Claude Fable 5 | Code complete. Script gen → video → upload |
+| YouTube pipeline | `apps/youtube/` | Python + governed AI scripting | Code complete. Script gen → video → upload |
 | TikTok uploader | `apps/tiktok/main.py` | FastAPI | Code complete. Locked to `lawrence72` account |
 | Next.js frontend | `apps/frontend/` | Next.js 14 | Dependencies listed. Pages not fully built out |
 
@@ -123,7 +123,7 @@ Walk in divine power, wisdom, and sovereignty. Every project aligns with abundan
 - [x] Dominion Healing static web (Nginx)
 - [x] n8n automation scripts
 - [x] CI/CD workflows (baby, cron-status, deploy, netlify)
-- [x] YouTube pipeline (Claude Fable 5 + Higgins)
+- [x] YouTube pipeline (governed AI scripting + Higgins)
 - [x] Repo audit script (`OPS/repo-audit.sh`)
 
 ## Parking Lot

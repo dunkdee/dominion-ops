@@ -1,0 +1,61 @@
+{
+  "schema": "dominion-buddy-capability-extensions-v1",
+  "version": "1.0.0",
+  "capabilities": [
+    {
+      "id": "system.capability_health",
+      "name": "Audit real capability health",
+      "description": "Verify which Buddy capabilities have actual executors and whether the governed MCP connector fabric is reachable. Never treats registry names alone as proof of capability.",
+      "executor": "native:capability_health",
+      "classification": "read",
+      "auth_required": false,
+      "max_retries": 0,
+      "enabled": true,
+      "tags": ["capability", "health", "truth", "audit"]
+    },
+    {
+      "id": "system.self_diagnose",
+      "name": "Diagnose Buddy and core runtime",
+      "description": "Inspect Buddy source integrity, disk pressure, allowlisted service state, loopback health, MCP health, and canonical repository state without mutation.",
+      "executor": "native:self_diagnose",
+      "classification": "read",
+      "auth_required": false,
+      "max_retries": 0,
+      "enabled": true,
+      "tags": ["self_heal", "diagnose", "runtime", "health"]
+    },
+    {
+      "id": "system.self_repair",
+      "name": "Repair safe internal runtime faults",
+      "description": "Execute standing-authorized reversible repair recipes: safe service restarts, disposable-cache cleanup, tracked Buddy source restoration from clean canonical main, verification, rollback, and repair receipts. No arbitrary shell or security-boundary changes.",
+      "executor": "native:self_repair",
+      "classification": "write",
+      "auth_required": false,
+      "max_retries": 0,
+      "enabled": true,
+      "tags": ["self_heal", "repair", "rollback", "standing_authorization"]
+    },
+    {
+      "id": "mcp.connectors_list",
+      "name": "List governed MCP connectors",
+      "description": "Read the loopback-only Dominion MCP connector registry so Buddy knows which concrete internal connectors are currently available.",
+      "executor": "native:mcp_list",
+      "classification": "read",
+      "auth_required": false,
+      "max_retries": 1,
+      "enabled": true,
+      "tags": ["mcp", "connectors", "tool_discovery", "read_only"]
+    },
+    {
+      "id": "mcp.connector_invoke",
+      "name": "Invoke governed read-only MCP connector",
+      "description": "Invoke a named connector from the reviewed Dominion MCP registry. The MCP server fixes targets and denies arbitrary URLs, arbitrary shell, and external mutation.",
+      "executor": "native:mcp_invoke",
+      "classification": "read",
+      "auth_required": false,
+      "max_retries": 1,
+      "enabled": true,
+      "tags": ["mcp", "connector", "internal", "read_only"]
+    }
+  ]
+}

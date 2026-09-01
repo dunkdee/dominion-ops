@@ -1,8 +1,17 @@
+import json
 import os
-import anthropic
 from typing import AsyncIterator
 
+import anthropic
+
+try:
+    from buddy_core.core.brain_router import _compose_system
+except ImportError:
+    from core.brain_router import _compose_system
+
+
 CLIENT = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+ANTHROPIC_MODEL = os.getenv("YOUTUBE_ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
 SYSTEM_PROMPT = """You are an expert Hollywood screenwriter and YouTube filmmaker.
 Generate compelling, production-ready content for YouTube films.
@@ -10,13 +19,18 @@ Structure all scripts with clear scene headings (INT./EXT.), action lines, and d
 Keep scenes visual and suitable for AI video generation."""
 
 
+def _system(extra: str | None = None) -> str:
+    specialist = SYSTEM_PROMPT if not extra else f"{SYSTEM_PROMPT}\n\n{extra}"
+    return _compose_system(specialist)
+
+
 def generate_script(prompt: str, title: str) -> str:
-    """Generate a full film script using Claude Fable 5 with streaming."""
+    """Generate a full governed YouTube film script with streaming."""
     full_text = []
     with CLIENT.messages.stream(
-        model="claude-fable-5",
+        model=ANTHROPIC_MODEL,
         max_tokens=8000,
-        system=SYSTEM_PROMPT,
+        system=_system(),
         messages=[
             {
                 "role": "user",
@@ -40,10 +54,11 @@ def generate_script(prompt: str, title: str) -> str:
 
 
 def generate_scene_visuals(scene_description: str) -> str:
-    """Generate a detailed visual prompt for a single scene."""
+    """Generate a detailed governed visual prompt for a single scene."""
     with CLIENT.messages.stream(
-        model="claude-fable-5",
+        model=ANTHROPIC_MODEL,
         max_tokens=500,
+        system=_system("Create visual-generation prompts only; do not claim any image or video was rendered."),
         messages=[
             {
                 "role": "user",
@@ -62,8 +77,9 @@ def generate_scene_visuals(scene_description: str) -> str:
 def generate_voiceover(script_text: str) -> str:
     """Extract and polish the narration/voiceover track from a script."""
     with CLIENT.messages.stream(
-        model="claude-fable-5",
+        model=ANTHROPIC_MODEL,
         max_tokens=4000,
+        system=_system("Transform supplied script text into narration; preserve factual uncertainty from the source."),
         messages=[
             {
                 "role": "user",
@@ -80,10 +96,11 @@ def generate_voiceover(script_text: str) -> str:
 
 
 def generate_title_and_description(script_text: str, title: str) -> dict:
-    """Generate YouTube-optimized title, description, and tags."""
+    """Generate governed YouTube-optimized title, description, and tags."""
     result = CLIENT.messages.create(
-        model="claude-fable-5",
+        model=ANTHROPIC_MODEL,
         max_tokens=1000,
+        system=_system("Optimize metadata for relevance and clarity without inventing performance claims or metrics."),
         messages=[
             {
                 "role": "user",
@@ -99,7 +116,6 @@ def generate_title_and_description(script_text: str, title: str) -> dict:
         ],
     )
 
-    import json
     text = result.content[0].text
     start = text.find("{")
     end = text.rfind("}") + 1

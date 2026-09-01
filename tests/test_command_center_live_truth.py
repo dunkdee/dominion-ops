@@ -137,6 +137,29 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
         install = INSTALL.read_text(encoding="utf-8"); self.assertIn("OnUnitActiveSec=60s", install); self.assertIn("command_center_state_bridge_v3.py", install)
         mcp_install = MCP_INSTALL.read_text(encoding="utf-8"); self.assertIn("2026-07-28", mcp_install); self.assertIn("loopback", mcp_install.lower())
 
+    def test_deploy_discovers_buddy_token_from_service_identity_not_deploy_home(self):
+        text = DEPLOY.read_text(encoding="utf-8")
+
+        # Derive Buddy identity/home from the live service.
+        self.assertIn("dominion-buddy-web.service", text)
+        self.assertIn("BUDDY_SVC_USER", text)
+        self.assertIn("BUDDY_SVC_HOME", text)
+        self.assertIn("getent passwd", text)
+
+        # Use Buddy's service home, not the deployment SSH user's HOME.
+        self.assertIn("$BUDDY_SVC_HOME/buddy_core/.env", text)
+        self.assertIn("$BUDDY_SVC_HOME/conductor/.env", text)
+        self.assertIn("$BUDDY_SVC_HOME/.env", text)
+        self.assertNotIn('"$HOME/buddy_core/.env"', text)
+        self.assertNotIn('"$HOME/conductor/.env"', text)
+
+        # Read protected dotenv files under Buddy's service identity.
+        self.assertIn('"sudo", "-u", svc_user,', text)
+
+        # Never expose the Buddy credential.
+        self.assertNotIn("echo $BUDDY_TOKEN", text)
+        self.assertNotIn("echo ${BUDDY_TOKEN}", text)
+
     def test_public_acceptance_uses_current_ui_and_bounded_retries(self):
         text = DEPLOY.read_text(encoding="utf-8")
         self.assertIn("probe_public_health()", text)

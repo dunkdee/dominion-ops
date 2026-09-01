@@ -64,7 +64,7 @@
   "intelligence_probe": {
     "url": "http://127.0.0.1:8091/api/chat",
     "message": "SYSTEM_INTEGRITY_HEALTH_PROBE. Return a short readiness acknowledgement. Do not perform any external action.",
-    "accepted_sources": ["nemotron", "conductor"]
+    "accepted_sources": ["buddy_operator", "nemotron"]
   },
   "state_root": ".dominion/system-integrity",
   "status_vocabulary": ["PASS", "DEGRADED", "BLOCKED", "UNKNOWN"]

@@ -1,0 +1,194 @@
+name: Recover Buddy Runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recover-buddy-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-buddy-production
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - name: Require protected VM access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Configure protected SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Recover canonical Buddy runtime from intact repository
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
+            "RUN_SHA='$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          repo="$HOME/dominion-ops"
+          runtime="$HOME/buddy_core"
+          state="$HOME/.dominion/buddy"
+          backups="$state/deploy-backups"
+          services="dominion-buddy-web.service buddy-bridge.service dominion-buddy.service"
+
+          echo '=== DISK BEFORE RECOVERY ==='
+          df -h "$HOME" || true
+          du -sh "$runtime" "$repo/buddy_core" "$backups" 2>/dev/null || true
+
+          # Remove only archives created by our failed Buddy deploy workflow.
+          # They are not canonical source and one is known truncated/corrupt.
+          if [ -d "$backups" ]; then
+            find "$backups" -maxdepth 1 -type f -name '*.tgz' -print -delete
+          fi
+          find "$runtime" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
+
+          echo '=== DISK AFTER DEPLOY-BACKUP CLEANUP ==='
+          df -h "$HOME" || true
+
+          test -d "$repo/.git"
+          cd "$repo"
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          test "$(git rev-parse HEAD)" = "$RUN_SHA"
+          test -s "$repo/buddy_core/core/brain.py"
+          test -s "$repo/buddy_core/core/brain_router.py"
+          test -s "$repo/buddy_core/config/FOUNDER_OPERATING_CONTEXT.md"
+
+          # In-place recovery preserves runtime-only .env/data while restoring
+          # every canonical tracked Buddy file from the intact repository.
+          install -d -m 755 "$runtime"
+          cp -a "$repo/buddy_core/." "$runtime/"
+
+          python3 -m py_compile \
+            "$runtime/core/brain.py" \
+            "$runtime/core/brain_router.py" \
+            "$runtime/core/operator.py" \
+            "$runtime/core/learning_engine.py" \
+            "$runtime/core/autonomous_learning.py" \
+            "$runtime/buddy_bridge_api.py" \
+            "$runtime/buddy_web.py"
+
+          grep -Fq 'ELITE REASONING PROTOCOL' "$runtime/core/brain.py"
+          grep -Fq 'RADAH MEMSHALAH' "$runtime/core/brain.py"
+          grep -Fq 'Founder Operating Context' "$runtime/config/FOUNDER_OPERATING_CONTEXT.md"
+          grep -Fq 'Capability Maximization Doctrine' "$runtime/config/FOUNDER_OPERATING_CONTEXT.md"
+          grep -Fq '_compose_system(system)' "$runtime/core/brain_router.py"
+          echo 'BUDDY_RECOVERY_SOURCE=PASS'
+
+          restarted=0
+          for s in $services; do
+            if systemctl cat "$s" >/dev/null 2>&1; then
+              echo "=== RESTART $s ==="
+              if ! sudo systemctl restart "$s"; then
+                sudo systemctl status "$s" --no-pager -l || true
+                journalctl -u "$s" -n 80 --no-pager || true
+                exit 1
+              fi
+              if ! sudo systemctl is-active --quiet "$s"; then
+                sudo systemctl status "$s" --no-pager -l || true
+                journalctl -u "$s" -n 80 --no-pager || true
+                exit 1
+              fi
+              restarted=$((restarted+1))
+              echo "BUDDY_SERVICE_ACTIVE=$s"
+            fi
+          done
+          test "$restarted" -ge 1
+
+          bridge_code="000"
+          for _ in $(seq 1 30); do
+            bridge_code="$(curl -sS -o /tmp/buddy-bridge-health.json -w '%{http_code}' --max-time 4 http://127.0.0.1:5052/health 2>/dev/null || true)"
+            [ "$bridge_code" = '200' ] && break
+            sleep 1
+          done
+          if [ "$bridge_code" != '200' ]; then
+            echo "BUDDY_BRIDGE_HEALTH=FAIL http=$bridge_code"
+            journalctl -u buddy-bridge.service -n 100 --no-pager || true
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          data=json.load(open('/tmp/buddy-bridge-health.json'))
+          assert data.get('ok') is True
+          assert data.get('service') == 'buddy_bridge'
+          print('BUDDY_BRIDGE_HEALTH=PASS')
+          PY
+
+          web_code="000"
+          for _ in $(seq 1 30); do
+            web_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 http://127.0.0.1:5070/buddy 2>/dev/null || true)"
+            case "$web_code" in 200|401|403) break;; esac
+            sleep 1
+          done
+          case "$web_code" in
+            200|401|403) echo "BUDDY_WEB_HEALTH=PASS http=$web_code" ;;
+            *)
+              echo "BUDDY_WEB_HEALTH=FAIL http=$web_code"
+              journalctl -u dominion-buddy-web.service -n 100 --no-pager || true
+              exit 1
+              ;;
+          esac
+
+          python3 - "$state/deployed_release.json" "$RUN_SHA" <<'PY'
+          import hashlib,json,sys
+          from datetime import datetime,timezone
+          from pathlib import Path
+          out=Path(sys.argv[1]); sha=sys.argv[2]
+          runtime=Path.home()/'buddy_core'
+          files={}
+          for rel in ['core/brain.py','core/brain_router.py','config/FOUNDER_OPERATING_CONTEXT.md','config/BUDDY_CONSTITUTION.md']:
+              p=runtime/rel
+              files[rel]=hashlib.sha256(p.read_bytes()).hexdigest()
+          payload={
+              'schema':'dominion-buddy-deployed-release-v1',
+              'release_sha':sha,
+              'deployed_at':datetime.now(timezone.utc).isoformat(),
+              'recovery':True,
+              'canonical_prompt':'ELITE_REASONING_PROTOCOL',
+              'founder_context':True,
+              'capability_maximization_doctrine':True,
+              'files_sha256':files,
+          }
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_text(json.dumps(payload,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          out.chmod(0o600)
+          print('BUDDY_RELEASE_RECEIPT=PASS')
+          PY
+
+          echo '=== DISK AFTER RECOVERY ==='
+          df -h "$HOME" || true
+          echo "BUDDY_RUNTIME_RECOVERY=PASS release=$RUN_SHA services=$restarted web_http=$web_code"
+          REMOTE
+
+      - name: Cleanup SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

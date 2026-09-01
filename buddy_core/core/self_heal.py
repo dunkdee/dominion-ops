@@ -1,9 +1,10 @@
 """Governed self-healing for Buddy and core Dominion runtime services.
 
-The repair engine is intentionally recipe-based. It can repair routine internal,
-reversible faults covered by the Founder's standing authorization, but it does
-not accept arbitrary shell commands and cannot modify credentials, firewall,
-public ingress, governance files, money/trading state, or binding submissions.
+The repair engine is recipe-based. It can diagnose every connector in the
+reviewed read-only MCP fabric and repair routine internal, reversible faults
+covered by the Founder's standing authorization. It never accepts arbitrary
+shell commands, service names, container names, URLs, or privileged policy
+changes from a prompt.
 """
 from __future__ import annotations
 
@@ -31,8 +32,7 @@ REPO = Path(os.getenv("DOMINION_REPO_ROOT", str(Path.home() / "dominion-ops"))).
 RUNTIME = Path(os.getenv("BUDDY_RUNTIME_ROOT", str(Path.home() / "buddy_core"))).expanduser()
 SELF_HEAL_STATE = STATE / "self-heal"
 
-# Only these fixed systemd units may be restarted by this module. No user input
-# can become a service name or shell command.
+# Fixed reviewed systemd targets. No prompt text can become a unit name.
 SERVICE_RECIPES: dict[str, dict[str, Any]] = {
     "buddy_web": {
         "unit": "dominion-buddy-web.service",
@@ -71,18 +71,60 @@ SERVICE_RECIPES: dict[str, dict[str, Any]] = {
     },
 }
 
+# Fixed reviewed Docker targets. These are canonical container names already
+# used by Dominion deployment/runtime evidence. No dynamic name is accepted.
+CONTAINER_RECIPES: dict[str, dict[str, Any]] = {
+    "command_center": {
+        "container": "dominion-command-center",
+        "health": "http://127.0.0.1:8091/health",
+        "accepted_http": {200},
+    },
+    "dominion_web": {
+        "container": "dominion-web",
+        "health": "http://127.0.0.1:8090/",
+        "accepted_http": {200},
+    },
+    "n8n": {
+        "container": "n8n",
+        "health": "http://127.0.0.1:5678/healthz",
+        "accepted_http": {200},
+    },
+    "wix_agent": {
+        "container": "wix-agent",
+        "health": "http://127.0.0.1:8082/ready",
+        "accepted_http": {200},
+    },
+}
+
+# Every connector in governance/mcp_connector_registry.json maps to a reviewed
+# repair target. This lets diagnosis cover the whole current connector fabric.
+MCP_REPAIR_MAP: dict[str, tuple[str, str]] = {
+    "alpha_engine_health": ("service", "alpha"),
+    "command_center_status": ("container", "command_center"),
+    "conductor_health": ("service", "conductor"),
+    "dominion_web_health": ("container", "dominion_web"),
+    "n8n_health": ("container", "n8n"),
+    "radah_autopilot_timer": ("service", "radah_autopilot"),
+    "revenue_runtime_service": ("service", "revenue_runtime"),
+    "wix_agent_health": ("container", "wix_agent"),
+}
+
 # Canonical source only. Runtime data, generated media, logs, .env, credentials,
 # and durable evidence are deliberately excluded.
 TRACKED_RUNTIME_FILES = (
+    "core/__init__.py",
     "core/brain.py",
     "core/brain_router.py",
     "core/operator.py",
+    "core/operator_extensions.py",
     "core/learning_engine.py",
     "core/autonomous_learning.py",
     "core/revenue_runtime.py",
     "core/capability_health.py",
     "core/mcp_client.py",
     "core/self_heal.py",
+    "config/capability_registry.json",
+    "config/capability_extensions.json",
     "config/BUDDY_CONSTITUTION.md",
     "config/FOUNDER_OPERATING_CONTEXT.md",
     "config/standing_authorizations.json",
@@ -134,14 +176,33 @@ def _service_active(unit: str) -> bool:
 
 
 def _restart_service(unit: str) -> dict[str, Any]:
-    # sudo is fixed and non-interactive; if the VM has not authorized this exact
-    # operation the repair fails visibly rather than hanging for a password.
     cp = _run(["sudo", "-n", "systemctl", "restart", unit], timeout=30)
     active = _service_active(unit) if cp.returncode == 0 else False
     return {
         "unit": unit,
         "returncode": cp.returncode,
         "active": active,
+        "stderr": cp.stderr[-500:] if cp.stderr else "",
+    }
+
+
+def _container_exists(name: str) -> bool:
+    cp = _run(["docker", "inspect", name], timeout=10)
+    return cp.returncode == 0
+
+
+def _container_running(name: str) -> bool:
+    cp = _run(["docker", "inspect", "--format", "{{.State.Running}}", name], timeout=10)
+    return cp.returncode == 0 and cp.stdout.strip().lower() == "true"
+
+
+def _restart_container(name: str) -> dict[str, Any]:
+    cp = _run(["docker", "restart", name], timeout=45)
+    running = _container_running(name) if cp.returncode == 0 else False
+    return {
+        "container": name,
+        "returncode": cp.returncode,
+        "running": running,
         "stderr": cp.stderr[-500:] if cp.stderr else "",
     }
 
@@ -210,10 +271,89 @@ def _source_state() -> dict[str, Any]:
     return {"checked": len(rows), "mismatches": mismatches, "files": rows}
 
 
+def _mcp_result_healthy(payload: dict[str, Any]) -> tuple[bool, str]:
+    """Interpret a read-only MCP result without retaining response bodies."""
+    if payload.get("status") != "PASS":
+        return False, "mcp_status_not_pass"
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return False, "mcp_result_missing"
+    if "returncode" in result:
+        try:
+            return int(result.get("returncode")) == 0, "exec_returncode"
+        except (TypeError, ValueError):
+            return False, "exec_returncode_invalid"
+    if "status" in result:
+        try:
+            status = int(result.get("status"))
+        except (TypeError, ValueError):
+            return False, "http_status_invalid"
+        return 200 <= status < 400, "http_status"
+    return True, "pass_contract"
+
+
+def _mcp_connector_state() -> dict[str, Any]:
+    """Probe every currently registered MCP connector and retain only metadata."""
+    try:
+        registry = mcp_client.list_connectors()
+    except Exception as exc:
+        return {
+            "available": False,
+            "error": type(exc).__name__,
+            "registered": 0,
+            "healthy": 0,
+            "failed": 0,
+            "connectors": [],
+        }
+
+    connectors = registry.get("connectors", [])
+    rows: list[dict[str, Any]] = []
+    for item in connectors:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        connector_id = str(item["id"])
+        row = {
+            "id": connector_id,
+            "adapter": item.get("adapter"),
+            "effect": item.get("effect"),
+        }
+        try:
+            result = mcp_client.invoke(connector_id, {})
+            healthy, evidence_kind = _mcp_result_healthy(result)
+            row.update(
+                {
+                    "healthy": healthy,
+                    "status": "PASS" if healthy else "FAIL",
+                    "elapsed_ms": result.get("elapsed_ms"),
+                    "evidence_kind": evidence_kind,
+                }
+            )
+        except Exception as exc:
+            row.update(
+                {
+                    "healthy": False,
+                    "status": "FAIL",
+                    "error": type(exc).__name__,
+                }
+            )
+        rows.append(row)
+
+    failed = sum(1 for row in rows if row.get("healthy") is False)
+    return {
+        "available": True,
+        "registered": len(rows),
+        "healthy": len(rows) - failed,
+        "failed": failed,
+        "all_healthy": bool(rows) and failed == 0,
+        "connectors": rows,
+    }
+
+
 def diagnose() -> dict[str, Any]:
-    """Diagnose Buddy plus registered core runtime dependencies without mutation."""
+    """Diagnose Buddy and all currently registered governed runtime signals."""
     disk = shutil.disk_usage(Path.home())
-    services = {}
+    services: dict[str, Any] = {}
+    containers: dict[str, Any] = {}
     issues: list[dict[str, Any]] = []
 
     for name, recipe in SERVICE_RECIPES.items():
@@ -222,26 +362,97 @@ def diagnose() -> dict[str, Any]:
         active = _service_active(unit) if exists else False
         probe = _probe(recipe.get("health"), set(recipe.get("accepted_http", set())))
         health_ok = probe.get("healthy")
-        if health_ok is None:
-            healthy = active if exists else None
-        else:
-            healthy = bool(active and health_ok)
+        healthy = active if health_ok is None else bool(active and health_ok)
         services[name] = {
             "unit": unit,
             "exists": exists,
             "active": active,
             "probe": probe,
-            "healthy": healthy,
+            "healthy": healthy if exists else None,
         }
         if exists and healthy is False:
-            issues.append({"id": f"service:{name}", "repair": "restart_allowlisted_service"})
+            issues.append(
+                {
+                    "id": f"service:{name}",
+                    "repair": "restart_allowlisted_service",
+                    "target_kind": "service",
+                    "target": name,
+                }
+            )
+
+    for name, recipe in CONTAINER_RECIPES.items():
+        container = recipe["container"]
+        exists = _container_exists(container)
+        running = _container_running(container) if exists else False
+        probe = _probe(recipe.get("health"), set(recipe.get("accepted_http", set())))
+        health_ok = probe.get("healthy")
+        healthy = running if health_ok is None else bool(running and health_ok)
+        containers[name] = {
+            "container": container,
+            "exists": exists,
+            "running": running,
+            "probe": probe,
+            "healthy": healthy if exists else None,
+        }
+        if exists and healthy is False:
+            issues.append(
+                {
+                    "id": f"container:{name}",
+                    "repair": "restart_allowlisted_container",
+                    "target_kind": "container",
+                    "target": name,
+                }
+            )
 
     try:
         mcp = mcp_client.health()
         mcp_state = {"healthy": True, "detail": mcp}
+        connector_state = _mcp_connector_state()
     except Exception as exc:
         mcp_state = {"healthy": False, "error": type(exc).__name__}
-        issues.append({"id": "mcp:unhealthy", "repair": "restart_mcp_cli"})
+        connector_state = {
+            "available": False,
+            "error": "mcp_server_unhealthy",
+            "registered": 0,
+            "healthy": 0,
+            "failed": 0,
+            "connectors": [],
+        }
+        issues.append(
+            {
+                "id": "mcp:unhealthy",
+                "repair": "restart_mcp_cli",
+                "target_kind": "service",
+                "target": "mcp_cli",
+            }
+        )
+
+    for row in connector_state.get("connectors", []):
+        if row.get("healthy") is not False:
+            continue
+        connector_id = str(row.get("id") or "")
+        target = MCP_REPAIR_MAP.get(connector_id)
+        if target is None:
+            issues.append(
+                {
+                    "id": f"mcp_connector:{connector_id}",
+                    "repair": "diagnosis_only_no_auto_recipe",
+                }
+            )
+            continue
+        target_kind, target_name = target
+        issues.append(
+            {
+                "id": f"mcp_connector:{connector_id}",
+                "repair": (
+                    "restart_allowlisted_service"
+                    if target_kind == "service"
+                    else "restart_allowlisted_container"
+                ),
+                "target_kind": target_kind,
+                "target": target_name,
+            }
+        )
 
     repo = _repo_state()
     source = _source_state() if repo.get("available") else {"checked": 0, "mismatches": [], "files": []}
@@ -252,9 +463,21 @@ def diagnose() -> dict[str, Any]:
         rel for rel in source.get("mismatches", []) if rel in PROTECTED_GOVERNANCE_FILES
     ]
     if mutable_mismatches:
-        issues.append({"id": "source:runtime_drift", "repair": "restore_tracked_runtime_source", "files": mutable_mismatches})
+        issues.append(
+            {
+                "id": "source:runtime_drift",
+                "repair": "restore_tracked_runtime_source",
+                "files": mutable_mismatches,
+            }
+        )
     if protected_mismatches:
-        issues.append({"id": "source:protected_governance_drift", "repair": "fresh_founder_review_required", "files": protected_mismatches})
+        issues.append(
+            {
+                "id": "source:protected_governance_drift",
+                "repair": "fresh_founder_review_required",
+                "files": protected_mismatches,
+            }
+        )
 
     free_bytes = disk.free
     if free_bytes < 256 * 1024 * 1024:
@@ -263,7 +486,7 @@ def diagnose() -> dict[str, Any]:
         issues.append({"id": "disk:low", "repair": "cleanup_disposable_buddy_artifacts"})
 
     return {
-        "schema": "dominion-buddy-self-diagnosis-v1",
+        "schema": "dominion-buddy-self-diagnosis-v2",
         "observed_at": _utc(),
         "repo": repo,
         "runtime_root": str(RUNTIME),
@@ -274,7 +497,9 @@ def diagnose() -> dict[str, Any]:
             "free_percent": round((free_bytes / disk.total) * 100, 2) if disk.total else 0.0,
         },
         "services": services,
+        "containers": containers,
         "mcp": mcp_state,
+        "mcp_connectors": connector_state,
         "source": source,
         "issues": issues,
         "healthy": not issues,
@@ -390,45 +615,112 @@ def repair_safe() -> dict[str, Any]:
     before = diagnose()
     actions: list[dict[str, Any]] = []
     rollback_snapshot: Path | None = None
+    restarted_services: set[str] = set()
+    restarted_containers: set[str] = set()
 
     try:
         issue_ids = {row.get("id") for row in before.get("issues", [])}
         if "disk:critically_low" in issue_ids or "disk:low" in issue_ids:
-            actions.append({"action": "cleanup_disposable_buddy_artifacts", "result": _cleanup_disposable()})
+            actions.append(
+                {
+                    "action": "cleanup_disposable_buddy_artifacts",
+                    "result": _cleanup_disposable(),
+                }
+            )
 
-        drift = next((row for row in before.get("issues", []) if row.get("id") == "source:runtime_drift"), None)
+        drift = next(
+            (row for row in before.get("issues", []) if row.get("id") == "source:runtime_drift"),
+            None,
+        )
         if drift:
             result = _restore_tracked_source(list(drift.get("files") or []))
             rollback_snapshot = Path(result["backup"])
             actions.append({"action": "restore_tracked_runtime_source", "result": result})
 
-        for name, state in before.get("services", {}).items():
-            if state.get("exists") and state.get("healthy") is False:
-                unit = SERVICE_RECIPES[name]["unit"]
-                result = _restart_service(unit)
-                actions.append({"action": "restart_allowlisted_service", "service": name, "result": result})
+        # Correlate both direct health failures and MCP connector failures to
+        # the fixed reviewed repair targets, de-duplicating repeated evidence.
+        for issue in before.get("issues", []):
+            repair = issue.get("repair")
+            target_kind = issue.get("target_kind")
+            target = issue.get("target")
+            if repair == "restart_allowlisted_service" and target_kind == "service":
+                if target in SERVICE_RECIPES and target not in restarted_services:
+                    unit = SERVICE_RECIPES[target]["unit"]
+                    result = _restart_service(unit)
+                    restarted_services.add(target)
+                    actions.append(
+                        {
+                            "action": "restart_allowlisted_service",
+                            "service": target,
+                            "trigger": issue.get("id"),
+                            "result": result,
+                        }
+                    )
+            elif repair == "restart_allowlisted_container" and target_kind == "container":
+                if target in CONTAINER_RECIPES and target not in restarted_containers:
+                    container = CONTAINER_RECIPES[target]["container"]
+                    result = _restart_container(container)
+                    restarted_containers.add(target)
+                    actions.append(
+                        {
+                            "action": "restart_allowlisted_container",
+                            "container": target,
+                            "trigger": issue.get("id"),
+                            "result": result,
+                        }
+                    )
 
-        # MCP may be unhealthy even if systemd still reports active.
-        if before.get("mcp", {}).get("healthy") is False:
-            unit = SERVICE_RECIPES["mcp_cli"]["unit"]
-            if not any(a.get("service") == "mcp_cli" for a in actions):
-                actions.append({"action": "restart_mcp_cli", "service": "mcp_cli", "result": _restart_service(unit)})
+        if before.get("mcp", {}).get("healthy") is False and "mcp_cli" not in restarted_services:
+            result = _restart_service(SERVICE_RECIPES["mcp_cli"]["unit"])
+            restarted_services.add("mcp_cli")
+            actions.append(
+                {
+                    "action": "restart_mcp_cli",
+                    "service": "mcp_cli",
+                    "result": result,
+                }
+            )
 
         after = diagnose()
-        unresolved = [row for row in after.get("issues", []) if row.get("repair") != "fresh_founder_review_required"]
-        status = "REPAIRED" if not unresolved else "BLOCKED"
+        held = [
+            row for row in after.get("issues", [])
+            if row.get("repair") == "fresh_founder_review_required"
+        ]
+        unresolved = [
+            row for row in after.get("issues", [])
+            if row.get("repair") != "fresh_founder_review_required"
+        ]
+        if unresolved:
+            status = "BLOCKED"
+        elif held:
+            status = "HELD"
+        elif actions:
+            status = "REPAIRED"
+        else:
+            status = "HEALTHY"
 
         if status == "BLOCKED" and rollback_snapshot is not None:
             _restore_snapshot(rollback_snapshot)
-            actions.append({"action": "rollback_tracked_runtime_source", "backup": str(rollback_snapshot)})
+            actions.append(
+                {
+                    "action": "rollback_tracked_runtime_source",
+                    "backup": str(rollback_snapshot),
+                }
+            )
             for name in ("buddy_web", "buddy_bridge"):
                 unit = SERVICE_RECIPES[name]["unit"]
                 if _service_exists(unit):
-                    actions.append({"action": "restart_after_rollback", "service": name, "result": _restart_service(unit)})
+                    actions.append(
+                        {
+                            "action": "restart_after_rollback",
+                            "service": name,
+                            "result": _restart_service(unit),
+                        }
+                    )
             after = diagnose()
 
         payload = {
-            "schema": "dominion-buddy-self-heal-receipt-v1",
+            "schema": "dominion-buddy-self-heal-receipt-v2",
             "observed_at": _utc(),
             "authorization_id": auth["id"],
             "status": status,
@@ -445,7 +737,7 @@ def repair_safe() -> dict[str, Any]:
             except Exception:
                 pass
         payload = {
-            "schema": "dominion-buddy-self-heal-receipt-v1",
+            "schema": "dominion-buddy-self-heal-receipt-v2",
             "observed_at": _utc(),
             "authorization_id": auth.get("id"),
             "status": "BLOCKED",
@@ -458,4 +750,12 @@ def repair_safe() -> dict[str, Any]:
         return payload
 
 
-__all__ = ["SelfHealError", "diagnose", "repair_safe", "SERVICE_RECIPES"]
+__all__ = [
+    "SelfHealError",
+    "diagnose",
+    "repair_safe",
+    "SERVICE_RECIPES",
+    "CONTAINER_RECIPES",
+    "MCP_REPAIR_MAP",
+    "PROTECTED_GOVERNANCE_FILES",
+]

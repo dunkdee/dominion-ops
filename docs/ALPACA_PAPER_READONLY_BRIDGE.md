@@ -53,7 +53,7 @@ Each observation appends one record to the existing append-only, hash-chained
 evidence ledger, using `control_plane.ledger.AppendOnlyLedger` directly — the
 chain implementation is reused, not reimplemented.
 
-- Default path: `/runtime/ledger/alpaca-paper-observations.jsonl`
+- Default path: `/ledger/alpaca-paper-observations.jsonl`
 - Event type: `alpaca_paper_readonly_observation`
 - Payload: governance flags, aggregate figures, and `snapshot_sha256` binding
   the record to the exact snapshot served. No credentials, no raw broker bodies.
@@ -100,7 +100,7 @@ already used for `governance/lane_access_policy.json`.
 ```yaml
 volumes:
   - ./control_plane:/app/control_plane:ro
-  - ${COMMAND_CENTER_LEDGER_DIR:-/home/malachisingleton8/.dominion/ledger}:/runtime/ledger
+  - ${COMMAND_CENTER_LEDGER_DIR:-/home/malachisingleton8/.dominion/ledger}:/ledger:rw
 ```
 
 If that mount is missing, the bridge does not mount and `/health` reports

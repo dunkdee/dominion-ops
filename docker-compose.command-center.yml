@@ -15,7 +15,7 @@ services:
       # Read-only reuse of the canonical hash-chained evidence ledger so
       # trading observations verify with the same control-plane tooling.
       - ./control_plane:/app/control_plane:ro
-      - ${COMMAND_CENTER_LEDGER_DIR:-/home/malachisingleton8/.dominion/ledger}:/runtime/ledger
+      - ${COMMAND_CENTER_LEDGER_DIR:-/home/malachisingleton8/.dominion/ledger}:/ledger:rw
     secrets:
       - buddy_web_token
     restart: unless-stopped
@@ -38,7 +38,7 @@ services:
       ALPACA_PAPER_SECRET_KEY: ${ALPACA_PAPER_SECRET_KEY:-}
       ALPACA_PAPER_BASE_URL: ${ALPACA_PAPER_BASE_URL:-https://paper-api.alpaca.markets}
       ALPHA_ENGINE_BASE_URL: ${ALPHA_ENGINE_BASE_URL:-http://127.0.0.1:8787}
-      TRADING_LEDGER_PATH: /runtime/ledger/alpaca-paper-observations.jsonl
+      TRADING_LEDGER_PATH: /ledger/alpaca-paper-observations.jsonl
       TRADING_SNAPSHOT_TTL_SECONDS: ${TRADING_SNAPSHOT_TTL_SECONDS:-15}
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8091/health\").read()' || exit 1"]

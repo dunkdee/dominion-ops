@@ -1,6 +1,6 @@
 {
   "schema": "dominion-buddy-authority-v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identity": {
     "agent_id": "buddy",
     "role": "PRIMARY_PERSONAL_AI",
@@ -127,7 +127,7 @@
   },
   "autonomy_control": {
     "schema": "dominion-autonomy-control-v1",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "authority": {
       "principal": "Dewayne Singleton",
       "final_decision_maker": "FOUNDER",
@@ -208,7 +208,9 @@
     },
     "approved_automatic_mutators": {
       ".github/workflows/fix-buddy-brains.yml": "BUDDY_BOUNDED_RESTART",
-      ".github/workflows/buddy-production-repair.yml": "TEMPORARY_LEGACY_BUDDY_EXCEPTION"
+      ".github/workflows/buddy-production-repair.yml": "TEMPORARY_LEGACY_BUDDY_EXCEPTION",
+      ".github/workflows/deploy-buddy-runtime.yml": "FOUNDER_STANDING_BUDDY_RUNTIME_DEPLOY",
+      ".github/workflows/recover-buddy-runtime.yml": "FOUNDER_STANDING_BUDDY_RUNTIME_RECOVERY"
     },
     "legacy_buddy_exception": {
       "workflow": ".github/workflows/buddy-production-repair.yml",

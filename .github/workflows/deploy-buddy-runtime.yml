@@ -8,6 +8,9 @@ on:
       - 'apps/youtube/**'
       - 'tests/test_buddy_brain_router_v2.py'
       - 'tests/test_buddy_canonical_governance.py'
+      - 'tests/test_buddy_standalone_runtime.py'
+      - 'tests/test_buddy_capability_health.py'
+      - 'tests/test_revenue_runtime.py'
   workflow_dispatch:
 
 permissions:
@@ -40,11 +43,12 @@ jobs:
             buddy_core/core/learning_engine.py \
             buddy_core/core/autonomous_learning.py \
             buddy_core/core/revenue_runtime.py \
+            buddy_core/core/capability_health.py \
             buddy_core/buddy_bridge_api.py \
             buddy_core/buddy_web.py \
             apps/youtube/script_generator.py \
             apps/youtube/main.py
-      - name: Verify canonical reasoning and context contracts
+      - name: Verify canonical reasoning and capability contracts
         env:
           PYTHONPATH: .:buddy_core
           BUDDY_STATE_DIR: /tmp/buddy-runtime-deploy-test-state
@@ -53,6 +57,8 @@ jobs:
           python -m pytest -q \
             tests/test_buddy_brain_router_v2.py \
             tests/test_buddy_canonical_governance.py \
+            tests/test_buddy_standalone_runtime.py \
+            tests/test_buddy_capability_health.py \
             tests/test_buddy_operator_v2.py \
             tests/test_buddy_autonomous_learning.py \
             tests/test_revenue_runtime.py
@@ -66,6 +72,7 @@ jobs:
           assert 'ELITE REASONING PROTOCOL' in s
           assert 'Founder Operating Context' in s
           assert 'Capability Maximization Doctrine' in s
+          assert 'Narrow Guardrails / Broad Autonomy' in s
           assert 'RADAH MEMSHALAH' in s
           assert 'Fable' not in s
           print('BUDDY_CANONICAL_PROMPT=PASS')
@@ -157,9 +164,7 @@ jobs:
           install -d -m 755 "$runtime"
           install -d -m 700 "$backups"
 
-          # Remove obsolete whole-runtime archives from the superseded deploy design.
           find "$backups" -maxdepth 1 -type f -name '*.tgz' -delete 2>/dev/null || true
-          # Tracked-file backups are tiny; retain only recent ones.
           find "$backups" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
 
           cd "$repo"
@@ -169,7 +174,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$RUN_SHA"
 
           avail_kb="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
-          test "${avail_kb:-0}" -ge 65536
+          test "${avail_kb:-0}" -ge 524288
 
           install -d -m 700 "$backup_dir/files"
           python3 - "$repo/buddy_core" "$runtime" "$backup_dir" <<'PY'
@@ -201,6 +206,7 @@ jobs:
             "$runtime/core/learning_engine.py" \
             "$runtime/core/autonomous_learning.py" \
             "$runtime/core/revenue_runtime.py" \
+            "$runtime/core/capability_health.py" \
             "$runtime/buddy_bridge_api.py" \
             "$runtime/buddy_web.py"
 
@@ -208,6 +214,7 @@ jobs:
           grep -Fq 'RADAH MEMSHALAH' "$runtime/core/brain.py"
           grep -Fq 'Founder Operating Context' "$runtime/config/FOUNDER_OPERATING_CONTEXT.md"
           grep -Fq 'Capability Maximization Doctrine' "$runtime/config/FOUNDER_OPERATING_CONTEXT.md"
+          grep -Fq 'Narrow Guardrails / Broad Autonomy' "$runtime/config/BUDDY_CONSTITUTION.md"
           grep -Fq '_compose_system(system)' "$runtime/core/brain_router.py"
           grep -Fq 'canonical_system_prompt()' "$runtime/core/brain_router.py"
           if grep -Rni --include='*.py' --include='*.md' --include='*.json' 'fable' "$runtime" >/tmp/buddy-fable-offenders.txt; then
@@ -251,7 +258,21 @@ jobs:
           data=json.load(open('/tmp/buddy-bridge-health.json'))
           assert data.get('ok') is True
           assert data.get('service') == 'buddy_bridge'
+          assert data.get('canonical_repo') is True
           print('BUDDY_BRIDGE_HEALTH=PASS')
+          PY
+
+          mcp_code="$(curl -sS -o /tmp/buddy-mcp-health.json -w '%{http_code}' --max-time 5 http://127.0.0.1:8390/health 2>/dev/null || true)"
+          test "$mcp_code" = '200'
+          python3 - <<'PY'
+          import json
+          data=json.load(open('/tmp/buddy-mcp-health.json'))
+          assert data.get('status') == 'ok'
+          assert data.get('service') == 'dominion-mcp-cli'
+          assert data.get('external_mutation_enabled') is False
+          assert data.get('binding') == 'loopback-only'
+          assert int(data.get('connector_count', 0)) >= 1
+          print(f"BUDDY_MCP_HEALTH=PASS connectors={data['connector_count']}")
           PY
 
           web_code="000"
@@ -262,14 +283,15 @@ jobs:
           done
           case "$web_code" in 200|401|403) ;; *) journalctl -u dominion-buddy-web.service -n 100 --no-pager || true; exit 1;; esac
 
-          python3 - "$state/deployed_release.json" "$RUN_SHA" <<'PY'
+          avail_after_kb="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
+          python3 - "$state/deployed_release.json" "$RUN_SHA" "$avail_after_kb" <<'PY'
           import hashlib,json,sys
           from datetime import datetime,timezone
           from pathlib import Path
-          out=Path(sys.argv[1]); sha=sys.argv[2]
+          out=Path(sys.argv[1]); sha=sys.argv[2]; available_kb=int(sys.argv[3])
           runtime=Path.home()/'buddy_core'
           files={}
-          for rel in ['core/brain.py','core/brain_router.py','config/FOUNDER_OPERATING_CONTEXT.md','config/BUDDY_CONSTITUTION.md']:
+          for rel in ['core/brain.py','core/brain_router.py','core/capability_health.py','config/FOUNDER_OPERATING_CONTEXT.md','config/BUDDY_CONSTITUTION.md']:
               p=runtime/rel
               files[rel]=hashlib.sha256(p.read_bytes()).hexdigest()
           payload={
@@ -279,6 +301,9 @@ jobs:
               'canonical_prompt':'ELITE_REASONING_PROTOCOL',
               'founder_context':True,
               'capability_maximization_doctrine':True,
+              'narrow_guardrails_broad_autonomy':True,
+              'mcp_health':True,
+              'disk_available_kb':available_kb,
               'files_sha256':files,
           }
           out.parent.mkdir(parents=True,exist_ok=True)
@@ -289,7 +314,7 @@ jobs:
 
           deployed=1
           trap - ERR
-          echo "BUDDY_RUNTIME_DEPLOY=PASS release=$RUN_SHA services=$restarted web_http=$web_code"
+          echo "BUDDY_RUNTIME_DEPLOY=PASS release=$RUN_SHA services=$restarted web_http=$web_code disk_available_kb=$avail_after_kb"
           REMOTE
 
       - name: Cleanup SSH material

@@ -4,10 +4,15 @@ Buddy owns the mission. Providers are interchangeable specialist brains. The
 router chooses one best-fit available provider and falls back on failure. It
 does not automatically call multiple paid providers, which could create
 unbounded spend without a standing Founder policy.
+
+Canonical governance is non-bypassable: every routed call receives Buddy's
+base system prompt, constitution, and Founder operating context before any
+narrower task-specific system rules.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
+from pathlib import Path
 
 try:  # VM runtime commonly has buddy_core itself on sys.path.
     from core import brain
@@ -36,6 +41,43 @@ _MODELS = {
     "ollama": getattr(brain, "OLLAMA_MODEL", "OLLAMA_MODEL"),
 }
 
+_CONFIG = Path(__file__).resolve().parents[1] / "config"
+_CONSTITUTION_FILE = _CONFIG / "BUDDY_CONSTITUTION.md"
+_FOUNDER_CONTEXT_FILE = _CONFIG / "FOUNDER_OPERATING_CONTEXT.md"
+_CANONICAL_FILE_LIMIT = 12000
+
+
+def _read_context(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")[:_CANONICAL_FILE_LIMIT].strip()
+    except OSError:
+        return ""
+
+
+def canonical_system_prompt() -> str:
+    """Return the non-bypassable canonical Buddy governance/context prompt."""
+    parts = [
+        str(getattr(brain, "BUDDY_SYSTEM", "") or "").strip(),
+        _read_context(_CONSTITUTION_FILE),
+        _read_context(_FOUNDER_CONTEXT_FILE),
+    ]
+    return "\n\n".join(part for part in parts if part)
+
+
+def _compose_system(system: str | None = None) -> str:
+    """Compose narrower task rules under canonical governance, never instead of it."""
+    canonical = canonical_system_prompt()
+    custom = (system or "").strip()
+    if not custom:
+        return canonical
+    if custom in canonical:
+        return canonical
+    return (
+        canonical
+        + "\n\nTASK-SPECIFIC SYSTEM RULES — subordinate to canonical governance:\n"
+        + custom
+    )
+
 
 def _available(mode: str) -> bool:
     checks = {
@@ -51,7 +93,7 @@ def _available(mode: str) -> bool:
 
 
 def _call(mode: str, prompt: str, system: str | None = None) -> str:
-    system = system or brain.BUDDY_SYSTEM
+    system = _compose_system(system)
     if mode == "claude":
         return brain.ask_claude(prompt, system)
     if mode == "groq":

@@ -65,6 +65,23 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
         text = COMPOSE.read_text(encoding="utf-8")
         self.assertIn("COMMAND_CENTER_RUNTIME_DIR", text); self.assertIn("/runtime:ro", text); self.assertIn("RUNTIME_STATE_PATH: /runtime/runtime-state.json", text); self.assertNotIn("CHECKOUT_ART_OF_TRUE_HEALING", text)
 
+    def test_ledger_mount_is_not_nested_inside_readonly_runtime(self):
+        """Prove the three-way contract: compose mount, compose env, module default all agree on /ledger."""
+        compose = COMPOSE.read_text(encoding="utf-8")
+        evidence = (ROOT / "apps/command-center/trading_evidence.py").read_text(encoding="utf-8")
+        # Ledger is mounted at /ledger (not /runtime/ledger — which is inside /runtime:ro)
+        self.assertIn(":/ledger", compose)
+        self.assertNotIn(":/runtime/ledger", compose)
+        # Runtime surface remains read-only
+        self.assertIn("/runtime:ro", compose)
+        # Compose env var agrees with the separate mount point
+        self.assertIn("TRADING_LEDGER_PATH: /ledger/alpaca-paper-observations.jsonl", compose)
+        # trading_evidence module default agrees with compose env var
+        self.assertIn('DEFAULT_LEDGER_PATH = "/ledger/alpaca-paper-observations.jsonl"', evidence)
+        self.assertNotIn("/runtime/ledger", evidence)
+        # Host source directory is unchanged
+        self.assertIn("/.dominion/ledger", compose)
+
     def test_intelligence_fallback_is_authenticated_buddy_operator_and_private_loopback(self):
         compose = COMPOSE.read_text(encoding="utf-8")
         intelligence = INTELLIGENCE.read_text(encoding="utf-8")

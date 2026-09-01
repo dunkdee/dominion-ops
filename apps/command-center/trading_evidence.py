@@ -21,7 +21,7 @@ from control_plane.canonical import sha256_json
 from control_plane.ledger import AppendOnlyLedger, LedgerError
 
 LEDGER_PATH_ENV = "TRADING_LEDGER_PATH"
-DEFAULT_LEDGER_PATH = "/runtime/ledger/alpaca-paper-observations.jsonl"
+DEFAULT_LEDGER_PATH = "/ledger/alpaca-paper-observations.jsonl"
 
 EVENT_TYPE = "alpaca_paper_readonly_observation"
 DEFAULT_ACTOR = "command-center-alpaca-bridge"

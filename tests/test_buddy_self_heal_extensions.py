@@ -159,3 +159,13 @@ def test_standing_authorization_explicitly_excludes_high_consequence_changes():
     assert "change firewall rules" in text
     assert "spend or move money" in text
     assert "rewrite BUDDY_CONSTITUTION.md" in text
+
+
+def test_bridge_health_proves_extensions_and_self_heal_endpoint_exists():
+    bridge = Path(__file__).resolve().parents[1] / "buddy_core" / "buddy_bridge_api.py"
+    source = bridge.read_text(encoding="utf-8")
+    assert 'self_heal_connected=self_heal_connected' in source
+    assert 'mcp_operator_connected=mcp_connected' in source
+    assert '@app.post("/webhook/buddy/self-heal")' in source
+    assert 'get_operator().handle(' in source
+    assert '"fix yourself"' in source

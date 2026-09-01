@@ -10,6 +10,7 @@ on:
       - 'tests/test_buddy_canonical_governance.py'
       - 'tests/test_buddy_standalone_runtime.py'
       - 'tests/test_buddy_capability_health.py'
+      - 'tests/test_buddy_self_heal_extensions.py'
       - 'tests/test_revenue_runtime.py'
   workflow_dispatch:
 
@@ -37,13 +38,17 @@ jobs:
         run: |
           set -euo pipefail
           python -m py_compile \
+            buddy_core/core/__init__.py \
             buddy_core/core/brain.py \
             buddy_core/core/brain_router.py \
             buddy_core/core/operator.py \
+            buddy_core/core/operator_extensions.py \
             buddy_core/core/learning_engine.py \
             buddy_core/core/autonomous_learning.py \
             buddy_core/core/revenue_runtime.py \
             buddy_core/core/capability_health.py \
+            buddy_core/core/mcp_client.py \
+            buddy_core/core/self_heal.py \
             buddy_core/buddy_bridge_api.py \
             buddy_core/buddy_web.py \
             apps/youtube/script_generator.py \
@@ -59,6 +64,7 @@ jobs:
             tests/test_buddy_canonical_governance.py \
             tests/test_buddy_standalone_runtime.py \
             tests/test_buddy_capability_health.py \
+            tests/test_buddy_self_heal_extensions.py \
             tests/test_buddy_operator_v2.py \
             tests/test_buddy_autonomous_learning.py \
             tests/test_revenue_runtime.py
@@ -200,13 +206,17 @@ jobs:
           cp -a "$repo/buddy_core/." "$runtime/"
 
           python3 -m py_compile \
+            "$runtime/core/__init__.py" \
             "$runtime/core/brain.py" \
             "$runtime/core/brain_router.py" \
             "$runtime/core/operator.py" \
+            "$runtime/core/operator_extensions.py" \
             "$runtime/core/learning_engine.py" \
             "$runtime/core/autonomous_learning.py" \
             "$runtime/core/revenue_runtime.py" \
             "$runtime/core/capability_health.py" \
+            "$runtime/core/mcp_client.py" \
+            "$runtime/core/self_heal.py" \
             "$runtime/buddy_bridge_api.py" \
             "$runtime/buddy_web.py"
 
@@ -215,6 +225,9 @@ jobs:
           grep -Fq 'Founder Operating Context' "$runtime/config/FOUNDER_OPERATING_CONTEXT.md"
           grep -Fq 'Capability Maximization Doctrine' "$runtime/config/FOUNDER_OPERATING_CONTEXT.md"
           grep -Fq 'Narrow Guardrails / Broad Autonomy' "$runtime/config/BUDDY_CONSTITUTION.md"
+          grep -Fq 'founder-safe-internal-self-heal-v1' "$runtime/config/standing_authorizations.json"
+          grep -Fq 'system.self_repair' "$runtime/config/capability_extensions.json"
+          grep -Fq 'install_operator_extensions' "$runtime/core/__init__.py"
           grep -Fq '_compose_system(system)' "$runtime/core/brain_router.py"
           grep -Fq 'canonical_system_prompt()' "$runtime/core/brain_router.py"
           if grep -Rni --include='*.py' --include='*.md' --include='*.json' 'fable' "$runtime" >/tmp/buddy-fable-offenders.txt; then
@@ -291,7 +304,12 @@ jobs:
           out=Path(sys.argv[1]); sha=sys.argv[2]; available_kb=int(sys.argv[3])
           runtime=Path.home()/'buddy_core'
           files={}
-          for rel in ['core/brain.py','core/brain_router.py','core/capability_health.py','config/FOUNDER_OPERATING_CONTEXT.md','config/BUDDY_CONSTITUTION.md']:
+          for rel in [
+              'core/brain.py','core/brain_router.py','core/capability_health.py',
+              'core/operator_extensions.py','core/mcp_client.py','core/self_heal.py',
+              'config/FOUNDER_OPERATING_CONTEXT.md','config/BUDDY_CONSTITUTION.md',
+              'config/standing_authorizations.json','config/capability_extensions.json'
+          ]:
               p=runtime/rel
               files[rel]=hashlib.sha256(p.read_bytes()).hexdigest()
           payload={
@@ -302,6 +320,8 @@ jobs:
               'founder_context':True,
               'capability_maximization_doctrine':True,
               'narrow_guardrails_broad_autonomy':True,
+              'standing_self_heal_authorization':True,
+              'operator_extensions':True,
               'mcp_health':True,
               'disk_available_kb':available_kb,
               'files_sha256':files,

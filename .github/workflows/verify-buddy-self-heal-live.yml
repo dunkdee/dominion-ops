@@ -1,0 +1,116 @@
+name: Verify Buddy Ecosystem Self-Heal Live
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-buddy-self-heal-live.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-buddy-self-heal
+  cancel-in-progress: false
+
+jobs:
+  verify-and-heal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    steps:
+      - name: Require protected VM access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Configure protected SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Run live governed self-heal acceptance
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          runtime="$HOME/buddy_core"
+          repo="$HOME/dominion-ops"
+          test -d "$runtime"
+          test -d "$repo/.git"
+          systemctl is-active --quiet buddy-bridge.service
+          pid="$(systemctl show buddy-bridge.service -p MainPID --value)"
+          test "${pid:-0}" -gt 1
+          python_bin="$(readlink -f "/proc/$pid/exe")"
+          test -x "$python_bin"
+
+          PYTHONPATH="$runtime:$repo" "$python_bin" - <<'PY'
+          import json
+          from core.self_heal import diagnose, repair_safe
+
+          def summary(state):
+              connectors = state.get('mcp_connectors') or {}
+              return {
+                  'schema': state.get('schema'),
+                  'healthy': state.get('healthy'),
+                  'issue_ids': [row.get('id') for row in state.get('issues', [])],
+                  'mcp_server_healthy': (state.get('mcp') or {}).get('healthy'),
+                  'mcp_registered': connectors.get('registered'),
+                  'mcp_healthy': connectors.get('healthy'),
+                  'mcp_failed': connectors.get('failed'),
+                  'connectors': [
+                      {'id': row.get('id'), 'status': row.get('status'), 'healthy': row.get('healthy')}
+                      for row in connectors.get('connectors', [])
+                  ],
+                  'services': {
+                      name: {'exists': row.get('exists'), 'active': row.get('active'), 'healthy': row.get('healthy')}
+                      for name, row in (state.get('services') or {}).items()
+                  },
+                  'containers': {
+                      name: {'exists': row.get('exists'), 'running': row.get('running'), 'healthy': row.get('healthy')}
+                      for name, row in (state.get('containers') or {}).items()
+                  },
+                  'disk_free_bytes': (state.get('disk') or {}).get('free_bytes'),
+              }
+
+          before = diagnose()
+          print('BUDDY_SELF_HEAL_BEFORE=' + json.dumps(summary(before), sort_keys=True))
+          repair = repair_safe()
+          after = repair.get('after') or diagnose()
+          print('BUDDY_SELF_HEAL_STATUS=' + str(repair.get('status')))
+          print('BUDDY_SELF_HEAL_ACTION_COUNT=' + str(len(repair.get('actions', []))))
+          print('BUDDY_SELF_HEAL_AFTER=' + json.dumps(summary(after), sort_keys=True))
+
+          connectors = after.get('mcp_connectors') or {}
+          assert connectors.get('registered') == 8, connectors
+          assert connectors.get('failed') == 0, connectors
+          assert connectors.get('healthy') == 8, connectors
+          assert (after.get('mcp') or {}).get('healthy') is True
+          assert repair.get('status') in {'HEALTHY', 'REPAIRED'}, repair.get('status')
+          assert after.get('issues') == [], after.get('issues')
+          assert after.get('healthy') is True
+          print('BUDDY_ECOSYSTEM_SELF_HEAL=PASS connectors=8/8 unresolved=0')
+          PY
+          REMOTE
+
+      - name: Cleanup SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

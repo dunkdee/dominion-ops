@@ -123,7 +123,13 @@ def port_open(port: int) -> bool:
         return False
 
 
-def evaluate(contract: dict[str, Any], repo: Path, previous: dict[str, Any]) -> dict[str, Any]:
+def evaluate(
+    contract: dict[str, Any],
+    repo: Path,
+    previous: dict[str, Any],
+    *,
+    force_deep_probe: bool = False,
+) -> dict[str, Any]:
     cycle = int(previous.get("cycle") or 0) + 1
     checks: list[dict[str, Any]] = []
     observed_at = utc_now()
@@ -183,7 +189,7 @@ def evaluate(contract: dict[str, Any], repo: Path, previous: dict[str, Any]) -> 
     checks.append(check_record("command-center:truth", truth_ok, " ".join(detail_parts)))
 
     deep_every = max(1, int(contract.get("deep_probe_every_cycles", 10)))
-    deep_due = cycle == 1 or cycle % deep_every == 0
+    deep_due = force_deep_probe or cycle == 1 or cycle % deep_every == 0
     if deep_due:
         probe = contract.get("intelligence_probe") or {}
         code, body = http_json(str(probe.get("url", "")), method="POST", payload={"message": probe.get("message", "SYSTEM_INTEGRITY_HEALTH_PROBE")}, timeout=70)
@@ -258,6 +264,7 @@ def main() -> int:
     parser.add_argument("--repo", default=str(Path.home() / "dominion-ops"))
     parser.add_argument("--state-root", default=str(Path.home() / ".dominion/system-integrity"))
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--force-deep-probe", action="store_true")
     args = parser.parse_args()
 
     contract = load_contract(Path(args.contract))
@@ -267,7 +274,12 @@ def main() -> int:
 
     state_root = Path(args.state_root)
     previous = load_json(state_root / "latest.json", {})
-    state = evaluate(contract, Path(args.repo), previous)
+    state = evaluate(
+        contract,
+        Path(args.repo),
+        previous,
+        force_deep_probe=args.force_deep_probe,
+    )
     persist(state_root, state)
     print(
         f"SYSTEM_INTEGRITY_AGENT={state['status']} cycle={state['cycle']} "

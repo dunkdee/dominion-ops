@@ -68,7 +68,7 @@ def test_fix_yourself_routes_to_diagnose_repair_and_reaudit(op, monkeypatch):
     monkeypatch.setattr(
         extensions,
         "diagnose",
-        lambda: {"observed_at": "now", "healthy": False, "issues": [{"id": "x"}]},
+        lambda: {"observed_at": "now", "healthy": False, "issues": [{"id": "x"}], "mcp_connectors": {"registered": 8, "failed": 1}},
     )
     monkeypatch.setattr(
         extensions,
@@ -78,7 +78,7 @@ def test_fix_yourself_routes_to_diagnose_repair_and_reaudit(op, monkeypatch):
     monkeypatch.setattr(
         extensions,
         "audit_capabilities",
-        lambda operator: {"status": "HEALTHY", "registered_enabled": 22, "native_connected": 17, "mcp": {"status": "HEALTHY"}},
+        lambda operator: {"status": "HEALTHY", "registered_enabled": 21, "native_connected": 16, "mcp": {"status": "HEALTHY"}},
     )
 
     result = op.handle("fix yourself", session_id="self-heal-test")
@@ -91,13 +91,35 @@ def test_fix_yourself_routes_to_diagnose_repair_and_reaudit(op, monkeypatch):
     assert all(r["status"] == "VERIFIED" for r in result["receipts"])
 
 
+def test_blocked_self_heal_blocks_mission_instead_of_faking_complete(op, monkeypatch):
+    monkeypatch.setattr(
+        extensions,
+        "diagnose",
+        lambda: {"observed_at": "now", "healthy": False, "issues": [{"id": "x"}], "mcp_connectors": {"registered": 8, "failed": 1}},
+    )
+    monkeypatch.setattr(
+        extensions,
+        "repair_safe",
+        lambda: {
+            "status": "BLOCKED",
+            "receipt": "/tmp/blocked.json",
+            "authorization_id": "founder-safe-internal-self-heal-v1",
+            "after": {"issues": [{"id": "still-broken"}]},
+        },
+    )
+    result = op.handle("fix yourself")
+    assert result["status"] == "BLOCKED"
+    repair_receipt = next(r for r in result["receipts"] if r["capability"] == "system.self_repair")
+    assert repair_receipt["status"] == "BLOCKED"
+
+
 def test_capability_audit_is_direct_and_truthful(op, monkeypatch):
     monkeypatch.setattr(
         extensions,
         "audit_capabilities",
         lambda operator: {
             "status": "DEGRADED",
-            "registered_enabled": 22,
+            "registered_enabled": 21,
             "native_connected": 16,
             "mcp": {"status": "UNAVAILABLE"},
         },
@@ -141,6 +163,76 @@ def test_capability_health_merges_extension_registry(op, monkeypatch):
     assert report["registered_enabled"] == len(op.capabilities)
 
 
+def test_self_heal_probes_every_registered_mcp_connector(monkeypatch):
+    connector_ids = list(self_heal.MCP_REPAIR_MAP)
+    monkeypatch.setattr(
+        self_heal.mcp_client,
+        "list_connectors",
+        lambda: {
+            "external_mutation_enabled": False,
+            "connectors": [{"id": connector_id, "adapter": "http_get", "effect": "read_only"} for connector_id in connector_ids],
+        },
+    )
+    calls = []
+
+    def invoke(connector_id, params):
+        calls.append(connector_id)
+        if connector_id in {"radah_autopilot_timer", "revenue_runtime_service"}:
+            return {"connector_id": connector_id, "status": "PASS", "elapsed_ms": 1, "result": {"returncode": 0}}
+        return {"connector_id": connector_id, "status": "PASS", "elapsed_ms": 1, "result": {"status": 200}}
+
+    monkeypatch.setattr(self_heal.mcp_client, "invoke", invoke)
+    report = self_heal._mcp_connector_state()
+    assert report["registered"] == len(connector_ids) == 8
+    assert report["failed"] == 0
+    assert report["all_healthy"] is True
+    assert calls == connector_ids
+
+
+def test_nonzero_exec_connector_is_failure_even_if_mcp_envelope_says_pass():
+    healthy, evidence = self_heal._mcp_result_healthy({"status": "PASS", "result": {"returncode": 3}})
+    assert healthy is False
+    assert evidence == "exec_returncode"
+
+
+def test_all_current_mcp_connectors_have_fixed_repair_targets():
+    assert set(self_heal.MCP_REPAIR_MAP) == {
+        "alpha_engine_health",
+        "command_center_status",
+        "conductor_health",
+        "dominion_web_health",
+        "n8n_health",
+        "radah_autopilot_timer",
+        "revenue_runtime_service",
+        "wix_agent_health",
+    }
+    for target_kind, target in self_heal.MCP_REPAIR_MAP.values():
+        if target_kind == "service":
+            assert target in self_heal.SERVICE_RECIPES
+        elif target_kind == "container":
+            assert target in self_heal.CONTAINER_RECIPES
+        else:
+            pytest.fail(f"unexpected repair target kind: {target_kind}")
+
+
+def test_container_repairs_are_fixed_names_only():
+    expected = {
+        "command_center": "dominion-command-center",
+        "dominion_web": "dominion-web",
+        "n8n": "n8n",
+        "wix_agent": "wix-agent",
+    }
+    assert {name: spec["container"] for name, spec in self_heal.CONTAINER_RECIPES.items()} == expected
+
+
+def test_self_heal_tracks_extension_and_registry_source_files():
+    tracked = set(self_heal.TRACKED_RUNTIME_FILES)
+    assert "core/__init__.py" in tracked
+    assert "core/operator_extensions.py" in tracked
+    assert "config/capability_registry.json" in tracked
+    assert "config/capability_extensions.json" in tracked
+
+
 def test_self_heal_protects_governance_and_forbids_arbitrary_shell():
     assert "config/BUDDY_CONSTITUTION.md" in self_heal.PROTECTED_GOVERNANCE_FILES
     assert "config/standing_authorizations.json" in self_heal.PROTECTED_GOVERNANCE_FILES
@@ -155,10 +247,13 @@ def test_standing_authorization_explicitly_excludes_high_consequence_changes():
     auth_path = Path(self_heal.AUTH_FILE)
     text = auth_path.read_text(encoding="utf-8")
     assert "safe_internal_repair" in text
+    assert "allowlisted fixed-name Dominion containers" in text
+    assert "probe every registered governed read-only MCP connector" in text
     assert "change credentials" in text
     assert "change firewall rules" in text
     assert "spend or move money" in text
     assert "rewrite BUDDY_CONSTITUTION.md" in text
+    assert "restart arbitrary containers" in text
 
 
 def test_bridge_health_proves_extensions_and_self_heal_endpoint_exists():

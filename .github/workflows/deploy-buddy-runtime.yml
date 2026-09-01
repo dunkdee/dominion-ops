@@ -272,7 +272,10 @@ jobs:
           assert data.get('ok') is True
           assert data.get('service') == 'buddy_bridge'
           assert data.get('canonical_repo') is True
-          print('BUDDY_BRIDGE_HEALTH=PASS')
+          assert data.get('self_heal_connected') is True
+          assert data.get('mcp_operator_connected') is True
+          assert int(data.get('capability_count', 0)) >= 20
+          print(f"BUDDY_BRIDGE_HEALTH=PASS capabilities={data['capability_count']} self_heal={data['self_heal_connected']} mcp_operator={data['mcp_operator_connected']}")
           PY
 
           mcp_code="$(curl -sS -o /tmp/buddy-mcp-health.json -w '%{http_code}' --max-time 5 http://127.0.0.1:8390/health 2>/dev/null || true)"
@@ -322,6 +325,8 @@ jobs:
               'narrow_guardrails_broad_autonomy':True,
               'standing_self_heal_authorization':True,
               'operator_extensions':True,
+              'self_heal_runtime_connected':True,
+              'mcp_operator_connected':True,
               'mcp_health':True,
               'disk_available_kb':available_kb,
               'files_sha256':files,

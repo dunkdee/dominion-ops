@@ -3,6 +3,21 @@
 > [!revenue] Objective
 > Move the strongest governed revenue lane from demand → conversion → paid revenue → fulfillment → retention → learning.
 
+## Revenue Engine — Locked Completion
+
+> [!success] LOCKED COMPLETE
+> `REVENUE_ENGINE_LOCKED_COMPLETE=YES`
+>
+> Canonical release: `12a6775373f04592db00983222268daa2b06f851` · source PR `#226`.
+> Foundation VM runtime verification confirmed `buddy-bridge.service` active, canonical repository connection, FAST CASH HTTP `200`, runtime schema `radah-memshalah-revenue-runtime-v1`, `publication_state=DRAFT_SHADOW`, and `external_actions_executed=false`.
+>
+> Determinism proof: two identical live requests produced package SHA-256 `a3b144f3ab623fdebee44e37c9eaf6105c764d259ccc375ebfa203cced888416`.
+> Fail-closed proof: legacy `draft_inputs[0].evidence_refs` returned HTTP `400` with `status=BLOCKED`.
+>
+> Machine-readable receipt: `runtime/releases/revenue-engine-locked-20260901.json`.
+>
+> This lock applies to the governed Revenue Engine hardening and Buddy Bridge execution path. It is **not** a claim of commercial revenue and is distinct from the `dominion-revenue-runtime.service` CRO experiment runtime. Reopen only for a verified defect or a new approved requirement.
+
 ## Production Revenue Work Plane
 
 **RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה** now treats the Dominion Revenue Runtime as the live execution plane for the Commerce & Fulfillment lane.

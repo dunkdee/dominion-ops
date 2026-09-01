@@ -3,6 +3,13 @@
 > [!revenue] Objective
 > Move the strongest governed revenue lane from demand → conversion → paid revenue → fulfillment → retention → learning.
 
+> [!mission] CURRENT PRODUCTION MISSION
+> `CURRENT_MODE=REVENUE_PRODUCTION`
+>
+> Revenue engineering is no longer the active constraint. Operate the live market loop now: **verify funnel baseline → remove proven VoltEdge conversion blockers → activate existing SimilarWeb capture → produce and distribute buyer-intent content → route qualified traffic → measure purchase attribution → learn and iterate.**
+>
+> Mission control: [[Dominion-Command-Center/REVENUE-PRODUCTION-NOW|Revenue Production · Current Mission]]
+
 ## Revenue Engine — Locked Completion
 
 > [!success] LOCKED COMPLETE

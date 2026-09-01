@@ -3,6 +3,25 @@
 > [!scorecard] Purpose
 > This page is the operator entry point for current work. It intentionally links to evidence instead of pretending generated notes are live telemetry.
 
+## Current Operating Priority
+
+> [!mission] REVENUE PRODUCTION
+> `CURRENT_MODE=REVENUE_PRODUCTION`
+>
+> The governed Revenue Engine is locked complete. The highest-impact constraint is now real production evidence: qualified traffic, conversion, purchase attribution, and learning — not additional infrastructure work.
+>
+> Current mission: [[Dominion-Command-Center/REVENUE-PRODUCTION-NOW|Revenue Production · Current Mission]]
+
+### Execution Order
+
+1. Verify the current live funnel baseline and attribution path.
+2. Remove only proven VoltEdge conversion blockers.
+3. Activate the existing SimilarWeb 7-day capture; do not rebuild it.
+4. Turn verified demand evidence into YouTube/content and owned organic distribution.
+5. Route qualified traffic through the governed revenue path.
+6. Measure demand → traffic → click → product → cart → checkout → purchase → attributed revenue.
+7. Feed verified outcomes back into Buddy, Revenue Operations, and Obsidian.
+
 ## Current-State Sources
 
 - [[Dominion-Brain/04-Agents/TEAM_CURRENT_STATE|Team Current State]]

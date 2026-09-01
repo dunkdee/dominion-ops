@@ -66,9 +66,10 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
         self.assertIn("COMMAND_CENTER_RUNTIME_DIR", text); self.assertIn("/runtime:ro", text); self.assertIn("RUNTIME_STATE_PATH: /runtime/runtime-state.json", text); self.assertNotIn("CHECKOUT_ART_OF_TRUE_HEALING", text)
 
     def test_ledger_mount_is_not_nested_inside_readonly_runtime(self):
-        """Prove the three-way contract: compose mount, compose env, module default all agree on /ledger."""
+        """Prove the four-way contract: governance, compose mount, compose env, module default all agree on /ledger."""
         compose = COMPOSE.read_text(encoding="utf-8")
         evidence = (ROOT / "apps/command-center/trading_evidence.py").read_text(encoding="utf-8")
+        policy = json.loads((ROOT / "governance/alpaca_paper_readonly_bridge_policy.json").read_text(encoding="utf-8"))
         # Ledger is mounted at /ledger (not /runtime/ledger — which is inside /runtime:ro)
         self.assertIn(":/ledger", compose)
         self.assertNotIn(":/runtime/ledger", compose)
@@ -79,6 +80,8 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
         # trading_evidence module default agrees with compose env var
         self.assertIn('DEFAULT_LEDGER_PATH = "/ledger/alpaca-paper-observations.jsonl"', evidence)
         self.assertNotIn("/runtime/ledger", evidence)
+        # Governance policy agrees with all three runtime contracts
+        self.assertEqual(policy["evidence"]["default_path"], "/ledger/alpaca-paper-observations.jsonl")
         # Host source directory is unchanged
         self.assertIn("/.dominion/ledger", compose)
 

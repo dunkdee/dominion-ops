@@ -59,7 +59,11 @@ jobs:
           systemctl is-active --quiet buddy-bridge.service
           pid="$(systemctl show buddy-bridge.service -p MainPID --value)"
           test "${pid:-0}" -gt 1
-          python_bin="$(readlink -f "/proc/$pid/exe")"
+
+          # Preserve the exact argv[0] used to start the live process. Resolving
+          # a virtualenv Python symlink to /usr/bin/python loses its site-packages.
+          python_bin="$(tr '\0' '\n' < "/proc/$pid/cmdline" | head -n 1)"
+          test -n "$python_bin"
           test -x "$python_bin"
 
           PYTHONPATH="$runtime:$repo" "$python_bin" - <<'PY'

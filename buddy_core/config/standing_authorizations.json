@@ -1,7 +1,7 @@
 {
   "schema": "dominion-standing-authorizations-v1",
-  "version": "1.0.0",
-  "updated_at": "2026-08-31T21:30:00-04:00",
+  "version": "1.1.0",
+  "updated_at": "2026-08-31T21:40:00-04:00",
   "authorizations": [
     {
       "id": "founder-safe-internal-self-heal-v1",
@@ -14,6 +14,8 @@
         "read governed logs and receipts with secret redaction",
         "restart specifically allowlisted internal Dominion services",
         "restart specifically allowlisted internal Dominion timers",
+        "restart specifically allowlisted fixed-name Dominion containers when their governed health evidence fails",
+        "probe every registered governed read-only MCP connector and correlate failures to an allowlisted repair target",
         "remove disposable __pycache__ directories and failed Buddy deploy backup artifacts",
         "restore tracked Buddy runtime source files from the canonical dominion-ops repository after creating a tracked-file rollback snapshot",
         "run compilation, tests, health probes, and source-integrity checks",
@@ -30,7 +32,8 @@
         "rewrite BUDDY_CONSTITUTION.md or standing_authorizations.json",
         "force-push rewrite git history or bypass required repository protections",
         "enable a quarantined or previously forbidden agent or service",
-        "perform arbitrary shell commands outside reviewed repair recipes"
+        "perform arbitrary shell commands outside reviewed repair recipes",
+        "restart arbitrary containers services or timers whose exact identifiers are not hard-coded in a reviewed repair recipe"
       ],
       "requirements": [
         "diagnose before repair",

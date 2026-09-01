@@ -64,6 +64,8 @@ def _self_diagnose_executor(operator: Any) -> Callable[[str, dict], tuple[Any, l
             "observed_at": result.get("observed_at"),
             "healthy": result.get("healthy"),
             "issue_count": len(result.get("issues", [])),
+            "mcp_connectors_registered": (result.get("mcp_connectors") or {}).get("registered"),
+            "mcp_connectors_failed": (result.get("mcp_connectors") or {}).get("failed"),
         }]
         return result, evidence
     return execute
@@ -72,12 +74,18 @@ def _self_diagnose_executor(operator: Any) -> Callable[[str, dict], tuple[Any, l
 def _self_repair_executor(operator: Any) -> Callable[[str, dict], tuple[Any, list]]:
     def execute(instruction: str, context: dict):
         result = repair_safe()
+        status = str(result.get("status") or "BLOCKED")
         evidence = [{
             "type": "self_heal_receipt",
-            "status": result.get("status"),
+            "status": status,
             "receipt": result.get("receipt"),
             "authorization_id": result.get("authorization_id"),
         }]
+        if status not in {"HEALTHY", "REPAIRED"}:
+            unresolved = (result.get("after") or result.get("before") or {}).get("issues", [])
+            raise OperatorExtensionError(
+                f"self_heal_{status.lower()}:unresolved={len(unresolved)} receipt={result.get('receipt','')}"
+            )
         return result, evidence
     return execute
 
@@ -106,7 +114,6 @@ def _extract_connector_id(instruction: str, available: list[dict[str, Any]]) -> 
     exact = (instruction or "").strip()
     if exact in ids:
         return exact
-    # Support a strict connector_id=<id> form while rejecting arbitrary strings.
     match = re.search(r"\bconnector_id\s*=\s*([a-z0-9][a-z0-9_.-]{1,79})\b", lowered)
     if match and match.group(1) in ids:
         return match.group(1)
@@ -204,8 +211,8 @@ def _wrap_handle(operator: Any) -> None:
                 operator,
                 text,
                 [
-                    ("system.self_diagnose", "Diagnose Buddy and core Dominion runtime before any mutation."),
-                    ("system.self_repair", "Apply only the standing-authorized safe internal repair recipes, verify, and roll back failed source repairs."),
+                    ("system.self_diagnose", "Diagnose Buddy and every registered governed Dominion runtime connector before any mutation."),
+                    ("system.self_repair", "Apply only standing-authorized allowlisted service/container/source repair recipes, verify all governed runtime signals, and roll back failed source repairs."),
                     ("system.capability_health", "Re-audit capability health after repair so unresolved gaps remain visible."),
                 ],
                 "self_heal",
@@ -218,7 +225,7 @@ def _wrap_handle(operator: Any) -> None:
             plan = _build_direct_plan(
                 operator,
                 text,
-                [("system.self_diagnose", "Diagnose Buddy and core Dominion runtime without mutation.")],
+                [("system.self_diagnose", "Diagnose Buddy and every registered governed Dominion runtime connector without mutation.")],
                 "self_diagnose",
             )
             if simulate:

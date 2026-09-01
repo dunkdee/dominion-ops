@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify
 import hmac
 import json
 import os
+import sys
 import threading
 from pathlib import Path
 
@@ -14,6 +15,39 @@ try:
 except ImportError:
     pass
 
+
+def _bootstrap_canonical_repo_root() -> Path | None:
+    """Expose canonical repo packages to the standalone Buddy runtime.
+
+    Production starts Buddy Bridge from ``~/buddy_core`` while governed shared
+    engines live under the canonical ``~/dominion-ops`` repository. Resolve only
+    an explicitly configured root or that canonical owner location, and add it
+    before importing shared modules.
+    """
+    candidates: list[Path] = []
+    configured = os.getenv("DOMINION_REPO_ROOT", "").strip()
+    if configured:
+        candidates.append(Path(configured).expanduser())
+    candidates.append(Path.home() / "dominion-ops")
+
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if not resolved.is_dir():
+            continue
+        if not (resolved / "apps" / "revenue_engine").is_dir():
+            continue
+        root = str(resolved)
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        return resolved
+    return None
+
+
+DOMINION_REPO_ROOT = _bootstrap_canonical_repo_root()
+
 from core.operator import get_operator
 from core.revenue_runtime import (
     MAX_PAYLOAD_BYTES,
@@ -23,7 +57,7 @@ from core.revenue_runtime import (
 
 app = Flask(__name__)
 
-BASE = Path("/home/malachisingleton8/buddy_core")
+BASE = Path.home() / "buddy_core"
 LOG = BASE / "buddy_bridge.log"
 DEALS = BASE / "scored_deals.json"
 BUDDY_WEB_TOKEN = os.getenv("BUDDY_WEB_TOKEN", "").strip()
@@ -80,7 +114,13 @@ def _governed_revenue_request(runner, lane: str):
 
 @app.get("/health")
 def health():
-    return jsonify(ok=True, service="buddy_bridge", port=5052, operator="v2")
+    return jsonify(
+        ok=True,
+        service="buddy_bridge",
+        port=5052,
+        operator="v2",
+        canonical_repo=bool(DOMINION_REPO_ROOT),
+    )
 
 
 @app.post("/webhook/wholesale/trigger")

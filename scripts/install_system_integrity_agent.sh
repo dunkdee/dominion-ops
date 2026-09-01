@@ -27,13 +27,25 @@ python3 "$LIB_DIR/system_integrity_agent.py" \
 sudo install -m 644 "$SERVICE_SRC" /etc/systemd/system/dominion-system-integrity.service
 sudo install -m 644 "$TIMER_SRC" /etc/systemd/system/dominion-system-integrity.timer
 sudo systemctl daemon-reload
-sudo systemctl enable --now dominion-system-integrity.timer
+sudo systemctl enable dominion-system-integrity.timer
 
-# First cycle is immediate and includes the end-to-end intelligence probe.
+# Prove the installed systemd service can complete a normal cycle without
+# resetting or deleting existing integrity history.
 sudo systemctl reset-failed dominion-system-integrity.service >/dev/null 2>&1 || true
 sudo systemctl start dominion-system-integrity.service
 
 test "$(sudo systemctl show dominion-system-integrity.service -p Result --value)" = success
+
+# Deployment acceptance always includes one end-to-end intelligence probe,
+# regardless of the persisted cycle number. The explicit flag preserves the
+# monotonic cycle counter and normal deep-probe cadence for timer executions.
+python3 "$LIB_DIR/system_integrity_agent.py" \
+  --contract "$CONFIG_DIR/system-integrity-agent.json" \
+  --repo "$REPO_DIR" \
+  --state-root "$STATE_ROOT" \
+  --force-deep-probe
+
+sudo systemctl start dominion-system-integrity.timer
 sudo systemctl is-active --quiet dominion-system-integrity.timer
 sudo systemctl is-enabled --quiet dominion-system-integrity.timer
 

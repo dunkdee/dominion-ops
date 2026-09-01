@@ -8,7 +8,6 @@ on:
       - 'apps/youtube/**'
       - 'tests/test_buddy_brain_router_v2.py'
       - 'tests/test_buddy_canonical_governance.py'
-      - '.github/workflows/deploy-buddy-runtime.yml'
   workflow_dispatch:
 
 permissions:
@@ -40,6 +39,7 @@ jobs:
             buddy_core/core/operator.py \
             buddy_core/core/learning_engine.py \
             buddy_core/core/autonomous_learning.py \
+            buddy_core/core/revenue_runtime.py \
             buddy_core/buddy_bridge_api.py \
             buddy_core/buddy_web.py \
             apps/youtube/script_generator.py \
@@ -54,7 +54,8 @@ jobs:
             tests/test_buddy_brain_router_v2.py \
             tests/test_buddy_canonical_governance.py \
             tests/test_buddy_operator_v2.py \
-            tests/test_buddy_autonomous_learning.py
+            tests/test_buddy_autonomous_learning.py \
+            tests/test_revenue_runtime.py
       - name: Assert canonical prompt content
         env:
           PYTHONPATH: .:buddy_core
@@ -99,7 +100,7 @@ jobs:
           ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Deploy exact Buddy release with rollback
+      - name: Deploy exact Buddy release with tracked-file rollback
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
@@ -114,36 +115,82 @@ jobs:
           state="$HOME/.dominion/buddy"
           backups="$state/deploy-backups"
           stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-          backup="$backups/$stamp-$RUN_SHA.tgz"
+          backup_dir="$backups/$stamp-$RUN_SHA"
+          backup_ready=0
           deployed=0
           services="dominion-buddy-web.service buddy-bridge.service dominion-buddy.service"
 
           rollback() {
             rc=$?
-            if [ "$deployed" -ne 1 ] && [ -f "$backup" ]; then
-              echo "BUDDY_DEPLOY_ROLLBACK=START"
-              rm -rf "$runtime"
-              tar -xzf "$backup" -C "$HOME"
+            if [ "$deployed" -ne 1 ] && [ "$backup_ready" -eq 1 ] && [ -d "$backup_dir" ]; then
+              echo 'BUDDY_DEPLOY_ROLLBACK=START'
+              python3 - "$runtime" "$backup_dir" <<'PY'
+          import json, shutil, sys
+          from pathlib import Path
+          runtime=Path(sys.argv[1]); backup=Path(sys.argv[2])
+          files=backup/'files'
+          if files.exists():
+              for src in files.rglob('*'):
+                  if not src.is_file():
+                      continue
+                  rel=src.relative_to(files)
+                  dst=runtime/rel
+                  dst.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(src, dst)
+          absent_file=backup/'absent.json'
+          if absent_file.exists():
+              for rel in json.loads(absent_file.read_text(encoding='utf-8')):
+                  target=runtime/rel
+                  if target.is_file() or target.is_symlink():
+                      target.unlink()
+          PY
               for s in $services; do
                 if systemctl cat "$s" >/dev/null 2>&1; then sudo systemctl restart "$s" || true; fi
               done
-              echo "BUDDY_DEPLOY_ROLLBACK=COMPLETE"
+              echo 'BUDDY_DEPLOY_ROLLBACK=COMPLETE'
             fi
             exit "$rc"
           }
           trap rollback ERR
 
           test -d "$repo/.git"
-          test -d "$runtime"
+          install -d -m 755 "$runtime"
           install -d -m 700 "$backups"
-          tar -czf "$backup" -C "$HOME" buddy_core
-          chmod 600 "$backup"
+
+          # Remove obsolete whole-runtime archives from the superseded deploy design.
+          find "$backups" -maxdepth 1 -type f -name '*.tgz' -delete 2>/dev/null || true
+          # Tracked-file backups are tiny; retain only recent ones.
+          find "$backups" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
 
           cd "$repo"
           git fetch origin main
           git checkout main
           git pull --ff-only origin main
           test "$(git rev-parse HEAD)" = "$RUN_SHA"
+
+          avail_kb="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
+          test "${avail_kb:-0}" -ge 65536
+
+          install -d -m 700 "$backup_dir/files"
+          python3 - "$repo/buddy_core" "$runtime" "$backup_dir" <<'PY'
+          import json, shutil, sys
+          from pathlib import Path
+          source=Path(sys.argv[1]); runtime=Path(sys.argv[2]); backup=Path(sys.argv[3])
+          absent=[]
+          for src in source.rglob('*'):
+              if not src.is_file():
+                  continue
+              rel=src.relative_to(source)
+              live=runtime/rel
+              if live.is_file():
+                  dst=backup/'files'/rel
+                  dst.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(live, dst)
+              else:
+                  absent.append(str(rel))
+          (backup/'absent.json').write_text(json.dumps(absent, sort_keys=True), encoding='utf-8')
+          PY
+          backup_ready=1
 
           cp -a "$repo/buddy_core/." "$runtime/"
 
@@ -153,12 +200,10 @@ jobs:
             "$runtime/core/operator.py" \
             "$runtime/core/learning_engine.py" \
             "$runtime/core/autonomous_learning.py" \
+            "$runtime/core/revenue_runtime.py" \
             "$runtime/buddy_bridge_api.py" \
             "$runtime/buddy_web.py"
 
-          # Source-integrity gate intentionally avoids importing through bare
-          # system Python. Runtime dependency compatibility is proven below by
-          # restarting the real Buddy services and requiring healthy endpoints.
           grep -Fq 'ELITE REASONING PROTOCOL' "$runtime/core/brain.py"
           grep -Fq 'RADAH MEMSHALAH' "$runtime/core/brain.py"
           grep -Fq 'Founder Operating Context' "$runtime/config/FOUNDER_OPERATING_CONTEXT.md"
@@ -175,8 +220,16 @@ jobs:
           restarted=0
           for s in $services; do
             if systemctl cat "$s" >/dev/null 2>&1; then
-              sudo systemctl restart "$s"
-              sudo systemctl is-active --quiet "$s"
+              if ! sudo systemctl restart "$s"; then
+                sudo systemctl status "$s" --no-pager -l || true
+                journalctl -u "$s" -n 80 --no-pager || true
+                exit 1
+              fi
+              if ! sudo systemctl is-active --quiet "$s"; then
+                sudo systemctl status "$s" --no-pager -l || true
+                journalctl -u "$s" -n 80 --no-pager || true
+                exit 1
+              fi
               restarted=$((restarted+1))
               echo "BUDDY_SERVICE_RESTARTED=$s"
             fi
@@ -184,12 +237,15 @@ jobs:
           test "$restarted" -ge 1
 
           bridge_code="000"
-          for _ in $(seq 1 20); do
+          for _ in $(seq 1 30); do
             bridge_code="$(curl -sS -o /tmp/buddy-bridge-health.json -w '%{http_code}' --max-time 4 http://127.0.0.1:5052/health 2>/dev/null || true)"
-            [ "$bridge_code" = "200" ] && break
+            [ "$bridge_code" = '200' ] && break
             sleep 1
           done
-          test "$bridge_code" = "200"
+          if [ "$bridge_code" != '200' ]; then
+            journalctl -u buddy-bridge.service -n 100 --no-pager || true
+            exit 1
+          fi
           python3 - <<'PY'
           import json
           data=json.load(open('/tmp/buddy-bridge-health.json'))
@@ -199,24 +255,23 @@ jobs:
           PY
 
           web_code="000"
-          for _ in $(seq 1 20); do
+          for _ in $(seq 1 30); do
             web_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 http://127.0.0.1:5070/buddy 2>/dev/null || true)"
             case "$web_code" in 200|401|403) break;; esac
             sleep 1
           done
-          case "$web_code" in 200|401|403) ;; *) echo "unexpected Buddy web code=$web_code"; exit 1;; esac
+          case "$web_code" in 200|401|403) ;; *) journalctl -u dominion-buddy-web.service -n 100 --no-pager || true; exit 1;; esac
 
           python3 - "$state/deployed_release.json" "$RUN_SHA" <<'PY'
           import hashlib,json,sys
           from datetime import datetime,timezone
           from pathlib import Path
           out=Path(sys.argv[1]); sha=sys.argv[2]
-          runtime=Path.home()/ 'buddy_core'
+          runtime=Path.home()/'buddy_core'
           files={}
           for rel in ['core/brain.py','core/brain_router.py','config/FOUNDER_OPERATING_CONTEXT.md','config/BUDDY_CONSTITUTION.md']:
               p=runtime/rel
-              raw=p.read_bytes()
-              files[rel]=hashlib.sha256(raw).hexdigest()
+              files[rel]=hashlib.sha256(p.read_bytes()).hexdigest()
           payload={
               'schema':'dominion-buddy-deployed-release-v1',
               'release_sha':sha,

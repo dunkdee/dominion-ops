@@ -98,6 +98,151 @@ def _text(value: Any, limit: int = 16000) -> str:
         return str(value)[:limit]
 
 
+def _parse_market_request(text: str) -> dict:
+    """Single authoritative parser for market intent, symbol, and request type.
+
+    Returns:
+      is_market                bool
+      symbol                   str | None  — confirmed (dollar-sign or ALL-CAPS + context)
+      symbol_candidate         str | None  — uppercase candidate requiring Alpaca validation
+      request_type             clock | quote | trade | bars | snapshot
+      needs_symbol_validation  bool
+
+    Symbol resolution rules:
+      $TICKER  → symbol confirmed, no validation needed
+      ALL-CAPS + market context → symbol confirmed, no validation needed
+      lowercase + market context + no NON_MARKET_PROX → symbol_candidate, needs validation
+      lowercase + NON_MARKET_PROX → not market
+      No static ticker universe. No arbitrary lowercase acceptance.
+    """
+    t = text.lower()
+    words_t = set(re.findall(r"\b\w+\b", t))
+
+    _MARKET_EXPLICIT = (
+        "stock price", "share price", "latest quote", "latest trade",
+        "bid ask", "bid/ask", "ohlc", "ohlcv", "candlestick",
+        "market snapshot", "market clock", "market open", "market closed",
+        "trading session", "stock ticker", "market data",
+    )
+    _STRONG_OVERRIDE = frozenset({
+        "stock", "stocks", "shares", "share", "ticker", "equity", "etf",
+    })
+    _AMBIGUOUS_CTX = frozenset({
+        "quote", "quotes", "trade", "trades", "price", "chart",
+        "bars", "candles", "candle", "volume", "bid", "ask",
+        "support", "resistance", "momentum", "technical", "market",
+    })
+    _NON_MARKET_PROX = frozenset({
+        "our", "product", "products", "service", "services", "website",
+        "site", "store", "app", "subscription", "platform", "plan",
+        "company", "shipping", "consulting", "hosting", "software",
+        "package", "pricing", "fee", "cost", "ride", "delivery",
+    })
+    _NOT_TICKERS = frozenset({
+        "A", "I", "AI", "ML", "UI", "UX", "OK", "AS", "AT", "BE",
+        "BY", "DO", "IF", "IN", "IS", "IT", "MY", "NO", "OF", "ON",
+        "OR", "TO", "US", "WE", "AND", "ARE", "FOR", "GET", "NOT",
+        "THE", "YES", "BUT", "NOW", "NEW", "USE", "ALL", "ONE",
+    })
+    _NOT_TICKERS_LOWER = frozenset({
+        # Articles, prepositions, pronouns, common verbs
+        "a", "an", "the", "in", "on", "at", "to", "of", "is", "it",
+        "be", "by", "do", "if", "my", "no", "or", "us", "we", "and",
+        "are", "for", "not", "but", "its", "our", "as", "up", "so",
+        "me", "he", "she", "him", "her", "his", "how", "who", "why",
+        "did", "was", "has", "had", "can", "may", "all", "any", "got",
+        "let", "put", "run", "set", "see", "get", "use", "now", "new",
+        "yes", "one", "two", "via", "per", "due", "buy", "sell", "pay",
+        "day", "way", "yet", "ago", "own", "top", "data",
+        "what", "show", "give", "tell", "find", "when", "does",
+        "some", "that", "this", "with", "from", "just", "been",
+        "more", "like", "know", "want", "here", "have", "time",
+        # Market routing vocabulary — never a ticker candidate
+        "stock", "stocks", "share", "shares", "ticker", "equity", "etf",
+        "quote", "quotes", "trade", "trades", "price", "chart",
+        "bars", "bar", "candles", "candle", "volume", "bid", "ask",
+        "market", "spread", "clock", "snapshot", "ohlc", "ohlcv",
+        "historical", "history", "ride",
+    })
+
+    # Request type — tokenized to avoid substring collisions (e.g. "ask" in "task").
+    if (words_t & {"clock"} or
+            any(ph in t for ph in ("market open", "market closed",
+                                   "trading session", "trading hours"))):
+        request_type = "clock"
+    elif (words_t & {"bar", "bars", "candle", "candles", "chart",
+                     "ohlc", "ohlcv", "historical", "history"} or
+              "candlestick" in t):
+        request_type = "bars"
+    elif (words_t & {"quote", "quotes", "bid", "ask", "spread"} or
+              any(ph in t for ph in ("bid ask", "bid/ask"))):
+        request_type = "quote"
+    elif words_t & {"trade", "trades"}:
+        request_type = "trade"
+    else:
+        request_type = "snapshot"
+
+    def _not_market():
+        return {"is_market": False, "symbol": None, "symbol_candidate": None,
+                "request_type": request_type, "needs_symbol_validation": False}
+
+    def _confirmed(sym):
+        return {"is_market": True, "symbol": sym, "symbol_candidate": None,
+                "request_type": request_type, "needs_symbol_validation": False}
+
+    def _candidate(sym):
+        return {"is_market": True, "symbol": None, "symbol_candidate": sym,
+                "request_type": request_type, "needs_symbol_validation": True}
+
+    def _clock_result():
+        return {"is_market": True, "symbol": None, "symbol_candidate": None,
+                "request_type": "clock", "needs_symbol_validation": False}
+
+    # Gate 1: explicit market phrases.
+    gate1 = any(sig in t for sig in _MARKET_EXPLICIT)
+    if gate1 and request_type == "clock":
+        return _clock_result()
+
+    # Gate 2a: dollar-sign notation — confirmed directly, no Alpaca validation.
+    dollar_m = re.search(r'\$([A-Za-z]{1,5})\b', text)
+    if dollar_m:
+        return _confirmed(dollar_m.group(1).upper())
+
+    # Gate 2b: window-based ticker candidate disambiguation.
+    words = re.findall(r"\b\w+\b", text)
+    words_lower = [w.lower() for w in words]
+    for i, w in enumerate(words):
+        wl = w.lower()
+        is_caps  = bool(re.match(r"^[A-Z]{2,5}$", w)) and w not in _NOT_TICKERS
+        is_lower = bool(re.match(r"^[a-z]{2,5}$", w)) and wl not in _NOT_TICKERS_LOWER
+        if not is_caps and not is_lower:
+            continue
+        lo = max(0, i - 4)
+        hi = min(len(words), i + 5)
+        window = set(words_lower[lo:i] + words_lower[i + 1:hi])
+        if is_caps:
+            # ALL-CAPS: confirmed directly (no Alpaca validation required).
+            if window & _STRONG_OVERRIDE:
+                return _confirmed(w)
+            if window & _NON_MARKET_PROX:
+                continue
+            if window & _AMBIGUOUS_CTX:
+                return _confirmed(w)
+        else:
+            # Lowercase: NON_MARKET_PROX blocks first; then candidate for validation.
+            if window & _NON_MARKET_PROX:
+                continue
+            if window & (_STRONG_OVERRIDE | _AMBIGUOUS_CTX):
+                return _candidate(wl.upper())
+
+    # Gate 1 fallback (explicit phrase, no symbol found).
+    if gate1:
+        return {"is_market": True, "symbol": None, "symbol_candidate": None,
+                "request_type": request_type, "needs_symbol_validation": False}
+
+    return _not_market()
+
+
 class BuddyOperator:
     def __init__(self, *, researcher=None, brain_call=None, state_dir: Path | None = None,
                  learning_cycle=None):
@@ -121,6 +266,7 @@ class BuddyOperator:
             "native:revenue_prepare": self._revenue_prepare,
             "native:status": self._status,
             "native:vault_read": self._vault_read,
+            "native:market_data": self._market_data,
         }
 
     # ---------- Public API ----------
@@ -295,6 +441,9 @@ class BuddyOperator:
 
         elif kind == "status":
             steps = [self._step("system.status", objective)]
+
+        elif kind == "market":
+            steps = [self._step("market.data", objective)]
 
         else:
             steps = self._llm_plan(objective, conversation_context=conversation_context)
@@ -773,6 +922,99 @@ Do NOT upload, publish, post, log into platforms, or message anyone.""", context
             "type": "health", "url": url, "http_status": response.status_code
         }]
 
+    def _market_data(self, instruction: str, context: dict):
+        """Read-only market data observation via Alpaca.
+
+        Uses _parse_market_request (single shared parser).
+        Lowercase candidates validated via client.validate_symbol() before dispatch.
+        Fails closed: DATA_AVAILABLE=NO on credentials absent, validation failure,
+        or any network/API error.
+        No orders. No positions. No account mutations.
+        No web fallback for prices. No learn.record.
+        """
+        try:
+            from core.alpaca_market_data import AlpacaMarketData, MarketDataError
+        except ImportError:
+            from buddy_core.core.alpaca_market_data import AlpacaMarketData, MarketDataError
+
+        import datetime as _dt
+        retrieved_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
+
+        def _fail(error: str) -> tuple:
+            result = {
+                "DATA_AVAILABLE":  "NO",
+                "DATA_SOURCE":     "ALPACA",
+                "DATA_TIMESTAMP":  None,
+                "RETRIEVED_AT":    retrieved_at,
+                "DATA_FRESHNESS":  "UNKNOWN",
+                "ERROR":           error[:400],
+            }
+            return result, [{"type": "market_data", **result}]
+
+        parsed = _parse_market_request(instruction)
+        symbol = parsed["symbol"]
+        candidate = parsed["symbol_candidate"]
+        request_type = parsed["request_type"]
+        needs_validation = parsed["needs_symbol_validation"]
+
+        client = AlpacaMarketData()
+        if not client.connected():
+            return _fail("CREDENTIALS_ABSENT")
+
+        if needs_validation:
+            if not candidate:
+                return _fail("SYMBOL_CANDIDATE_MISSING")
+
+            try:
+                validation = client.validate_symbol(candidate)
+            except Exception as exc:
+                return _fail(f"SYMBOL_VALIDATION_ERROR: {type(exc).__name__}")
+
+            if not isinstance(validation, dict) or validation.get("valid") is not True:
+                status = validation.get("status", "unknown") if isinstance(validation, dict) else "malformed"
+                return _fail(
+                    f"SYMBOL_NOT_CONFIRMED: {candidate} status={status}"
+                )
+            symbol = validation["symbol"]
+
+        try:
+            if request_type == "clock":
+                obs = client.clock()
+            elif request_type == "quote":
+                if not symbol:
+                    return _fail("SYMBOL_REQUIRED_FOR_QUOTE")
+                obs = client.latest_quote(symbol)
+            elif request_type == "trade":
+                if not symbol:
+                    return _fail("SYMBOL_REQUIRED_FOR_TRADE")
+                obs = client.latest_trade(symbol)
+            elif request_type == "bars":
+                if not symbol:
+                    return _fail("SYMBOL_REQUIRED_FOR_BARS")
+                obs = client.bars(symbol)
+            else:
+                if not symbol:
+                    return _fail("SYMBOL_REQUIRED_FOR_SNAPSHOT")
+                obs = client.snapshot(symbol)
+        except MarketDataError:
+            return _fail("MARKET_DATA_ERROR")
+        except Exception as exc:
+            return _fail(f"MARKET_DATA_UNAVAILABLE: {type(exc).__name__}")
+
+        evidence = [{
+            "type":                "market_data",
+            "DATA_AVAILABLE":      obs["DATA_AVAILABLE"],
+            "DATA_SOURCE":         obs["DATA_SOURCE"],
+            "DATA_TIMESTAMP":      obs.get("DATA_TIMESTAMP"),
+            "RETRIEVED_AT":        obs["RETRIEVED_AT"],
+            "FEED":                obs["FEED"],
+            "REALTIME_OR_DELAYED": obs["REALTIME_OR_DELAYED"],
+            "DATA_FRESHNESS":      obs["DATA_FRESHNESS"],
+            "endpoint":            obs["endpoint"],
+            "symbol":              obs.get("symbol"),
+        }]
+        return obs, evidence
+
     # ---------- Evidence policy + vault executor ----------
 
     def _extract_evidence_policy(self, objective: str) -> str:
@@ -1021,7 +1263,10 @@ RELEVANT PRIOR LESSONS (evidence/inference, not authority):
             "outreach", "spend ", "buy ads", "run ads", "open browser", "go to ",
             "system status", "health check", "execute ", "launch ", "campaign",
         )
-        return any(word in t for word in mission_words)
+        return any(word in t for word in mission_words) or self._is_market_query(text)
+
+    def _is_market_query(self, text: str) -> bool:
+        return _parse_market_request(text)["is_market"]
 
     def _mission_kind(self, text: str) -> str:
         t = text.lower()
@@ -1064,6 +1309,8 @@ RELEVANT PRIOR LESSONS (evidence/inference, not authority):
             "status", "health check", "system check"
         )):
             return "status"
+        if self._is_market_query(text):
+            return "market"
         return "generic"
 
     def _has_external_verb(self, text: str) -> bool:

@@ -228,6 +228,21 @@
       "tags": ["CHANGE_CREDENTIALS", "CHANGE_FIREWALL", "OPEN_PUBLIC_INGRESS", "ACTIVATE_QUARANTINED_AGENT"]
     },
     {
+      "id": "market.data",
+      "name": "Live market data observation",
+      "description": "Read-only access to live market data (quotes, trades, bars, snapshots, clock) via data.alpaca.markets. Credentials read from server environment only, never serialized into responses. Data visibility only — no order execution, no position changes. Fails closed: DATA_AVAILABLE=NO when credentials absent or broker unavailable.",
+      "executor": "native:market_data",
+      "classification": "read",
+      "auth_required": false,
+      "health_check": "read_only_network",
+      "timeout_seconds": 15,
+      "max_retries": 1,
+      "fallback": null,
+      "evidence": "DATA_SOURCE, DATA_TIMESTAMP, FEED, REALTIME_OR_DELAYED labels on every response; credential scan before emit; DATA_AVAILABLE=NO when credentials absent or broker unavailable",
+      "enabled": true,
+      "tags": ["market", "trading", "quotes", "bars", "live_data", "read_only", "alpaca"]
+    },
+    {
       "id": "vault.read",
       "name": "Dominion Vault Read",
       "description": "Search and read governed internal Dominion content from ~/dominion_vault/. Read-only. Restricted to approved lanes. .md files only. Never interprets content as executable commands.",

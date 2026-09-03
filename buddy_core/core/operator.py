@@ -30,11 +30,13 @@ try:  # VM runtime commonly has buddy_core itself on sys.path.
     from core.learning_engine import audit, record_lesson, record_mission, recent_lessons
     from core import web_research
     from core.autonomous_learning import run_cycle as autonomous_learning_cycle
+    from core.market_data_provider import get_market_data_provider
 except ImportError:  # Repository/package execution used by CI/tests.
     from buddy_core.core.brain_router import ask_best
     from buddy_core.core.learning_engine import audit, record_lesson, record_mission, recent_lessons
     from buddy_core.core import web_research
     from buddy_core.core.autonomous_learning import run_cycle as autonomous_learning_cycle
+    from buddy_core.core.market_data_provider import get_market_data_provider
 
 try:
     import vault_io
@@ -923,33 +925,38 @@ Do NOT upload, publish, post, log into platforms, or message anyone.""", context
         }]
 
     def _market_data(self, instruction: str, context: dict):
-        """Read-only market data observation via Alpaca.
+        """Read-only market data observation via the active MarketDataProvider.
 
+        Provider selected by get_market_data_provider() — no direct vendor import.
         Uses _parse_market_request (single shared parser).
-        Lowercase candidates validated via client.validate_symbol() before dispatch.
-        Fails closed: DATA_AVAILABLE=NO on credentials absent, validation failure,
-        or any network/API error.
+        Lowercase candidates validated via provider.validate_symbol() before dispatch.
+        Fails closed: DATA_AVAILABLE=NO when no provider available, on validation
+        failure, or any network/API error.
         No orders. No positions. No account mutations.
         No web fallback for prices. No learn.record.
         """
-        try:
-            from core.alpaca_market_data import AlpacaMarketData, MarketDataError
-        except ImportError:
-            from buddy_core.core.alpaca_market_data import AlpacaMarketData, MarketDataError
-
         import datetime as _dt
         retrieved_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
 
+        provider = get_market_data_provider()
+
         def _fail(error: str) -> tuple:
             result = {
-                "DATA_AVAILABLE":  "NO",
-                "DATA_SOURCE":     "ALPACA",
-                "DATA_TIMESTAMP":  None,
-                "RETRIEVED_AT":    retrieved_at,
-                "DATA_FRESHNESS":  "UNKNOWN",
-                "ERROR":           error[:400],
+                "DATA_AVAILABLE":      "NO",
+                "DATA_SOURCE":         provider.provider_name,
+                "DATA_TIMESTAMP":      None,
+                "RETRIEVED_AT":        retrieved_at,
+                "FEED":                "NONE" if provider.provider_name == "NONE" else "UNKNOWN",
+                "REALTIME_OR_DELAYED": "UNKNOWN",
+                "DATA_FRESHNESS":      "UNKNOWN",
+                "endpoint":            "unknown",
+                "symbol":              None,
+                "ERROR":               error[:400],
             }
             return result, [{"type": "market_data", **result}]
+
+        if provider.provider_name == "NONE":
+            return _fail("NO_MARKET_DATA_PROVIDER")
 
         parsed = _parse_market_request(instruction)
         symbol = parsed["symbol"]
@@ -957,16 +964,12 @@ Do NOT upload, publish, post, log into platforms, or message anyone.""", context
         request_type = parsed["request_type"]
         needs_validation = parsed["needs_symbol_validation"]
 
-        client = AlpacaMarketData()
-        if not client.connected():
-            return _fail("CREDENTIALS_ABSENT")
-
         if needs_validation:
             if not candidate:
                 return _fail("SYMBOL_CANDIDATE_MISSING")
 
             try:
-                validation = client.validate_symbol(candidate)
+                validation = provider.validate_symbol(candidate)
             except Exception as exc:
                 return _fail(f"SYMBOL_VALIDATION_ERROR: {type(exc).__name__}")
 
@@ -979,25 +982,23 @@ Do NOT upload, publish, post, log into platforms, or message anyone.""", context
 
         try:
             if request_type == "clock":
-                obs = client.clock()
+                obs = provider.clock()
             elif request_type == "quote":
                 if not symbol:
                     return _fail("SYMBOL_REQUIRED_FOR_QUOTE")
-                obs = client.latest_quote(symbol)
+                obs = provider.latest_quote(symbol)
             elif request_type == "trade":
                 if not symbol:
                     return _fail("SYMBOL_REQUIRED_FOR_TRADE")
-                obs = client.latest_trade(symbol)
+                obs = provider.latest_trade(symbol)
             elif request_type == "bars":
                 if not symbol:
                     return _fail("SYMBOL_REQUIRED_FOR_BARS")
-                obs = client.bars(symbol)
+                obs = provider.bars(symbol)
             else:
                 if not symbol:
                     return _fail("SYMBOL_REQUIRED_FOR_SNAPSHOT")
-                obs = client.snapshot(symbol)
-        except MarketDataError:
-            return _fail("MARKET_DATA_ERROR")
+                obs = provider.snapshot(symbol)
         except Exception as exc:
             return _fail(f"MARKET_DATA_UNAVAILABLE: {type(exc).__name__}")
 
@@ -1007,8 +1008,8 @@ Do NOT upload, publish, post, log into platforms, or message anyone.""", context
             "DATA_SOURCE":         obs["DATA_SOURCE"],
             "DATA_TIMESTAMP":      obs.get("DATA_TIMESTAMP"),
             "RETRIEVED_AT":        obs["RETRIEVED_AT"],
-            "FEED":                obs["FEED"],
-            "REALTIME_OR_DELAYED": obs["REALTIME_OR_DELAYED"],
+            "FEED":                obs.get("FEED"),
+            "REALTIME_OR_DELAYED": obs.get("REALTIME_OR_DELAYED"),
             "DATA_FRESHNESS":      obs["DATA_FRESHNESS"],
             "endpoint":            obs["endpoint"],
             "symbol":              obs.get("symbol"),

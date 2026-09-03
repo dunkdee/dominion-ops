@@ -229,8 +229,8 @@
     },
     {
       "id": "market.data",
-      "name": "Live market data observation",
-      "description": "Read-only access to live market data (quotes, trades, bars, snapshots, clock) via data.alpaca.markets. Credentials read from server environment only, never serialized into responses. Data visibility only — no order execution, no position changes. Fails closed: DATA_AVAILABLE=NO when credentials absent or broker unavailable.",
+      "name": "Governed market data observation",
+      "description": "Governed market data observation through the active MarketDataProvider. Read-only access to quotes, trades, bars, snapshots, and market clock. No order execution, no position changes. Provider-neutral: adapters are optional and configurable. Fails closed: DATA_AVAILABLE=NO when no provider is configured or available.",
       "executor": "native:market_data",
       "classification": "read",
       "auth_required": false,
@@ -238,9 +238,9 @@
       "timeout_seconds": 15,
       "max_retries": 1,
       "fallback": null,
-      "evidence": "DATA_SOURCE, DATA_TIMESTAMP, FEED, REALTIME_OR_DELAYED labels on every response; credential scan before emit; DATA_AVAILABLE=NO when credentials absent or broker unavailable",
+      "evidence": "DATA_SOURCE, DATA_TIMESTAMP, FEED, REALTIME_OR_DELAYED labels on every response; DATA_AVAILABLE=NO when no provider configured or available",
       "enabled": true,
-      "tags": ["market", "trading", "quotes", "bars", "live_data", "read_only", "alpaca"]
+      "tags": ["market", "trading", "quotes", "bars", "live_data", "read_only", "provider_neutral"]
     },
     {
       "id": "vault.read",

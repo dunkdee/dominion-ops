@@ -57,7 +57,6 @@ from core.token_resolver import (
     TOKEN_KEY,
     count_assignments,
     parse_env_file,
-    resolve_buddy_web_token,
 )
 
 try:
@@ -686,6 +685,12 @@ ENV_FILES = [
     Path.home() / "buddy_core" / ".env",
 ]
 
+# BUDDY_WEB_TOKEN is a live production auth secret, not an ordinary config
+# value: it must exist in exactly one place. Every other required key is
+# still mirrored across ENV_FILES for backward compatibility; the token is
+# instead enforced single-source here and actively stripped from the rest.
+CANONICAL_TOKEN_FILE = Path.home() / "buddy_core" / ".env"
+
 
 def _write_env_key(env_file: Path, key: str, value: str) -> str:
     """Set ``key`` to ``value`` in ``env_file`` with exactly one assignment.
@@ -724,6 +729,39 @@ def _write_env_key(env_file: Path, key: str, value: str) -> str:
     except OSError:
         pass
     return "rewrote" if replaced else "appended"
+
+
+def _strip_env_key(env_file: Path, key: str) -> bool:
+    """Remove every assignment of ``key`` from ``env_file``. Returns True if
+    anything was actually removed.
+
+    Used only to retire a secret from a non-canonical location — never to
+    delete an ordinary config key, and never touching the canonical file.
+    """
+    lines = env_file.read_text(encoding="utf-8", errors="ignore").splitlines()
+    out = []
+    removed = False
+    for line in lines:
+        stripped = line.strip()
+        candidate = stripped[len("export "):].lstrip() if stripped.startswith("export ") else stripped
+        if not stripped.startswith("#") and "=" in candidate and candidate.partition("=")[0].strip() == key:
+            removed = True
+            continue
+        out.append(line)
+    if not removed:
+        return False
+    backup = Path(str(env_file) + ".sentinel-bak")
+    try:
+        backup.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        backup.chmod(0o600)
+    except OSError:
+        pass
+    env_file.write_text(("\n".join(out) + "\n") if out else "", encoding="utf-8")
+    try:
+        env_file.chmod(0o600)
+    except OSError:
+        pass
+    return True
 
 
 def check_env_keys(state):
@@ -767,24 +805,56 @@ def check_env_keys(state):
             continue
 
         if key == TOKEN_KEY:
-            # Align on the value Buddy's runtime authenticates with, not on
-            # whichever file this loop happened to read first.
-            resolution = resolve_buddy_web_token()
-            canonical_value = resolution.token or list(sources.values())[0]
-            if resolution.conflict:
-                issues.append(
-                    f"ENV KEY CONFLICT: {key} differs across "
-                    f"{', '.join(resolution.conflicting_sources)} — aligning on {resolution.source}"
-                )
-                log.warning(f"  {key}: conflict across {', '.join(resolution.conflicting_sources)}")
-        else:
-            canonical_value = list(sources.values())[0]
-            if len(set(sources.values())) > 1:
-                issues.append(
-                    f"ENV KEY CONFLICT: {key} differs across "
-                    f"{', '.join(Path(f).name for f in sources)}"
-                )
-                log.warning(f"  {key}: conflicting values across {len(sources)} files")
+            # Single canonical source, not a mirrored config value. A secret
+            # copied into three dotenv files is three places it can drift or
+            # leak — enforce exactly one authoritative location and retire it
+            # everywhere else instead of syncing it everywhere.
+            canonical_str = str(CANONICAL_TOKEN_FILE)
+            canonical_value = sources.get(canonical_str) or list(sources.values())[0]
+
+            if CANONICAL_TOKEN_FILE.exists():
+                already_correct = sources.get(canonical_str) == canonical_value
+                needs_dedupe = CANONICAL_TOKEN_FILE.name in duplicates.get(key, [])
+                if not already_correct or needs_dedupe:
+                    try:
+                        action = _write_env_key(CANONICAL_TOKEN_FILE, key, canonical_value)
+                        fixed.append(f"{action.capitalize()} {key} in {CANONICAL_TOKEN_FILE.name} (canonical)")
+                        state.record_fix()
+                        log.info(f"  {action.capitalize()} {key} in {CANONICAL_TOKEN_FILE.name} (canonical)")
+                        audit_log(
+                            "sentinel", "env_key_sync", "ok",
+                            {"key": key, "target": CANONICAL_TOKEN_FILE.name, "action": action},
+                        )
+                    except Exception as e:
+                        issues.append(f"Failed to write canonical {key} to {CANONICAL_TOKEN_FILE.name}: {e}")
+            else:
+                issues.append(f"ENV KEY CANONICAL FILE MISSING: {CANONICAL_TOKEN_FILE}")
+                log.warning(f"  {key}: canonical file missing: {CANONICAL_TOKEN_FILE}")
+
+            for env_file in ENV_FILES:
+                if str(env_file) == canonical_str or not env_file.exists():
+                    continue
+                try:
+                    if _strip_env_key(env_file, key):
+                        issues.append(f"ENV KEY NON-CANONICAL: removed {key} from {env_file.name}")
+                        fixed.append(f"Stripped {key} from {env_file.name} (non-canonical)")
+                        state.record_fix()
+                        log.info(f"  Stripped {key} from {env_file.name} (non-canonical)")
+                        audit_log(
+                            "sentinel", "env_key_desync", "ok",
+                            {"key": key, "target": env_file.name, "action": "stripped_non_canonical"},
+                        )
+                except Exception as e:
+                    issues.append(f"Failed to strip {key} from {env_file.name}: {e}")
+            continue
+
+        canonical_value = list(sources.values())[0]
+        if len(set(sources.values())) > 1:
+            issues.append(
+                f"ENV KEY CONFLICT: {key} differs across "
+                f"{', '.join(Path(f).name for f in sources)}"
+            )
+            log.warning(f"  {key}: conflicting values across {len(sources)} files")
 
         for env_file in ENV_FILES:
             if not env_file.exists():

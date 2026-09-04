@@ -48,6 +48,11 @@ except ImportError:
     except ImportError:
         vault_io = None
 
+try:
+    from core.authorization import AuthorizationLedger, payload_fingerprint
+except ImportError:  # standalone runtime vs canonical repo import path
+    from buddy_core.core.authorization import AuthorizationLedger, payload_fingerprint
+
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "config"
 STATE = Path(os.getenv("BUDDY_STATE_DIR", str(Path.home() / ".dominion" / "buddy")))
@@ -258,6 +263,20 @@ class BuddyOperator:
         registry = _load_json(CAPABILITY_FILE)
         self.capabilities = {
             c["id"]: c for c in registry.get("capabilities", []) if c.get("enabled", True)
+        }
+        # Founder authority is persisted and redeemed through the one canonical
+        # ledger. There is no second authority path.
+        self._ledger = AuthorizationLedger(self.state_dir)
+        # Every declared external capability binds to a real governed executor.
+        # None of them fabricate success: with no delivery backend configured
+        # they return an explicit BLOCKED result, never a claimed action.
+        self._external_executors = {
+            "external:publish": self._external_publish,
+            "external:message": self._external_message,
+            "external:spend": self._external_spend,
+            "external:submit": self._external_submit,
+            "external:browser": self._external_browser,
+            "external:credential_or_network": self._external_credential_or_network,
         }
         self._executors = {
             "native:brain_reason": self._brain_reason,
@@ -497,12 +516,69 @@ class BuddyOperator:
             if cap.get("auth_required") or cap.get("classification") in {
                 "privileged_write", "destructive"
             }:
-                approval_id = "approval_" + uuid.uuid4().hex[:12]
+                # A consequential boundary. Either the Founder has already
+                # authorized this exact action, in which case the authority is
+                # redeemed once and the governed executor runs, or the mission
+                # holds and a durable authorization request is recorded.
+                destination = step.get("destination")
+                supplied = step.get("authorization_id")
+
+                if supplied:
+                    redeemed = self._ledger.verify_and_consume(
+                        supplied,
+                        capability=step["capability"],
+                        instruction=step["instruction"],
+                        content=step.get("content"),
+                        destination=destination,
+                    )
+                    if not redeemed.get("ok"):
+                        # Missing, expired, replayed or mismatched authority
+                        # fails closed. It never degrades into execution.
+                        receipt = {
+                            "step": index,
+                            "capability": step["capability"],
+                            "status": "BLOCKED",
+                            "attempts": 0,
+                            "errors": [{
+                                "attempt": 0,
+                                "error": "AuthorizationRejected",
+                                "detail": redeemed.get("error", "authorization_denied"),
+                            }],
+                            "result": None,
+                            "evidence": [],
+                        }
+                        receipts.append(receipt)
+                        audit("external_authorization_rejected", {
+                            "mission_id": plan["mission_id"],
+                            "capability": step["capability"],
+                            "approval_id": supplied,
+                            "error": redeemed.get("error"),
+                        })
+                        break
+
+                    receipt = self._execute_external(index, step, cap, context, redeemed["authorization"])
+                    receipts.append(receipt)
+                    if receipt["status"] != "VERIFIED":
+                        break
+                    context["outputs"].append(receipt.get("result"))
+                    continue
+
+                request = self._ledger.request(
+                    mission_id=plan["mission_id"],
+                    step=index,
+                    capability=step["capability"],
+                    instruction=step["instruction"],
+                    content=step.get("content"),
+                    destination=destination,
+                    policy_tags=cap.get("tags", []),
+                )
                 held = {
                     "step": index,
                     "capability": step["capability"],
                     "instruction": step["instruction"],
-                    "approval_id": approval_id,
+                    "approval_id": request["approval_id"],
+                    "payload_hash": request["payload_hash"],
+                    "expires_at": request["expires_at"],
                     "reason": "FOUNDER_AUTHORIZATION_REQUIRED",
                     "policy_tags": cap.get("tags", []),
                 }
@@ -662,6 +738,118 @@ CAPABILITY REGISTRY:
         ]
 
     # ---------- Native executors ----------
+    # ---------- Governed external execution ----------
+
+    def _execute_external(self, index: int, step: dict, cap: dict, context: dict,
+                          authorization: dict) -> dict:
+        """Dispatch a consequential action that carries redeemed Founder authority.
+
+        Reached only after the authorization ledger has verified and consumed a
+        grant bound to this exact capability, instruction, content and
+        destination. The receipt records which authority was used, by id and
+        sequence, never by any secret value.
+        """
+        executor_name = cap.get("executor", "")
+        executor = self._external_executors.get(executor_name)
+        base = {
+            "step": index,
+            "capability": step["capability"],
+            "attempts": 1,
+            "authorization": {
+                "approval_id": authorization.get("approval_id"),
+                "authorization_sequence": authorization.get("authorization_sequence"),
+                "payload_hash": authorization.get("payload_hash"),
+                "approver": authorization.get("approver"),
+            },
+        }
+
+        if executor is None:
+            # A declared capability with no bound executor is BLOCKED. It is
+            # never reported as a completed action.
+            return {
+                **base,
+                "status": "BLOCKED",
+                "errors": [{
+                    "attempt": 1,
+                    "error": "ExecutorUnavailable",
+                    "detail": f"no governed executor bound for {executor_name or step['capability']}",
+                }],
+                "result": None,
+                "evidence": [],
+            }
+
+        try:
+            outcome = executor(step, context)
+        except Exception as exc:  # executor faults are failures, never successes
+            return {
+                **base,
+                "status": "BLOCKED",
+                "errors": [{
+                    "attempt": 1,
+                    "error": type(exc).__name__,
+                    "detail": str(exc)[:300],
+                }],
+                "result": None,
+                "evidence": [],
+            }
+
+        if not isinstance(outcome, dict) or not outcome.get("delivered"):
+            detail = (outcome or {}).get("detail", "external delivery not performed") \
+                if isinstance(outcome, dict) else "executor returned no governed result"
+            return {
+                **base,
+                "status": "BLOCKED",
+                "errors": [{"attempt": 1, "error": "ExternalDeliveryUnavailable", "detail": detail}],
+                "result": None,
+                "evidence": [],
+            }
+
+        audit("external_action_executed", {
+            "capability": step["capability"],
+            "approval_id": authorization.get("approval_id"),
+            "destination": step.get("destination"),
+        })
+        return {
+            **base,
+            "status": "VERIFIED",
+            "errors": [],
+            "result": outcome.get("result"),
+            "evidence": outcome.get("evidence", []),
+        }
+
+    def _no_delivery_backend(self, channel: str) -> dict:
+        """The honest result when a governed executor exists but has no
+        configured way to actually perform the action.
+
+        This is the difference between "authorized but undeliverable" and
+        "done". Buddy reports the former and never claims the latter.
+        """
+        return {
+            "delivered": False,
+            "detail": (
+                f"{channel} executor is bound and authorized but no delivery "
+                "backend is configured; no external action was performed"
+            ),
+        }
+
+    def _external_publish(self, step: dict, context: dict) -> dict:
+        return self._no_delivery_backend("external.publish")
+
+    def _external_message(self, step: dict, context: dict) -> dict:
+        return self._no_delivery_backend("external.message")
+
+    def _external_spend(self, step: dict, context: dict) -> dict:
+        return self._no_delivery_backend("external.spend")
+
+    def _external_submit(self, step: dict, context: dict) -> dict:
+        return self._no_delivery_backend("external.submit")
+
+    def _external_browser(self, step: dict, context: dict) -> dict:
+        return self._no_delivery_backend("external.browser")
+
+    def _external_credential_or_network(self, step: dict, context: dict) -> dict:
+        return self._no_delivery_backend("external.credential_or_network")
+
     def _execute_internal(self, index: int, step: dict, cap: dict, context: dict) -> dict:
         executor = self._executors[cap["executor"]]
         attempts = 1 + max(0, int(cap.get("max_retries", 0)))

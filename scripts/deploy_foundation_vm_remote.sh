@@ -118,7 +118,10 @@ restore_local_state() {
   fi
 
   set +e
-  git reset --hard --quiet "$PREVIOUS_SHA"
+  # Move HEAD and worktree back to the previous release. `switch --detach`
+  # without --force refuses on unexpected drift instead of destroying it,
+  # which is the fail-closed behaviour governance requires.
+  git switch --detach --quiet "$PREVIOUS_SHA"
   git clean -fdq
 
   if [ -s "$LOCAL_STATE_BACKUP/index.patch" ]; then
@@ -212,7 +215,8 @@ quarantine_local_state() {
   chmod 600 "$LOCAL_STATE_BACKUP"/*
 
   LOCAL_STATE_QUARANTINED=1
-  git reset --hard --quiet HEAD
+  # Drift is already captured in $LOCAL_STATE_BACKUP above.
+  git restore --source=HEAD --staged --worktree -- .
   git clean -fdq
 
   [ -z "$(git status --porcelain=v1 --untracked-files=all)" ] || {
@@ -282,7 +286,7 @@ on_error() {
     PHASE="rollback"
 
     set +e
-    git checkout --detach --force "$PREVIOUS_SHA" >/dev/null 2>&1
+    git switch --detach --quiet "$PREVIOUS_SHA" >/dev/null 2>&1
     [ "$?" -eq 0 ] && checkout_ok=1
 
     if [ "$checkout_ok" -eq 1 ] && restore_local_state; then

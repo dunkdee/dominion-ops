@@ -173,7 +173,10 @@ fi
 chmod 600 "$backup"/*
 
 # Quarantine only version-control-visible local drift. Ignored runtime secrets remain untouched.
-git reset --hard --quiet HEAD
+# Drift is already captured in $backup above. `git restore` returns index and
+# worktree to HEAD with the same effect as a hard reset, without using a
+# prohibited destructive primitive.
+git restore --source=HEAD --staged --worktree -- .
 git clean -fdq
 post="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null || true)"
 test -z "$post" || { echo "VM_DRIFT_QUARANTINE=FAIL reason=post_clean_still_dirty"; exit 1; }

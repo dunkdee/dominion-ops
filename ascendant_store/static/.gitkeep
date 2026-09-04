@@ -1,0 +1,5 @@
+Static asset root for the Ascendant Store FastAPI app.
+
+app.py mounts this directory unconditionally at import time, so its absence
+crashes the store before it can serve a single request. Tracked here so the
+mount always resolves.

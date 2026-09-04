@@ -1,0 +1,32 @@
+# Dependencies required to run the repository-wide Python suite.
+#
+# The elite governance gate runs `python -m pytest` across the whole
+# repository so dependency and collection gaps are visible rather than hidden
+# behind hand-picked test subsets. That only works if the suite's real
+# dependencies are declared here — declaring them is the fix, deselecting the
+# tests that need them is not.
+#
+# Runtime services pin their own dependencies in their own manifests; this
+# file covers what importing and exercising them under test requires.
+
+pytest>=8,<9
+
+# Buddy runtime and its web surfaces
+fastapi
+httpx
+uvicorn
+python-dotenv
+requests
+
+# FastAPI form parsing (apps/video-studio worker + public routes)
+python-multipart
+
+# Pydantic EmailStr validation (OPS/radah-traffic-engine models)
+email-validator
+
+# Cross-process lock used by services/email_drip
+filelock
+
+# Lite renderer (apps/video-studio/worker/requirements-lite.txt)
+numpy
+opencv-python-headless

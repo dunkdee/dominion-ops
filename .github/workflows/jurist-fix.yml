@@ -1,20 +1,42 @@
-name: Jurist Fix — Debug Service + Force Sync baby-api
+name: Jurist Repair — Governed Service Recovery
 
 on:
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type REPAIR JURIST"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA to deploy"
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
   fix:
-    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm == 'REPAIR JURIST' &&
+      inputs.commit_sha == github.sha &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
     steps:
-      - name: Fix Jurist service + force-sync baby-api
+      - name: Repair Jurist service and fast-forward baby-api source
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 5m
+          envs: EXPECTED_SHA
           script: |
+            set -euo pipefail
+
             echo "=============================="
             echo "  JURIST SERVICE ERROR LOGS"
             echo "=============================="
@@ -24,15 +46,23 @@ jobs:
             echo "=============================="
             echo "  CHECK PYTHON DEPS FOR JURIST"
             echo "=============================="
-            python3 -c "import dotenv; print('dotenv OK')" 2>/dev/null || echo "python-dotenv missing"
-            python3 -c "import http.server; print('http.server OK')" 2>/dev/null
-            python3 -c "import sys; sys.path.insert(0, '/home/$USER/buddy_core'); from core.juris_protocol import JurisProtocol; print('JurisProtocol OK')" 2>/dev/null || echo "JurisProtocol import failed"
+            python3 -c "import dotenv; print('dotenv OK')"
+            python3 -c "import requests; print('requests OK')"
+            python3 -c "import http.server; print('http.server OK')"
+            python3 -c "import sys; sys.path.insert(0, '/home/$USER/buddy_core'); from core.juris_protocol import JurisProtocol; print('JurisProtocol OK')"
 
             echo ""
             echo "=============================="
-            echo "  INSTALL MISSING DEPS IF NEEDED"
+            echo "  VERIFY + FAST-FORWARD SOURCE"
             echo "=============================="
-            pip3 install python-dotenv requests 2>/dev/null | tail -3
+            cd ~/dominion-ops
+            test -z "$(git status --porcelain)" || { echo "REFUSE: production worktree is dirty"; exit 31; }
+            test "$(git branch --show-current)" = "main" || { echo "REFUSE: production repo is not on main"; exit 32; }
+            git fetch origin main
+            test "$(git rev-parse origin/main)" = "$EXPECTED_SHA" || { echo "REFUSE: requested SHA does not equal origin/main"; exit 33; }
+            git merge --ff-only origin/main
+            test "$(git rev-parse HEAD)" = "$EXPECTED_SHA" || { echo "REFUSE: deployed provenance mismatch"; exit 34; }
+            echo "DEPLOY_PROVENANCE=PASS sha=$EXPECTED_SHA"
 
             echo ""
             echo "=============================="
@@ -40,34 +70,19 @@ jobs:
             echo "=============================="
             sudo systemctl restart dominion-juris
             sleep 4
-            sudo systemctl status dominion-juris --no-pager
-
-            echo ""
-            echo "=============================="
-            echo "  FORCE-SYNC dominion-ops"
-            echo "=============================="
-            cd ~/dominion-ops
-            git fetch origin
-            git reset --hard origin/main
-            echo "Sync complete. app.py head:"
-            head -5 api/app.py
-            grep -n "ask/juris" api/app.py && echo "-> /ask/juris endpoint is in app.py" || echo "-> NOT found in app.py"
+            sudo systemctl is-active --quiet dominion-juris
 
             echo ""
             echo "=============================="
             echo "  REBUILD + RESTART BABY-API"
             echo "=============================="
-            cd ~/dominion-ops && docker compose up -d --build baby-api
-            echo "Waiting 20s..."
+            docker compose up -d --build baby-api
             sleep 20
 
             echo ""
             echo "=============================="
             echo "  TEST /ask/juris ENDPOINT"
             echo "=============================="
-            curl -s http://localhost:8080/ask/juris \
-              | python3 -m json.tool 2>/dev/null \
-              || echo "curl failed or bad JSON"
+            curl --fail --silent --show-error http://localhost:8080/ask/juris | python3 -m json.tool
 
-            echo ""
-            echo "FIX COMPLETE"
+            echo "JURIST_REPAIR=PASS"

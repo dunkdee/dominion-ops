@@ -40,7 +40,6 @@ class WatchmenStateTestCase(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.state = Path(self._tmp.name) / "watchmen"
         self._env(saraqael.ENV_STATE_DIR, str(self.state))
-        # Neither key override is active unless a test opts in.
         self._env(saraqael.ENV_HMAC_KEY, None)
         self._env(saraqael.ENV_HMAC_FILE, None)
 
@@ -63,8 +62,6 @@ class WatchmenStateTestCase(unittest.TestCase):
         return stat.S_IMODE(os.stat(path).st_mode)
 
 
-# ── state location ───────────────────────────────────────────────────────
-
 class StateLocationTests(WatchmenStateTestCase):
     def test_default_state_dir_is_outside_the_repository(self):
         self._env(saraqael.ENV_STATE_DIR, None)
@@ -82,8 +79,7 @@ class StateLocationTests(WatchmenStateTestCase):
         saraqael.log("test", "state_location_check", "ok")
         self.assertTrue(saraqael.audit_file().exists())
         for legacy in saraqael.LEGACY_ARTIFACTS:
-            self.assertFalse(legacy.exists(),
-                             f"{legacy} was recreated inside the repository")
+            self.assertFalse(legacy.exists(), f"{legacy} was recreated inside the repository")
 
     def test_repository_working_tree_stays_clean_after_logging(self):
         saraqael.log("test", "worktree_cleanliness", "ok")
@@ -95,13 +91,10 @@ class StateLocationTests(WatchmenStateTestCase):
         self.assertEqual(dirty.strip().count("watchmen_chain.json"), 0)
 
 
-# ── signing key ──────────────────────────────────────────────────────────
-
 class SigningKeyTests(WatchmenStateTestCase):
     def test_no_static_signing_secret_remains_in_source(self):
         self.assertNotIn("_CHAIN_SECRET", SOURCE)
         self.assertNotIn("dominion_phi_1618_saraqael_eternal", SOURCE)
-        # No bytes/str literal is passed to hmac.new as the key.
         self.assertNotIn('hmac.new(b"', SOURCE)
         self.assertNotIn("hmac.new(b'", SOURCE)
 
@@ -109,7 +102,7 @@ class SigningKeyTests(WatchmenStateTestCase):
         key = saraqael._resolve_key()
         self.assertTrue(saraqael.key_file().exists())
         self.assertGreaterEqual(len(key), 32)
-        self.assertEqual(len(set(key)), len(set(key)))  # bytes, not a phrase
+        self.assertEqual(len(set(key)), len(set(key)))
         self.assertNotIn(b"dominion", key.lower())
 
     def test_generated_key_persists_across_resolutions(self):
@@ -127,12 +120,13 @@ class SigningKeyTests(WatchmenStateTestCase):
         self._env(saraqael.ENV_HMAC_KEY, "an-explicit-operator-key")
         self.assertEqual(saraqael._resolve_key(), b"an-explicit-operator-key")
         saraqael.log("test", "env_key", "ok")
-        self.assertFalse(saraqael.key_file().exists(),
-                         "an in-memory key must never be persisted")
+        self.assertFalse(saraqael.key_file().exists(), "an in-memory key must never be persisted")
 
     def test_key_file_override_is_used(self):
         external = Path(self._tmp.name) / "external.key"
         external.write_bytes(b"key-from-an-external-file\n")
+        if POSIX:
+            external.chmod(0o600)
         self._env(saraqael.ENV_HMAC_FILE, str(external))
         self.assertEqual(saraqael._resolve_key(), b"key-from-an-external-file")
 
@@ -152,6 +146,8 @@ class SigningKeyTests(WatchmenStateTestCase):
     def test_blank_key_file_fails_closed(self):
         empty = Path(self._tmp.name) / "empty.key"
         empty.write_bytes(b"\n")
+        if POSIX:
+            empty.chmod(0o600)
         self._env(saraqael.ENV_HMAC_FILE, str(empty))
         with self.assertRaises(WatchmenStateError):
             saraqael._resolve_key()
@@ -164,8 +160,6 @@ class SigningKeyTests(WatchmenStateTestCase):
         self.assertNotIn(key, json.dumps(saraqael.report()))
         self.assertNotIn(key, saraqael.chain_file().read_text(encoding="utf-8"))
 
-
-# ── permissions ──────────────────────────────────────────────────────────
 
 @unittest.skipUnless(POSIX, "POSIX permission bits")
 class PermissionTests(WatchmenStateTestCase):
@@ -182,12 +176,9 @@ class PermissionTests(WatchmenStateTestCase):
         self.assertEqual(self.mode_of(saraqael.chain_file()), 0o600)
 
 
-# ── chain integrity ──────────────────────────────────────────────────────
-
 class ChainIntegrityTests(WatchmenStateTestCase):
     def write_entries(self, count=3):
-        return [saraqael.log("test", f"event_{i}", "ok", {"i": i})
-                for i in range(count)]
+        return [saraqael.log("test", f"event_{i}", "ok", {"i": i}) for i in range(count)]
 
     def rewrite(self, entries):
         saraqael.audit_file().write_text(
@@ -195,8 +186,7 @@ class ChainIntegrityTests(WatchmenStateTestCase):
             encoding="utf-8")
 
     def read_entries(self):
-        return [json.loads(line) for line
-                in saraqael.audit_file().read_text(encoding="utf-8").splitlines() if line]
+        return [json.loads(line) for line in saraqael.audit_file().read_text(encoding="utf-8").splitlines() if line]
 
     def test_empty_state_verifies_as_empty(self):
         result = saraqael.verify_chain()
@@ -270,7 +260,6 @@ class ChainIntegrityTests(WatchmenStateTestCase):
     def test_deleted_chain_state_will_not_fabricate_a_new_genesis(self):
         self.write_entries(2)
         saraqael.chain_file().unlink()
-        # Refusing to log is the point: a fresh GENESIS here would erase history.
         with self.assertRaises(WatchmenStateError):
             saraqael.log("test", "after_state_deletion", "ok")
         self.assertFalse(saraqael.verify_chain()["valid"])
@@ -291,22 +280,16 @@ class ChainIntegrityTests(WatchmenStateTestCase):
 
     def test_chain_state_is_replaced_atomically(self):
         self.write_entries(2)
-        leftovers = [p.name for p in saraqael.state_dir().iterdir()
-                     if p.name.endswith(".tmp")]
+        leftovers = [p.name for p in saraqael.state_dir().iterdir() if p.name.endswith(".tmp")]
         self.assertEqual(leftovers, [])
         json.loads(saraqael.chain_file().read_text(encoding="utf-8"))
 
 
-# ── legacy artifacts ─────────────────────────────────────────────────────
-
 class LegacyArtifactTests(WatchmenStateTestCase):
     def test_legacy_repo_paths_are_git_ignored(self):
         for legacy in saraqael.LEGACY_ARTIFACTS:
-            result = subprocess.run(
-                ["git", "check-ignore", "-q", str(legacy)],
-                cwd=str(ROOT), capture_output=True)
-            self.assertEqual(result.returncode, 0,
-                             f"{legacy} is not git-ignored")
+            result = subprocess.run(["git", "check-ignore", "-q", str(legacy)], cwd=str(ROOT), capture_output=True)
+            self.assertEqual(result.returncode, 0, f"{legacy} is not git-ignored")
 
     def test_legacy_files_are_never_read_as_authoritative(self):
         for legacy in saraqael.LEGACY_ARTIFACTS:
@@ -318,9 +301,7 @@ class LegacyArtifactTests(WatchmenStateTestCase):
             encoding="utf-8")
         saraqael.LEGACY_ARTIFACTS[1].write_text(
             json.dumps({"last_hash": "0" * 64, "count": 1}), encoding="utf-8")
-        self.addCleanup(lambda: [p.unlink() for p in saraqael.LEGACY_ARTIFACTS
-                                 if p.exists()])
-        # The authoritative chain is untouched by anything in the checkout.
+        self.addCleanup(lambda: [p.unlink() for p in saraqael.LEGACY_ARTIFACTS if p.exists()])
         self.assertEqual(saraqael.verify_chain()["entries_checked"], 0)
         entry = saraqael.log("test", "legacy_isolation", "ok")
         self.assertEqual(entry["seq"], 1)
@@ -331,31 +312,23 @@ class LegacyArtifactTests(WatchmenStateTestCase):
         self.assertEqual(saraqael.legacy_repo_artifacts(), [])
         saraqael.LEGACY_ARTIFACTS[0].write_text("legacy\n", encoding="utf-8")
         self.addCleanup(saraqael.LEGACY_ARTIFACTS[0].unlink)
-        self.assertEqual(saraqael.legacy_repo_artifacts(),
-                         [str(saraqael.LEGACY_ARTIFACTS[0])])
+        self.assertEqual(saraqael.legacy_repo_artifacts(), [str(saraqael.LEGACY_ARTIFACTS[0])])
         self.assertEqual(saraqael.verify_chain()["entries_checked"], 0)
 
-
-# ── truthful language ────────────────────────────────────────────────────
 
 class SecurityLanguageTests(unittest.TestCase):
     def test_module_claims_tamper_evidence_not_tamper_proofing(self):
         lowered = SOURCE.lower()
         self.assertIn("tamper-evident", lowered)
-        # "tamper-proof" may appear only where the module disclaims it. An
-        # unqualified use would overstate what an HMAC chain actually provides.
         start = 0
         while True:
             found = lowered.find("tamper-proof", start)
             if found == -1:
                 break
             context = lowered[max(0, found - 40):found]
-            self.assertIn("not", context,
-                          "'tamper-proof' is claimed rather than disclaimed")
+            self.assertIn("not", context, "'tamper-proof' is claimed rather than disclaimed")
             start = found + 1
 
-
-# ── sentinel integration ─────────────────────────────────────────────────
 
 class SentinelIntegrationTests(WatchmenStateTestCase):
     def test_sentinel_audit_helper_writes_to_the_machine_local_chain(self):

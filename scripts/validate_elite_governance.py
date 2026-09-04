@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail-closed repository governance gate for Dominion.
 
-This is not a readiness report. It is an enforcement control.  A non-zero exit
+This is not a readiness report. It is an enforcement control. A non-zero exit
 means the repository must not be described as end-to-end autonomous or merged
 as an elite-governed release.
 
@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,7 +33,7 @@ REQUIRED_CONSTITUTION_PHRASES = (
 
 # These patterns are forbidden in GitHub Actions and executable repository
 # scripts unless a future, explicit emergency policy creates a narrowly scoped
-# allowlist with independent review.  There is intentionally no blanket legacy
+# allowlist with independent review. There is intentionally no blanket legacy
 # grandfathering.
 HIGH_RISK_PATTERNS = (
     ("force_push", re.compile(r"\bgit\s+push\b[^\n]*(?:--force|-f\b)", re.I)),
@@ -80,8 +79,10 @@ def collect_failures() -> list[dict]:
     if not constitution:
         failures.append({"gate": "constitution", "reason": "missing SYSTEM_CONSTITUTION.md"})
     else:
+        # Markdown emphasis must not create false negatives in the invariant gate.
+        constitution_plain = re.sub(r"[*_`]", "", constitution)
         for phrase in REQUIRED_CONSTITUTION_PHRASES:
-            if phrase not in constitution:
+            if phrase not in constitution_plain:
                 failures.append({"gate": "constitution", "reason": f"missing invariant: {phrase}"})
 
     try:

@@ -15,10 +15,12 @@ Security properties and their limits:
   - "Tamper-evident", not "tamper-proof". An attacker who can write the audit
     log can also delete it, and one who additionally holds the signing key can
     forge a self-consistent chain. What the chain guarantees is that
-    modification without the key is *detectable*, not that it is prevented.
+    modification without the key is detectable, not that it is prevented.
   - The signing key is machine-local and never lives in this repository.
     Anyone holding the key can sign entries, so the key file is the trust
-    boundary — it is created 0600 inside a 0700 state directory.
+    boundary. On POSIX systems the state directory is enforced 0700 and the
+    key/audit/chain files are enforced 0600; inability to enforce those modes
+    is a fail-closed security error rather than a silent best effort.
 
 Runtime state lives OUTSIDE the git checkout. Location resolution:
   1. $DOMINION_WATCHMEN_STATE_DIR
@@ -26,9 +28,9 @@ Runtime state lives OUTSIDE the git checkout. Location resolution:
 
 Signing key resolution (fail-closed — no predictable fallback exists):
   1. $DOMINION_WATCHMEN_HMAC_KEY        (used in memory only, never written)
-  2. $DOMINION_WATCHMEN_HMAC_KEY_FILE   (must exist and be readable)
-  3. <state dir>/watchmen_hmac.key      (generated with os/secrets randomness
-                                         on first use, then reused)
+  2. $DOMINION_WATCHMEN_HMAC_KEY_FILE   (must exist, be readable, and private)
+  3. <state dir>/watchmen_hmac.key      (generated with cryptographic
+                                         randomness on first use, then reused)
 
 Governance: phi = 1.618 | DominionBrain validation required for chain reset.
 """
@@ -37,6 +39,7 @@ import os
 import sys
 import json
 import hmac
+import stat
 import secrets
 import hashlib
 import tempfile
@@ -75,6 +78,50 @@ class WatchmenStateError(RuntimeError):
     """Audit state could not be resolved, read, or trusted. Always fail closed."""
 
 
+# ── Permission enforcement ───────────────────────────────────
+
+def _posix_modes_required() -> bool:
+    return os.name == "posix"
+
+
+def _current_mode(path: Path) -> int:
+    try:
+        return stat.S_IMODE(path.stat().st_mode)
+    except OSError as exc:
+        raise WatchmenStateError(f"cannot inspect permissions for {path}: {exc}") from exc
+
+
+def _enforce_mode(path: Path, mode: int) -> bool:
+    """Enforce an exact owner-only mode on POSIX; fail closed if it cannot be set.
+
+    Non-POSIX platforms do not expose equivalent POSIX mode semantics, so this
+    returns False there without claiming that 0600/0700 was enforced.
+    """
+    if not _posix_modes_required():
+        return False
+    try:
+        os.chmod(path, mode)
+    except (OSError, NotImplementedError) as exc:
+        raise WatchmenStateError(
+            f"cannot enforce permissions {oct(mode)} on {path}: {exc}") from exc
+    actual = _current_mode(path)
+    if actual != mode:
+        raise WatchmenStateError(
+            f"permissions on {path} are {oct(actual)}, expected {oct(mode)}")
+    return True
+
+
+def _assert_private_file(path: Path, *, label: str) -> bool:
+    """Require that a security-sensitive existing file is not group/world accessible."""
+    if not _posix_modes_required():
+        return False
+    actual = _current_mode(path)
+    if actual & 0o077:
+        raise WatchmenStateError(
+            f"{label} is not private: {path} has mode {oct(actual)}")
+    return True
+
+
 # ── Paths ─────────────────────────────────────────────────────
 
 def state_dir() -> Path:
@@ -96,22 +143,14 @@ def key_file() -> Path:
 
 
 def _ensure_state_dir() -> Path:
-    """Create the state directory on demand with owner-only permissions."""
+    """Create the state directory on demand and enforce owner-only permissions."""
     d = state_dir()
     try:
         d.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         raise WatchmenStateError(f"cannot create audit state directory: {exc}") from exc
-    _chmod(d, DIR_MODE)
+    _enforce_mode(d, DIR_MODE)
     return d
-
-
-def _chmod(path: Path, mode: int) -> None:
-    """Best-effort permission tightening; a no-op where the OS lacks support."""
-    try:
-        os.chmod(path, mode)
-    except (OSError, NotImplementedError):
-        pass
 
 
 def legacy_repo_artifacts() -> list:
@@ -137,21 +176,34 @@ def _generate_key(path: Path) -> bytes:
     key = secrets.token_hex(32).encode("ascii")
     fd = None
     try:
-        # O_EXCL so a concurrent generator cannot be clobbered; if we lose the
-        # race we fall back to reading the winner's key.
+        # O_EXCL means a concurrent generator cannot be clobbered; if we lose
+        # the race we read the winner only after verifying its privacy.
         fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, FILE_MODE)
+        if _posix_modes_required() and hasattr(os, "fchmod"):
+            try:
+                os.fchmod(fd, FILE_MODE)
+            except (OSError, NotImplementedError) as exc:
+                raise WatchmenStateError(
+                    f"cannot protect generated audit signing key: {exc}") from exc
         with os.fdopen(fd, "wb") as f:
             fd = None
             f.write(key + b"\n")
             f.flush()
             os.fsync(f.fileno())
     except FileExistsError:
-        return _validate_key(path.read_bytes(), str(path))
-    except OSError as exc:
+        _assert_private_file(path, label="audit signing key file")
+        try:
+            return _validate_key(path.read_bytes(), str(path))
+        except OSError as exc:
+            raise WatchmenStateError(f"audit signing key file is unreadable: {exc}") from exc
+    except BaseException:
         if fd is not None:
-            os.close(fd)
-        raise WatchmenStateError(f"cannot create audit signing key: {exc}") from exc
-    _chmod(path, FILE_MODE)
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        raise
+    _enforce_mode(path, FILE_MODE)
     return key
 
 
@@ -167,7 +219,10 @@ def _resolve_key() -> bytes:
         if not env_file.strip():
             raise WatchmenStateError(f"${ENV_HMAC_FILE} is set but empty")
         try:
+            _assert_private_file(path, label="explicit audit signing key file")
             raw = path.read_bytes()
+        except WatchmenStateError:
+            raise
         except OSError as exc:
             raise WatchmenStateError(
                 f"audit signing key file is missing or unreadable: {exc}") from exc
@@ -176,6 +231,7 @@ def _resolve_key() -> bytes:
     _ensure_state_dir()
     path = key_file()
     if path.exists():
+        _assert_private_file(path, label="audit signing key file")
         try:
             raw = path.read_bytes()
         except OSError as exc:
@@ -188,27 +244,34 @@ def _resolve_key() -> bytes:
 # ── Atomic state writes ───────────────────────────────────────
 
 def _atomic_write(path: Path, data: bytes) -> None:
-    """Replace `path` atomically so a crash can never leave a half-written chain."""
+    """Replace ``path`` atomically so a crash cannot leave half-written state."""
     directory = path.parent
     fd, tmp = tempfile.mkstemp(dir=str(directory), prefix=path.name + ".", suffix=".tmp")
     try:
-        if hasattr(os, "fchmod"):
+        if _posix_modes_required() and hasattr(os, "fchmod"):
             try:
                 os.fchmod(fd, FILE_MODE)
-            except (OSError, NotImplementedError):
-                pass
+            except (OSError, NotImplementedError) as exc:
+                raise WatchmenStateError(
+                    f"cannot protect temporary audit state file: {exc}") from exc
         with os.fdopen(fd, "wb") as f:
+            fd = None
             f.write(data)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
     except BaseException:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         try:
             os.unlink(tmp)
         except OSError:
             pass
         raise
-    _chmod(path, FILE_MODE)
+    _enforce_mode(path, FILE_MODE)
 
 
 # ── Chain helpers ─────────────────────────────────────────────
@@ -230,6 +293,7 @@ def _load_chain() -> dict:
                 "chain state is missing while an audit log exists; "
                 "refusing to fabricate chain continuity")
         return dict(_GENESIS)
+    _assert_private_file(path, label="audit chain state")
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -258,12 +322,28 @@ def _entry_hash(entry: dict, prev_hash: str, key: bytes) -> str:
 
 def _append_entry(path: Path, line: str) -> None:
     """Append one JSONL record, creating the log 0600 if it does not exist."""
-    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, FILE_MODE)
-    with os.fdopen(fd, "a", encoding="utf-8") as f:
-        f.write(line)
-        f.flush()
-        os.fsync(f.fileno())
-    _chmod(path, FILE_MODE)
+    fd = None
+    try:
+        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, FILE_MODE)
+        if _posix_modes_required() and hasattr(os, "fchmod"):
+            try:
+                os.fchmod(fd, FILE_MODE)
+            except (OSError, NotImplementedError) as exc:
+                raise WatchmenStateError(
+                    f"cannot protect audit log before append: {exc}") from exc
+        with os.fdopen(fd, "a", encoding="utf-8") as f:
+            fd = None
+            f.write(line)
+            f.flush()
+            os.fsync(f.fileno())
+    except BaseException:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        raise
+    _enforce_mode(path, FILE_MODE)
 
 
 # ── Core API ──────────────────────────────────────────────────
@@ -275,29 +355,23 @@ def log(
     details: dict = None,
     threat_level: str = "none",
 ) -> dict:
+    """Append a cryptographically chained entry to the audit log.
+
+    Existing history is verified before appending. If the chain is corrupt,
+    unreadable, improperly protected, or cannot be verified with the active
+    key, the write is refused rather than extending untrusted history.
     """
-    Append a cryptographically chained entry to the audit log.
-
-    Args:
-        source:       Watchman or system that generated the event
-                      (e.g. 'gabriel', 'uriel', 'system')
-        event:        Short event descriptor (e.g. 'ssh_attempt', 'file_modified')
-        status:       'info' | 'warning' | 'critical' | 'ok'
-        details:      Arbitrary dict — kept under 1KB
-        threat_level: 'none' | 'low' | 'medium' | 'high' | 'critical'
-
-    Returns:
-        The completed entry dict (includes hash and sequence number).
-
-    Raises:
-        WatchmenStateError: if the signing key or chain state cannot be
-        trusted. Refusing to write is deliberate — an unsigned or
-        discontinuous entry is worse than no entry.
-    """
-    key   = _resolve_key()
+    key = _resolve_key()
     _ensure_state_dir()
+
+    if audit_file().exists() or chain_file().exists():
+        existing = verify_chain()
+        if existing.get("valid") is not True:
+            raise WatchmenStateError(
+                f"existing audit history is untrusted: {existing.get('message', 'unknown failure')}")
+
     chain = _load_chain()
-    ts    = datetime.now(timezone.utc).isoformat()
+    ts = datetime.now(timezone.utc).isoformat()
 
     entry = {
         "seq":          chain["count"] + 1,
@@ -316,10 +390,10 @@ def log(
     _append_entry(audit_file(), json.dumps(entry, ensure_ascii=True) + "\n")
 
     chain["last_hash"] = entry_hash
-    chain["count"]     = entry["seq"]
+    chain["count"] = entry["seq"]
     _save_chain(chain)
 
-    # PhiMemory: store critical events
+    # PhiMemory: store critical events. This is secondary memory, not authority.
     if threat_level in ("high", "critical"):
         try:
             level_map = {"high": 0.8, "critical": 1.0}
@@ -338,13 +412,7 @@ def _broken(seq, message: str) -> dict:
 
 
 def verify_chain() -> dict:
-    """
-    Walk the entire audit log and verify every hash, link, and sequence number.
-
-    Returns a report dict with 'valid', 'entries_checked', 'first_break'.
-    Every failure path reports valid=False with a truthful reason; no
-    condition here is allowed to resolve to a silent pass.
-    """
+    """Verify every hash, link, sequence number, state value, and permission boundary."""
     path = audit_file()
     if not path.exists():
         try:
@@ -358,9 +426,10 @@ def verify_chain() -> dict:
                 "message": "Log empty"}
 
     try:
+        _assert_private_file(path, label="audit log")
         key = _resolve_key()
     except WatchmenStateError as exc:
-        return _broken(0, f"Signing key unavailable: {exc}")
+        return _broken(0, f"Audit trust boundary unavailable: {exc}")
 
     try:
         chain = _load_chain()
@@ -368,21 +437,21 @@ def verify_chain() -> dict:
         return _broken(0, f"Chain state untrusted: {exc}")
 
     entries = []
-    with open(path, "r", encoding="utf-8") as f:
-        for lineno, line in enumerate(f, start=1):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                parsed = json.loads(line)
-            except ValueError:
-                # A line that no longer parses is corruption, not noise.
-                # Skipping it would let an attacker mangle an entry into
-                # invisibility and still be told the chain is intact.
-                return _broken(lineno, f"Audit log line {lineno} is not valid JSON")
-            if not isinstance(parsed, dict):
-                return _broken(lineno, f"Audit log line {lineno} is not an object")
-            entries.append(parsed)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for lineno, line in enumerate(f, start=1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    parsed = json.loads(line)
+                except ValueError:
+                    return _broken(lineno, f"Audit log line {lineno} is not valid JSON")
+                if not isinstance(parsed, dict):
+                    return _broken(lineno, f"Audit log line {lineno} is not an object")
+                entries.append(parsed)
+    except OSError as exc:
+        return _broken(0, f"Audit log unreadable: {exc}")
 
     if not entries:
         if chain["count"] != 0:
@@ -399,6 +468,8 @@ def verify_chain() -> dict:
         if e.get("prev_hash") != prev_hash:
             return _broken(seq, f"Broken link at entry #{seq}: prev_hash does not match")
         stored_hash = e.get("hash", "")
+        if not isinstance(stored_hash, str):
+            return _broken(seq, f"Entry #{seq} has an invalid hash field")
         e_copy = {k: v for k, v in e.items() if k != "hash"}
         expected = _entry_hash(e_copy, prev_hash, key)
         if not hmac.compare_digest(expected, stored_hash):
@@ -420,73 +491,112 @@ def verify_chain() -> dict:
 
 
 def _read_entries() -> list:
+    """Read audit entries strictly; malformed records are corruption, not noise."""
     path = audit_file()
     if not path.exists():
         return []
+    _assert_private_file(path, label="audit log")
     entries = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entries.append(json.loads(line))
-            except ValueError:
-                continue
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for lineno, line in enumerate(f, start=1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    parsed = json.loads(line)
+                except ValueError as exc:
+                    raise WatchmenStateError(
+                        f"audit log line {lineno} is not valid JSON") from exc
+                if not isinstance(parsed, dict):
+                    raise WatchmenStateError(
+                        f"audit log line {lineno} is not an object")
+                entries.append(parsed)
+    except WatchmenStateError:
+        raise
+    except OSError as exc:
+        raise WatchmenStateError(f"audit log unreadable: {exc}") from exc
     return entries
 
 
 def tail(n: int = 20) -> list:
-    """Return the last N audit log entries."""
+    """Return the last N entries, raising if the underlying history is corrupt."""
     return _read_entries()[-n:]
 
 
 def report() -> dict:
-    """Generate a summary report of the audit log."""
-    entries = _read_entries()
+    """Generate a truthful summary; corruption can never be summarized as healthy."""
+    try:
+        entries = _read_entries()
+    except WatchmenStateError as exc:
+        return {
+            "total": 0,
+            "chain_valid": False,
+            "chain_msg": f"Audit state untrusted: {exc}",
+            "by_status": {},
+            "by_source": {},
+            "open_threats": [],
+            "corruption_visible": True,
+        }
+
+    chain_status = verify_chain()
     if not entries:
-        return {"total": 0, "by_status": {}, "by_source": {}, "threats": []}
+        return {
+            "total": 0,
+            "chain_valid": chain_status["valid"],
+            "chain_msg": chain_status["message"],
+            "by_status": {},
+            "by_source": {},
+            "open_threats": [],
+            "corruption_visible": not chain_status["valid"],
+        }
 
     total = 0
     by_status: dict = {}
     by_source: dict = {}
-    threats   = []
+    threats = []
 
-    for e in entries:
-        try:
-            total += 1
-            by_status[e["status"]]  = by_status.get(e["status"], 0) + 1
-            by_source[e["source"]]  = by_source.get(e["source"], 0) + 1
-            if e.get("threat_level") in ("high", "critical"):
-                threats.append({
-                    "seq":    e["seq"],
-                    "ts":     e["ts"],
-                    "source": e["source"],
-                    "event":  e["event"],
-                    "level":  e["threat_level"],
-                })
-        except KeyError:
-            pass
-
-    chain_status = verify_chain()
+    for index, e in enumerate(entries, start=1):
+        required = ("status", "source", "seq", "ts", "event")
+        missing = [field for field in required if field not in e]
+        if missing:
+            chain_status = _broken(index, f"Audit entry {index} missing fields: {', '.join(missing)}")
+            break
+        total += 1
+        by_status[e["status"]] = by_status.get(e["status"], 0) + 1
+        by_source[e["source"]] = by_source.get(e["source"], 0) + 1
+        if e.get("threat_level") in ("high", "critical"):
+            threats.append({
+                "seq": e["seq"],
+                "ts": e["ts"],
+                "source": e["source"],
+                "event": e["event"],
+                "level": e["threat_level"],
+            })
 
     return {
-        "total":        total,
-        "chain_valid":  chain_status["valid"],
-        "chain_msg":    chain_status["message"],
-        "by_status":    by_status,
-        "by_source":    by_source,
+        "total": total,
+        "chain_valid": chain_status["valid"],
+        "chain_msg": chain_status["message"],
+        "by_status": by_status,
+        "by_source": by_source,
         "open_threats": [t for t in threats[-10:]],
+        "corruption_visible": not chain_status["valid"],
     }
 
 
 def run():
     """Saraqael self-check — verify chain integrity and log startup."""
+    # Refuse to extend any pre-existing untrusted history.
+    if audit_file().exists() or chain_file().exists():
+        before = verify_chain()
+        if before.get("valid") is not True:
+            raise WatchmenStateError(f"cannot start Saraqael on untrusted history: {before['message']}")
     log("saraqael", "startup", "ok", {"watchman": "Saraqael", "role": "audit"})
     result = verify_chain()
     status = "ok" if result["valid"] else "critical"
-    log("saraqael", "chain_verify", status, result,
-        threat_level="none" if result["valid"] else "critical")
+    if result["valid"]:
+        log("saraqael", "chain_verify", status, result, threat_level="none")
     print(f"[SARAQAEL] Chain: {result['message']}")
     return result
 

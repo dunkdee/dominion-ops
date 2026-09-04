@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """RADAH MEMSHALAH governed production lane supervisor.
 
-This runner keeps every registered Dominion lane productive without granting
+This runner keeps every registered Dominion lane rotating without granting
 itself external authority. It selects one due lane per cycle, asks the existing
 Buddy operator to perform the lane's bounded internal mission, verifies that
 all planned capabilities are either explicitly allowed internal capabilities or
 Founder-held external capabilities, and writes an auditable receipt.
 
-A policy/evidence blocker is a valid governed cycle when Buddy created a real
-mission and returned auditable step receipts without a supervisor exception.
-That lane records the blocker and yields to the next due lane. Infrastructure,
-import, planning, authority-validation, or unexpected-status failures remain
-service failures and fail closed.
+A policy/evidence blocker can be a structurally valid scheduler cycle when
+Buddy created a real mission and returned auditable step receipts without a
+supervisor exception. Structural scheduler health is not business progress:
+only COMPLETE updates progress/productivity timestamps. HELD and BLOCKED are
+recorded separately so they can never masquerade as productive work.
+Infrastructure, import, planning, authority-validation, or unexpected-status
+failures remain service failures and fail closed.
 
 Activation is separate from code deployment. The runner is inert unless
 RADAH_AUTOPILOT_ENABLED=1 is present in its runtime environment.
@@ -256,12 +258,12 @@ def policy_digest(policy: dict[str, Any]) -> str:
 
 
 def bounded_cycle_ok(receipt: dict[str, Any]) -> bool:
-    """Return True when the scheduler completed a valid governed cycle.
+    """Return True when the scheduler completed a structurally valid cycle.
 
-    COMPLETE and HELD are valid terminal mission outcomes. BLOCKED is also a
-    valid cycle only when Buddy actually created a mission and returned step
-    receipts, with no supervisor exception. This lets evidence/policy blockers
-    rotate without disguising infrastructure or orchestration failures as green.
+    This is scheduler-health evidence only. It must never be interpreted as
+    business progress. COMPLETE, HELD, and governed BLOCKED outcomes can all
+    prove that the supervisor itself ran correctly; persist_cycle separately
+    records whether productive progress actually occurred.
     """
     status = str(receipt.get("status", ""))
     if status == "PLANNED":
@@ -285,13 +287,21 @@ def persist_cycle(
     now: datetime,
 ) -> None:
     lane_state = state.setdefault("lanes", {}).setdefault(lane.lane_id, {})
+    status = str(receipt["status"])
     lane_state["last_attempt_at"] = iso(now)
-    lane_state["last_status"] = receipt["status"]
+    lane_state["last_status"] = status
     lane_state["last_mission_id"] = receipt.get("mission_id")
-    if bounded_cycle_ok(receipt):
+
+    # Only an actually completed mission is progress/productivity evidence.
+    # HELD/BLOCKED remain scheduler evidence and are tracked separately.
+    if status == "COMPLETE":
         lane_state["last_progress_at"] = iso(now)
-    if receipt["status"] in {"COMPLETE", "HELD"}:
         lane_state["last_productive_at"] = iso(now)
+    elif status == "HELD":
+        lane_state["last_held_at"] = iso(now)
+    elif status == "BLOCKED":
+        lane_state["last_blocked_at"] = iso(now)
+
     state["cycles"] = int(state.get("cycles", 0)) + 1
     state["updated_at"] = iso(now)
 

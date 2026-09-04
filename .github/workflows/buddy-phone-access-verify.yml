@@ -11,7 +11,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - claude/buddy-phone-access-iagg5x
+      - main
+      - claude/buddy-phone-access-clean
     paths:
       - 'buddy_core/**'
       - 'scripts/deploy_command_center.sh'

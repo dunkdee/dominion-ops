@@ -1,0 +1,201 @@
+name: Set Buddy Phone Passcode
+
+# Sets the phone-facing sign-in passcode from a GitHub Secret, so the Founder
+# can establish it from a phone without SSH or a terminal.
+#
+# Create the secret first:
+#   repo -> Settings -> Secrets and variables -> Actions -> New repository secret
+#   Name:  BUDDY_PHONE_PASSCODE
+#   Value: a passphrase of 12+ characters (buddy_web.py refuses anything shorter)
+#
+# The value travels GitHub -> runner -> VM over the SSH stdin stream only. It is
+# never placed on a command line (so it never appears in `ps` on the VM), never
+# echoed, and never written to this workflow's logs — only HTTP status codes and
+# booleans are printed. The master BUDDY_WEB_TOKEN is untouched by this workflow.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-buddy-production
+  cancel-in-progress: false
+
+jobs:
+  set-passcode:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    steps:
+      - name: Require the passcode secret and the VM access secrets
+        env:
+          BUDDY_PHONE_PASSCODE: ${{ secrets.BUDDY_PHONE_PASSCODE }}
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          if [ -z "$BUDDY_PHONE_PASSCODE" ]; then
+            echo '::error::Repository secret BUDDY_PHONE_PASSCODE is not set. Create it first (Settings -> Secrets and variables -> Actions).'
+            exit 1
+          fi
+          # Length check only — the value itself is never printed.
+          if [ "${#BUDDY_PHONE_PASSCODE}" -lt 12 ]; then
+            echo "::error::BUDDY_PHONE_PASSCODE is too short (${#BUDDY_PHONE_PASSCODE} chars). Buddy requires 12 or more."
+            exit 1
+          fi
+          echo "PASSCODE_LENGTH_OK=YES chars=${#BUDDY_PHONE_PASSCODE}"
+
+      - name: Configure protected SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Install the passcode and prove the phone login works
+        env:
+          BUDDY_PHONE_PASSCODE: ${{ secrets.BUDDY_PHONE_PASSCODE }}
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+
+          # Base64 so any character (spaces, quotes, unicode) survives transit.
+          PASSCODE_B64="$(printf '%s' "$BUDDY_PHONE_PASSCODE" | base64 -w0)"
+
+          # The secret is emitted as the first line of the SSH *stdin stream*,
+          # ahead of a literal (quoted) heredoc carrying the script. Nothing
+          # sensitive reaches argv, so it cannot be seen in `ps` on the VM.
+          {
+            printf 'PASSCODE_B64=%s\n' "$PASSCODE_B64"
+            cat <<'REMOTE'
+          set -Eeuo pipefail
+
+          BUDDY_DIR="$HOME/buddy_core"
+          CANONICAL="$BUDDY_DIR/.env"
+          KEY="BUDDY_PHONE_PASSCODE"
+          STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+          BACKUP_DIR="$HOME/.dominion/buddy/passcode-backups/$STAMP"
+
+          cleanup() { unset PASSCODE PASSCODE_B64 2>/dev/null || true; }
+          trap cleanup EXIT
+
+          test -f "$CANONICAL" || { echo 'BUDDY_PASSCODE_SET=FAIL canonical_file_missing'; exit 10; }
+
+          PASSCODE="$(printf '%s' "$PASSCODE_B64" | base64 -d)"
+          test -n "$PASSCODE" || { echo 'BUDDY_PASSCODE_SET=FAIL empty_after_decode'; exit 11; }
+
+          echo '=== GATE 1: BACKUP ==='
+          install -d -m 700 "$BACKUP_DIR"
+          cp -a "$CANONICAL" "$BACKUP_DIR/buddy_core.env.bak"
+          chmod -R 700 "$BACKUP_DIR"
+          echo "BACKUP_DIR=$BACKUP_DIR"
+
+          echo '=== GATE 2: WRITE SINGLE ASSIGNMENT INTO THE CANONICAL FILE ==='
+          PASSCODE_VALUE="$PASSCODE" python3 - "$CANONICAL" "$KEY" <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          path, key = Path(sys.argv[1]), sys.argv[2]
+          value = os.environ["PASSCODE_VALUE"]
+
+          lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+          out, replaced = [], False
+          for line in lines:
+              s = line.strip()
+              c = s[len("export "):].lstrip() if s.startswith("export ") else s
+              if not s.startswith("#") and "=" in c and c.partition("=")[0].strip() == key:
+                  if replaced:
+                      continue
+                  out.append(f"{key}={value}")
+                  replaced = True
+                  continue
+              out.append(line)
+          if not replaced:
+              out.append(f"{key}={value}")
+          path.write_text("\n".join(out) + "\n", encoding="utf-8")
+          os.chmod(path, 0o600)
+          print("PASSCODE_WRITTEN=YES")
+          PY
+
+          count="$(grep -Ec "^[[:space:]]*(export[[:space:]]+)?${KEY}=" "$CANONICAL" 2>/dev/null)" || true
+          echo "PASSCODE_ASSIGNMENTS=${count:-0}"
+          test "${count:-0}" = '1' || { echo 'BUDDY_PASSCODE_SET=FAIL not_singular'; exit 12; }
+
+          echo '=== GATE 3: RESTART BUDDY WEB ==='
+          sudo systemctl restart dominion-buddy-web.service
+          sleep 3
+          systemctl is-active --quiet dominion-buddy-web.service || { echo 'BUDDY_PASSCODE_SET=FAIL service_not_active'; exit 13; }
+          echo 'SERVICE_RESTARTED=dominion-buddy-web.service'
+
+          echo '=== GATE 4: WRONG PASSCODE IS REJECTED ==='
+          bad="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+            -H 'Content-Type: application/json' \
+            -d '{"passcode":"definitely-not-the-passcode"}' \
+            http://127.0.0.1:5070/buddy/api/login || true)"
+          echo "WRONG_PASSCODE_REJECTED=$bad"
+          test "$bad" = '401' || { echo 'BUDDY_PASSCODE_SET=FAIL wrong_passcode_not_rejected'; exit 14; }
+
+          echo '=== GATE 5: THE REAL PASSCODE SIGNS IN AND OPENS THE DASHBOARD ==='
+          jar="$(mktemp)"
+          body="$(mktemp)"
+          chmod 600 "$body"
+          # Build the JSON body in a mode-600 temp file rather than on a command
+          # line, so the passcode never appears in `ps` output.
+          PASSCODE_VALUE="$PASSCODE" python3 - "$body" <<'PY'
+          import json, os, sys
+          with open(sys.argv[1], "w", encoding="utf-8") as fh:
+              json.dump({"passcode": os.environ["PASSCODE_VALUE"]}, fh)
+          PY
+          login="$(curl -sS -c "$jar" -o /dev/null -w '%{http_code}' --max-time 10 \
+            -H 'Content-Type: application/json' \
+            --data-binary "@$body" \
+            http://127.0.0.1:5070/buddy/api/login || true)"
+          rm -f "$body"
+          echo "LOGIN_EXCHANGE=$login"
+          test "$login" = '200' || { rm -f "$jar"; echo 'BUDDY_PASSCODE_SET=FAIL login_failed'; exit 15; }
+
+          grep -q 'buddy_session' "$jar" && echo 'SESSION_COOKIE_ISSUED=YES' || { rm -f "$jar"; echo 'BUDDY_PASSCODE_SET=FAIL no_session_cookie'; exit 16; }
+
+          dash_body="$(mktemp)"
+          dash="$(curl -sS -b "$jar" -o "$dash_body" -w '%{http_code}' --max-time 10 http://127.0.0.1:5070/buddy || true)"
+          echo "DASHBOARD_WITH_SESSION=$dash"
+          grep -q 'id="messages"' "$dash_body" && echo 'EXISTING_DASHBOARD_OPENED=YES' || echo 'EXISTING_DASHBOARD_OPENED=NO'
+
+          status="$(curl -sS -b "$jar" --max-time 10 http://127.0.0.1:5070/buddy/api/status || true)"
+          # Informational only — the sign-in itself already passed above, so a
+          # hiccup here must not fail an otherwise-successful install.
+          python3 - "$status" <<'PY' || echo 'STATUS_PROBE=UNAVAILABLE'
+          import json, sys
+          s = json.loads(sys.argv[1])
+          auth = s.get("auth", {})
+          print("PASSCODE_CONFIGURED=" + ("YES" if auth.get("passcode_configured") else "NO"))
+          print("PHONE_LOGIN=" + ("YES" if auth.get("phone_login") else "NO"))
+          PY
+
+          rm -f "$jar" "$dash_body"
+          test "$dash" = '200' || { echo 'BUDDY_PASSCODE_SET=FAIL dashboard_not_opened'; exit 17; }
+
+          echo '=== COMPLETE ==='
+          echo 'BUDDY_PASSCODE_SET=PASS'
+          echo 'PASSCODE_VALUE=NEVER_PRINTED'
+          REMOTE
+          } | ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes \
+                -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
+                "$VM_USER@$VM_HOST" 'bash -s'
+
+      - name: Cleanup SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

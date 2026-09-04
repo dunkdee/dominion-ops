@@ -1,0 +1,193 @@
+name: Rotate Buddy Web Token
+
+# One-time (re-runnable) operational action: replaces the live
+# BUDDY_WEB_TOKEN with a fresh random value and consolidates storage to a
+# single canonical file (buddy_core/.env), stripping every other copy.
+#
+# The token is generated, written, and verified entirely inside the SSH
+# session on the VM. It never crosses back to the GitHub Actions runner, is
+# never echoed, and is never included in this workflow's own logs — only
+# HTTP status codes and booleans are printed.
+#
+# workflow_dispatch only. This is a credential-rotation action, not part of
+# any push-triggered pipeline.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-buddy-production
+  cancel-in-progress: false
+
+jobs:
+  rotate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    steps:
+      - name: Require protected VM access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Configure protected SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Rotate BUDDY_WEB_TOKEN to a single canonical source
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+
+          BUDDY_DIR="$HOME/buddy_core"
+          CANONICAL="$BUDDY_DIR/.env"
+          CONDUCTOR_ENV="$HOME/conductor/.env"
+          HOME_ENV="$HOME/.env"
+          KEY="BUDDY_WEB_TOKEN"
+          STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+          BACKUP_DIR="$HOME/.dominion/buddy/token-rotation-backups/$STAMP"
+          services="dominion-buddy-web.service buddy-bridge.service dominion-buddy.service"
+
+          cleanup() { unset OLD_TOKEN NEW_TOKEN 2>/dev/null || true; }
+          trap cleanup EXIT
+
+          test -d "$BUDDY_DIR"
+          test -f "$CANONICAL" || { echo 'BUDDY_TOKEN_ROTATION=FAIL canonical_file_missing'; exit 10; }
+          install -d -m 700 "$BACKUP_DIR"
+
+          echo '=== GATE 0: CAPTURE LIVE TOKEN (IN-MEMORY ONLY) ==='
+          buddy_pid="$(systemctl show -p MainPID --value dominion-buddy-web.service)"
+          test "${buddy_pid:-0}" != "0" || { echo 'BUDDY_TOKEN_ROTATION=FAIL buddy_web_not_running'; exit 11; }
+          OLD_TOKEN="$(sudo tr '\0' '\n' < "/proc/$buddy_pid/environ" | sed -n "s/^${KEY}=//p" | head -1)"
+          test -n "$OLD_TOKEN" || { echo 'BUDDY_TOKEN_ROTATION=FAIL old_token_unreadable'; exit 12; }
+          echo 'OLD_TOKEN_CAPTURED=YES'
+
+          echo '=== GATE 1: BACKUP EVERY FILE THAT CURRENTLY DEFINES THE KEY ==='
+          for f in "$CANONICAL" "$CONDUCTOR_ENV" "$HOME_ENV"; do
+            if [ -f "$f" ]; then
+              safe_name="$(printf '%s' "$f" | tr '/' '_')"
+              cp -a "$f" "$BACKUP_DIR/$safe_name.bak"
+            fi
+          done
+          chmod -R 700 "$BACKUP_DIR"
+          echo "BACKUP_DIR=$BACKUP_DIR"
+
+          echo '=== GATE 2: GENERATE NEW TOKEN (NEVER PRINTED) ==='
+          NEW_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          test -n "$NEW_TOKEN"
+          test "$NEW_TOKEN" != "$OLD_TOKEN" || { echo 'BUDDY_TOKEN_ROTATION=FAIL generated_duplicate'; exit 13; }
+          echo 'NEW_TOKEN_GENERATED=YES'
+
+          echo '=== GATE 3: CONSOLIDATE TO ONE CANONICAL FILE ==='
+          ROTATE_NEW_TOKEN="$NEW_TOKEN" python3 - "$CANONICAL" "$CONDUCTOR_ENV" "$HOME_ENV" "$KEY" <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          canonical, conductor_env, home_env = (Path(p) for p in sys.argv[1:4])
+          key = sys.argv[4]
+          new_token = os.environ["ROTATE_NEW_TOKEN"]
+
+          def strip(path: Path) -> None:
+              if not path.is_file():
+                  return
+              lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+              out = []
+              for line in lines:
+                  s = line.strip()
+                  c = s[len("export "):].lstrip() if s.startswith("export ") else s
+                  if not s.startswith("#") and "=" in c and c.partition("=")[0].strip() == key:
+                      continue
+                  out.append(line)
+              path.write_text(("\n".join(out) + "\n") if out else "", encoding="utf-8")
+              os.chmod(path, 0o600)
+
+          def set_canonical(path: Path, value: str) -> None:
+              lines = path.read_text(encoding="utf-8", errors="ignore").splitlines() if path.is_file() else []
+              out = []
+              replaced = False
+              for line in lines:
+                  s = line.strip()
+                  c = s[len("export "):].lstrip() if s.startswith("export ") else s
+                  if not s.startswith("#") and "=" in c and c.partition("=")[0].strip() == key:
+                      if replaced:
+                          continue
+                      out.append(f"{key}={value}")
+                      replaced = True
+                      continue
+                  out.append(line)
+              if not replaced:
+                  out.append(f"{key}={value}")
+              path.write_text("\n".join(out) + "\n", encoding="utf-8")
+              os.chmod(path, 0o600)
+
+          set_canonical(canonical, new_token)
+          strip(conductor_env)
+          strip(home_env)
+          print("BUDDY_TOKEN_FILES_REWRITTEN=YES")
+          PY
+
+          echo '=== GATE 4: EXACTLY ONE ASSIGNMENT, EXACTLY ONE FILE ==='
+          count_of() { [ -f "$1" ] && grep -Ec "^[[:space:]]*(export[[:space:]]+)?${KEY}=" "$1" || echo 0; }
+          canonical_count="$(count_of "$CANONICAL")"
+          conductor_count="$(count_of "$CONDUCTOR_ENV")"
+          home_count="$(count_of "$HOME_ENV")"
+          echo "CANONICAL_ASSIGNMENTS=$canonical_count"
+          echo "NON_CANONICAL_ASSIGNMENTS=$((conductor_count + home_count))"
+          test "$canonical_count" = "1" || { echo 'BUDDY_TOKEN_ROTATION=FAIL canonical_not_singular'; exit 14; }
+          test "$((conductor_count + home_count))" = "0" || { echo 'BUDDY_TOKEN_ROTATION=FAIL non_canonical_remnant'; exit 15; }
+
+          echo '=== GATE 5: RESTART AFFECTED SERVICES ==='
+          restarted=0
+          for s in $services; do
+            if systemctl cat "$s" >/dev/null 2>&1; then
+              sudo systemctl restart "$s"
+              sleep 1
+              systemctl is-active --quiet "$s" || { echo "BUDDY_TOKEN_ROTATION=FAIL service_not_active:$s"; exit 16; }
+              restarted=$((restarted+1))
+              echo "SERVICE_RESTARTED=$s"
+            fi
+          done
+          test "$restarted" -ge 1
+          sleep 2
+
+          echo '=== GATE 6: OLD TOKEN NOW REJECTED, NEW TOKEN NOW ACTIVE ==='
+          old_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -H "Authorization: Bearer $OLD_TOKEN" http://127.0.0.1:5070/buddy || true)"
+          echo "OLD_TOKEN_REJECTED=$([ "$old_code" = '401' ] && echo YES || echo NO)"
+          test "$old_code" = '401' || { echo 'BUDDY_TOKEN_ROTATION=FAIL old_token_still_active'; exit 17; }
+
+          new_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -H "Authorization: Bearer $NEW_TOKEN" http://127.0.0.1:5070/buddy || true)"
+          echo "NEW_TOKEN_ACTIVE=$([ "$new_code" = '200' ] && echo YES || echo NO)"
+          test "$new_code" = '200' || { echo 'BUDDY_TOKEN_ROTATION=FAIL new_token_not_active'; exit 18; }
+
+          echo '=== ROTATION COMPLETE ==='
+          echo 'BUDDY_TOKEN_ROTATION=PASS'
+          echo 'CANONICAL_SOURCE=buddy_core/.env'
+          echo "BACKUP_DIR=$BACKUP_DIR"
+          echo 'TOKEN_VALUE=NEVER_PRINTED'
+          REMOTE
+
+      - name: Cleanup SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

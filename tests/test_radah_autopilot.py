@@ -120,7 +120,7 @@ class RadahAutopilotTests(unittest.TestCase):
             self.assertFalse((root / "state.json").exists())
             self.assertFalse((root / "receipts").exists())
 
-    def test_governed_blocked_cycle_is_healthy_scheduler_progress(self):
+    def test_governed_blocked_cycle_can_be_scheduler_healthy_without_business_progress(self):
         receipt = {
             "schema": "radah-autopilot-receipt-v1", "lane": "analytics_services",
             "status": "BLOCKED", "mission_id": "mission_test", "external_actions_authorized": False,
@@ -136,7 +136,7 @@ class RadahAutopilotTests(unittest.TestCase):
         }
         self.assertFalse(lane_supervisor.bounded_cycle_ok(receipt))
 
-    def test_blocked_receipt_updates_rotation_state(self):
+    def test_blocked_receipt_updates_rotation_state_not_progress(self):
         lanes = lane_supervisor.validate_policy(self.policy, self.verticals)
         lane = lanes[0]
         now = datetime.now(timezone.utc)
@@ -150,10 +150,48 @@ class RadahAutopilotTests(unittest.TestCase):
             }
             lane_supervisor.persist_cycle(state_dir=state_dir, state=state, lane=lane, receipt=receipt, now=now)
             saved = lane_supervisor.load_state(state_dir / "state.json")
+            lane_state = saved["lanes"][lane.lane_id]
             self.assertEqual(saved["cycles"], 1)
-            self.assertEqual(saved["lanes"][lane.lane_id]["last_status"], "BLOCKED")
-            self.assertEqual(saved["lanes"][lane.lane_id]["last_attempt_at"], now.isoformat())
-            self.assertEqual(saved["lanes"][lane.lane_id]["last_progress_at"], now.isoformat())
+            self.assertEqual(lane_state["last_status"], "BLOCKED")
+            self.assertEqual(lane_state["last_attempt_at"], now.isoformat())
+            self.assertEqual(lane_state["last_blocked_at"], now.isoformat())
+            self.assertNotIn("last_progress_at", lane_state)
+            self.assertNotIn("last_productive_at", lane_state)
+
+    def test_held_receipt_is_not_productive(self):
+        lanes = lane_supervisor.validate_policy(self.policy, self.verticals)
+        lane = lanes[0]
+        now = datetime.now(timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            state = {"schema": "radah-autopilot-state-v1", "lanes": {}, "cycles": 0}
+            receipt = {
+                "schema": "radah-autopilot-receipt-v1", "lane": lane.lane_id, "status": "HELD",
+                "mission_id": "mission_held", "external_actions_authorized": False,
+                "receipts": [{"capability": "external.publish", "status": "HELD"}],
+            }
+            lane_supervisor.persist_cycle(state_dir=state_dir, state=state, lane=lane, receipt=receipt, now=now)
+            lane_state = lane_supervisor.load_state(state_dir / "state.json")["lanes"][lane.lane_id]
+            self.assertEqual(lane_state["last_held_at"], now.isoformat())
+            self.assertNotIn("last_progress_at", lane_state)
+            self.assertNotIn("last_productive_at", lane_state)
+
+    def test_complete_receipt_is_only_productive_outcome(self):
+        lanes = lane_supervisor.validate_policy(self.policy, self.verticals)
+        lane = lanes[0]
+        now = datetime.now(timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            state = {"schema": "radah-autopilot-state-v1", "lanes": {}, "cycles": 0}
+            receipt = {
+                "schema": "radah-autopilot-receipt-v1", "lane": lane.lane_id, "status": "COMPLETE",
+                "mission_id": "mission_complete", "external_actions_authorized": False,
+                "receipts": [{"capability": "brain.reason", "status": "COMPLETE"}],
+            }
+            lane_supervisor.persist_cycle(state_dir=state_dir, state=state, lane=lane, receipt=receipt, now=now)
+            lane_state = lane_supervisor.load_state(state_dir / "state.json")["lanes"][lane.lane_id]
+            self.assertEqual(lane_state["last_progress_at"], now.isoformat())
+            self.assertEqual(lane_state["last_productive_at"], now.isoformat())
 
     def test_installer_reuses_proven_buddy_python_runtime(self):
         installer = INSTALLER_PATH.read_text(encoding="utf-8")

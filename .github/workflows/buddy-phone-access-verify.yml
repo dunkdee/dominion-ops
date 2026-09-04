@@ -136,6 +136,30 @@ jobs:
             done
           fi
 
+          echo '=== SUDO / SYSTEMD ENVIRONMENT DIAGNOSTIC (READ ONLY, NO SECRET VALUES) ==='
+          sudo -n true 2>/dev/null && echo 'SUDO_NOPASSWD=YES' || echo 'SUDO_NOPASSWD=NO'
+          systemctl show dominion-buddy-web.service -p EnvironmentFiles --no-pager 2>/dev/null || true
+          env_directive="$(systemctl show dominion-buddy-web.service -p Environment --value 2>/dev/null || true)"
+          if printf '%s' "$env_directive" | grep -q 'BUDDY_WEB_TOKEN='; then
+            echo 'BUDDY_WEB_TOKEN_IN_SYSTEMD_ENVIRONMENT_DIRECTIVE=YES'
+          else
+            echo 'BUDDY_WEB_TOKEN_IN_SYSTEMD_ENVIRONMENT_DIRECTIVE=NO'
+          fi
+          buddy_pid="$(systemctl show -p MainPID --value dominion-buddy-web.service 2>/dev/null || true)"
+          echo "BUDDY_WEB_MAIN_PID=${buddy_pid:-0}"
+          if [ -n "${buddy_pid:-}" ] && [ "${buddy_pid}" != '0' ]; then
+            if sudo -n test -r "/proc/$buddy_pid/environ" 2>/dev/null; then
+              echo 'PROC_ENVIRON_READABLE=YES'
+              if sudo -n tr '\0' '\n' < "/proc/$buddy_pid/environ" 2>/dev/null | grep -q '^BUDDY_WEB_TOKEN='; then
+                echo 'BUDDY_WEB_TOKEN_IN_PROC_ENVIRON=YES'
+              else
+                echo 'BUDDY_WEB_TOKEN_IN_PROC_ENVIRON=NO (loaded at runtime via dotenv, not exec-time env)'
+              fi
+            else
+              echo 'PROC_ENVIRON_READABLE=NO (sudo denied or requires a password non-interactively)'
+            fi
+          fi
+
           echo '=== PHONE LOGIN LIVE PROBE (LOOPBACK, READ ONLY) ==='
           if grep -q 'DOMINION_BUDDY_PHONE_AUTH_V1' "$BUDDY_DIR/buddy_web.py" 2>/dev/null; then
             token="$(sudo tr '\0' '\n' < "/proc/$(systemctl show -p MainPID --value dominion-buddy-web.service)/environ" | sed -n 's/^BUDDY_WEB_TOKEN=//p' | head -1)"

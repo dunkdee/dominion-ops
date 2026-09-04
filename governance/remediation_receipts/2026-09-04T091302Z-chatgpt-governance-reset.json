@@ -1,0 +1,35 @@
+{
+  "schema": "radah-remediation-receipt-v1",
+  "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+  "receipt_kind": "contemporaneous_pre_action",
+  "created_at": "2026-09-04T09:13:02Z",
+  "actor": "ChatGPT via GitHub connector",
+  "authority": {
+    "source": "explicit active-session user instruction",
+    "scope": "continue system-wide governance remediation on PR #235; no merge or production certification while required gates are red",
+    "status": "AUTHORIZED_FOR_BOUNDED_REMEDIATION"
+  },
+  "evidence": {
+    "pr": 235,
+    "base_branch": "main",
+    "base_sha": "20af74455d3de9bb631c8795599bbc7fa7b9df4c",
+    "remediation_branch": "governance/elite-end-to-end-remediation",
+    "observed_head_sha": "7b571c03fc5f53ce7e13693d72b4617bdceaca89",
+    "pr_state": "OPEN_DRAFT",
+    "merge_state": "NOT_MERGED"
+  },
+  "action_intent": {
+    "next_action": "inspect current failing governance/CI evidence, select one bounded highest-severity failure category, remediate it on the branch, then record the exact resulting commit and verification outcome",
+    "prohibited": [
+      "direct push to main",
+      "force merge",
+      "production readiness claim without end-to-end proof",
+      "retroactive receipt fabrication"
+    ]
+  },
+  "truth_status": {
+    "system_operating_autonomously": "NO",
+    "elite_governance": "FAIL_REMEDIATION_IN_PROGRESS",
+    "this_receipt_claims_completion": false
+  }
+}

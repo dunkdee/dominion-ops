@@ -256,6 +256,21 @@
       "evidence": "vault file paths, SHA-256 digests, byte ranges, and file content excerpts",
       "enabled": true,
       "tags": ["internal", "vault", "read_only", "governed"]
+    },
+    {
+      "id": "revenue.feedback",
+      "name": "Revenue attribution feedback",
+      "description": "Read-only feedback from dominion-db orders table. PURCHASE_SOURCE=orders (Stripe webhook, Group C). REVENUE_SOURCE=orders.amount_cents. Returns WINNER, LOSER, NEXT_CONSTRAINT, NEXT_ALLOWED_ACTION, APPROVAL_REQUIRED. DB host loopback-only. Fails closed.",
+      "executor": "native:revenue_feedback",
+      "classification": "read",
+      "auth_required": false,
+      "health_check": "loopback_only",
+      "timeout_seconds": 10,
+      "max_retries": 0,
+      "fallback": null,
+      "evidence": "purchase_count, revenue_cents, utm_breakdown, WINNER, LOSER, NEXT_CONSTRAINT, NEXT_ALLOWED_ACTION, APPROVAL_REQUIRED",
+      "enabled": true,
+      "tags": ["revenue", "attribution", "analytics", "read_only", "internal", "governed"]
     }
   ]
 }

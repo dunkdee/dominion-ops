@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Golden Years Word Search | 50 Large-Print Puzzles</title>
+    <meta name="description" content="50 large-print word search puzzles designed for seniors — keep your mind sharp while having fun. Available on Amazon.">
+    <meta property="og:title" content="Golden Years Word Search | 50 Large-Print Puzzles">
+    <meta property="og:description" content="50 large-print word search puzzles designed for seniors — keep your mind sharp while having fun.">
+    <meta property="og:type" content="book">
+    <meta property="og:url" content="https://dominionhealing.org/books/golden-years">
+    <meta property="og:image" content="https://dominionhealing.org/images/books/golden-years-cover.jpg">
+    <meta property="og:site_name" content="Dominion Healing">
+    <meta property="book:author" content="Dominion Healing">
+    <meta property="book:tag" content="word search, large print, puzzles, seniors">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            line-height: 1.6;
+        }
+        a { color: #d4af37; text-decoration: none; }
+
+        /* Nav */
+        .nav {
+            padding: 18px 30px;
+            border-bottom: 1px solid #2a2a4a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .nav-brand { font-weight: 700; color: #d4af37; font-size: 1.1rem; letter-spacing: 1px; }
+        .nav a.back { color: #aaa; font-size: 0.9rem; }
+        .nav a.back:hover { color: #d4af37; }
+
+        /* Hero */
+        .hero {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 60px 20px;
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 50px;
+            align-items: center;
+        }
+        .hero-cover {
+            background: #0f0f23;
+            border-radius: 16px;
+            border: 2px solid #2a2a4a;
+            height: 480px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .hero-cover .placeholder { font-size: 6rem; opacity: 0.35; }
+        /* Replace placeholder with: <img src="/images/books/golden-years-cover.jpg" alt="Golden Years Word Search" style="width:100%;height:100%;object-fit:cover;border-radius:14px;"> */
+
+        .hero-details .tag {
+            display: inline-block;
+            background: rgba(212, 175, 55, 0.15);
+            color: #d4af37;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 4px 14px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+        }
+        .hero-details h1 {
+            font-size: 2.4rem;
+            color: #fff;
+            margin-bottom: 12px;
+            line-height: 1.2;
+        }
+        .hero-details .subtitle {
+            font-size: 1.1rem;
+            color: #bbb;
+            margin-bottom: 20px;
+        }
+        .hero-details .price {
+            font-size: 2rem;
+            color: #d4af37;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .hero-details .format { color: #888; font-size: 0.9rem; margin-bottom: 28px; }
+
+        .btn-primary {
+            display: inline-block;
+            background: #d4af37;
+            color: #1a1a2e;
+            font-weight: 700;
+            padding: 16px 36px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            transition: background 0.3s ease;
+            margin-right: 14px;
+            margin-bottom: 10px;
+        }
+        .btn-primary:hover { background: #e8c84a; color: #1a1a2e; }
+        .btn-outline {
+            display: inline-block;
+            border: 2px solid #d4af37;
+            color: #d4af37;
+            font-weight: 600;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+        .btn-outline:hover { background: #d4af37; color: #1a1a2e; }
+
+        /* Features */
+        .features {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px 60px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 30px;
+        }
+        .feature-item {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 28px;
+            border: 1px solid #2a2a4a;
+            text-align: center;
+        }
+        .feature-item .icon { font-size: 2.2rem; margin-bottom: 14px; }
+        .feature-item h3 { color: #d4af37; font-size: 1rem; margin-bottom: 8px; }
+        .feature-item p { color: #aaa; font-size: 0.9rem; }
+
+        /* Preview */
+        .preview-section {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 60px 20px;
+        }
+        .preview-section h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            color: #d4af37;
+            margin-bottom: 30px;
+        }
+        .preview-box {
+            background: #fff;
+            color: #333;
+            border-radius: 12px;
+            padding: 40px;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 1.05rem;
+            line-height: 1.8;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        }
+        .preview-box h3 { color: #1a1a2e; margin-bottom: 16px; font-size: 1.3rem; }
+        .preview-box p { margin-bottom: 14px; }
+        .preview-box .word-grid {
+            font-family: 'Courier New', monospace;
+            font-size: 1.2rem;
+            letter-spacing: 4px;
+            line-height: 2;
+            text-align: center;
+            background: #f9f6f0;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            color: #1a1a2e;
+        }
+        .preview-box .word-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 24px;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 0.95rem;
+            color: #555;
+            margin-top: 12px;
+        }
+        .preview-fade {
+            position: relative;
+        }
+        .preview-fade::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            background: linear-gradient(transparent, #fff);
+        }
+        .preview-cta {
+            text-align: center;
+            padding: 20px;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 0.95rem;
+            color: #888;
+            font-style: italic;
+        }
+
+        /* Email Form */
+        .email-section {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 60px 20px;
+            text-align: center;
+        }
+        .email-section h2 {
+            font-size: 1.6rem;
+            color: #d4af37;
+            margin-bottom: 10px;
+        }
+        .email-section p {
+            color: #aaa;
+            margin-bottom: 28px;
+            font-size: 0.95rem;
+        }
+        .email-form {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            max-width: 420px;
+            margin: 0 auto;
+        }
+        .email-form input {
+            padding: 14px 18px;
+            border-radius: 8px;
+            border: 1px solid #2a2a4a;
+            background: #16213e;
+            color: #fff;
+            font-size: 1rem;
+        }
+        .email-form input::placeholder { color: #666; }
+        .email-form input:focus { outline: none; border-color: #d4af37; }
+        .email-form button {
+            background: #d4af37;
+            color: #1a1a2e;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .email-form button:hover { background: #e8c84a; }
+        .form-msg { font-size: 0.9rem; margin-top: 10px; min-height: 22px; }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 40px 20px;
+            border-top: 1px solid #2a2a4a;
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 700px) {
+            .hero { grid-template-columns: 1fr; padding: 40px 20px; gap: 30px; }
+            .hero-cover { height: 360px; }
+            .hero-details h1 { font-size: 1.8rem; }
+        }
+    </style>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3038615053105919" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<nav class="nav">
+    <span class="nav-brand">DOMINION HEALING</span>
+    <a href="/books/" class="back">&larr; All Books</a>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+    <div class="hero-cover">
+        <!-- Replace with actual cover image -->
+        <div class="placeholder">&#128218;</div>
+    </div>
+    <div class="hero-details">
+        <span class="tag">Puzzles &amp; Games</span>
+        <h1>Golden Years Word Search</h1>
+        <p class="subtitle">50 large-print word search puzzles designed for relaxation, mental sharpness, and pure enjoyment. Perfect for seniors and anyone who loves a good puzzle.</p>
+        <div class="price">$9.97</div>
+        <div class="format">Paperback &middot; Large Print &middot; 110+ Pages</div>
+        <a href="https://www.amazon.com/dp/PLACEHOLDER" class="btn-primary" target="_blank" rel="noopener">Buy on Amazon</a>
+        <a href="#preview" class="btn-outline">Free Preview</a>
+    </div>
+</section>
+
+<!-- Features -->
+<section class="features">
+    <div class="feature-item">
+        <div class="icon">&#128260;</div>
+        <h3>Large Print</h3>
+        <p>Oversized letters and grids designed for comfortable, strain-free reading.</p>
+    </div>
+    <div class="feature-item">
+        <div class="icon">&#129504;</div>
+        <h3>Brain Health</h3>
+        <p>Puzzles that keep your mind sharp and engaged every single day.</p>
+    </div>
+    <div class="feature-item">
+        <div class="icon">&#127793;</div>
+        <h3>Relaxing Themes</h3>
+        <p>Nature, travel, food, history, and more — themes you actually enjoy.</p>
+    </div>
+    <div class="feature-item">
+        <div class="icon">&#127873;</div>
+        <h3>Perfect Gift</h3>
+        <p>An ideal gift for parents, grandparents, or anyone who loves word puzzles.</p>
+    </div>
+</section>
+
+<!-- Free Preview -->
+<section class="preview-section" id="preview">
+    <h2>Free Preview</h2>
+    <div class="preview-box">
+        <h3>Puzzle #1 — Garden Delights</h3>
+        <p>Find all 12 words hidden in the grid below. Words can go in any direction: horizontal, vertical, or diagonal.</p>
+        <div class="preview-fade">
+            <div class="word-grid">
+R O S E M A R Y T P<br>
+L A V E N D E R U E<br>
+S U N F L O W E R O<br>
+D A I S Y B T G A N<br>
+P T U L I P H A S Y<br>
+O R C H I D Y R T M<br>
+J A S M I N E D E E<br>
+L I L Y F E R N R A<br>
+            </div>
+            <div class="word-list">
+                <span>ROSEMARY</span>
+                <span>LAVENDER</span>
+                <span>SUNFLOWER</span>
+                <span>DAISY</span>
+                <span>TULIP</span>
+                <span>ORCHID</span>
+                <span>JASMINE</span>
+                <span>LILY</span>
+                <span>FERN</span>
+                <span>ASTER</span>
+                <span>PEONY</span>
+                <span>GARDEN</span>
+            </div>
+        </div>
+        <div class="preview-cta">Get all 50 puzzles in the full book &rarr;</div>
+    </div>
+</section>
+
+<!-- Email Signup -->
+<section class="email-section" id="signup">
+    <h2>Get a Free Bonus Puzzle Pack</h2>
+    <p>Sign up and receive 5 bonus large-print word search puzzles delivered straight to your inbox.</p>
+    <form class="email-form" id="leadForm" onsubmit="return submitLead(event)">
+        <input type="text" name="name" placeholder="Your name" required>
+        <input type="email" name="email" placeholder="Your email address" required>
+        <button type="submit">Send My Free Puzzles</button>
+    </form>
+    <div class="form-msg" id="formMsg"></div>
+</section>
+
+<div class="footer">
+    <p>&copy; 2026 <a href="https://dominionhealing.org">Dominion Healing</a>. All rights reserved.</p>
+</div>
+
+<script>
+async function submitLead(e) {
+    e.preventDefault();
+    const form = e.target;
+    const msg = document.getElementById('formMsg');
+    const data = {
+        name: form.name.value.trim(),
+        email: form.email.value.trim(),
+        source: 'kdp_golden-years'
+    };
+    const _u = new URLSearchParams(window.location.search);
+    if (_u.get('utm_source'))   data.utm_source   = _u.get('utm_source');
+    if (_u.get('utm_medium'))   data.utm_medium   = _u.get('utm_medium');
+    if (_u.get('utm_campaign')) data.utm_campaign = _u.get('utm_campaign');
+    if (_u.get('utm_content'))  data.utm_content  = _u.get('utm_content');
+    try {
+        msg.style.color = '#aaa';
+        msg.textContent = 'Sending...';
+        const res = await fetch('https://dominionhealing.org/api/lead', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (res.ok) {
+            msg.style.color = '#4caf50';
+            msg.textContent = 'You are in! Check your inbox for your bonus puzzles.';
+            form.reset();
+        } else {
+            throw new Error('Server error');
+        }
+    } catch (err) {
+        msg.style.color = '#ff5555';
+        msg.textContent = 'Something went wrong. Please try again.';
+    }
+}
+</script>
+
+</body>
+</html>

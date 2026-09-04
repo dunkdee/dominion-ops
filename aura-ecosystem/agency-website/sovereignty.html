@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #050508;
+      color: #e2d9c8;
+      font-family: Georgia, 'Times New Roman', serif;
+      line-height: 1.7;
+    }
+    a { color: #C9A84C; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.25rem 2rem;
+      border-bottom: 1px solid #1a1810;
+    }
+    .nav-logo { font-size: 15px; letter-spacing: 0.15em; text-transform: uppercase; color: #C9A84C; }
+    .nav-links { display: flex; gap: 2rem; font-size: 13px; }
+    .nav-links a { color: #8a7d65; }
+    .nav-links a:hover { color: #C9A84C; text-decoration: none; }
+
+    /* Hero — full-width dark gradient */
+    .hero-banner {
+      background: linear-gradient(180deg, #0d0a05 0%, #050508 100%);
+      border-bottom: 1px solid #C9A84C22;
+      padding: 5rem 2rem 4rem;
+      text-align: center;
+    }
+    .eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: #C9A84C;
+      margin-bottom: 1.25rem;
+    }
+    h1 {
+      font-size: 2.8rem;
+      font-weight: normal;
+      color: #f5e9d0;
+      line-height: 1.25;
+      margin-bottom: 1rem;
+      max-width: 640px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .tagline {
+      font-size: 17px;
+      color: #a09278;
+      font-style: italic;
+      max-width: 520px;
+      margin: 0 auto 3rem;
+    }
+    .hero-cta-group { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: linear-gradient(135deg, #C9A84C, #a07830);
+      color: #050508;
+      font-family: Georgia, serif;
+      font-size: 15px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      padding: 0.9rem 2rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn-primary:hover { opacity: 0.9; text-decoration: none; color: #050508; }
+    .btn-ghost {
+      background: transparent;
+      color: #C9A84C;
+      font-family: Georgia, serif;
+      font-size: 15px;
+      border: 1px solid #C9A84C44;
+      border-radius: 8px;
+      padding: 0.9rem 2rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn-ghost:hover { border-color: #C9A84C; text-decoration: none; color: #C9A84C; }
+
+    /* What's inside */
+    .inside {
+      max-width: 800px;
+      margin: 5rem auto;
+      padding: 0 2rem;
+    }
+    .inside h2 {
+      font-size: 1.6rem;
+      font-weight: normal;
+      color: #f5e9d0;
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+    .module-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 600px) { .module-grid { grid-template-columns: 1fr; } h1 { font-size: 2rem; } }
+    .module-card {
+      background: #0a0a0d;
+      border: 1px solid #1a1810;
+      border-radius: 10px;
+      padding: 1.5rem;
+    }
+    .module-num {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: #C9A84C;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+    .module-title { font-size: 16px; color: #f5e9d0; margin-bottom: 0.5rem; }
+    .module-body { font-size: 13px; color: #7a6e5e; }
+
+    /* Price block */
+    .price-block {
+      background: #0a0a0d;
+      border: 1px solid #C9A84C33;
+      border-radius: 14px;
+      max-width: 480px;
+      margin: 0 auto 5rem;
+      padding: 2.5rem 2rem;
+      text-align: center;
+    }
+    .price-block .eyebrow { margin-bottom: 0.5rem; }
+    .price-block h3 { font-size: 1.4rem; font-weight: normal; color: #f5e9d0; margin-bottom: 0.5rem; }
+    .price-block .price-amount { font-size: 3rem; color: #C9A84C; margin: 1rem 0 0.25rem; }
+    .price-block .price-sub { font-size: 12px; color: #5a5040; margin-bottom: 1.5rem; }
+    .price-block ul {
+      list-style: none;
+      text-align: left;
+      margin-bottom: 1.75rem;
+    }
+    .price-block ul li {
+      font-size: 14px;
+      color: #a09278;
+      padding: 0.4rem 0;
+      padding-left: 1.4rem;
+      position: relative;
+    }
+    .price-block ul li::before {
+      content: '✦';
+      position: absolute;
+      left: 0;
+      color: #C9A84C;
+      font-size: 9px;
+      top: 0.6rem;
+    }
+    .price-block .btn-primary { width: 100%; margin-bottom: 0.75rem; }
+    .price-block .guarantee { font-size: 11px; color: #3a3028; }
+
+    /* Chapter freebie */
+    .chapter-section {
+      background: #0a0a0d;
+      border-top: 1px solid #1a1810;
+      border-bottom: 1px solid #1a1810;
+      padding: 4rem 2rem;
+      text-align: center;
+      margin-bottom: 4rem;
+    }
+    .chapter-section h2 { font-size: 1.4rem; font-weight: normal; color: #f5e9d0; margin-bottom: 0.5rem; }
+    .chapter-section p { color: #8a7d65; font-size: 14px; margin-bottom: 1.5rem; }
+    .chapter-form { display: flex; gap: 0.75rem; max-width: 440px; margin: 0 auto; }
+    .chapter-form input {
+      flex: 1;
+      background: #0d0d12;
+      border: 1px solid #2a2415;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 14px;
+      color: #e2d9c8;
+      font-family: Georgia, serif;
+      outline: none;
+    }
+    .chapter-form input:focus { border-color: #C9A84C; }
+    .chapter-form button {
+      background: #C9A84C22;
+      border: 1px solid #C9A84C;
+      border-radius: 8px;
+      padding: 0.75rem 1.5rem;
+      color: #C9A84C;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+      font-family: Georgia, serif;
+    }
+    .chapter-form button:hover { background: #C9A84C33; }
+
+    footer {
+      border-top: 1px solid #1a1810;
+      padding: 2rem;
+      text-align: center;
+      font-size: 12px;
+      color: #3a3028;
+      margin-top: 2rem;
+    }
+    footer a { color: #5a5040; }
+  </style>
+<script type="application/ld+json">
+  {
+      "@context": "https://schema.org",
+      "@type": "Service",
+      "name": "Divine Sovereignty Program",
+      "serviceType": "Sovereignty Consulting",
+      "description": "Financial, legal, and spiritual sovereignty for entrepreneurs.",
+      "provider": {"@type": "Organization", "name": "Dominion Healing", "url": "https://dominionhealing.org"}
+    }
+</script>
+
+  <!-- SEO: Dominion Growth Engine -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Divine Sovereignty — Dominion Healing</title>
+  <meta name="description" content="Divine Sovereignty -- Dominion Healing">
+  <meta name="keywords" content="dominion healing, holistic wellness, AI automation, sovereignty">
+  <meta name="author" content="Dewayne Singleton">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+  <link rel="canonical" href="https://dominionhealing.org/sovereignty.html">
+  <meta property="og:title" content="Divine Sovereignty — Dominion Healing">
+  <meta property="og:description" content="Divine Sovereignty -- Dominion Healing">
+  <meta property="og:url" content="https://dominionhealing.org/sovereignty.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Dominion Healing">
+  <meta property="og:image" content="https://dominionhealing.org/assets/og-image.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Divine Sovereignty — Dominion Healing">
+  <meta name="twitter:description" content="Divine Sovereignty -- Dominion Healing">
+  <meta name="twitter:image" content="https://dominionhealing.org/assets/og-image.jpg">
+  <script type="application/ld+json">
+  {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Divine Sovereignty \u2014 Dominion Healing",
+  "description": "Divine Sovereignty -- Dominion Healing",
+  "url": "https://dominionhealing.org/sovereignty.html",
+  "author": {
+    "@type": "Person",
+    "name": "Dewayne Singleton"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Dominion Healing",
+    "url": "https://dominionhealing.org",
+    "logo": "https://dominionhealing.org/assets/logo.png"
+  }
+}
+  </script>
+
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">Dominion Healing</div>
+  <div class="nav-links">
+    <a href="/books.html">All Books</a>
+    <a href="/healing.html">The Art of Healing</a>
+    <a href="/">Ecosystem</a>
+  </div>
+</nav>
+
+<div class="hero-banner">
+  <div class="eyebrow">Essential Reading</div>
+  <h1>Divine Sovereignty</h1>
+  <p class="tagline">Reclaim your authority. Build structures that last. Live by design — not by default.</p>
+  <div class="hero-cta-group">
+    <a href="/go/divine-sovereignty-ebook" class="btn-primary">Get the Book — $14.99</a>
+    <a href="#free-chapter" class="btn-ghost">Read Free Chapter</a>
+  </div>
+</div>
+
+<div class="inside">
+  <h2>What's Inside</h2>
+  <div class="module-grid">
+    <div class="module-card">
+      <div class="module-num">Chapter I</div>
+      <div class="module-title">The Architecture of Sovereignty</div>
+      <div class="module-body">Why most people live in invisible cages — and the exact framework to identify and dismantle them.</div>
+    </div>
+    <div class="module-card">
+      <div class="module-num">Chapter II</div>
+      <div class="module-title">Trust Formation & Legal Structures</div>
+      <div class="module-body">How to use lawful trust structures to protect your assets, your family, and your future.</div>
+    </div>
+    <div class="module-card">
+      <div class="module-num">Chapter III</div>
+      <div class="module-title">Financial Sovereignty</div>
+      <div class="module-body">Build wealth systems that work while you sleep. Sovereign money principles beyond traditional finance.</div>
+    </div>
+    <div class="module-card">
+      <div class="module-num">Chapter IV</div>
+      <div class="module-title">AI as a Sovereign Tool</div>
+      <div class="module-body">How to deploy AI automation in your own life and business — the Dominion model in practice.</div>
+    </div>
+    <div class="module-card">
+      <div class="module-num">Chapter V</div>
+      <div class="module-title">Mind, Body & Sovereign Identity</div>
+      <div class="module-body">The philosophy of self-mastery. Who you are when no external system defines you.</div>
+    </div>
+    <div class="module-card">
+      <div class="module-num">Chapter VI</div>
+      <div class="module-title">The Sovereign Blueprint</div>
+      <div class="module-body">A practical 90-day activation plan. Step-by-step from where you are to where you're designed to be.</div>
+    </div>
+  </div>
+</div>
+
+<div class="price-block">
+  <div class="eyebrow">Your Investment</div>
+  <h3>Divine Sovereignty</h3>
+  <div class="price-amount">$14.99</div>
+  <div class="price-sub">Digital PDF · Instant Download</div>
+  <ul>
+    <li>Complete 6-chapter guide (180+ pages)</li>
+    <li>Trust formation templates included</li>
+    <li>90-day sovereign activation plan</li>
+    <li>AI deployment playbook (Dominion model)</li>
+    <li>Lifetime access to all future updates</li>
+  </ul>
+  <a href="/go/divine-sovereignty-ebook" class="btn-primary">Get Instant Access — $14.99</a>
+  <div class="guarantee">Secure checkout &nbsp;·&nbsp; 30-day money-back guarantee</div>
+</div>
+
+<div class="chapter-section" id="free-chapter">
+  <h2>Read Chapter I Free</h2>
+  <p>The Architecture of Sovereignty — delivered to your inbox instantly.</p>
+  <form class="chapter-form" onsubmit="return submitChapter(event)">
+    <input type="email" name="email" placeholder="your@email.com" required>
+    <button type="submit">Send It</button>
+  </form>
+</div>
+
+<footer>
+  &copy; 2026 Dominion Healing &nbsp;·&nbsp; <a href="/privacy.html">Privacy</a> &nbsp;·&nbsp; <a href="/terms.html">Terms</a> &nbsp;·&nbsp; <a href="mailto:dewayne@dominionhealing.org">Contact</a>
+</footer>
+
+<script>
+  function submitChapter(e) {
+    e.preventDefault();
+    const email = e.target.querySelector('input').value;
+    const _u = new URLSearchParams(window.location.search);
+    fetch('/lead', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign(
+        { email, source: 'sovereignty-free-chapter', interest: 'divine-sovereignty' },
+        _u.get('utm_source')   ? {utm_source:   _u.get('utm_source')}   : {},
+        _u.get('utm_medium')   ? {utm_medium:   _u.get('utm_medium')}   : {},
+        _u.get('utm_campaign') ? {utm_campaign: _u.get('utm_campaign')} : {},
+        _u.get('utm_content')  ? {utm_content:  _u.get('utm_content')}  : {}
+      ))
+    }).then(() => {
+      e.target.innerHTML = '<p style="color:#C9A84C;font-size:14px">Chapter I is on its way. Check your inbox.</p>';
+    }).catch(() => {
+      e.target.innerHTML = '<p style="color:#C9A84C;font-size:14px">Chapter I is on its way. Check your inbox.</p>';
+    });
+    return false;
+  }
+</script>
+</body>
+</html>

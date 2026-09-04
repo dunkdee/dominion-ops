@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign Mind Journal | 90-Day Gratitude &amp; Goal Journal</title>
+    <meta name="description" content="A 90-day guided journal for gratitude, goal-setting, and building the mindset of a sovereign individual. Transform your mornings, master your mind.">
+    <meta property="og:title" content="Sovereign Mind Journal | 90-Day Gratitude &amp; Goal Journal">
+    <meta property="og:description" content="A 90-day guided journal for gratitude, goal-setting, and building the mindset of a sovereign individual.">
+    <meta property="og:type" content="book">
+    <meta property="og:url" content="https://dominionhealing.org/books/sovereign-mind">
+    <meta property="og:image" content="https://dominionhealing.org/images/books/sovereign-mind-cover.jpg">
+    <meta property="og:site_name" content="Dominion Healing">
+    <meta property="book:author" content="Dominion Healing">
+    <meta property="book:tag" content="journal, gratitude, goals, self-improvement, mindset">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            line-height: 1.6;
+        }
+        a { color: #d4af37; text-decoration: none; }
+
+        .nav {
+            padding: 18px 30px;
+            border-bottom: 1px solid #2a2a4a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .nav-brand { font-weight: 700; color: #d4af37; font-size: 1.1rem; letter-spacing: 1px; }
+        .nav a.back { color: #aaa; font-size: 0.9rem; }
+        .nav a.back:hover { color: #d4af37; }
+
+        .hero {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 60px 20px;
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 50px;
+            align-items: center;
+        }
+        .hero-cover {
+            background: #0f0f23;
+            border-radius: 16px;
+            border: 2px solid #2a2a4a;
+            height: 480px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .hero-cover .placeholder { font-size: 6rem; opacity: 0.35; }
+
+        .hero-details .tag {
+            display: inline-block;
+            background: rgba(212, 175, 55, 0.15);
+            color: #d4af37;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 4px 14px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+        }
+        .hero-details h1 {
+            font-size: 2.4rem;
+            color: #fff;
+            margin-bottom: 12px;
+            line-height: 1.2;
+        }
+        .hero-details .subtitle {
+            font-size: 1.1rem;
+            color: #bbb;
+            margin-bottom: 20px;
+        }
+        .hero-details .price {
+            font-size: 2rem;
+            color: #d4af37;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .hero-details .format { color: #888; font-size: 0.9rem; margin-bottom: 28px; }
+
+        .btn-primary {
+            display: inline-block;
+            background: #d4af37;
+            color: #1a1a2e;
+            font-weight: 700;
+            padding: 16px 36px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            transition: background 0.3s ease;
+            margin-right: 14px;
+            margin-bottom: 10px;
+        }
+        .btn-primary:hover { background: #e8c84a; color: #1a1a2e; }
+        .btn-outline {
+            display: inline-block;
+            border: 2px solid #d4af37;
+            color: #d4af37;
+            font-weight: 600;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+        .btn-outline:hover { background: #d4af37; color: #1a1a2e; }
+
+        .features {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px 60px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 30px;
+        }
+        .feature-item {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 28px;
+            border: 1px solid #2a2a4a;
+            text-align: center;
+        }
+        .feature-item .icon { font-size: 2.2rem; margin-bottom: 14px; }
+        .feature-item h3 { color: #d4af37; font-size: 1rem; margin-bottom: 8px; }
+        .feature-item p { color: #aaa; font-size: 0.9rem; }
+
+        .preview-section {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 60px 20px;
+        }
+        .preview-section h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            color: #d4af37;
+            margin-bottom: 30px;
+        }
+        .preview-box {
+            background: #fff;
+            color: #333;
+            border-radius: 12px;
+            padding: 40px;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 1.05rem;
+            line-height: 1.8;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        }
+        .preview-box h3 { color: #1a1a2e; margin-bottom: 16px; font-size: 1.3rem; }
+        .preview-box p { margin-bottom: 14px; }
+        .preview-box .journal-prompt {
+            background: #f9f6f0;
+            border-left: 4px solid #d4af37;
+            padding: 20px 24px;
+            margin: 18px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .preview-box .journal-prompt h4 {
+            color: #1a1a2e;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        .preview-box .journal-lines {
+            border-bottom: 1px solid #ddd;
+            height: 32px;
+            margin-bottom: 4px;
+        }
+        .preview-fade { position: relative; }
+        .preview-fade::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 80px;
+            background: linear-gradient(transparent, #fff);
+        }
+        .preview-cta {
+            text-align: center;
+            padding: 20px;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 0.95rem;
+            color: #888;
+            font-style: italic;
+        }
+
+        .email-section {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 60px 20px;
+            text-align: center;
+        }
+        .email-section h2 {
+            font-size: 1.6rem;
+            color: #d4af37;
+            margin-bottom: 10px;
+        }
+        .email-section p {
+            color: #aaa;
+            margin-bottom: 28px;
+            font-size: 0.95rem;
+        }
+        .email-form {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            max-width: 420px;
+            margin: 0 auto;
+        }
+        .email-form input {
+            padding: 14px 18px;
+            border-radius: 8px;
+            border: 1px solid #2a2a4a;
+            background: #16213e;
+            color: #fff;
+            font-size: 1rem;
+        }
+        .email-form input::placeholder { color: #666; }
+        .email-form input:focus { outline: none; border-color: #d4af37; }
+        .email-form button {
+            background: #d4af37;
+            color: #1a1a2e;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .email-form button:hover { background: #e8c84a; }
+        .form-msg { font-size: 0.9rem; margin-top: 10px; min-height: 22px; }
+
+        .footer {
+            text-align: center;
+            padding: 40px 20px;
+            border-top: 1px solid #2a2a4a;
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 700px) {
+            .hero { grid-template-columns: 1fr; padding: 40px 20px; gap: 30px; }
+            .hero-cover { height: 360px; }
+            .hero-details h1 { font-size: 1.8rem; }
+        }
+    </style>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3038615053105919" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<nav class="nav">
+    <span class="nav-brand">DOMINION HEALING</span>
+    <a href="/books/" class="back">&larr; All Books</a>
+</nav>
+
+<section class="hero">
+    <div class="hero-cover">
+        <div class="placeholder">&#128221;</div>
+    </div>
+    <div class="hero-details">
+        <span class="tag">Self-Improvement</span>
+        <h1>Sovereign Mind Journal</h1>
+        <p class="subtitle">A 90-day guided journal for gratitude, goal-setting, and building the mindset of a sovereign individual. Transform your mornings. Master your mind.</p>
+        <div class="price">$14.97</div>
+        <div class="format">Paperback &middot; 200+ Pages &middot; 90 Daily Entries</div>
+        <a href="https://www.amazon.com/dp/B0DVBL912R" class="btn-primary" target="_blank" rel="noopener">Buy on Amazon</a>
+        <a href="#preview" class="btn-outline">Free Preview</a>
+    </div>
+</section>
+
+<section class="features">
+    <div class="feature-item">
+        <div class="icon">&#9728;&#65039;</div>
+        <h3>Morning Ritual</h3>
+        <p>Structured morning prompts for gratitude, intention, and focus — every single day.</p>
+    </div>
+    <div class="feature-item">
+        <div class="icon">&#127919;</div>
+        <h3>Goal Tracking</h3>
+        <p>Weekly and monthly goal pages to keep your vision sharp and your progress measurable.</p>
+    </div>
+    <div class="feature-item">
+        <div class="icon">&#128161;</div>
+        <h3>Reflection Prompts</h3>
+        <p>Evening reflection questions that compound wisdom over 90 days of practice.</p>
+    </div>
+    <div class="feature-item">
+        <div class="icon">&#128081;</div>
+        <h3>Sovereign Mindset</h3>
+        <p>Built on the principle that your mind is your domain — own it completely.</p>
+    </div>
+</section>
+
+<section class="preview-section" id="preview">
+    <h2>Free Preview</h2>
+    <div class="preview-box">
+        <h3>Day 1 — The Beginning</h3>
+        <p><em>"The sovereign mind does not wait for permission to begin. It begins."</em></p>
+
+        <div class="journal-prompt">
+            <h4>Morning Gratitude</h4>
+            <p>Write 3 things you are genuinely grateful for this morning:</p>
+            <div class="journal-lines"></div>
+            <div class="journal-lines"></div>
+            <div class="journal-lines"></div>
+        </div>
+
+        <div class="journal-prompt">
+            <h4>Today's Intention</h4>
+            <p>What is the single most important thing you will accomplish today?</p>
+            <div class="journal-lines"></div>
+            <div class="journal-lines"></div>
+        </div>
+
+        <div class="preview-fade">
+            <div class="journal-prompt">
+                <h4>Evening Reflection</h4>
+                <p>What did you learn about yourself today? What will you do differently tomorrow?</p>
+                <div class="journal-lines"></div>
+                <div class="journal-lines"></div>
+                <div class="journal-lines"></div>
+            </div>
+        </div>
+        <div class="preview-cta">90 days of guided journaling await you &rarr;</div>
+    </div>
+</section>
+
+<section class="email-section" id="signup">
+    <h2>Get a Free 7-Day Journaling Starter Kit</h2>
+    <p>Sign up and receive a printable 7-day journaling guide with prompts to build your morning ritual.</p>
+    <form class="email-form" id="leadForm" onsubmit="return submitLead(event)">
+        <input type="text" name="name" placeholder="Your name" required>
+        <input type="email" name="email" placeholder="Your email address" required>
+        <button type="submit">Send My Starter Kit</button>
+    </form>
+    <div class="form-msg" id="formMsg"></div>
+</section>
+
+<div class="footer">
+    <p>&copy; 2026 <a href="https://dominionhealing.org">Dominion Healing</a>. All rights reserved.</p>
+</div>
+
+<script>
+async function submitLead(e) {
+    e.preventDefault();
+    const form = e.target;
+    const msg = document.getElementById('formMsg');
+    const data = {
+        name: form.name.value.trim(),
+        email: form.email.value.trim(),
+        source: 'kdp_sovereign-mind'
+    };
+    const _u = new URLSearchParams(window.location.search);
+    if (_u.get('utm_source'))   data.utm_source   = _u.get('utm_source');
+    if (_u.get('utm_medium'))   data.utm_medium   = _u.get('utm_medium');
+    if (_u.get('utm_campaign')) data.utm_campaign = _u.get('utm_campaign');
+    if (_u.get('utm_content'))  data.utm_content  = _u.get('utm_content');
+    try {
+        msg.style.color = '#aaa';
+        msg.textContent = 'Sending...';
+        const res = await fetch('https://dominionhealing.org/api/lead', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (res.ok) {
+            msg.style.color = '#4caf50';
+            msg.textContent = 'You are in! Check your inbox for your starter kit.';
+            form.reset();
+        } else {
+            throw new Error('Server error');
+        }
+    } catch (err) {
+        msg.style.color = '#ff5555';
+        msg.textContent = 'Something went wrong. Please try again.';
+    }
+}
+</script>
+
+</body>
+</html>

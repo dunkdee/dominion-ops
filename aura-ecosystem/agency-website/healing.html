@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #050508;
+      color: #e2d9c8;
+      font-family: Georgia, 'Times New Roman', serif;
+      line-height: 1.7;
+    }
+    a { color: #C9A84C; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Nav */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.25rem 2rem;
+      border-bottom: 1px solid #1a1810;
+    }
+    .nav-logo {
+      font-size: 15px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #C9A84C;
+    }
+    .nav-links { display: flex; gap: 2rem; font-size: 13px; color: #8a7d65; }
+    .nav-links a { color: #8a7d65; }
+    .nav-links a:hover { color: #C9A84C; text-decoration: none; }
+
+    /* Hero */
+    .hero {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 5rem 2rem 3rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+    @media (max-width: 680px) {
+      .hero { grid-template-columns: 1fr; gap: 2rem; }
+      .book-cover { order: -1; }
+    }
+
+    /* Book cover mockup */
+    .book-cover {
+      aspect-ratio: 2/3;
+      background: linear-gradient(145deg, #1a1508 0%, #0d0d05 60%, #0a0a08 100%);
+      border: 1px solid #C9A84C44;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      text-align: center;
+      box-shadow: 8px 8px 32px #00000088, -2px -2px 8px #C9A84C11;
+      position: relative;
+      overflow: hidden;
+    }
+    .book-cover::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #C9A84C, transparent);
+    }
+    .book-cover-eyebrow {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #C9A84C;
+      margin-bottom: 1.5rem;
+    }
+    .book-cover-title {
+      font-size: 22px;
+      font-weight: normal;
+      color: #f5e9d0;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.5rem;
+    }
+    .book-cover-subtitle {
+      font-size: 13px;
+      color: #8a7d65;
+      margin-bottom: 2rem;
+    }
+    .book-cover-divider {
+      width: 40px;
+      height: 1px;
+      background: #C9A84C66;
+      margin: 0 auto 2rem;
+    }
+    .book-cover-author {
+      font-size: 12px;
+      color: #C9A84C;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    /* Copy */
+    .hero-copy {}
+    .eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #C9A84C;
+      margin-bottom: 1rem;
+    }
+    h1 {
+      font-size: 2.2rem;
+      font-weight: normal;
+      color: #f5e9d0;
+      line-height: 1.3;
+      margin-bottom: 1rem;
+    }
+    .tagline {
+      font-size: 16px;
+      color: #a09278;
+      margin-bottom: 2rem;
+      font-style: italic;
+    }
+
+    /* Benefits */
+    .benefits { list-style: none; margin-bottom: 2rem; }
+    .benefits li {
+      padding: 0.5rem 0;
+      padding-left: 1.5rem;
+      position: relative;
+      font-size: 15px;
+      color: #c8bca8;
+    }
+    .benefits li::before {
+      content: '✦';
+      position: absolute;
+      left: 0;
+      color: #C9A84C;
+      font-size: 10px;
+      top: 0.65rem;
+    }
+
+    /* Price selector */
+    .price-row {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .price-btn {
+      flex: 1;
+      border: 1px solid #2a2415;
+      background: #0d0d08;
+      border-radius: 8px;
+      padding: 1rem;
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 0.2s;
+    }
+    .price-btn:hover, .price-btn.selected {
+      border-color: #C9A84C;
+    }
+    .price-btn .format { font-size: 12px; color: #8a7d65; margin-bottom: 4px; }
+    .price-btn .amount { font-size: 20px; color: #f5e9d0; }
+    .price-btn .sub { font-size: 11px; color: #5a5040; margin-top: 4px; }
+
+    /* CTA */
+    .cta-btn {
+      display: block;
+      width: 100%;
+      background: linear-gradient(135deg, #C9A84C, #a07830);
+      color: #050508;
+      font-family: Georgia, serif;
+      font-size: 15px;
+      font-weight: bold;
+      letter-spacing: 0.05em;
+      border: none;
+      border-radius: 8px;
+      padding: 1rem;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      transition: opacity 0.2s;
+      margin-bottom: 0.75rem;
+    }
+    .cta-btn:hover { opacity: 0.9; text-decoration: none; color: #050508; }
+    .cta-sub { font-size: 11px; color: #5a5040; text-align: center; }
+
+    /* Free chapter section */
+    .chapter-section {
+      background: #0a0a0d;
+      border-top: 1px solid #1a1810;
+      border-bottom: 1px solid #1a1810;
+      padding: 4rem 2rem;
+      text-align: center;
+      margin-top: 4rem;
+    }
+    .chapter-section h2 {
+      font-size: 1.5rem;
+      font-weight: normal;
+      color: #f5e9d0;
+      margin-bottom: 0.75rem;
+    }
+    .chapter-section p {
+      color: #8a7d65;
+      font-size: 14px;
+      margin-bottom: 2rem;
+    }
+    .chapter-form {
+      display: flex;
+      gap: 0.75rem;
+      max-width: 440px;
+      margin: 0 auto;
+    }
+    .chapter-form input {
+      flex: 1;
+      background: #0d0d12;
+      border: 1px solid #2a2415;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 14px;
+      color: #e2d9c8;
+      font-family: Georgia, serif;
+      outline: none;
+    }
+    .chapter-form input:focus { border-color: #C9A84C; }
+    .chapter-form button {
+      background: #C9A84C22;
+      border: 1px solid #C9A84C;
+      border-radius: 8px;
+      padding: 0.75rem 1.5rem;
+      color: #C9A84C;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+      font-family: Georgia, serif;
+    }
+    .chapter-form button:hover { background: #C9A84C33; }
+
+    /* Testimonials */
+    .testimonials {
+      max-width: 800px;
+      margin: 4rem auto;
+      padding: 0 2rem;
+    }
+    .testimonials h2 {
+      text-align: center;
+      font-weight: normal;
+      color: #f5e9d0;
+      margin-bottom: 2.5rem;
+      font-size: 1.3rem;
+    }
+    .testi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 600px) { .testi-grid { grid-template-columns: 1fr; } }
+    .testi-card {
+      background: #0a0a0d;
+      border: 1px solid #1a1810;
+      border-radius: 10px;
+      padding: 1.5rem;
+    }
+    .testi-body { font-size: 14px; color: #a09278; font-style: italic; margin-bottom: 1rem; }
+    .testi-name { font-size: 12px; color: #C9A84C; letter-spacing: 0.1em; text-transform: uppercase; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid #1a1810;
+      padding: 2rem;
+      text-align: center;
+      font-size: 12px;
+      color: #3a3028;
+      margin-top: 4rem;
+    }
+    footer a { color: #5a5040; }
+  </style>
+<script type="application/ld+json">
+  {
+      "@context": "https://schema.org",
+      "@type": "Service",
+      "name": "The Art of Healing",
+      "serviceType": "AI Business Healing Protocol",
+      "description": "Holistic AI protocols for business and personal transformation.",
+      "provider": {"@type": "Organization", "name": "Dominion Healing", "url": "https://dominionhealing.org"}
+    }
+</script>
+
+  <!-- SEO: Dominion Growth Engine -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Art of Healing — Dominion Healing</title>
+  <meta name="description" content="The Art of Healing -- Dominion Healing">
+  <meta name="keywords" content="dominion healing, holistic wellness, AI automation, sovereignty">
+  <meta name="author" content="Dewayne Singleton">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+  <link rel="canonical" href="https://dominionhealing.org/healing.html">
+  <meta property="og:title" content="The Art of Healing — Dominion Healing">
+  <meta property="og:description" content="The Art of Healing -- Dominion Healing">
+  <meta property="og:url" content="https://dominionhealing.org/healing.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Dominion Healing">
+  <meta property="og:image" content="https://dominionhealing.org/assets/og-image.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="The Art of Healing — Dominion Healing">
+  <meta name="twitter:description" content="The Art of Healing -- Dominion Healing">
+  <meta name="twitter:image" content="https://dominionhealing.org/assets/og-image.jpg">
+  <script type="application/ld+json">
+  {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "The Art of Healing \u2014 Dominion Healing",
+  "description": "The Art of Healing -- Dominion Healing",
+  "url": "https://dominionhealing.org/healing.html",
+  "author": {
+    "@type": "Person",
+    "name": "Dewayne Singleton"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Dominion Healing",
+    "url": "https://dominionhealing.org",
+    "logo": "https://dominionhealing.org/assets/logo.png"
+  }
+}
+  </script>
+
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">Dominion Healing</div>
+  <div class="nav-links">
+    <a href="/books.html">All Books</a>
+    <a href="/sovereignty.html">Divine Sovereignty</a>
+    <a href="/">Ecosystem</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-copy">
+    <div class="eyebrow">New Release</div>
+    <h1>The Art of Healing</h1>
+    <p class="tagline">Reclaim your body, your mind, and your sovereign power.</p>
+    <ul class="benefits">
+      <li>Ancient healing protocols re-engineered for modern life</li>
+      <li>Root-cause frameworks — not symptom management</li>
+      <li>Practical daily rituals backed by real research</li>
+      <li>Sovereign mindset shifts that transform your health trajectory</li>
+      <li>Lifetime access to updated digital editions</li>
+    </ul>
+
+    <div class="price-row">
+      <div class="price-btn selected" id="btn-ebook" onclick="selectFormat('ebook', this)">
+        <div class="format">Digital PDF</div>
+        <div class="amount">$9.99</div>
+        <div class="sub">Instant download</div>
+      </div>
+      <div class="price-btn" id="btn-paperback" onclick="selectFormat('paperback', this)">
+        <div class="format">Paperback</div>
+        <div class="amount">$17.00</div>
+        <div class="sub">Ships in 5–7 days</div>
+      </div>
+    </div>
+
+    <a href="/go/art-of-healing-ebook" id="cta-link" class="cta-btn">Get Your Copy — $9.99</a>
+    <div class="cta-sub">Secure checkout &nbsp;·&nbsp; Instant delivery &nbsp;·&nbsp; 30-day guarantee</div>
+  </div>
+
+  <div class="book-cover">
+    <div class="book-cover-eyebrow">Dominion Healing</div>
+    <div class="book-cover-title">The Art of Healing</div>
+    <div class="book-cover-subtitle">A Sovereign Guide to Whole-Body Restoration</div>
+    <div class="book-cover-divider"></div>
+    <div class="book-cover-author">DeWayne Singleton</div>
+  </div>
+</div>
+
+<div class="chapter-section">
+  <h2>Read the First Chapter Free</h2>
+  <p>Enter your email and we'll send you Chapter 1 immediately.</p>
+  <form class="chapter-form" action="/lead" method="POST" onsubmit="return submitChapter(event)">
+    <input type="email" name="email" placeholder="your@email.com" required>
+    <button type="submit">Send It</button>
+  </form>
+</div>
+
+<div class="testimonials">
+  <h2>What Readers Are Saying</h2>
+  <div class="testi-grid">
+    <div class="testi-card">
+      <div class="testi-body">"This book changed the way I understand my own body. I implemented the morning protocol and felt a difference within two weeks."</div>
+      <div class="testi-name">Marcus T. — Atlanta, GA</div>
+    </div>
+    <div class="testi-card">
+      <div class="testi-body">"DeWayne breaks down healing in a way that actually makes sense. No fluff, no fads — real sovereign thinking about health."</div>
+      <div class="testi-name">Alicia R. — Houston, TX</div>
+    </div>
+    <div class="testi-card">
+      <div class="testi-body">"I've read dozens of health books. This one is different. It treats you like an adult and gives you the tools to think for yourself."</div>
+      <div class="testi-name">Jerome W. — Charlotte, NC</div>
+    </div>
+    <div class="testi-card">
+      <div class="testi-body">"The sovereignty mindset section alone was worth the price. Completely reframed how I approach my well-being."</div>
+      <div class="testi-name">Simone P. — Washington, DC</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  &copy; 2026 Dominion Healing &nbsp;·&nbsp; <a href="/privacy.html">Privacy</a> &nbsp;·&nbsp; <a href="/terms.html">Terms</a> &nbsp;·&nbsp; <a href="mailto:dewayne@dominionhealing.org">Contact</a>
+</footer>
+
+<script>
+  const prices = {
+    ebook:     { label: 'Get Your Copy — $9.99',   slug: '/go/art-of-healing-ebook' },
+    paperback: { label: 'Order Paperback — $17.00', slug: '/go/art-of-healing-paperback' }
+  };
+  function selectFormat(fmt, el) {
+    document.querySelectorAll('.price-btn').forEach(b => b.classList.remove('selected'));
+    el.classList.add('selected');
+    const link = document.getElementById('cta-link');
+    link.href = prices[fmt].slug;
+    link.textContent = prices[fmt].label;
+  }
+  function submitChapter(e) {
+    e.preventDefault();
+    const email = e.target.querySelector('input').value;
+    const _u = new URLSearchParams(window.location.search);
+    fetch('/lead', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign(
+        { email, source: 'healing-free-chapter', interest: 'art-of-healing' },
+        _u.get('utm_source')   ? {utm_source:   _u.get('utm_source')}   : {},
+        _u.get('utm_medium')   ? {utm_medium:   _u.get('utm_medium')}   : {},
+        _u.get('utm_campaign') ? {utm_campaign: _u.get('utm_campaign')} : {},
+        _u.get('utm_content')  ? {utm_content:  _u.get('utm_content')}  : {}
+      ))
+    }).then(() => {
+      e.target.innerHTML = '<p style="color:#C9A84C;font-size:14px">Chapter 1 is on its way. Check your inbox.</p>';
+    }).catch(() => {
+      e.target.innerHTML = '<p style="color:#C9A84C;font-size:14px">Chapter 1 is on its way. Check your inbox.</p>';
+    });
+    return false;
+  }
+</script>
+</body>
+</html>

@@ -26,6 +26,11 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import random
 
+try:
+    from core.attribution import _cta_with_utm
+except ImportError:
+    from buddy_core.core.attribution import _cta_with_utm
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(name)s | %(levelname)s | %(message)s'
@@ -92,10 +97,11 @@ class DailyContentGenerator:
         for i in range(count):
             topic = random.choice(ContentLibrary.BOOK_TOPICS)
             hook = random.choice(ContentLibrary.TRENDING_HOOKS)
-            cta = random.choice(ContentLibrary.CALLS_TO_ACTION)
-            
+            content_id = f"daily_short_{datetime.now().strftime('%Y%m%d')}_{i+1}"
+            cta = _cta_with_utm(random.choice(ContentLibrary.CALLS_TO_ACTION), content_id)
+
             video = {
-                "id": f"daily_short_{datetime.now().strftime('%Y%m%d')}_{i+1}",
+                "id": content_id,
                 "platform": ["youtube_shorts", "tiktok", "instagram_reels"],
                 "duration": "60 seconds",
                 "topic": topic,

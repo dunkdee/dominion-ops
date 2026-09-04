@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debt Freedom Planner | Your Path to Zero Debt</title>
+    <meta name="description" content="A structured debt payoff system — track every balance, plan every payment, and eliminate debt month by month. Available on Amazon.">
+    <meta property="og:title" content="Debt Freedom Planner | Your Path to Zero Debt">
+    <meta property="og:description" content="A structured debt payoff system — track every balance, plan every payment, and eliminate debt month by month.">
+    <meta property="og:type" content="book">
+    <meta property="og:url" content="https://dominionhealing.org/books/debt-freedom">
+    <meta property="og:image" content="https://dominionhealing.org/images/books/debt-freedom-cover.jpg">
+    <meta property="og:site_name" content="Dominion Healing">
+    <meta property="book:author" content="Dominion Healing">
+    <meta property="book:tag" content="debt, finance, planner, budget, money, freedom">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            line-height: 1.6;
+        }
+        a { color: #d4af37; text-decoration: none; }
+
+        .nav {
+            padding: 18px 30px;
+            border-bottom: 1px solid #2a2a4a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .nav-brand { font-weight: 700; color: #d4af37; font-size: 1.1rem; letter-spacing: 1px; }
+        .nav a.back { color: #aaa; font-size: 0.9rem; }
+        .nav a.back:hover { color: #d4af37; }
+
+        .hero {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 60px 20px;
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 50px;
+            align-items: center;
+        }
+        .hero-cover {
+            background: #0f0f23;
+            border-radius: 16px;
+            border: 2px solid #2a2a4a;
+            height: 480px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .hero-cover .placeholder { font-size: 6rem; opacity: 0.35; }
+
+        .hero-details .tag {
+            display: inline-block;
+            background: rgba(212, 175, 55, 0.15);
+            color: #d4af37;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 4px 14px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+        }
+        .hero-details h1 {
+            font-size: 2.4rem;
+            color: #fff;
+            margin-bottom: 12px;
+            line-height: 1.2;
+        }
+        .hero-details .subtitle {
+            font-size: 1.1rem;
+            color: #bbb;
+            margin-bottom: 20px;
+        }
+        .hero-details .price {
+            font-size: 2rem;
+            color: #d4af37;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .hero-details .format { color: #888; font-size: 0.9rem; margin-bottom: 28px; }
+
+        .btn-primary {
+            display: inline-block;
+            background: #d4af37;
+            color: #1a1a2e;
+            font-weight: 700;
+            padding: 16px 36px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            transition: background 0.3s ease;
+            margin-right: 14px;
+            margin-bottom: 10px;
+        }
+        .btn-primary:hover { background: #e8c84a; color: #1a1a2e; }
+        .btn-outline {
+            display: inline-block;
+            border: 2px solid #d4af37;
+            color: #d4af37;
+            font-weight: 600;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+        .btn-outline:hover { background: #d4af37; color: #1a1a2e; }
+
+        .features {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px 60px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 30px;
+        }
+        .feature-item {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 28px;
+            border: 1px solid #2a2a4a;
+            text-align: center;
+        }
+        .feature-item .icon { font-size: 2.2rem; margin-bottom: 14px; }
+        .feature-item h3 { color: #d4af37; font-size: 1rem; margin-bottom: 8px; }
+        .feature-item p { color: #aaa; font-size: 0.9rem; }
+
+        /* Stats banner */
+        .stats-banner {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 20px 50px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            text-align: center;
+        }
+        .stat-box {
+            background: linear-gradient(145deg, #16213e, #1a1a2e);
+            border: 1px solid #d4af37;
+            border-radius: 12px;
+            padding: 24px;
+        }
+        .stat-box .number {
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: #d4af37;
+        }
+        .stat-box .label {
+            color: #aaa;
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+
+        .preview-section {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 60px 20px;
+        }
+        .preview-section h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            color: #d4af37;
+            margin-bottom: 30px;
+        }
+        .preview-box {
+            background: #fff;
+            color: #333;
+            border-radius: 12px;
+            padding: 40px;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 1.05rem;
+            line-height: 1.8;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        }
+        .preview-box h3 { color: #1a1a2e; margin-bottom: 16px; font-size: 1.3rem; }
+        .preview-box p { margin-bottom: 14px; }
+        .preview-box table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 0.9rem;
+        }
+        .preview-box table th {
+            background: #1a1a2e;
+            color: #d4af37;
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .preview-box table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .preview-box table tr:nth-child(even) td { background: #f9f6f0; }
+        .preview-fade { position: relative; }
+        .preview-fade::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 80px;
+            background: linear-gradient(transparent, #fff);
+        }
+        .preview-cta {
+            text-align: center;
+            padding: 20px;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 0.95rem;
+            color: #888;
+            font-style: italic;
+        }
+
+        .email-section {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 60px 20px;
+            text-align: center;
+        }
+        .email-section h2 {
+            font-size: 1.6rem;
+            color: #d4af37;
+            margin-bottom: 10px;
+        }
+        .email-section p {
+            color: #aaa;
+            margin-bottom: 28px;
+            font-size: 0.95rem;
+        }
+        .email-form {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            max-width: 420px;
+            margin: 0 auto;
+        }
+        .email-form input {
+            padding: 14px 18px;
+            border-radius: 8px;
+            border: 1px solid #2a2a4a;
+            background: #16213e;
+            color: #fff;
+            font-size: 1rem;
+        }
+        .email-form input::placeholder { color: #666; }
+        .email-form input:focus { outline: none; border-color: #d4af37; }
+        .email-form button {
+            background: #d4af37;
+            color: #1a1a2e;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .email-form button:hover { background: #e8c84a; }
+        .form-msg { font-size: 0.9rem; margin-top: 10px; min-height: 22px; }
+
+        .footer {
+            text-align: center;
+            padding: 40px 20px;
+            border-top: 1px solid #2a2a4a;
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 700px) {
+            .hero { grid-template-columns: 1fr; padding: 40px 20px; gap: 30px; }
+            .hero-cover { height: 360px; }
+            .hero-details h1 { font-size: 1.8rem; }
+            .stats-banner { grid-template-columns: 1fr; }
+        }
+    </style>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3038615053105919" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<nav class="nav">
+    <span class="nav-brand">DOMINION HEALING</span>
+    <a href="/books/" class="back">&larr; All Books</a>
+</nav>
+
+<section class="hero">
+    <div class="hero-cover">
+        <div class="placeholder">&#128176;</div>
+    </div>
+    <div class="hero-details">
+        <span class="tag">Personal Finance</span>
+        <h1>Debt Freedom Planner</h1>
+        <p class="subtitle">A structured system to track, attack, and eliminate every dollar of debt you owe. Month by month, payment by payment, until you are completely free.</p>
+        <div class="price">$12.97</div>
+        <div class="format">Paperback &middot; 150+ Pages &middot; 12-Month System</div>
+        <a href="https://www.amazon.com/dp/PLACEHOLDER" class="btn-primary" target="_blank" rel="noopener">Buy on Amazon</a>
+        <a href="#preview" class="btn-outline">Free Preview</a>
+    </div>
+</section>
+
+<section class="stats-banner">
+    <div class="stat-box">
+        <div class="number">12</div>
+        <div class="label">Monthly Tracking Spreads</div>
+    </div>
+    <div class="stat-box">
+        <div class="number">52</div>
+        <div class="label">Weekly Payment Checkpoints</div>
+    </div>
+    <div class="stat-box">
+        <div class="number">$0</div>
+        <div class="label">Your Debt Goal</div>
+    </div>
+</section>
+
+<section class="features">
+    <div class="feature-item">
+        <div class="icon">&#128200;</div>
+        <h3>Debt Tracker</h3>
+        <p>List every balance, interest rate, and minimum payment in one clear snapshot.</p>
+    </div>
+    <div class="feature-item">
+        <div class="icon">&#9989;</div>
+        <h3>Payment Schedule</h3>
+        <p>Monthly and weekly checkboxes so you never miss a payment or lose momentum.</p>
+    </div>
+    <div class="feature-item">
+        <div class="icon">&#128170;</div>
+        <h3>Snowball & Avalanche</h3>
+        <p>Choose your strategy — smallest balance first or highest interest first. Both are built in.</p>
+    </div>
+    <div class="feature-item">
+        <div class="icon">&#127942;</div>
+        <h3>Milestone Rewards</h3>
+        <p>Built-in celebration pages at every $1,000 milestone to keep you motivated.</p>
+    </div>
+</section>
+
+<section class="preview-section" id="preview">
+    <h2>Free Preview</h2>
+    <div class="preview-box">
+        <h3>Step 1 — Know Your Numbers</h3>
+        <p>Before you can destroy debt, you need to face it. Use this table to list every debt you currently owe. Be honest. Be complete. This is where freedom begins.</p>
+
+        <div class="preview-fade">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Creditor</th>
+                        <th>Balance</th>
+                        <th>APR %</th>
+                        <th>Min. Payment</th>
+                        <th>Payoff Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="color:#999;font-style:italic;">Example: Visa</td>
+                        <td>$3,200</td>
+                        <td>22.9%</td>
+                        <td>$85</td>
+                        <td>___/___</td>
+                    </tr>
+                    <tr>
+                        <td style="color:#999;">___________</td>
+                        <td>$_______</td>
+                        <td>_____%</td>
+                        <td>$_______</td>
+                        <td>___/___</td>
+                    </tr>
+                    <tr>
+                        <td style="color:#999;">___________</td>
+                        <td>$_______</td>
+                        <td>_____%</td>
+                        <td>$_______</td>
+                        <td>___/___</td>
+                    </tr>
+                    <tr>
+                        <td style="color:#999;">___________</td>
+                        <td>$_______</td>
+                        <td>_____%</td>
+                        <td>$_______</td>
+                        <td>___/___</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p><strong>Total Debt: $__________</strong></p>
+            <p>Now you know the number. It is just a number. And numbers can be changed.</p>
+        </div>
+        <div class="preview-cta">12 months of structured payoff planning inside &rarr;</div>
+    </div>
+</section>
+
+<section class="email-section" id="signup">
+    <h2>Get a Free Debt Snapshot Worksheet</h2>
+    <p>Sign up and receive a printable one-page debt snapshot to map out your current balances instantly.</p>
+    <form class="email-form" id="leadForm" onsubmit="return submitLead(event)">
+        <input type="text" name="name" placeholder="Your name" required>
+        <input type="email" name="email" placeholder="Your email address" required>
+        <button type="submit">Send My Free Worksheet</button>
+    </form>
+    <div class="form-msg" id="formMsg"></div>
+</section>
+
+<div class="footer">
+    <p>&copy; 2026 <a href="https://dominionhealing.org">Dominion Healing</a>. All rights reserved.</p>
+</div>
+
+<script>
+async function submitLead(e) {
+    e.preventDefault();
+    const form = e.target;
+    const msg = document.getElementById('formMsg');
+    const data = {
+        name: form.name.value.trim(),
+        email: form.email.value.trim(),
+        source: 'kdp_debt-freedom'
+    };
+    const _u = new URLSearchParams(window.location.search);
+    if (_u.get('utm_source'))   data.utm_source   = _u.get('utm_source');
+    if (_u.get('utm_medium'))   data.utm_medium   = _u.get('utm_medium');
+    if (_u.get('utm_campaign')) data.utm_campaign = _u.get('utm_campaign');
+    if (_u.get('utm_content'))  data.utm_content  = _u.get('utm_content');
+    try {
+        msg.style.color = '#aaa';
+        msg.textContent = 'Sending...';
+        const res = await fetch('https://dominionhealing.org/api/lead', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (res.ok) {
+            msg.style.color = '#4caf50';
+            msg.textContent = 'You are in! Check your inbox for your worksheet.';
+            form.reset();
+        } else {
+            throw new Error('Server error');
+        }
+    } catch (err) {
+        msg.style.color = '#ff5555';
+        msg.textContent = 'Something went wrong. Please try again.';
+    }
+}
+</script>
+
+</body>
+</html>

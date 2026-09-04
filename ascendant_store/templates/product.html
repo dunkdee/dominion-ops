@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ product.name }} — Ascendant Digital</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; }
+        .container { max-width: 700px; margin: 0 auto; padding: 60px 20px; }
+        a { color: #DAA520; }
+        .back { display: inline-block; margin-bottom: 30px; color: #888; text-decoration: none; }
+        .back:hover { color: #DAA520; }
+        h1 { font-size: 2rem; color: #fff; margin-bottom: 15px; }
+        .badge { display: inline-block; background: #2a2a4e; color: #DAA520; padding: 4px 12px; border-radius: 4px; font-size: 0.85rem; margin-bottom: 20px; }
+        .description { color: #b0b0b0; font-size: 1.1rem; line-height: 1.7; margin-bottom: 30px; }
+        .price { font-size: 2rem; color: #DAA520; font-weight: bold; margin-bottom: 30px; }
+        .btn {
+            display: inline-block; background: #DAA520; color: #0a0a0a; padding: 16px 40px;
+            border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 1.1rem;
+            cursor: pointer; border: none; transition: background 0.2s;
+        }
+        .btn:hover { background: #f0c040; }
+        .features { background: #1a1a2e; border-radius: 12px; padding: 30px; margin-top: 40px; border: 1px solid #2a2a4e; }
+        .features h3 { color: #DAA520; margin-bottom: 15px; }
+        .features li { margin-bottom: 8px; color: #c0c0c0; }
+        footer { text-align: center; padding: 40px; color: #555; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back">&larr; Back to Store</a>
+        <span class="badge">{{ product.category | upper }}</span>
+        <h1>{{ product.name }}</h1>
+        <p class="description">{{ product.description }}</p>
+        <div class="price">{{ product.price_display }}</div>
+        {% if not product.purchasable %}
+        <button class="btn" id="buyBtn" type="button" disabled aria-disabled="true">Not Yet Available</button>
+        {% elif product.checkout_mode == "payment_link" and product.stripe_payment_link %}
+        <a href="{{ product.stripe_payment_link }}" class="btn" id="buyBtn">Buy Now &mdash; {{ product.price_display }}</a>
+        {% else %}
+        <button class="btn" id="buyBtn" onclick="checkout()">Buy Now</button>
+        {% endif %}
+
+        <div class="features">
+            <h3>What You Get</h3>
+            <ul>
+                <li>Availability and delivery details shown before purchase</li>
+                <li>Print-ready format — use at home or professionally</li>
+                <li>Designed for maximum usability and impact</li>
+                <li>Secure payment via Stripe</li>
+            </ul>
+        </div>
+    </div>
+
+    <footer>&copy; 2026 Ascendant Digital. A Primal Dominion brand.</footer>
+
+    <script>
+    async function checkout() {
+        const btn = document.getElementById('buyBtn');
+        btn.textContent = 'Processing...';
+        btn.disabled = true;
+        const _u = new URLSearchParams(window.location.search);
+        const _payload = {product_id: '{{ product.id }}'};
+        if (_u.get('utm_source'))   _payload.utm_source   = _u.get('utm_source');
+        if (_u.get('utm_medium'))   _payload.utm_medium   = _u.get('utm_medium');
+        if (_u.get('utm_campaign')) _payload.utm_campaign = _u.get('utm_campaign');
+        if (_u.get('utm_content'))  _payload.utm_content  = _u.get('utm_content');
+        try {
+            const resp = await fetch('/api/checkout', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(_payload)
+            });
+            const data = await resp.json();
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                alert(data.error || 'Checkout unavailable');
+                btn.textContent = 'Buy Now';
+                btn.disabled = false;
+            }
+        } catch(e) {
+            alert('Connection error. Try again.');
+            btn.textContent = 'Buy Now';
+            btn.disabled = false;
+        }
+    }
+    </script>
+</body>
+</html>

@@ -269,12 +269,20 @@ def capture_lead():
 
     name = str(lead.get("name") or "Friend").strip() or "Friend"
     source = str(lead.get("source") or lead.get("challenge") or "website").strip() or "website"
+    utm_source   = str(lead.get("utm_source")   or "").strip() or None
+    utm_medium   = str(lead.get("utm_medium")   or "").strip() or None
+    utm_campaign = str(lead.get("utm_campaign") or "").strip() or None
+    utm_content  = str(lead.get("utm_content")  or "").strip() or None
 
     record = dict(lead)
-    record["email"] = email
-    record["name"] = name
+    record["email"]  = email
+    record["name"]   = name
     record["source"] = source
-    record["ts"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    record["ts"]     = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    if utm_source:   record["utm_source"]   = utm_source
+    if utm_medium:   record["utm_medium"]   = utm_medium
+    if utm_campaign: record["utm_campaign"] = utm_campaign
+    if utm_content:  record["utm_content"]  = utm_content
 
     try:
         _append_lead(record)
@@ -298,6 +306,10 @@ def capture_lead():
                 "name": name,
                 "source": source,
                 "unsubscribe_url": _unsubscribe_url(email),
+                **({"utm_source":   utm_source}   if utm_source   else {}),
+                **({"utm_medium":   utm_medium}   if utm_medium   else {}),
+                **({"utm_campaign": utm_campaign} if utm_campaign else {}),
+                **({"utm_content":  utm_content}  if utm_content  else {}),
             },
             timeout=5,
         )

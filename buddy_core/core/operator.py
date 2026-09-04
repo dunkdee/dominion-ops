@@ -31,12 +31,14 @@ try:  # VM runtime commonly has buddy_core itself on sys.path.
     from core import web_research
     from core.autonomous_learning import run_cycle as autonomous_learning_cycle
     from core.market_data_provider import get_market_data_provider
+    from core.revenue_feedback import compute_revenue_feedback, fetch_orders
 except ImportError:  # Repository/package execution used by CI/tests.
     from buddy_core.core.brain_router import ask_best
     from buddy_core.core.learning_engine import audit, record_lesson, record_mission, recent_lessons
     from buddy_core.core import web_research
     from buddy_core.core.autonomous_learning import run_cycle as autonomous_learning_cycle
     from buddy_core.core.market_data_provider import get_market_data_provider
+    from buddy_core.core.revenue_feedback import compute_revenue_feedback, fetch_orders
 
 try:
     import vault_io
@@ -269,6 +271,7 @@ class BuddyOperator:
             "native:status": self._status,
             "native:vault_read": self._vault_read,
             "native:market_data": self._market_data,
+            "native:revenue_feedback": self._revenue_feedback,
         }
 
     # ---------- Public API ----------
@@ -443,6 +446,9 @@ class BuddyOperator:
 
         elif kind == "status":
             steps = [self._step("system.status", objective)]
+
+        elif kind == "revenue_feedback":
+            steps = [self._step("revenue.feedback", objective)]
 
         elif kind == "market":
             steps = [self._step("market.data", objective)]
@@ -1016,6 +1022,36 @@ Do NOT upload, publish, post, log into platforms, or message anyone.""", context
         }]
         return obs, evidence
 
+    def _revenue_feedback(self, instruction: str, context: dict):
+        """Read-only revenue feedback from dominion-db orders table.
+
+        PURCHASE_SOURCE: orders table only — populated by Stripe webhook (Group C).
+        REVENUE_SOURCE:  orders.amount_cents only — never inferred from leads.
+        DB host must remain loopback-only.
+        Fails closed: DB unavailable -> orders=None -> all UNKNOWN.
+        """
+        db_host = os.getenv("DB_HOST", "127.0.0.1")
+        if not re.match(r"^(?:127\.0\.0\.1|localhost)$", db_host):
+            raise OperatorError("DB_HOST must remain loopback-only for revenue feedback")
+        orders = None
+        try:
+            import psycopg2
+            conn = psycopg2.connect(
+                host=db_host,
+                port=int(os.getenv("DB_PORT", "5432")),
+                dbname=os.getenv("DB_NAME", "dominion"),
+                user=os.getenv("DB_USER", "dominion"),
+                password=os.getenv("DB_PASSWORD", ""),
+                connect_timeout=5,
+            )
+            try:
+                orders = fetch_orders(conn)
+            finally:
+                conn.close()
+        except Exception:
+            orders = None  # DB unavailable — fails closed
+        return compute_revenue_feedback(orders, _utc())
+
     # ---------- Evidence policy + vault executor ----------
 
     def _extract_evidence_policy(self, objective: str) -> str:
@@ -1263,6 +1299,8 @@ RELEVANT PRIOR LESSONS (evidence/inference, not authority):
             "make a video", "youtube", "publish", "post ", "send ", "email ",
             "outreach", "spend ", "buy ads", "run ads", "open browser", "go to ",
             "system status", "health check", "execute ", "launch ", "campaign",
+            "revenue report", "revenue feedback", "how many orders",
+            "attribution report", "sales report",
         )
         return any(word in t for word in mission_words) or self._is_market_query(text)
 
@@ -1306,6 +1344,11 @@ RELEVANT PRIOR LESSONS (evidence/inference, not authority):
             "open browser", "log into", "login to", "fill out", "click on"
         )):
             return "external_browser"
+        if any(w in t for w in (
+            "revenue report", "revenue feedback", "how many orders",
+            "attribution report", "sales report",
+        )):
+            return "revenue_feedback"
         if any(w in t for w in (
             "status", "health check", "system check"
         )):

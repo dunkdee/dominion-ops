@@ -76,11 +76,52 @@ jobs:
           test -f "$CANONICAL" || { echo 'BUDDY_TOKEN_ROTATION=FAIL canonical_file_missing'; exit 10; }
           install -d -m 700 "$BACKUP_DIR"
 
-          echo '=== GATE 0: CAPTURE LIVE TOKEN (IN-MEMORY ONLY) ==='
+          echo '=== GATE 0: DETERMINE THE CURRENTLY ACTIVE TOKEN ==='
+          # Buddy Web loads this at runtime via python-dotenv, which only
+          # updates the process's own os.environ — it does not appear in
+          # /proc/pid/environ (that reflects the exec-time environment only).
+          # Confirmed by a prior read-only probe: SUDO_NOPASSWD=YES,
+          # PROC_ENVIRON_READABLE=YES, BUDDY_WEB_TOKEN_IN_PROC_ENVIRON=NO.
+          # Read the same files the app reads instead, with the same
+          # last-assignment-wins precedence as core/token_resolver.py.
           buddy_pid="$(systemctl show -p MainPID --value dominion-buddy-web.service)"
           test "${buddy_pid:-0}" != "0" || { echo 'BUDDY_TOKEN_ROTATION=FAIL buddy_web_not_running'; exit 11; }
-          OLD_TOKEN="$(sudo tr '\0' '\n' < "/proc/$buddy_pid/environ" | sed -n "s/^${KEY}=//p" | head -1)"
+
+          OLD_TOKEN="$(python3 - "$CANONICAL" "$CONDUCTOR_ENV" "$HOME_ENV" "$KEY" <<'PY'
+          import sys
+          from pathlib import Path
+
+          def parse(path):
+              values = {}
+              if not path.is_file():
+                  return values
+              for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                  s = line.strip()
+                  if not s or s.startswith("#") or "=" not in s:
+                      continue
+                  if s.startswith("export "):
+                      s = s[len("export "):].lstrip()
+                  k, _, v = s.partition("=")
+                  k, v = k.strip(), v.strip()
+                  if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+                      v = v[1:-1]
+                  values[k] = v  # last assignment in the file wins
+              return values
+
+          canonical, conductor_env, home_env, key = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4]
+          for path in (canonical, conductor_env, home_env):
+              value = parse(path).get(key, "").strip()
+              if value:
+                  sys.stdout.write(value)
+                  break
+          PY
+          )"
           test -n "$OLD_TOKEN" || { echo 'BUDDY_TOKEN_ROTATION=FAIL old_token_unreadable'; exit 12; }
+
+          # Confirm it is actually the token the live service authenticates
+          # with right now, not a stale leftover from a non-canonical file.
+          live_check="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -H "Authorization: Bearer $OLD_TOKEN" http://127.0.0.1:5070/buddy || true)"
+          test "$live_check" = '200' || { echo 'BUDDY_TOKEN_ROTATION=FAIL old_token_not_live'; exit 12; }
           echo 'OLD_TOKEN_CAPTURED=YES'
 
           echo '=== GATE 1: BACKUP EVERY FILE THAT CURRENTLY DEFINES THE KEY ==='

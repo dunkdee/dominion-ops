@@ -162,7 +162,18 @@ jobs:
 
           echo '=== PHONE LOGIN LIVE PROBE (LOOPBACK, READ ONLY) ==='
           if grep -q 'DOMINION_BUDDY_PHONE_AUTH_V1' "$BUDDY_DIR/buddy_web.py" 2>/dev/null; then
-            token="$(sudo tr '\0' '\n' < "/proc/$(systemctl show -p MainPID --value dominion-buddy-web.service)/environ" | sed -n 's/^BUDDY_WEB_TOKEN=//p' | head -1)"
+            # The token is loaded at runtime via python-dotenv, which never
+            # shows up in /proc/pid/environ (exec-time snapshot only) — use
+            # the deployed resolver instead, same source of truth the app uses.
+            token="$("$HOME/dominion_env/bin/python3" - "$BUDDY_DIR" <<'PY'
+          import sys
+          from pathlib import Path
+          runtime = Path(sys.argv[1])
+          sys.path.insert(0, str(runtime))
+          from core.token_resolver import resolve_buddy_web_token
+          sys.stdout.write(resolve_buddy_web_token(home=runtime.parent).token)
+          PY
+          )"
             gate="$(curl -sS -o /tmp/gate.html -w '%{http_code}' --max-time 10 http://127.0.0.1:5070/buddy || true)"
             echo "UNAUTH_GATE=$gate"
             grep -q '/buddy/api/login' /tmp/gate.html && echo 'LOGIN_SCREEN_SERVED=YES' || echo 'LOGIN_SCREEN_SERVED=NO'

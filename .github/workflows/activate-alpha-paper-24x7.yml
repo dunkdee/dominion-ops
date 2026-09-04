@@ -26,7 +26,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       inputs.confirm == 'ACTIVATE ALPHA PAPER 24X7' &&
       inputs.commit_sha == github.sha
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,7 +52,7 @@ jobs:
       inputs.confirm == 'ACTIVATE ALPHA PAPER 24X7' &&
       inputs.commit_sha == github.sha
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: foundation-vm-production
     steps:
       - uses: actions/checkout@v4
@@ -81,11 +81,15 @@ jobs:
             expected_sha="${{ inputs.commit_sha }}"
             mkdir -p "$receipts"
             cd "$repo"
+            test -z "$(git status --porcelain)" || { echo 'REFUSE: production worktree dirty'; exit 31; }
+            test "$(git branch --show-current)" = "main" || { echo 'REFUSE: production repo not on main'; exit 32; }
             git fetch origin main
             git cat-file -e "$expected_sha^{commit}"
-            git reset --hard "$expected_sha"
+            test "$(git rev-parse origin/main)" = "$expected_sha" || { echo 'REFUSE: expected SHA is not origin/main'; exit 33; }
+            git merge --ff-only origin/main
             release_sha="$(git rev-parse HEAD)"
-            test "$release_sha" = "$expected_sha"
+            test "$release_sha" = "$expected_sha" || { echo 'REFUSE: provenance mismatch'; exit 34; }
+            echo "DEPLOY_PROVENANCE=PASS sha=$release_sha"
 
             mkdir -p "$runtime"
             if [ ! -d "$runtime/.venv" ]; then python3 -m venv "$runtime/.venv"; fi

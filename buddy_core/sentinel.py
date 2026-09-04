@@ -87,25 +87,48 @@ try:
 except ImportError:
     pass
 
-# ── Saraqael audit log integration ──
+
+class AuditUnavailable(RuntimeError):
+    """Governed audit evidence could not be written or verified."""
+
+
+# ── Saraqael governed audit integration ──
 def audit_log(source, event, status, details=None):
-    """Log to saraqael audit chain if available, else local fallback."""
+    """Write a governed Saraqael receipt or fail closed.
+
+    Operational logging (stdout/systemd journal and sentinel.log) may describe
+    the failure, but it is explicitly NON-AUTHORITATIVE and is never used as a
+    substitute receipt.  In particular, the retired repo-local
+    ``buddy_core/logs/sentinel_audit.log`` fallback is never written.
+    """
     try:
         from watchmen.saraqael import log as saraqael_log
-        saraqael_log(source, event, status, details or {})
-    except Exception:
-        # Fallback: append to local audit log
-        entry = {
-            "ts": datetime.utcnow().isoformat(),
-            "source": source,
-            "event": event,
-            "status": status,
-            "details": details or {}
-        }
-        audit_path = Path.home() / "buddy_core" / "logs" / "sentinel_audit.log"
-        audit_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(audit_path, "a") as f:
-            f.write(json.dumps(entry) + "\n")
+        return saraqael_log(source, event, status, details or {})
+    except Exception as exc:
+        # This message is diagnostic only.  It must never be interpreted as a
+        # governance receipt because it is not part of the signed audit chain.
+        try:
+            log.critical(
+                "NON-AUTHORITATIVE AUDIT_UNAVAILABLE | %s | %s | %s",
+                source, event, exc,
+            )
+        except Exception:
+            pass
+        raise AuditUnavailable(f"governed audit unavailable for {source}:{event}: {exc}") from exc
+
+
+def _audit_intent(event, details=None):
+    """Record authority/evidence availability before a mutating auto-fix."""
+    return audit_log("sentinel", f"{event}_intent", "pending", details or {})
+
+
+def _audit_failure(event, details=None):
+    """Best effort to record a failed mutation without inventing a fallback.
+
+    If Saraqael is unavailable, the caller receives AuditUnavailable and must
+    keep the operation in an unresolved/failed state.
+    """
+    return audit_log("sentinel", event, "failed", details or {})
 
 
 # ============================================================
@@ -294,20 +317,35 @@ def check_services(state):
 
         log.warning(f"  {name}:{cfg['port']} OFFLINE — attempting restart...")
         try:
+            _audit_intent(f"restart_{name}", {"port": cfg["port"]})
             time.sleep(PHI)
             subprocess.run(cfg["restart"], shell=True, timeout=30, capture_output=True)
             time.sleep(3)
             if check_port(cfg["port"]):
-                log.info(f"  {name} restarted successfully")
+                audit_log("sentinel", f"restart_{name}", "ok", {"port": cfg["port"]})
                 state.record_restart(name)
                 state.record_fix()
                 fixed.append(f"{name} restarted")
-                audit_log("sentinel", f"restart_{name}", "ok", {"port": cfg["port"]})
+                log.info(f"  {name} restarted successfully")
             else:
                 raise RuntimeError("Still offline after restart")
+        except AuditUnavailable as e:
+            issues.append(f"{name} restart NOT ACCEPTED AS COMPLETE: governed audit unavailable ({e})")
+            log.critical(f"  {name}: mutation blocked/unaccepted because governed audit is unavailable: {e}")
+            if cfg["critical"]:
+                send_alert(
+                    f"CRITICAL: {name} audit unavailable",
+                    f"{name} (port {cfg['port']}) requires intervention.\nGoverned audit unavailable: {e}",
+                    state,
+                    f"svc_audit_{name}",
+                )
         except Exception as e:
             issues.append(f"{name} OFFLINE (restart failed: {e})")
-            audit_log("sentinel", f"restart_{name}", "failed", {"error": str(e)})
+            try:
+                _audit_failure(f"restart_{name}", {"error": str(e)})
+            except AuditUnavailable as audit_exc:
+                issues.append(f"AUDIT_UNAVAILABLE recording restart failure for {name}: {audit_exc}")
+                log.critical(f"  {name}: failure could not be recorded in governed audit: {audit_exc}")
             if cfg["critical"]:
                 send_alert(f"CRITICAL: {name} is DOWN", f"{name} (port {cfg['port']}) is offline.\nAuto-restart failed: {e}\nManual intervention required.", state, f"svc_{name}")
     return issues, fixed
@@ -334,17 +372,25 @@ def check_docker(state):
 
         log.warning(f"  {name}: {status} — restarting...")
         try:
+            _audit_intent(f"docker_restart_{name}", {"status": status})
             subprocess.run(["docker", "start", name], capture_output=True, timeout=30)
             time.sleep(3)
             if check_docker_status(name) == "running":
+                audit_log("sentinel", f"docker_restart_{name}", "ok")
                 state.record_restart(name)
                 state.record_fix()
                 fixed.append(f"{name} container restarted")
-                audit_log("sentinel", f"docker_restart_{name}", "ok")
             else:
                 raise RuntimeError(f"Still {status}")
+        except AuditUnavailable as e:
+            issues.append(f"Docker {name} restart NOT ACCEPTED AS COMPLETE: governed audit unavailable ({e})")
+            log.critical(f"  Docker {name}: mutation blocked/unaccepted because governed audit is unavailable: {e}")
         except Exception as e:
             issues.append(f"Docker {name}: {status} (restart failed)")
+            try:
+                _audit_failure(f"docker_restart_{name}", {"error": str(e), "status": status})
+            except AuditUnavailable as audit_exc:
+                issues.append(f"AUDIT_UNAVAILABLE recording Docker failure for {name}: {audit_exc}")
             send_alert(f"Docker container down: {name}", f"Status: {status}\nRestart failed: {e}", state, f"docker_{name}")
     return issues, fixed
 
@@ -365,6 +411,7 @@ def check_disk(state):
 
         if pct >= 85:
             log.warning(f"  Disk at {pct}% — AUTO-CLEANING...")
+            _audit_intent("disk_clean", {"before": pct})
             cmds = [
                 "sudo apt-get clean -y",
                 "sudo journalctl --vacuum-size=50M",
@@ -381,15 +428,18 @@ def check_disk(state):
             r2 = subprocess.run(["df", "-h", "/"], capture_output=True, text=True, timeout=10)
             new_pct = int(r2.stdout.strip().split("\n")[1].split()[4].replace("%", ""))
             if new_pct < pct:
+                audit_log("sentinel", "disk_clean", "ok", {"before": pct, "after": new_pct})
                 fixed.append(f"Disk cleaned: {pct}% -> {new_pct}%")
                 state.record_fix()
-                audit_log("sentinel", "disk_clean", "ok", {"before": pct, "after": new_pct})
             if new_pct >= 85:
                 issues.append(f"Disk still at {new_pct}% after auto-clean")
                 send_alert(f"DISK CRITICAL: {new_pct}%", f"Auto-clean ran but disk still at {new_pct}%.\nManual cleanup needed.", state, "disk")
         elif pct >= 80:
             issues.append(f"Disk at {pct}% — approaching critical")
             send_alert(f"Disk warning: {pct}%", f"Disk usage is at {pct}%. Target is < 80%.", state, "disk_warn")
+    except AuditUnavailable as e:
+        issues.append(f"Disk auto-clean blocked/unaccepted: governed audit unavailable ({e})")
+        log.critical(f"  Disk mutation blocked/unaccepted because governed audit is unavailable: {e}")
     except Exception as e:
         log.error(f"  Disk check failed: {e}")
     return issues, fixed
@@ -576,18 +626,22 @@ def check_ownership(state):
         bad_files = [f for f in r.stdout.strip().split("\n") if f]
         if bad_files:
             log.warning(f"  {len(bad_files)} files not owned by {EXPECTED_OWNER} — fixing...")
+            _audit_intent("fix_ownership", {"count": len(bad_files)})
             fix = subprocess.run(
                 ["sudo", "chown", "-R", f"{EXPECTED_OWNER}:{EXPECTED_OWNER}", str(BUDDY_CORE)],
                 capture_output=True, timeout=30,
             )
             if fix.returncode == 0:
+                audit_log("sentinel", "fix_ownership", "ok", {"count": len(bad_files)})
                 fixed.append(f"Fixed ownership on {len(bad_files)} files")
                 state.record_fix()
-                audit_log("sentinel", "fix_ownership", "ok", {"count": len(bad_files)})
             else:
                 issues.append("File ownership fix failed (sudo issue?)")
         else:
             log.info(f"  File ownership: all {EXPECTED_OWNER}")
+    except AuditUnavailable as e:
+        issues.append(f"File ownership mutation blocked/unaccepted: governed audit unavailable ({e})")
+        log.critical(f"  Ownership mutation blocked/unaccepted because governed audit is unavailable: {e}")
     except Exception as e:
         log.error(f"  Ownership check failed: {e}")
     return issues, fixed
@@ -817,14 +871,18 @@ def check_env_keys(state):
                 needs_dedupe = CANONICAL_TOKEN_FILE.name in duplicates.get(key, [])
                 if not already_correct or needs_dedupe:
                     try:
+                        _audit_intent(
+                            "env_key_sync",
+                            {"key": key, "target": CANONICAL_TOKEN_FILE.name, "action": "write_canonical"},
+                        )
                         action = _write_env_key(CANONICAL_TOKEN_FILE, key, canonical_value)
-                        fixed.append(f"{action.capitalize()} {key} in {CANONICAL_TOKEN_FILE.name} (canonical)")
-                        state.record_fix()
-                        log.info(f"  {action.capitalize()} {key} in {CANONICAL_TOKEN_FILE.name} (canonical)")
                         audit_log(
                             "sentinel", "env_key_sync", "ok",
                             {"key": key, "target": CANONICAL_TOKEN_FILE.name, "action": action},
                         )
+                        fixed.append(f"{action.capitalize()} {key} in {CANONICAL_TOKEN_FILE.name} (canonical)")
+                        state.record_fix()
+                        log.info(f"  {action.capitalize()} {key} in {CANONICAL_TOKEN_FILE.name} (canonical)")
                     except Exception as e:
                         issues.append(f"Failed to write canonical {key} to {CANONICAL_TOKEN_FILE.name}: {e}")
             else:
@@ -835,15 +893,21 @@ def check_env_keys(state):
                 if str(env_file) == canonical_str or not env_file.exists():
                     continue
                 try:
+                    # Preflight the governed audit before mutating a secret file.
+                    if count_assignments(env_file, key) > 0:
+                        _audit_intent(
+                            "env_key_desync",
+                            {"key": key, "target": env_file.name, "action": "strip_non_canonical"},
+                        )
                     if _strip_env_key(env_file, key):
-                        issues.append(f"ENV KEY NON-CANONICAL: removed {key} from {env_file.name}")
-                        fixed.append(f"Stripped {key} from {env_file.name} (non-canonical)")
-                        state.record_fix()
-                        log.info(f"  Stripped {key} from {env_file.name} (non-canonical)")
                         audit_log(
                             "sentinel", "env_key_desync", "ok",
                             {"key": key, "target": env_file.name, "action": "stripped_non_canonical"},
                         )
+                        issues.append(f"ENV KEY NON-CANONICAL: removed {key} from {env_file.name}")
+                        fixed.append(f"Stripped {key} from {env_file.name} (non-canonical)")
+                        state.record_fix()
+                        log.info(f"  Stripped {key} from {env_file.name} (non-canonical)")
                 except Exception as e:
                     issues.append(f"Failed to strip {key} from {env_file.name}: {e}")
             continue
@@ -864,11 +928,15 @@ def check_env_keys(state):
             if already_correct and not needs_dedupe:
                 continue
             try:
+                _audit_intent(
+                    "env_key_sync",
+                    {"key": key, "target": env_file.name, "action": "sync"},
+                )
                 action = _write_env_key(env_file, key, canonical_value)
+                audit_log("sentinel", "env_key_sync", "ok", {"key": key, "target": env_file.name, "action": action})
                 fixed.append(f"{action.capitalize()} {key} in {env_file.name}")
                 state.record_fix()
                 log.info(f"  {action.capitalize()} {key} in {env_file.name}")
-                audit_log("sentinel", "env_key_sync", "ok", {"key": key, "target": env_file.name, "action": action})
             except Exception as e:
                 issues.append(f"Failed to sync {key} to {env_file.name}: {e}")
 
@@ -1049,9 +1117,17 @@ def run_cycle(state):
     }
     state.save()
 
-    audit_log("sentinel", "cycle_complete",
-              "ok" if not all_issues else "warning",
-              {"cycle": state.data["cycles"], "issues": len(all_issues), "fixed": len(all_fixed)})
+    try:
+        audit_log("sentinel", "cycle_complete",
+                  "ok" if not all_issues else "warning",
+                  {"cycle": state.data["cycles"], "issues": len(all_issues), "fixed": len(all_fixed)})
+    except AuditUnavailable as exc:
+        all_issues.append(f"AUDIT_UNAVAILABLE: cycle completion receipt missing ({exc})")
+        state.data["last_result"]["issues"] = all_issues
+        state.data["last_result"]["healthy"] = False
+        state.save()
+        log.critical(f"Cycle cannot be accepted as healthy without governed receipt: {exc}")
+        raise
 
     log.info(f"[SUMMARY] Issues: {len(all_issues)} | Fixed: {len(all_fixed)}")
     if all_fixed:
@@ -1134,9 +1210,19 @@ def main():
         time.sleep(SCAN_INTERVAL)
         try:
             run_cycle(state)
+        except AuditUnavailable as e:
+            # This is intentionally fatal for the current daemon iteration.
+            # systemd will restart Sentinel, keeping the failure visible rather
+            # than allowing unaudited autonomous mutation to continue.
+            log.critical(f"[CYCLE AUDIT HOLD] {e}")
+            raise
         except Exception as e:
             log.error(f"[CYCLE ERROR] {e}")
-            audit_log("sentinel", "cycle_error", "critical", {"error": str(e)})
+            try:
+                audit_log("sentinel", "cycle_error", "critical", {"error": str(e)})
+            except AuditUnavailable as audit_exc:
+                log.critical(f"[CYCLE ERROR UNRECORDED] governed audit unavailable: {audit_exc}")
+                raise
 
 
 SYSTEMD_UNIT = """[Unit]

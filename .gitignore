@@ -20,3 +20,11 @@ audit-report-*.txt
 n8n-backup-*.tar.gz
 *.env.n8n.secrets
 pre-restore-backup-*.tar.gz
+
+# Watchmen/Saraqael runtime audit state.
+# Authoritative state lives outside the checkout ($DOMINION_WATCHMEN_STATE_DIR,
+# default ~/.dominion/watchmen). These exact paths are legacy artifacts kept
+# ignored so an accidental `git add` can never commit a machine-local audit
+# chain — or the secret-key names its entries reference — into the repository.
+buddy_core/watchmen_audit.log
+buddy_core/watchmen_chain.json

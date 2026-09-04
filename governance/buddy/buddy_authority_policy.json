@@ -181,7 +181,6 @@
       ".github/workflows/email-drip-readonly-planner.yml": "RUN EMAIL DRIP PLANNER",
       ".github/workflows/finish-production-activation.yml": "FINISH PRODUCTION ACTIVATION",
       ".github/workflows/netlify_sync_env.yml": "SYNC NETLIFY ENV",
-      ".github/workflows/one-time-harden-baby-api.yml": "HARDEN BABY API",
       ".github/workflows/publish-dominion-brain-production.yml": "PUBLISH DOMINION BRAIN",
       ".github/workflows/repair-email-drip-suppression-and-hold.yml": "REPAIR EMAIL DRIP HOLD",
       ".github/workflows/repair-obsidian-remote.yml": "REPAIR OBSIDIAN REMOTE",

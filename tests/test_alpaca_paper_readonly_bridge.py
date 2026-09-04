@@ -607,25 +607,54 @@ class AuthenticatedSurfaceTests(unittest.TestCase):
 
 
 @unittest.skipUnless(HTTP_DEPS, "fastapi/httpx not installed on this runner")
+
+def _route_paths(routes) -> set:
+    """Every route path an app serves, including routes behind include_router.
+
+    Newer FastAPI keeps included routers as `_IncludedRouter` objects in
+    `app.routes` instead of flattening their routes into it. Those objects
+    carry no `.path`, so reading paths off the top level alone silently misses
+    every mounted sub-router — which would make these preservation assertions
+    pass while checking nothing.
+    """
+    found = set()
+    for route in routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            found |= _route_paths(getattr(inner, "routes", []))
+        path = getattr(route, "path", None)
+        if path:
+            found.add(path)
+    return found
+
+
 class LiveServicePreservationTests(unittest.TestCase):
     """The pre-existing Command Center surface must be unchanged."""
 
     def setUp(self):
         for module in ("app", "trading_api"):
             sys.modules.pop(module, None)
+        # Other subprojects in this repository also provide a top-level `app`
+        # and put their own root on sys.path. Claim command-center's `app.py`
+        # here so a repository-wide run imports the module under test rather
+        # than whichever `app` was resolved last.
+        cc_entry = str(CC_DIR)
+        if cc_entry in sys.path:
+            sys.path.remove(cc_entry)
+        sys.path.insert(0, cc_entry)
         os.environ.setdefault("COMMAND_CENTER_API_KEY", "dominion-phone-key-abcdefghijklmnop")
         import app as command_center
         self.app = command_center
         self.client = TestClient(command_center.app)
 
     def test_pre_existing_routes_all_still_exist(self):
-        paths = {route.path for route in self.app.app.routes}
+        paths = _route_paths(self.app.app.routes)
         for path in ("/", "/health", "/api/status", "/api/chat",
                      "/api/revenue", "/api/revenue/events"):
             self.assertIn(path, paths)
 
     def test_trading_routes_are_additive_and_namespaced(self):
-        paths = {route.path for route in self.app.app.routes}
+        paths = _route_paths(self.app.app.routes)
         trading = {p for p in paths if p.startswith("/api/trading/")}
         self.assertEqual(len(trading), 9)
         self.assertTrue(all(p.startswith("/api/trading/paper/") for p in trading))

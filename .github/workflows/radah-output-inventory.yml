@@ -1,0 +1,159 @@
+name: RADAH Output Inventory
+
+# Read-only. Answers one question: what has RADAH MEMSHALAH actually produced,
+# and how much of it is sitting HELD waiting for Founder authorization?
+#
+# Performs no VM mutation of any kind — no restarts, no writes, no execution.
+# Prints counts, lane state, receipt statuses and a bounded preview of the most
+# recent staged package so the Founder can see the real work product.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Require protected VM access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"; test -n "$VM_USER"; test -n "$VM_SSH_KEY"
+
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Inventory RADAH output (read only)
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -se' <<'REMOTE'
+          set -u
+          AUTO="$HOME/.dominion/autopilot"
+          BUDDY_STATE="$HOME/.dominion/buddy"
+
+          echo '=== IS THE ENGINE RUNNING? ==='
+          for u in dominion-radah-autopilot.timer dominion-radah-autopilot.service \
+                   dominion-revenue-runtime.service dominion-revenue-evaluator.timer; do
+            if systemctl cat "$u" >/dev/null 2>&1; then
+              printf '%s: active=%s enabled=%s\n' "$u" \
+                "$(systemctl is-active "$u" 2>/dev/null || true)" \
+                "$(systemctl is-enabled "$u" 2>/dev/null || true)"
+            else
+              echo "$u: NOT INSTALLED"
+            fi
+          done
+          echo '--- any unit matching radah/autopilot ---'
+          systemctl list-units --all --no-pager --no-legend 2>/dev/null | grep -iE 'radah|autopilot' || echo 'none found'
+
+          echo ''
+          echo '=== AUTOPILOT STATE ==='
+          if [ -f "$AUTO/state.json" ]; then
+            echo "state.json last modified: $(date -u -r "$AUTO/state.json" '+%Y-%m-%dT%H:%M:%SZ')"
+            python3 - "$AUTO/state.json" <<'PY' || echo 'STATE_PARSE=ERROR'
+          import json, sys
+          s = json.load(open(sys.argv[1], encoding='utf-8'))
+          lanes = s.get('lanes', s)
+          if isinstance(lanes, dict):
+              print(f"lanes tracked: {len(lanes)}")
+              for name, v in sorted(lanes.items()):
+                  if isinstance(v, dict):
+                      print(f"  {name}: last_status={v.get('last_status')} "
+                            f"last_run={v.get('last_run_at') or v.get('last_completed_at')} "
+                            f"mission={v.get('last_mission_id')}")
+          print("top-level keys: " + ", ".join(sorted(k for k in s)))
+          PY
+          else
+            echo "NO state.json at $AUTO — autopilot has never completed a cycle"
+          fi
+
+          echo ''
+          echo '=== CYCLE RECEIPTS ==='
+          if [ -d "$AUTO/receipts" ]; then
+            total="$(find "$AUTO/receipts" -type f -name '*.json' | wc -l)"
+            echo "total cycle receipts: $total"
+            echo "--- status tally across all receipts ---"
+            python3 - "$AUTO/receipts" <<'PY' || echo 'RECEIPT_PARSE=ERROR'
+          import json, pathlib, sys, collections
+          root = pathlib.Path(sys.argv[1])
+          tally = collections.Counter()
+          lanes = collections.Counter()
+          held = []
+          for p in sorted(root.glob('*.json')):
+              try:
+                  r = json.loads(p.read_text(encoding='utf-8'))
+              except Exception:
+                  tally['UNREADABLE'] += 1
+                  continue
+              st = str(r.get('status') or r.get('outcome') or 'UNKNOWN')
+              tally[st] += 1
+              lane = r.get('lane') or r.get('lane_id')
+              if lane:
+                  lanes[str(lane)] += 1
+              if st.upper() == 'HELD':
+                  held.append((p.name, lane, (r.get('held') or {}).get('capability')))
+          print("status tally: " + json.dumps(dict(tally), sort_keys=True))
+          print("per-lane cycles: " + json.dumps(dict(lanes), sort_keys=True))
+          print(f"HELD missions awaiting authorization: {len(held)}")
+          for name, lane, cap in held[-15:]:
+              print(f"  HELD {lane} {cap} <- {name}")
+          PY
+            echo "--- 5 most recent receipts ---"
+            find "$AUTO/receipts" -type f -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -5 | cut -d' ' -f2- | while read -r f; do
+              echo "  $(basename "$f")  ($(date -u -r "$f" '+%Y-%m-%dT%H:%M:%SZ'))"
+            done
+          else
+            echo "NO receipts directory at $AUTO/receipts"
+          fi
+
+          echo ''
+          echo '=== STAGED WORK PRODUCT (what Buddy actually wrote) ==='
+          if [ -d "$BUDDY_STATE/staged" ]; then
+            count="$(find "$BUDDY_STATE/staged" -type f | wc -l)"
+            echo "staged artifacts: $count"
+            echo "total size: $(du -sh "$BUDDY_STATE/staged" 2>/dev/null | cut -f1)"
+            echo "--- 15 most recent ---"
+            find "$BUDDY_STATE/staged" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -15 | cut -d' ' -f2- | while read -r f; do
+              echo "  $(date -u -r "$f" '+%Y-%m-%d %H:%M')  $(wc -c < "$f") bytes  $(basename "$f")"
+            done
+            newest="$(find "$BUDDY_STATE/staged" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
+            if [ -n "${newest:-}" ]; then
+              echo ''
+              echo "--- PREVIEW OF MOST RECENT: $(basename "$newest") ---"
+              head -c 3000 "$newest"
+              echo ''
+              echo '--- end preview ---'
+            fi
+          else
+            echo "NO staged directory at $BUDDY_STATE/staged"
+          fi
+
+          echo ''
+          echo '=== BUDDY MISSION STATE ==='
+          ls -1 "$BUDDY_STATE" 2>/dev/null | head -20 || echo "no $BUDDY_STATE"
+
+          echo ''
+          echo '=== READ-ONLY INVENTORY COMPLETE: NO VM MUTATIONS PERFORMED ==='
+          REMOTE
+
+      - name: Cleanup SSH material
+        if: always()
+        run: rm -f ~/.ssh/id_vm ~/.ssh/known_hosts

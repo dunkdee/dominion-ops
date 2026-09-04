@@ -53,6 +53,13 @@ except ImportError:
     GEMINI_PRO = "gemini-2.5-pro"
     GCP_PROJECT = "dominion-ascendant"
 
+from core.token_resolver import (
+    TOKEN_KEY,
+    count_assignments,
+    parse_env_file,
+    resolve_buddy_web_token,
+)
+
 try:
     from utils.safe_io import atomic_json_write, load_json
 except ImportError:
@@ -680,28 +687,78 @@ ENV_FILES = [
 ]
 
 
+def _write_env_key(env_file: Path, key: str, value: str) -> str:
+    """Set ``key`` to ``value`` in ``env_file`` with exactly one assignment.
+
+    The previous implementation appended a new line whenever a file lacked a
+    non-empty value. A file holding ``KEY=`` therefore ended up with two
+    assignments, and python-dotenv's override=False kept the empty one — which
+    is how Buddy's auth could report "not configured" while the real token sat
+    two lines below. Rewriting in place keeps every file single-valued and
+    makes repeated sentinel cycles idempotent.
+    """
+    lines = env_file.read_text(encoding="utf-8", errors="ignore").splitlines()
+    replaced = False
+    out = []
+    for line in lines:
+        stripped = line.strip()
+        candidate = stripped[len("export "):].lstrip() if stripped.startswith("export ") else stripped
+        if not stripped.startswith("#") and "=" in candidate and candidate.partition("=")[0].strip() == key:
+            if replaced:
+                continue  # drop the surplus duplicate assignment
+            out.append(f"{key}={value}")
+            replaced = True
+            continue
+        out.append(line)
+    if not replaced:
+        out.append(f"{key}={value}")
+    backup = Path(str(env_file) + ".sentinel-bak")
+    try:
+        backup.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        backup.chmod(0o600)
+    except OSError:
+        pass
+    env_file.write_text("\n".join(out) + "\n", encoding="utf-8")
+    try:
+        env_file.chmod(0o600)
+    except OSError:
+        pass
+    return "rewrote" if replaced else "appended"
+
+
 def check_env_keys(state):
-    """Verify required keys exist in all .env files. Auto-sync missing keys."""
+    """Verify required keys exist, agree, and are single-valued in every .env.
+
+    Three conditions are repaired, all idempotent:
+      * key missing from a file             -> written
+      * key present but empty               -> filled in place, not appended
+      * key assigned twice in one file      -> collapsed to a single assignment
+    Two files holding *different* non-empty values is the conflict that used to
+    pass unnoticed; it is now reported and aligned on the value the runtime
+    actually authenticates with.
+    """
     issues, fixed = [], []
 
-    # Collect all keys from all env files
-    all_keys = {}  # key -> {file: value}
+    # Per-file values parsed with shell `source` semantics (last write wins)
+    # rather than dotenv's first-write-wins, which is what let an empty
+    # duplicate line shadow a real secret.
+    all_keys = {}    # key -> {file: value}
+    duplicates = {}  # key -> [file name, ...]
     for env_file in ENV_FILES:
         if not env_file.exists():
             continue
-        try:
-            for line in env_file.read_text(errors="ignore").split("\n"):
-                line = line.strip()
-                if "=" in line and not line.startswith("#"):
-                    k, v = line.split("=", 1)
-                    k = k.strip()
-                    v = v.strip()
-                    if k in REQUIRED_ENV_KEYS and v:
-                        all_keys.setdefault(k, {})[str(env_file)] = v
-        except Exception:
-            pass
+        parsed = parse_env_file(env_file)
+        for key in REQUIRED_ENV_KEYS:
+            value = str(parsed.get(key, "") or "").strip()
+            if value:
+                all_keys.setdefault(key, {})[str(env_file)] = value
+            if count_assignments(env_file, key) > 1:
+                duplicates.setdefault(key, []).append(env_file.name)
 
-    # Check each required key
+    for key, files in duplicates.items():
+        issues.append(f"ENV KEY DUPLICATED: {key} assigned more than once in {', '.join(files)}")
+        log.warning(f"  {key}: duplicate assignment in {', '.join(files)}")
+
     for key in REQUIRED_ENV_KEYS:
         sources = all_keys.get(key, {})
         if not sources:
@@ -709,25 +766,41 @@ def check_env_keys(state):
             log.warning(f"  {key}: NOT FOUND in any .env")
             continue
 
-        # Get the canonical value (from whichever file has it)
-        canonical_value = list(sources.values())[0]
+        if key == TOKEN_KEY:
+            # Align on the value Buddy's runtime authenticates with, not on
+            # whichever file this loop happened to read first.
+            resolution = resolve_buddy_web_token()
+            canonical_value = resolution.token or list(sources.values())[0]
+            if resolution.conflict:
+                issues.append(
+                    f"ENV KEY CONFLICT: {key} differs across "
+                    f"{', '.join(resolution.conflicting_sources)} — aligning on {resolution.source}"
+                )
+                log.warning(f"  {key}: conflict across {', '.join(resolution.conflicting_sources)}")
+        else:
+            canonical_value = list(sources.values())[0]
+            if len(set(sources.values())) > 1:
+                issues.append(
+                    f"ENV KEY CONFLICT: {key} differs across "
+                    f"{', '.join(Path(f).name for f in sources)}"
+                )
+                log.warning(f"  {key}: conflicting values across {len(sources)} files")
 
-        # Check each env file has the key
         for env_file in ENV_FILES:
             if not env_file.exists():
                 continue
-            env_str = str(env_file)
-            if env_str not in sources:
-                # Key missing from this file — auto-sync
-                try:
-                    with open(env_file, "a") as f:
-                        f.write(f"\n{key}={canonical_value}\n")
-                    fixed.append(f"Synced {key} to {env_file.name}")
-                    state.record_fix()
-                    log.info(f"  Synced {key} to {env_file.name}")
-                    audit_log("sentinel", "env_key_sync", "ok", {"key": key, "target": env_file.name})
-                except Exception as e:
-                    issues.append(f"Failed to sync {key} to {env_file.name}: {e}")
+            already_correct = sources.get(str(env_file)) == canonical_value
+            needs_dedupe = env_file.name in duplicates.get(key, [])
+            if already_correct and not needs_dedupe:
+                continue
+            try:
+                action = _write_env_key(env_file, key, canonical_value)
+                fixed.append(f"{action.capitalize()} {key} in {env_file.name}")
+                state.record_fix()
+                log.info(f"  {action.capitalize()} {key} in {env_file.name}")
+                audit_log("sentinel", "env_key_sync", "ok", {"key": key, "target": env_file.name, "action": action})
+            except Exception as e:
+                issues.append(f"Failed to sync {key} to {env_file.name}: {e}")
 
     if not issues and not fixed:
         log.info(f"  Env keys: all {len(REQUIRED_ENV_KEYS)} keys synced across {len(ENV_FILES)} files")

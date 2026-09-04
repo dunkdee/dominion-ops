@@ -36,10 +36,52 @@ except ImportError:
 
 from core.brain import status as brain_status
 from core.operator import get_operator
+from core.token_resolver import resolve_buddy_web_token
 
-# ── Auth token ──
-BUDDY_WEB_TOKEN = os.getenv("BUDDY_WEB_TOKEN", "").strip()
+# ── Auth token — DOMINION_BUDDY_PHONE_AUTH_V1 ──
+# One resolver for every consumer (web, bridge, Command Center deploy) so the
+# three dotenv files can never disagree silently. See core/token_resolver.py.
+TOKEN_RESOLUTION = resolve_buddy_web_token()
+BUDDY_WEB_TOKEN = TOKEN_RESOLUTION.token
 BUDDY_ALLOW_OPEN_DEV = os.getenv("BUDDY_ALLOW_OPEN_DEV", "0").strip().lower() in {"1", "true", "yes"}
+
+if TOKEN_RESOLUTION.conflict:
+    print(
+        "BUDDY_TOKEN_CONFLICT=YES sources="
+        + ",".join(TOKEN_RESOLUTION.conflicting_sources)
+        + f" using={TOKEN_RESOLUTION.source}",
+        file=sys.stderr,
+    )
+if TOKEN_RESOLUTION.duplicated:
+    print(
+        "BUDDY_TOKEN_DUPLICATE_ASSIGNMENT=YES files="
+        + ",".join(TOKEN_RESOLUTION.duplicate_sources),
+        file=sys.stderr,
+    )
+
+# ── Phone sign-in ──
+# A 64-character bearer token is not something anybody types on a phone. The
+# passcode is the phone-facing credential; the master token keeps working for
+# machine callers and as the operator's break-glass sign-in.
+BUDDY_PHONE_PASSCODE = os.getenv("BUDDY_PHONE_PASSCODE", "").strip()
+MIN_PASSCODE_LENGTH = 12
+if BUDDY_PHONE_PASSCODE and len(BUDDY_PHONE_PASSCODE) < MIN_PASSCODE_LENGTH:
+    # Refuse a weak passcode outright rather than quietly widening the door.
+    print(
+        f"BUDDY_PHONE_PASSCODE_REJECTED=too_short min={MIN_PASSCODE_LENGTH}",
+        file=sys.stderr,
+    )
+    BUDDY_PHONE_PASSCODE = ""
+
+SESSION_COOKIE = "buddy_session"
+SESSION_TTL_SECONDS = 30 * 86400          # a month of phone-first daily ops
+SESSION_VERSION = "v1"
+LOGIN_WINDOW_SECONDS = 900
+LOGIN_MAX_FAILURES = 8
+
+# ip -> [failed attempt timestamps]. In-memory on purpose: a restart clears the
+# lockout, and the service is a single uvicorn process behind Caddy.
+_login_failures: dict = {}
 
 # Conversation memory (last 20 messages per session, in-memory)
 conversations = {}
@@ -48,30 +90,150 @@ MAX_HISTORY = 20
 app = FastAPI(title="Buddy Web", docs_url=None, redoc_url=None)
 
 
+import hashlib
 import hmac
+import secrets
 from fastapi import Header, HTTPException
 
+
+def _client_ip(request: Request) -> str:
+    """Caller identity for rate limiting. Caddy sets X-Forwarded-For."""
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _is_https(request: Request) -> bool:
+    """True when the browser hop is TLS, so Secure cookies are usable.
+
+    Loopback health probes speak plain HTTP; marking the cookie Secure there
+    would stop curl from ever sending it back and break every local gate.
+    """
+    proto = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip().lower()
+    return proto == "https" or request.url.scheme == "https"
+
+
+def issue_session(now: float | None = None, ttl: int = SESSION_TTL_SECONDS) -> str:
+    """Mint an opaque, expiring session value signed with the master token.
+
+    The token itself never reaches the browser, and rotating the token
+    invalidates every outstanding phone session for free.
+    """
+    if not BUDDY_WEB_TOKEN:
+        raise RuntimeError("cannot issue a session without BUDDY_WEB_TOKEN")
+    expires = int((time.time() if now is None else now) + ttl)
+    nonce = secrets.token_urlsafe(12)
+    body = f"{SESSION_VERSION}.{expires}.{nonce}"
+    signature = hmac.new(BUDDY_WEB_TOKEN.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{body}.{signature}"
+
+
+def session_is_valid(value: str, now: float | None = None) -> bool:
+    """Constant-time verification of a session cookie."""
+    if not value or not BUDDY_WEB_TOKEN:
+        return False
+    parts = value.split(".")
+    if len(parts) != 4:
+        return False
+    version, expires_raw, nonce, signature = parts
+    if version != SESSION_VERSION:
+        return False
+    body = f"{version}.{expires_raw}.{nonce}"
+    expected = hmac.new(BUDDY_WEB_TOKEN.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        return False
+    try:
+        expires = int(expires_raw)
+    except ValueError:
+        return False
+    return expires > (time.time() if now is None else now)
+
+
+def _supplied_secrets(request: Request):
+    """Every place a caller may present the master token."""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        yield auth[len("Bearer "):].strip()
+    header = request.headers.get("X-Buddy-Token", "").strip()
+    if header:
+        yield header
+    query = request.query_params.get("token", "").strip()
+    if query:
+        yield query
+    cookie = request.cookies.get("buddy_token", "").strip()
+    if cookie:
+        yield cookie
+
+
+def is_authenticated(request: Request) -> bool:
+    """True when the caller already holds a valid session or master token."""
+    if not BUDDY_WEB_TOKEN:
+        return False
+    if session_is_valid(request.cookies.get(SESSION_COOKIE, "")):
+        return True
+    for candidate in _supplied_secrets(request):
+        if hmac.compare_digest(candidate, BUDDY_WEB_TOKEN):
+            return True
+    return False
+
+
 def verify_token(request: Request):
-    """Check bearer token or query param for auth."""
+    """Fail-closed auth for every Buddy surface.
+
+    Accepts, in order: a signed phone session cookie, a bearer token, an
+    X-Buddy-Token header, ?token=, or the legacy buddy_token cookie.
+    """
     if not BUDDY_WEB_TOKEN:
         # Fail closed by default. Explicit open-dev is loopback only.
         host = request.client.host if request.client else ""
         if BUDDY_ALLOW_OPEN_DEV and host in {"127.0.0.1", "::1", "localhost"}:
             return
         raise HTTPException(status_code=503, detail="Buddy authentication is not configured")
-    # Check Authorization header
-    auth = request.headers.get("Authorization", "")
-    if hmac.compare_digest(auth, f"Bearer {BUDDY_WEB_TOKEN}"):
-        return
-    # Check query param ?token=
-    token = request.query_params.get("token", "")
-    if token and hmac.compare_digest(token, BUDDY_WEB_TOKEN):
-        return
-    # Check cookie
-    cookie_token = request.cookies.get("buddy_token", "")
-    if cookie_token and hmac.compare_digest(cookie_token, BUDDY_WEB_TOKEN):
+    if is_authenticated(request):
         return
     raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def _login_blocked(ip: str, now: float | None = None) -> bool:
+    now = time.time() if now is None else now
+    attempts = [t for t in _login_failures.get(ip, []) if now - t < LOGIN_WINDOW_SECONDS]
+    if attempts:
+        _login_failures[ip] = attempts
+    else:
+        _login_failures.pop(ip, None)
+    return len(attempts) >= LOGIN_MAX_FAILURES
+
+
+def _record_login_failure(ip: str, now: float | None = None) -> None:
+    now = time.time() if now is None else now
+    _login_failures.setdefault(ip, []).append(now)
+
+
+def _accepts_passcode(supplied: str) -> bool:
+    """Constant-time check of both accepted sign-in credentials."""
+    if not supplied:
+        return False
+    accepted = False
+    if BUDDY_PHONE_PASSCODE and hmac.compare_digest(supplied, BUDDY_PHONE_PASSCODE):
+        accepted = True
+    if BUDDY_WEB_TOKEN and hmac.compare_digest(supplied, BUDDY_WEB_TOKEN):
+        accepted = True
+    return accepted
+
+
+def _attach_session(response, request: Request):
+    """Put a fresh signed session on the response and retire the legacy cookie."""
+    response.set_cookie(
+        SESSION_COOKIE,
+        issue_session(),
+        max_age=SESSION_TTL_SECONDS,
+        httponly=True,
+        secure=_is_https(request),
+        samesite="lax",
+        path="/buddy",
+    )
+    return response
 
 # ── Chat HTML — Dominion Brand ───────────────────────────────
 CHAT_HTML = """<!DOCTYPE html>
@@ -208,6 +370,7 @@ CHAT_HTML = """<!DOCTYPE html>
   <div class="nav">
     <a href="/buddy" class="active">Chat</a>
     <a href="/buddy/jobs">Proposals</a>
+    <a href="/buddy/logout">Sign Out</a>
   </div>
   <div class="messages" id="messages">
     <div class="msg system">Sovereign AI Online — Speak Your Mind</div>
@@ -240,8 +403,10 @@ async function sendMsg() {
     const r = await fetch('/buddy/api/chat', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
+      credentials: 'same-origin',
       body: JSON.stringify({message: text, session_id: sessionId})
     });
+    if (r.status === 401 || r.status === 403) { window.location.replace('/buddy/login'); return; }
     const data = await r.json();
     typing.remove();
     addMsg(data.response || 'No response.', 'buddy');
@@ -366,17 +531,166 @@ if (synth) synth.onvoiceschanged = () => synth.getVoices();
 </html>"""
 
 
+# ============================================================
+# PHONE SIGN-IN — normal login screen, no terminal, no token in the URL
+# ============================================================
+
+LOGIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#080d09">
+<meta name="robots" content="noindex, nofollow">
+<title>Buddy — Sign In</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--void:#080d09;--deep:#0d1810;--forest:#152a18;--gold:#c9a22a;--gold-lt:#e8c84a;--wheat:#e8d4a0;--cream:#f4ede0}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Syne',sans-serif;background:var(--void);color:var(--cream);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{width:100%;max-width:380px;background:var(--deep);border:1px solid rgba(201,162,42,.14);border-left:2px solid rgba(201,162,42,.35);padding:30px 24px 26px}
+  .geo{width:44px;height:44px;border:1px solid rgba(201,162,42,.3);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:18px}
+  .geo span{font-family:'Cormorant Garamond',serif;color:var(--gold);font-size:20px}
+  h1{font-family:'Cormorant Garamond',serif;font-size:28px;color:var(--gold);font-weight:600;letter-spacing:.06em}
+  .sub{font-size:10px;color:rgba(201,162,42,.45);letter-spacing:.22em;text-transform:uppercase;margin:6px 0 24px;font-weight:600}
+  label{display:block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(232,212,160,.5);margin-bottom:8px;font-weight:600}
+  input{width:100%;background:var(--forest);border:1px solid rgba(201,162,42,.18);padding:15px 14px;color:var(--cream);font-family:'Syne',sans-serif;font-size:16px;outline:none;transition:border-color .2s}
+  input:focus{border-color:var(--gold)}
+  button{width:100%;margin-top:14px;background:var(--gold);color:var(--void);border:none;padding:15px;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;transition:background .2s}
+  button:hover{background:var(--gold-lt)}
+  button:disabled{opacity:.4;cursor:default}
+  .msg{margin-top:16px;font-size:12px;line-height:1.6;min-height:18px;color:#e07a5f}
+  .msg.ok{color:var(--gold)}
+  .hint{margin-top:22px;padding-top:16px;border-top:1px solid rgba(201,162,42,.08);font-size:11px;line-height:1.7;color:rgba(232,212,160,.32)}
+</style>
+</head>
+<body>
+  <form class="card" id="form" autocomplete="on">
+    <div class="geo"><span>&#x2B21;</span></div>
+    <h1>Buddy</h1>
+    <div class="sub">Dominion AI &middot; Sign In</div>
+    <label for="passcode">Passcode</label>
+    <input type="password" id="passcode" name="password" inputmode="text" autocomplete="current-password"
+           autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Enter your passcode" required>
+    <button type="submit" id="go">Unlock Buddy</button>
+    <div class="msg" id="msg"></div>
+    <div class="hint">Stays signed in on this phone for 30 days. Add to Home Screen for one-tap access.</div>
+  </form>
+<script>
+const form = document.getElementById('form');
+const msg = document.getElementById('msg');
+const go = document.getElementById('go');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const passcode = document.getElementById('passcode').value;
+  if (!passcode) return;
+  go.disabled = true; go.textContent = 'Checking...';
+  msg.className = 'msg'; msg.textContent = '';
+  try {
+    const r = await fetch('/buddy/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      credentials: 'same-origin',
+      body: JSON.stringify({passcode: passcode})
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data.ok) {
+      msg.className = 'msg ok'; msg.textContent = 'Signed in. Opening Buddy...';
+      window.location.replace(data.redirect || '/buddy');
+      return;
+    }
+    msg.textContent = data.detail || 'Sign in failed.';
+  } catch (err) {
+    msg.textContent = 'Connection lost. Try again.';
+  }
+  go.disabled = false; go.textContent = 'Unlock Buddy';
+});
+</script>
+</body>
+</html>"""
+
+
+def _login_response(request: Request, status_code: int = 200):
+    """The sign-in screen. Served with 401 on a gated page so machine probes
+    and existing production gates still see 'unauthorized', while a phone
+    browser gets something it can actually log in with."""
+    return HTMLResponse(LOGIN_HTML, status_code=status_code)
+
+
+@app.get("/buddy/login", response_class=HTMLResponse)
+@app.get("/buddy/login/", response_class=HTMLResponse)
+def login_page(request: Request):
+    if is_authenticated(request):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("/buddy", status_code=303)
+    return _login_response(request)
+
+
+@app.post("/buddy/api/login")
+async def login(request: Request):
+    """Exchange the phone passcode for a signed, expiring session cookie."""
+    if not BUDDY_WEB_TOKEN:
+        return JSONResponse({"detail": "Buddy authentication is not configured"}, status_code=503)
+
+    ip = _client_ip(request)
+    if _login_blocked(ip):
+        return JSONResponse(
+            {"detail": "Too many attempts. Wait 15 minutes and try again."},
+            status_code=429,
+        )
+
+    # Accept JSON from the sign-in page and urlencoded form posts from any
+    # browser fallback. Parsed by hand so the service takes no new dependency.
+    supplied = ""
+    raw = (await request.body())[:4096]
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+        if isinstance(parsed, dict):
+            supplied = str(parsed.get("passcode") or parsed.get("token") or "").strip()
+    except Exception:
+        from urllib.parse import parse_qs
+        try:
+            fields = parse_qs(raw.decode("utf-8"))
+            supplied = (fields.get("passcode") or fields.get("token") or [""])[0].strip()
+        except Exception:
+            supplied = ""
+
+    if not _accepts_passcode(supplied):
+        _record_login_failure(ip)
+        return JSONResponse({"detail": "Incorrect passcode."}, status_code=401)
+
+    _login_failures.pop(ip, None)
+    response = JSONResponse({"ok": True, "redirect": "/buddy"})
+    return _attach_session(response, request)
+
+
+@app.get("/buddy/logout")
+@app.post("/buddy/api/logout")
+def logout(request: Request):
+    """Drop the phone session on this device."""
+    from fastapi.responses import RedirectResponse
+    response = RedirectResponse("/buddy/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE, path="/buddy")
+    response.delete_cookie("buddy_token", path="/")
+    return response
+
+
 @app.get("/buddy", response_class=HTMLResponse)
 @app.get("/buddy/", response_class=HTMLResponse)
 def chat_page(request: Request):
-    verify_token(request)
-    from fastapi.responses import Response
+    if not BUDDY_WEB_TOKEN and not BUDDY_ALLOW_OPEN_DEV:
+        raise HTTPException(status_code=503, detail="Buddy authentication is not configured")
+    if not is_authenticated(request):
+        if BUDDY_ALLOW_OPEN_DEV and not BUDDY_WEB_TOKEN:
+            return HTMLResponse(CHAT_HTML)
+        return _login_response(request, status_code=401)
     resp = HTMLResponse(CHAT_HTML)
-    # Set cookie so subsequent API calls work without token in URL
-    token = request.query_params.get("token", "")
-    if token:
-        resp.set_cookie("buddy_token", token, httponly=True, max_age=86400*30)
-    return resp
+    # Arriving with a valid ?token= upgrades the phone to a signed session so
+    # the secret never has to live in a bookmark again.
+    return _attach_session(resp, request)
 
 
 @app.post("/buddy/api/chat")
@@ -430,6 +744,13 @@ def buddy_status(request: Request):
     data = brain_status()
     data["operator"] = "v2"
     data["capability_count"] = len(get_operator().capabilities)
+    # Auth posture, names and booleans only — never any secret material.
+    data["auth"] = {
+        "phone_login": True,
+        "passcode_configured": bool(BUDDY_PHONE_PASSCODE),
+        "session_ttl_seconds": SESSION_TTL_SECONDS,
+        "token": TOKEN_RESOLUTION.report(),
+    }
     return JSONResponse(data)
 
 
@@ -510,6 +831,7 @@ JOBS_HTML = """<!DOCTYPE html>
   <div class="nav">
     <a href="/buddy">Chat</a>
     <a href="/buddy/jobs" class="active">Proposals</a>
+    <a href="/buddy/logout">Sign Out</a>
   </div>
   <div class="gen-section">
     <input class="gen-input" id="jobDesc" placeholder="Paste job description here...">
@@ -522,7 +844,8 @@ let proposals = [];
 
 async function loadProposals() {
   try {
-    const r = await fetch('/buddy/api/proposals');
+    const r = await fetch('/buddy/api/proposals', {credentials: 'same-origin'});
+    if (r.status === 401 || r.status === 403) { window.location.replace('/buddy/login'); return; }
     proposals = await r.json();
     render();
   } catch(e) { console.error(e); }
@@ -707,13 +1030,13 @@ if (synth) synth.onvoiceschanged = () => synth.getVoices();
 @app.get("/buddy/jobs", response_class=HTMLResponse)
 @app.get("/buddy/jobs/", response_class=HTMLResponse)
 def jobs_page(request: Request):
-    verify_token(request)
-    from fastapi.responses import Response
-    resp = HTMLResponse(JOBS_HTML)
-    token = request.query_params.get("token", "")
-    if token:
-        resp.set_cookie("buddy_token", token, httponly=True, max_age=86400*30)
-    return resp
+    if not BUDDY_WEB_TOKEN and not BUDDY_ALLOW_OPEN_DEV:
+        raise HTTPException(status_code=503, detail="Buddy authentication is not configured")
+    if not is_authenticated(request):
+        if BUDDY_ALLOW_OPEN_DEV and not BUDDY_WEB_TOKEN:
+            return HTMLResponse(JOBS_HTML)
+        return _login_response(request, status_code=401)
+    return _attach_session(HTMLResponse(JOBS_HTML), request)
 
 
 @app.get("/buddy/api/proposals")

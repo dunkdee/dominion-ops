@@ -174,15 +174,21 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
         # Use noninteractive sudo under the Buddy service identity.
         self.assertIn('sudo -n -u "$BUDDY_SVC_USER"', text)
 
-        # Parse with python-dotenv exactly as buddy_web.py does.
-        self.assertIn("from dotenv import load_dotenv", text)
-        self.assertIn("load_dotenv(candidate, override=False)", text)
+        # Resolve through Buddy's own resolver rather than a second, private
+        # copy of the discovery rules. Re-implementing it here is exactly what
+        # let the Command Center hold a different token than Buddy Web.
+        self.assertIn("from core.token_resolver import resolve_buddy_web_token", text)
+        self.assertIn("resolve_buddy_web_token(home=runtime.parent)", text)
+        self.assertNotIn("load_dotenv(candidate, override=False)", text)
         self.assertIn("BUDDY_FALLBACK_TOKEN_MISSING", text)
 
+        # A disagreement between sources stops the deploy instead of guessing.
+        self.assertIn("BUDDY_TOKEN_CONFLICT", text)
+        self.assertIn("resolution.conflict", text)
+
         # Fail-closed interpreter path proofs.
-        self.assertIn("$BUDDY_SVC_HOME/buddy_core/.env", text)
-        self.assertIn("$BUDDY_SVC_HOME/conductor/.env", text)
-        self.assertIn("$BUDDY_SVC_HOME/.env", text)
+        self.assertIn("$BUDDY_SVC_HOME/buddy_core", text)
+        self.assertIn("BUDDY_TOKEN_RESOLVER_MISSING", text)
 
         # No stale deploy-user $HOME paths for Buddy credential discovery.
         self.assertNotIn('"$HOME/buddy_core/.env"', text)

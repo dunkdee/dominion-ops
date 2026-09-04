@@ -41,28 +41,34 @@ test -n "$BUDDY_SVC_USER"
 test -n "$BUDDY_SVC_HOME"
 test -x "$BUDDY_PYTHON"
 
+# Buddy's own resolver is the single source of truth for this token. Importing
+# it here — instead of re-implementing dotenv discovery — is what stops the
+# Command Center from ever holding a different BUDDY_WEB_TOKEN than Buddy Web.
 BUDDY_TOKEN="$(
   sudo -n -u "$BUDDY_SVC_USER" "$BUDDY_PYTHON" - \
-    "$BUDDY_SVC_HOME/buddy_core/.env" \
-    "$BUDDY_SVC_HOME/conductor/.env" \
-    "$BUDDY_SVC_HOME/.env" <<'PY'
-import os
+    "$BUDDY_SVC_HOME/buddy_core" <<'PY'
 import sys
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Match buddy_web.py exactly: sequential files, override=False.
-for candidate in map(Path, sys.argv[1:]):
-    if candidate.is_file():
-        load_dotenv(candidate, override=False)
+runtime = Path(sys.argv[1])
+if not (runtime / "core" / "token_resolver.py").is_file():
+    raise SystemExit("BUDDY_TOKEN_RESOLVER_MISSING deploy the Buddy runtime first")
+sys.path.insert(0, str(runtime))
 
-token = os.getenv("BUDDY_WEB_TOKEN", "").strip()
+from core.token_resolver import resolve_buddy_web_token
 
-if not token:
+resolution = resolve_buddy_web_token(home=runtime.parent)
+
+if resolution.conflict:
+    # Never paper over two different secrets; the operator has to reconcile.
+    raise SystemExit(
+        "BUDDY_TOKEN_CONFLICT sources=" + ",".join(resolution.conflicting_sources)
+    )
+if not resolution.token:
     raise SystemExit("BUDDY_FALLBACK_TOKEN_MISSING")
 
 # stdout is captured by command substitution; never logged.
-print(token, end="")
+print(resolution.token, end="")
 PY
 )"
 

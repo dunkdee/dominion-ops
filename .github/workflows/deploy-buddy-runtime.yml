@@ -10,6 +10,8 @@ on:
       - 'tests/test_buddy_canonical_governance.py'
       - 'tests/test_buddy_standalone_runtime.py'
       - 'tests/test_buddy_capability_health.py'
+      - 'tests/test_buddy_token_resolver.py'
+      - 'tests/test_buddy_phone_login.py'
       - 'tests/test_buddy_self_heal_extensions.py'
       - 'tests/test_revenue_runtime.py'
   workflow_dispatch:
@@ -31,7 +33,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install bounded Buddy test dependencies
-        run: python -m pip install --disable-pip-version-check pytest requests python-dotenv
+        run: python -m pip install --disable-pip-version-check pytest requests python-dotenv fastapi httpx uvicorn
       - name: Compile canonical Buddy paths
         env:
           PYTHONPATH: .:buddy_core
@@ -49,6 +51,7 @@ jobs:
             buddy_core/core/capability_health.py \
             buddy_core/core/mcp_client.py \
             buddy_core/core/self_heal.py \
+            buddy_core/core/token_resolver.py \
             buddy_core/buddy_bridge_api.py \
             buddy_core/buddy_web.py \
             apps/youtube/script_generator.py \
@@ -67,6 +70,8 @@ jobs:
             tests/test_buddy_self_heal_extensions.py \
             tests/test_buddy_operator_v2.py \
             tests/test_buddy_autonomous_learning.py \
+            tests/test_buddy_token_resolver.py \
+            tests/test_buddy_phone_login.py \
             tests/test_revenue_runtime.py
       - name: Assert canonical prompt content
         env:
@@ -217,6 +222,7 @@ jobs:
             "$runtime/core/capability_health.py" \
             "$runtime/core/mcp_client.py" \
             "$runtime/core/self_heal.py" \
+            "$runtime/core/token_resolver.py" \
             "$runtime/buddy_bridge_api.py" \
             "$runtime/buddy_web.py"
 
@@ -230,6 +236,9 @@ jobs:
           grep -Fq 'install_operator_extensions' "$runtime/core/__init__.py"
           grep -Fq '_compose_system(system)' "$runtime/core/brain_router.py"
           grep -Fq 'canonical_system_prompt()' "$runtime/core/brain_router.py"
+          grep -Fq 'DOMINION_BUDDY_PHONE_AUTH_V1' "$runtime/buddy_web.py"
+          grep -Fq '/buddy/api/login' "$runtime/buddy_web.py"
+          grep -Fq 'resolve_buddy_web_token' "$runtime/buddy_web.py"
           if grep -Rni --include='*.py' --include='*.md' --include='*.json' 'fable' "$runtime" >/tmp/buddy-fable-offenders.txt; then
             cat /tmp/buddy-fable-offenders.txt
             echo 'BUDDY_RUNTIME_SOURCE_INTEGRITY=FAIL stale_fable_reference'

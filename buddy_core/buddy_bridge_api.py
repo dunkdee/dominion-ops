@@ -54,6 +54,7 @@ DOMINION_REPO_ROOT = _bootstrap_canonical_repo_root()
 
 from core.capability_health import audit_capabilities
 from core.operator import get_operator
+from core.token_resolver import resolve_buddy_web_token
 from core.revenue_runtime import (
     MAX_PAYLOAD_BYTES,
     run_compounding_payload,
@@ -65,7 +66,9 @@ app = Flask(__name__)
 BASE = Path.home() / "buddy_core"
 LOG = BASE / "buddy_bridge.log"
 DEALS = BASE / "scored_deals.json"
-BUDDY_WEB_TOKEN = os.getenv("BUDDY_WEB_TOKEN", "").strip()
+# Same resolver as buddy_web.py so the bridge can never authenticate with a
+# different token than the web surface. See core/token_resolver.py.
+BUDDY_WEB_TOKEN = resolve_buddy_web_token().token
 MCP_BASE_URL = os.getenv("BUDDY_MCP_BASE_URL", "http://127.0.0.1:8390").rstrip("/")
 MCP_PROTOCOL_VERSION = "2026-07-28"
 MAX_MCP_REQUEST_BYTES = 65_536

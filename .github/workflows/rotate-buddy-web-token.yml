@@ -190,7 +190,15 @@ jobs:
           PY
 
           echo '=== GATE 4: EXACTLY ONE ASSIGNMENT, EXACTLY ONE FILE ==='
-          count_of() { [ -f "$1" ] && grep -Ec "^[[:space:]]*(export[[:space:]]+)?${KEY}=" "$1" || echo 0; }
+          # grep -c exits 1 when the count is 0 (while still printing "0"),
+          # so a bare `grep ... || echo 0` prints the count twice on a clean
+          # file. Capture output and exit status separately instead.
+          count_of() {
+            if [ ! -f "$1" ]; then echo 0; return; fi
+            local n
+            n="$(grep -Ec "^[[:space:]]*(export[[:space:]]+)?${KEY}=" "$1" 2>/dev/null)" || true
+            echo "${n:-0}"
+          }
           canonical_count="$(count_of "$CANONICAL")"
           conductor_count="$(count_of "$CONDUCTOR_ENV")"
           home_count="$(count_of "$HOME_ENV")"

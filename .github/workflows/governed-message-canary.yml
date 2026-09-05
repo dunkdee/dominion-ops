@@ -126,8 +126,20 @@ jobs:
           set -euo pipefail
           cleanup() { rm -rf -- "$REMOTE_DIR"; }
           trap cleanup EXIT
+
+          # Execute the canary with the exact Python runtime already proven by
+          # the healthy Buddy web service. Bare /usr/bin/python3 on the VM does
+          # not necessarily carry Buddy's installed dependencies (python-dotenv
+          # was the observed mismatch in canary run 33967100286).
+          buddy_exec="$(systemctl show dominion-buddy-web.service -p ExecStart --value 2>/dev/null || true)"
+          buddy_python="$(printf '%s\n' "$buddy_exec" | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)"
+          test -n "$buddy_python" || { echo 'CANARY_BUDDY_PYTHON=UNRESOLVED'; exit 8; }
+          test -x "$buddy_python" || { echo 'CANARY_BUDDY_PYTHON=NOT_EXECUTABLE'; exit 8; }
+          "$buddy_python" -c 'import dotenv' >/dev/null 2>&1 || { echo 'CANARY_BUDDY_PYTHON_DOTENV=UNAVAILABLE'; exit 8; }
+          echo 'CANARY_BUDDY_PYTHON=RESOLVED'
+
           recipient="$(printf '%s' "$RECIPIENT_B64" | base64 -d)"
-          args=(python3 "$REMOTE_SCRIPT" --recipient "$recipient" --expected-sha "$EXPECTED_SHA")
+          args=("$buddy_python" "$REMOTE_SCRIPT" --recipient "$recipient" --expected-sha "$EXPECTED_SHA")
           if [ "$SEND_FLAG" = "1" ]; then args+=(--send); fi
           set +e
           "${args[@]}"

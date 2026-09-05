@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD^)" = "cef0740cb96c5d2317432c998ea971793546d7d7"
+          test "$(git rev-parse HEAD^)" = "00371f96d7e5168d9433519ea427131ea441555b"
           test -z "$(git status --porcelain)"
 
       - name: Apply reviewed remediation and close focused regressions
@@ -33,11 +33,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          # Reuse the V8 working-tree remediation. V8 already proved that its
-          # transformation compiles; its only remaining failures were four
-          # focused compatibility/test regressions.
-          v8_path = Path('.github/workflows/pr235-review-fix-v8.yml')
-          v8 = v8_path.read_text(encoding='utf-8')
+          v8 = Path('.github/workflows/pr235-review-fix-v8.yml').read_text(encoding='utf-8')
           start = "          python - <<'PY'\n"
           end = "\n          PY\n\n      - name: Install repository-wide test dependencies"
           if start not in v8 or end not in v8:
@@ -50,9 +46,6 @@ jobs:
           compile(normalized, '<pr235-v8-remediation>', 'exec')
           exec(normalized, {'__name__': '__main__'})
 
-          # 1. Preserve the established sanitized `authorization` receipt key
-          # while retaining the new explicit `authority_ref`. Do this by
-          # structure/indentation rather than brittle exact whitespace.
           op_path = Path('buddy_core/core/operator.py')
           lines = op_path.read_text(encoding='utf-8').splitlines(keepends=True)
           method_start = next((i for i, line in enumerate(lines)
@@ -83,9 +76,6 @@ jobs:
           lines[close_i + 1:close_i + 1] = alias
           op_path.write_text(''.join(lines), encoding='utf-8')
 
-          # 2/3. Keep the hardened 256-bit minimum. Strengthen only the two old
-          # positive fixtures that were intentionally shorter than the new
-          # security boundary.
           key_tests = Path('tests/test_watchmen_audit_state.py')
           tests = key_tests.read_text(encoding='utf-8')
           if tests.count('an-explicit-operator-key') != 2:
@@ -96,22 +86,14 @@ jobs:
                                 '0123456789abcdef0123456789abcdef')
           tests = tests.replace('key-from-an-external-file',
                                 'fedcba9876543210fedcba9876543210')
-
           marker = '    def test_blank_key_sources_fail_closed_rather_than_defaulting(self):\n'
-          weak_test = '''    def test_weak_explicit_key_fails_closed(self):
-        self._env(saraqael.ENV_HMAC_KEY, "too-short")
-        with self.assertRaises(WatchmenStateError):
-            saraqael._resolve_key()
-
-'''
+          weak_test = '    def test_weak_explicit_key_fails_closed(self):\n        self._env(saraqael.ENV_HMAC_KEY, "too-short")\n        with self.assertRaises(WatchmenStateError):\n            saraqael._resolve_key()\n\n'
           if marker not in tests:
               raise SystemExit('Watchmen weak-key test insertion marker missing')
           if 'def test_weak_explicit_key_fails_closed' not in tests:
               tests = tests.replace(marker, weak_test + marker, 1)
           key_tests.write_text(tests, encoding='utf-8')
 
-          # 4. Do not weaken runtime productivity semantics. Update the legacy
-          # test fixture to represent a genuinely verified completed step.
           auto_tests = Path('tests/test_radah_autopilot.py')
           auto = auto_tests.read_text(encoding='utf-8')
           old = '"receipts": [{"capability": "brain.reason", "status": "COMPLETE"}],'
@@ -120,8 +102,6 @@ jobs:
               raise SystemExit(f'autopilot productive fixture count={auto.count(old)}')
           auto_tests.write_text(auto.replace(old, new, 1), encoding='utf-8')
 
-          # V8 removes the one-shot helpers. Enforce no helper survives into the
-          # final candidate tree, including this V10 file.
           for helper in Path('.github/workflows').glob('pr235-review-fix*.yml'):
               helper.unlink()
 

@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 import traceback
+import types
 from pathlib import Path
 
 SUBJECT = "Dominion Governed Delivery Canary"
@@ -37,8 +38,15 @@ def load_runtime_env(home: Path):
     try:
         from dotenv import load_dotenv
     except ImportError:
+        shim = types.ModuleType("dotenv")
+
+        def _shim_load_dotenv(*_args, **_kwargs):
+            return False
+
+        shim.load_dotenv = _shim_load_dotenv
+        sys.modules.setdefault("dotenv", shim)
+        load_dotenv = shim.load_dotenv
         emit("DOTENV", "UNAVAILABLE")
-        return
     for candidate in (home / "buddy_core" / ".env", home / "conductor" / ".env", home / ".env"):
         if candidate.is_file():
             load_dotenv(dotenv_path=candidate, override=False)

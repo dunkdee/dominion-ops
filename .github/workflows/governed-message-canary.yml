@@ -99,12 +99,28 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$EXPECTED_SHA" ] || [ "$EXPECTED_SHA" = "DEPLOYED" ]; then
-            receipt_json="$(
-              ssh -i "$HOME/.ssh/canary_key" \
-                -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
-                "$VM_USER@$VM_HOST" \
-                "cat ~/.dominion/buddy/deployed_release.json"
-            )"
+            receipt_json=""
+            for _ in 1 2 3 4 5; do
+              candidate="$(
+                ssh -i "$HOME/.ssh/canary_key" \
+                  -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+                  "$VM_USER@$VM_HOST" \
+                  "cat ~/.dominion/buddy/deployed_release.json"
+              )"
+              parsed="$(
+                printf '%s' "$candidate" \
+                  | python3 -c "import json,sys; payload=json.load(sys.stdin); print(json.dumps(payload, separators=(',', ':')) if isinstance(payload, dict) else '')" \
+                  2>/dev/null || true
+              )"
+              if [ -n "$parsed" ]; then
+                if [ -n "$receipt_json" ] && [ "$receipt_json" = "$parsed" ]; then
+                  break
+                fi
+                receipt_json="$parsed"
+              fi
+              sleep 0.2
+            done
+            [ -n "$receipt_json" ] || { echo "Unable to read a stable deployed_release.json"; exit 1; }
             resolved_sha="$(
               printf '%s' "$receipt_json" \
                 | python3 scripts/runtime/resolve_canary_expected_sha.py \

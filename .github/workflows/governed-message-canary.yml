@@ -97,7 +97,16 @@ jobs:
           CONFIRM: ${{ inputs.confirm }}
         run: |
           set -euo pipefail
-          remote_script="/tmp/governed_message_canary_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}.py"
+          remote_dir="/tmp/dominion_governed_canary_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          remote_script="$remote_dir/governed_message_canary.py"
+
+          # Keep the canary script out of /tmp itself. The VM may contain legacy
+          # top-level Python files there (for example operator.py) that can shadow
+          # Python stdlib modules when a script is executed directly from /tmp.
+          ssh -i "$HOME/.ssh/canary_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            "install -d -m 700 '$remote_dir'"
 
           scp -i "$HOME/.ssh/canary_key" \
             -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
@@ -112,9 +121,11 @@ jobs:
           ssh -i "$HOME/.ssh/canary_key" \
             -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
             "$VM_USER@$VM_HOST" \
-            "RECIPIENT_B64='$recipient_b64' EXPECTED_SHA='$EXPECTED_SHA' SEND_FLAG='$send_flag' REMOTE_SCRIPT='$remote_script' bash -s" <<'REMOTE' \
+            "RECIPIENT_B64='$recipient_b64' EXPECTED_SHA='$EXPECTED_SHA' SEND_FLAG='$send_flag' REMOTE_DIR='$remote_dir' REMOTE_SCRIPT='$remote_script' bash -s" <<'REMOTE' \
             | tee canary-output.txt
           set -euo pipefail
+          cleanup() { rm -rf -- "$REMOTE_DIR"; }
+          trap cleanup EXIT
           recipient="$(printf '%s' "$RECIPIENT_B64" | base64 -d)"
           args=(python3 "$REMOTE_SCRIPT" --recipient "$recipient" --expected-sha "$EXPECTED_SHA")
           if [ "$SEND_FLAG" = "1" ]; then args+=(--send); fi
@@ -122,7 +133,6 @@ jobs:
           "${args[@]}"
           rc=$?
           set -e
-          rm -f "$REMOTE_SCRIPT"
           exit "$rc"
           REMOTE
           rc=${PIPESTATUS[0]}

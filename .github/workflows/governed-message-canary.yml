@@ -39,12 +39,15 @@ jobs:
         with:
           ref: main
 
-      - name: Validate inputs
+      - name: Validate inputs and Founder authority
         shell: bash
         env:
           RECIPIENT: ${{ inputs.recipient }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           CONFIRM: ${{ inputs.confirm }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          FOUNDER_ACTOR: dunkdee
         run: |
           set -euo pipefail
           [[ "$EXPECTED_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "A full 40-character SHA is required"; exit 1; }
@@ -53,6 +56,10 @@ jobs:
             "SEND CANARY"|"VERIFY ONLY") ;;
             *) echo "confirm must be exactly 'SEND CANARY' or 'VERIFY ONLY'"; exit 1 ;;
           esac
+          if [ "$CONFIRM" = "SEND CANARY" ]; then
+            [ "$ACTOR" = "$FOUNDER_ACTOR" ] || { echo "SEND CANARY requires the Founder actor"; exit 1; }
+            [ "$TRIGGERING_ACTOR" = "$FOUNDER_ACTOR" ] || { echo "SEND CANARY requires the Founder triggering actor"; exit 1; }
+          fi
 
       - name: Require deployment secrets
         shell: bash
@@ -97,15 +104,27 @@ jobs:
             scripts/runtime/governed_message_canary.py \
             "$VM_USER@$VM_HOST:$remote_script"
 
-          send_flag=""
-          if [ "$CONFIRM" = "SEND CANARY" ]; then send_flag="--send"; fi
+          recipient_b64="$(printf '%s' "$RECIPIENT" | base64 -w0)"
+          send_flag=0
+          if [ "$CONFIRM" = "SEND CANARY" ]; then send_flag=1; fi
 
           set +e
           ssh -i "$HOME/.ssh/canary_key" \
             -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
             "$VM_USER@$VM_HOST" \
-            "python3 '$remote_script' --recipient '$RECIPIENT' --expected-sha '$EXPECTED_SHA' $send_flag; rc=\$?; rm -f '$remote_script'; exit \$rc" \
+            "RECIPIENT_B64='$recipient_b64' EXPECTED_SHA='$EXPECTED_SHA' SEND_FLAG='$send_flag' REMOTE_SCRIPT='$remote_script' bash -s" <<'REMOTE' \
             | tee canary-output.txt
+          set -euo pipefail
+          recipient="$(printf '%s' "$RECIPIENT_B64" | base64 -d)"
+          args=(python3 "$REMOTE_SCRIPT" --recipient "$recipient" --expected-sha "$EXPECTED_SHA")
+          if [ "$SEND_FLAG" = "1" ]; then args+=(--send); fi
+          set +e
+          "${args[@]}"
+          rc=$?
+          set -e
+          rm -f "$REMOTE_SCRIPT"
+          exit "$rc"
+          REMOTE
           rc=${PIPESTATUS[0]}
           set -e
           echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
@@ -121,4 +140,4 @@ jobs:
 
       - name: Remove SSH material
         if: always()
-        run: rm -f "$HOME/.ssh/canary_key"
+        run: rm -f "$HOME/.ssh/canary_key" "$HOME/.ssh/known_hosts"

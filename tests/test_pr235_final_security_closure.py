@@ -153,11 +153,29 @@ def test_non_json_delivery_evidence_returns_truthful_receipt(authority_env):
     json.dumps(receipt)
 
 
-def test_copied_buddy_layout_does_not_treat_home_as_checkout(tmp_path):
-    fake = tmp_path / "home" / "buddy_core" / "watchmen" / "saraqael.py"
+def test_copied_buddy_layout_does_not_treat_home_as_checkout(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    (home / ".github").mkdir(parents=True)
+    fake_base = home / "buddy_core"
+    fake = fake_base / "watchmen" / "saraqael.py"
     fake.parent.mkdir(parents=True)
     fake.write_text("# copied runtime\n", encoding="utf-8")
+
     assert saraqael._detect_checkout_root(fake) is None
+
+    monkeypatch.setattr(saraqael, "_BASE_DIR", fake_base)
+    monkeypatch.setattr(saraqael, "DEFAULT_STATE_DIR", home / ".dominion" / "watchmen")
+    monkeypatch.delenv(saraqael.ENV_STATE_DIR, raising=False)
+    assert saraqael.state_dir() == (home / ".dominion" / "watchmen").resolve(strict=False)
+
+
+def test_real_git_checkout_is_still_detected(tmp_path):
+    checkout = tmp_path / "checkout"
+    (checkout / ".git").mkdir(parents=True)
+    fake = checkout / "buddy_core" / "watchmen" / "saraqael.py"
+    fake.parent.mkdir(parents=True)
+    fake.write_text("# checkout runtime\n", encoding="utf-8")
+    assert saraqael._detect_checkout_root(fake) == checkout.resolve(strict=False)
 
 
 def test_explicit_watchmen_key_inside_source_is_rejected(monkeypatch):

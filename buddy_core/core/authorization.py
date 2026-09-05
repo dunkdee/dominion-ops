@@ -22,8 +22,9 @@ This module supplies the key, using the same discipline
   canonical hash of the exact capability, instruction and content held. It
   authorizes *that action*, never a blank cheque. Change so much as a
   character of what gets published and the authorization no longer matches.
-* **Tamper-evident.** ``approval_hash`` covers the whole record, so a granted
-  authorization cannot be edited after the fact without detection.
+* **Authenticated.** ``approval_hash`` is an HMAC-SHA256 over the whole
+  record using a machine-local secret outside writable Buddy state. A process
+  that can edit ledger JSON cannot manufacture Founder authority.
 * **Single-use.** Consumption is recorded; a spent authorization can never be
   replayed.
 * **Monotonic.** Each grant takes the next ``authorization_sequence``, so an
@@ -39,8 +40,11 @@ and leaves the receipt proving why.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
+import secrets
+import stat
 import tempfile
 import uuid
 from contextlib import contextmanager
@@ -59,6 +63,9 @@ except ImportError:  # pragma: no cover - POSIX
     msvcrt = None
 
 SCHEMA = "dominion-founder-authorization-v1"
+AUTH_HMAC_ENV = "DOMINION_AUTHORIZATION_HMAC_KEY"
+AUTH_HMAC_FILE_ENV = "DOMINION_AUTHORIZATION_HMAC_KEY_FILE"
+AUTH_DEFAULT_KEY_FILE = Path.home() / ".dominion" / "authorization" / "ledger_hmac.key"
 
 # An unused grant expires rather than lingering as a standing blank cheque.
 DEFAULT_TTL_SECONDS = 24 * 3600
@@ -83,8 +90,33 @@ def sha256_json(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
-def _hash_without(record: dict, field: str) -> str:
-    return sha256_json({k: v for k, v in record.items() if k != field})
+def _record_mac_material(record: dict) -> bytes:
+    return canonical_json({k: v for k, v in record.items() if k != "approval_hash"}).encode("utf-8")
+
+
+def _path_within(path: Path, parent: Path) -> bool:
+    path = path.resolve(strict=False)
+    parent = parent.resolve(strict=False)
+    return path == parent or parent in path.parents
+
+
+def _detect_checkout_root(start: Path | None = None) -> Path | None:
+    current = (start or Path(__file__)).resolve(strict=False)
+    if current.is_file():
+        current = current.parent
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists():
+            return candidate.resolve(strict=False)
+        if (candidate / ".github").is_dir() and (candidate / "buddy_core").is_dir():
+            return candidate.resolve(strict=False)
+    return None
+
+
+def _validate_auth_key(raw: bytes, origin: str) -> bytes:
+    key = raw.strip()
+    if len(key) < 32:
+        raise AuthorizationError(f"authorization signing key from {origin} is weaker than 256 bits")
+    return key
 
 
 def _now() -> datetime:
@@ -126,11 +158,103 @@ class AuthorizationLedger:
     """Durable store of Founder authorization requests and grants."""
 
     def __init__(self, state_dir: Path | str):
-        self.root = Path(state_dir) / "authorizations"
+        self.state_dir = Path(state_dir).expanduser().resolve(strict=False)
+        self.root = self.state_dir / "authorizations"
         self.root.mkdir(parents=True, exist_ok=True)
         self.receipts_path = self.root / "receipts.jsonl"
         self.sequence_path = self.root / "sequence.json"
         self.lock_path = self.root / ".ledger.lock"
+        self._hmac_key = self._resolve_signing_key()
+
+    def _resolve_signing_key(self) -> bytes:
+        direct = os.environ.get(AUTH_HMAC_ENV)
+        if direct is not None:
+            return _validate_auth_key(direct.encode("utf-8"), f"${AUTH_HMAC_ENV}")
+
+        configured = os.environ.get(AUTH_HMAC_FILE_ENV)
+        if configured is not None and not configured.strip():
+            raise AuthorizationError(f"${AUTH_HMAC_FILE_ENV} is set but empty")
+        path = (
+            Path(configured.strip()).expanduser().resolve(strict=False)
+            if configured is not None
+            else AUTH_DEFAULT_KEY_FILE.expanduser().resolve(strict=False)
+        )
+
+        source_root = Path(__file__).resolve(strict=False).parents[1]
+        checkout_root = _detect_checkout_root(Path(__file__))
+        if _path_within(path, self.state_dir):
+            raise AuthorizationError("authorization signing key must be outside writable Buddy state")
+        if _path_within(path, source_root):
+            raise AuthorizationError("authorization signing key must be outside Buddy source")
+        if checkout_root is not None and _path_within(path, checkout_root):
+            raise AuthorizationError("authorization signing key must be outside repository checkout")
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if os.name == "posix":
+                os.chmod(path.parent, 0o700)
+                if stat.S_IMODE(path.parent.stat().st_mode) != 0o700:
+                    raise AuthorizationError("authorization signing key directory is not private")
+        except AuthorizationError:
+            raise
+        except OSError as exc:
+            raise AuthorizationError("authorization signing key directory unavailable") from exc
+
+        def read_existing() -> bytes:
+            try:
+                if os.name == "posix" and stat.S_IMODE(path.stat().st_mode) & 0o077:
+                    raise AuthorizationError("authorization signing key file is not private")
+                return _validate_auth_key(path.read_bytes(), str(path))
+            except AuthorizationError:
+                raise
+            except OSError as exc:
+                raise AuthorizationError("authorization signing key file unreadable") from exc
+
+        if path.exists():
+            return read_existing()
+
+        key = secrets.token_hex(32).encode("ascii")
+        fd = None
+        try:
+            fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            if os.name == "posix" and hasattr(os, "fchmod"):
+                os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "wb") as fh:
+                fd = None
+                fh.write(key + b"\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            if os.name == "posix":
+                dir_fd = os.open(str(path.parent), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+                os.chmod(path, 0o600)
+                if stat.S_IMODE(path.stat().st_mode) != 0o600:
+                    raise AuthorizationError("authorization signing key file is not private")
+            return key
+        except FileExistsError:
+            return read_existing()
+        except AuthorizationError:
+            raise
+        except OSError as exc:
+            raise AuthorizationError("authorization signing key generation failed") from exc
+        finally:
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+
+    def _record_mac(self, record: dict) -> str:
+        return hmac.new(self._hmac_key, _record_mac_material(record), hashlib.sha256).hexdigest()
+
+    def _record_mac_valid(self, record: dict) -> bool:
+        supplied = record.get("approval_hash")
+        if not isinstance(supplied, str) or len(supplied) != 64:
+            return False
+        return hmac.compare_digest(supplied, self._record_mac(record))
 
     # ── storage ──────────────────────────────────────────────────────────
 
@@ -246,12 +370,19 @@ class AuthorizationLedger:
             return None
 
     def _next_sequence(self) -> int:
+        # Derive monotonic authority from authenticated records, not a mutable cache.
         current = 0
-        if self.sequence_path.is_file():
+        for path in self.root.glob("approval_*.json"):
             try:
-                current = int(json.loads(self.sequence_path.read_text(encoding="utf-8"))["sequence"])
-            except (OSError, ValueError, KeyError, TypeError):
-                current = 0
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not self._record_mac_valid(record):
+                continue
+            try:
+                current = max(current, int(record.get("authorization_sequence") or 0))
+            except (TypeError, ValueError):
+                continue
         nxt = current + 1
         self._atomic_write_text(
             self.sequence_path, canonical_json({"sequence": nxt}) + "\n"
@@ -305,7 +436,7 @@ class AuthorizationLedger:
             "granted_at": None,
             "consumed_at": None,
         }
-        record["approval_hash"] = _hash_without(record, "approval_hash")
+        record["approval_hash"] = self._record_mac(record)
         self._write(record)
         self._receipt("authorization_requested", record)
         return record
@@ -317,6 +448,8 @@ class AuthorizationLedger:
             try:
                 record = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
+                continue
+            if not self._record_mac_valid(record):
                 continue
             if record.get("status") != PENDING:
                 continue
@@ -339,7 +472,7 @@ class AuthorizationLedger:
         record = self.load(approval_id)
         if record is None:
             return {"ok": False, "error": "unknown_approval_id"}
-        if record.get("approval_hash") != _hash_without(record, "approval_hash"):
+        if not self._record_mac_valid(record):
             return {"ok": False, "error": "authorization_record_tampered"}
         if record.get("status") == CONSUMED:
             return {"ok": False, "error": "already_consumed"}
@@ -351,7 +484,7 @@ class AuthorizationLedger:
             return {"ok": False, "error": "not_pending"}
         if self._is_expired(record):
             record["status"] = EXPIRED
-            record["approval_hash"] = _hash_without(record, "approval_hash")
+            record["approval_hash"] = self._record_mac(record)
             self._write(record)
             self._receipt("authorization_expired", record)
             return {"ok": False, "error": "expired"}
@@ -360,7 +493,7 @@ class AuthorizationLedger:
         record["approver"] = approver
         record["granted_at"] = _iso(_now())
         record["authorization_sequence"] = self._next_sequence()
-        record["approval_hash"] = _hash_without(record, "approval_hash")
+        record["approval_hash"] = self._record_mac(record)
         self._write(record)
         self._receipt("authorization_granted", record,
                       authorization_sequence=record["authorization_sequence"],
@@ -375,13 +508,15 @@ class AuthorizationLedger:
         record = self.load(approval_id)
         if record is None:
             return {"ok": False, "error": "unknown_approval_id"}
+        if not self._record_mac_valid(record):
+            return {"ok": False, "error": "authorization_record_tampered"}
         if record.get("status") in {CONSUMED, DENIED}:
             return {"ok": False, "error": "already_" + record["status"].lower()}
         record["status"] = DENIED
         record["approver"] = approver
         record["denied_reason"] = reason
         record["denied_at"] = _iso(_now())
-        record["approval_hash"] = _hash_without(record, "approval_hash")
+        record["approval_hash"] = self._record_mac(record)
         self._write(record)
         self._receipt("authorization_denied", record, approver=approver, reason=reason)
         return {"ok": True, "authorization": record}
@@ -408,7 +543,7 @@ class AuthorizationLedger:
         record = self.load(approval_id)
         if record is None:
             return {"ok": False, "error": "unknown_approval_id"}
-        if record.get("approval_hash") != _hash_without(record, "approval_hash"):
+        if not self._record_mac_valid(record):
             self._receipt("authorization_rejected", record, error="record_tampered")
             return {"ok": False, "error": "authorization_record_tampered"}
         if record.get("status") == CONSUMED:
@@ -418,7 +553,7 @@ class AuthorizationLedger:
             return {"ok": False, "error": "not_granted"}
         if self._is_expired(record):
             record["status"] = EXPIRED
-            record["approval_hash"] = _hash_without(record, "approval_hash")
+            record["approval_hash"] = self._record_mac(record)
             self._write(record)
             self._receipt("authorization_expired", record)
             return {"ok": False, "error": "expired"}
@@ -431,7 +566,7 @@ class AuthorizationLedger:
 
         record["status"] = CONSUMED
         record["consumed_at"] = _iso(_now())
-        record["approval_hash"] = _hash_without(record, "approval_hash")
+        record["approval_hash"] = self._record_mac(record)
         self._write(record)
         self._receipt("authorization_consumed", record)
         return {"ok": True, "authorization": record}

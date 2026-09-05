@@ -888,41 +888,71 @@ CAPABILITY REGISTRY:
 
     @staticmethod
     def _validate_delivery_evidence(capability: str, evidence: Any) -> tuple[bool, str | None]:
-        """Require a real capability-specific delivery receipt.
-
-        A truthy dictionary, URL, or error object is not evidence of delivery.
-        At least one item must contain a recognized receipt identifier,
-        source/platform provenance, and an observation timestamp.
-        """
+        """Validate the exact receipt contract for every consequential capability."""
         if not isinstance(evidence, list) or not evidence:
             return False, None
 
-        receipt_keys = {
+        def scalar(item: dict, keys: tuple[str, ...]) -> str | None:
+            for key in keys:
+                value = item.get(key)
+                if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+                    rendered = str(value).strip()
+                    if rendered:
+                        return rendered
+            return None
+
+        provenance_keys = ("platform", "provider", "system", "source")
+        time_keys = ("observed_at", "delivered_at", "timestamp", "created_at")
+        id_keys = {
             "external.publish": ("platform_receipt_id", "publication_id", "post_id", "receipt_id"),
             "external.message": ("send_receipt_id", "message_id", "receipt_id"),
             "external.spend": ("financial_receipt_id", "transaction_id", "payment_id", "receipt_id"),
-        }.get(capability, ("receipt_id",))
-        provenance_keys = ("platform", "provider", "system", "source")
-        time_keys = ("observed_at", "delivered_at", "timestamp", "created_at")
+            "external.submit": ("submission_receipt_id", "submission_id", "filing_id"),
+            "external.browser": ("browser_action_receipt_id", "browser_action_id", "action_id"),
+            "external.credential_or_network": ("change_receipt_id", "network_change_id", "credential_change_id"),
+        }
+        if capability not in id_keys:
+            return False, None
 
         for item in evidence:
             if not isinstance(item, dict) or not item:
                 continue
-            receipt_id = next(
-                (str(item.get(key)).strip() for key in receipt_keys if str(item.get(key) or "").strip()),
-                None,
-            )
-            provenance = next(
-                (str(item.get(key)).strip() for key in provenance_keys if str(item.get(key) or "").strip()),
-                None,
-            )
-            observed_at = next(
-                (str(item.get(key)).strip() for key in time_keys if str(item.get(key) or "").strip()),
-                None,
-            )
-            if receipt_id and provenance and observed_at:
-                return True, receipt_id
+            receipt_id = scalar(item, id_keys[capability])
+            provenance = scalar(item, provenance_keys)
+            observed_at = scalar(item, time_keys)
+            if not (receipt_id and provenance and observed_at):
+                continue
+
+            if capability == "external.browser":
+                if not scalar(item, ("action", "action_type", "browser_action")):
+                    continue
+            elif capability == "external.credential_or_network":
+                before = item.get("before_state")
+                after = item.get("after_state")
+                verification = item.get("verification")
+                rollback = scalar(item, ("rollback_receipt_id", "rollback_id"))
+                json_native = (str, int, float, bool, dict, list)
+                if before is None or after is None or not isinstance(before, json_native) or not isinstance(after, json_native):
+                    continue
+                verified = (
+                    verification is True
+                    or (isinstance(verification, dict) and verification.get("ok") is True)
+                    or (isinstance(verification, str) and verification.strip().lower() in {"ok", "passed", "verified"})
+                )
+                if not verified or not rollback:
+                    continue
+            return True, receipt_id
         return False, None
+
+    @staticmethod
+    def _authorized_external_context(step: dict) -> dict:
+        # Every value exposed to the executor is already included in payload_fingerprint().
+        return {
+            "capability": step["capability"],
+            "instruction": step["instruction"],
+            "content": copy.deepcopy(step.get("content")),
+            "destination": step.get("destination"),
+        }
 
     def _execute_external(self, index: int, step: dict, cap: dict, context: dict,
                         authorization: dict) -> dict:
@@ -952,7 +982,7 @@ CAPABILITY REGISTRY:
                                 "detail": f"no governed executor bound for {executor_name or step['capability']}"}],
                     "result": None, "evidence": []}
         try:
-            outcome = executor(step, context)
+            outcome = executor(copy.deepcopy(step), self._authorized_external_context(step))
         except Exception as exc:
             return {**base, "status": "BLOCKED",
                     "errors": [{"attempt": 1, "error": type(exc).__name__, "detail": str(exc)[:300]}],
@@ -975,14 +1005,25 @@ CAPABILITY REGISTRY:
                     "result": outcome.get("result"),
                     "evidence": evidence if isinstance(evidence, list) else []}
 
-        evidence_hash = hashlib.sha256(
-            json.dumps(
+        try:
+            evidence_blob = json.dumps(
                 evidence,
                 sort_keys=True,
                 ensure_ascii=True,
                 separators=(",", ":"),
+                allow_nan=False,
             ).encode("utf-8")
-        ).hexdigest()
+            # A non-serializable result would fail later persistence/HTTP response after
+            # a real side effect, so reject it here while preserving delivered truth.
+            json.dumps(outcome.get("result"), ensure_ascii=True, allow_nan=False)
+        except (TypeError, ValueError, OverflowError) as exc:
+            return {**base, "status": "DELIVERED_UNVERIFIED",
+                    "errors": [{"attempt": 1, "error": "EvidenceSerializationError",
+                                "detail": type(exc).__name__}],
+                    "result": None,
+                    "evidence": [{"type": "delivery_evidence_rejected",
+                                  "reason": "non_json_serializable"}]}
+        evidence_hash = hashlib.sha256(evidence_blob).hexdigest()
         try:
             governed_entry = governed_audit_log(
                 "buddy_operator",

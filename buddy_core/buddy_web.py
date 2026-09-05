@@ -372,6 +372,10 @@ CHAT_HTML = """<!DOCTYPE html>
   }
   .input-area button:hover { background: var(--gold-lt); }
   .input-area button:disabled { opacity:0.35; }
+  .approval-card{border:1px solid rgba(201,162,42,.32);padding:12px 14px;margin:6px 0;background:rgba(201,162,42,.06)}
+  .approval-card .approval-id{font-size:10px;opacity:.65;word-break:break-all;margin-top:6px}
+  .approval-card button{margin-top:10px;background:var(--gold);color:var(--void);border:0;padding:10px 14px;font-weight:700;cursor:pointer}
+  .approval-card button:disabled{opacity:.4;cursor:default}
   .typing { color:var(--gold); font-size:12px; padding:4px 16px; letter-spacing:.1em; }
   @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @media (max-width: 600px) { .msg { max-width: 92%; } }
@@ -427,6 +431,7 @@ async function sendMsg() {
     const data = await r.json();
     typing.remove();
     addMsg(data.response || 'No response.', 'buddy');
+    if (data.held && data.held.approval_id) renderHeldApproval(data.held);
     speakText(data.response || '');
   } catch(e) {
     typing.remove();
@@ -434,6 +439,55 @@ async function sendMsg() {
   }
   btn.disabled = false;
   input.focus();
+}
+
+
+function renderHeldApproval(held) {
+  const approvalId = String((held && held.approval_id) || '');
+  if (!/^approval_[0-9a-f]{12}$/.test(approvalId)) {
+    addMsg('Held action returned an invalid authorization reference. Approval blocked.', 'system');
+    return;
+  }
+  const card = document.createElement('div');
+  card.className = 'msg system approval-card';
+  const title = document.createElement('div');
+  title.textContent = 'Founder approval required: ' + String(held.capability || 'external action');
+  const detail = document.createElement('div');
+  detail.className = 'approval-id';
+  detail.textContent = approvalId;
+  const approve = document.createElement('button');
+  approve.type = 'button';
+  approve.textContent = 'APPROVE & RESUME';
+  approve.addEventListener('click', () => approveHeld(approvalId, approve, card));
+  card.appendChild(title);
+  card.appendChild(detail);
+  card.appendChild(approve);
+  msgs.appendChild(card);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+async function approveHeld(approvalId, approveButton, card) {
+  if (!/^approval_[0-9a-f]{12}$/.test(approvalId)) return;
+  approveButton.disabled = true;
+  approveButton.textContent = 'APPROVING...';
+  try {
+    const r = await fetch('/buddy/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      credentials: 'same-origin',
+      body: JSON.stringify({approve: true, authorization_id: approvalId, session_id: sessionId})
+    });
+    if (r.status === 401 || r.status === 403) { window.location.replace('/buddy/login'); return; }
+    const data = await r.json().catch(() => ({}));
+    card.remove();
+    addMsg(data.response || data.error || data.status || 'Approval processed.', 'buddy');
+    if (data.held && data.held.approval_id) renderHeldApproval(data.held);
+    speakText(data.response || '');
+  } catch(e) {
+    approveButton.disabled = false;
+    approveButton.textContent = 'APPROVE & RESUME';
+    addMsg('Approval connection lost. Nothing was re-authorized automatically.', 'system');
+  }
 }
 
 function addMsg(text, type) {

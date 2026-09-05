@@ -23,10 +23,10 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD^)" = "89f470b87f2013c8db9640ab137903e5293a39ae"
+          test "$(git rev-parse HEAD^)" = "d5176429c49e3a49c5cdec907ffb996f22e251bd"
           test -z "$(git status --porcelain)"
 
-      - name: Apply reviewed remediation and canonicalize generated methods
+      - name: Apply reviewed remediation and canonicalize each generated method
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -56,8 +56,6 @@ jobs:
           if set(literals) != {'new_execute', 'new_external'}:
               raise SystemExit('reviewed operator method payloads missing')
 
-          # The v4 validator edit used brittle source-text matching. Skip only
-          # that section and apply the same rule structurally after execution.
           left_marker = '# 8. Elite validator: actual AST map binding, never comments/strings.'
           right_marker = '# 9. Test-suite correctness/dependencies.'
           left = script.find(left_marker)
@@ -75,33 +73,41 @@ jobs:
               method_rows = [i for i, ln in enumerate(lines) if ln.lstrip().startswith('def ')]
               if not method_rows:
                   raise SystemExit('generated method block has no methods')
-              method_indent = min(len(lines[i]) - len(lines[i].lstrip(' ')) for i in method_rows)
-
-              # Determine whether the reviewed raw string omitted one body level.
-              first = method_rows[0]
-              sig_end = first
-              while sig_end < len(lines) and not lines[sig_end].rstrip().endswith(':'):
-                  sig_end += 1
-              body_idx = sig_end + 1
-              while body_idx < len(lines) and not lines[body_idx].strip():
-                  body_idx += 1
-              if body_idx >= len(lines):
-                  raise SystemExit('generated method block has no body')
-              body_indent = len(lines[body_idx]) - len(lines[body_idx].lstrip(' '))
-              add_body_level = body_indent <= method_indent
 
               out = []
-              for ln in lines:
-                  stripped = ln.lstrip(' ')
-                  if not stripped:
-                      out.append('')
-                      continue
-                  raw_indent = len(ln) - len(stripped)
-                  if stripped.startswith('def '):
-                      desired = 4 + max(0, raw_indent - method_indent)
-                  else:
-                      desired = 4 + max(0, raw_indent - method_indent) + (4 if add_body_level else 0)
-                  out.append(' ' * desired + stripped)
+              for pos, method_start in enumerate(method_rows):
+                  method_end = method_rows[pos + 1] if pos + 1 < len(method_rows) else len(lines)
+                  segment = lines[method_start:method_end]
+                  method_raw_indent = len(segment[0]) - len(segment[0].lstrip(' '))
+
+                  sig_end = 0
+                  while sig_end < len(segment) and not segment[sig_end].rstrip().endswith(':'):
+                      sig_end += 1
+                  if sig_end >= len(segment):
+                      raise SystemExit('generated method signature incomplete')
+                  body_idx = sig_end + 1
+                  while body_idx < len(segment) and not segment[body_idx].strip():
+                      body_idx += 1
+                  if body_idx >= len(segment):
+                      raise SystemExit('generated method body missing')
+                  first_body_indent = len(segment[body_idx]) - len(segment[body_idx].lstrip(' '))
+                  body_level_missing = first_body_indent <= method_raw_indent
+
+                  for rel, ln in enumerate(segment):
+                      stripped = ln.lstrip(' ')
+                      if not stripped:
+                          out.append('')
+                          continue
+                      raw_indent = len(ln) - len(stripped)
+                      if rel == 0:
+                          desired = 4
+                      elif rel <= sig_end:
+                          desired = 4 + max(4, raw_indent - method_raw_indent)
+                      else:
+                          desired = 4 + max(0, raw_indent - method_raw_indent)
+                          if body_level_missing:
+                              desired += 4
+                      out.append(' ' * desired + stripped)
               return '\n'.join(out).rstrip() + '\n\n'
 
           canonical_execute = canonical_method_block(literals['new_execute'], drop_planning_comment=True)
@@ -109,7 +115,6 @@ jobs:
 
           op = Path('buddy_core/core/operator.py')
           op_lines = op.read_text(encoding='utf-8').splitlines(keepends=True)
-
           freeze_i = next((i for i, ln in enumerate(op_lines)
                            if ln.lstrip().startswith('def _freeze_external_step(')), None)
           planning_i = next((i for i, ln in enumerate(op_lines)
@@ -136,7 +141,6 @@ jobs:
           op_lines[ext_i:backend_i] = canonical_external.splitlines(keepends=True)
           op.write_text(''.join(op_lines), encoding='utf-8')
 
-          # Structural Elite Governance external-executor binding check.
           vp = Path('scripts/validate_elite_governance.py')
           vtext = vp.read_text(encoding='utf-8')
           if 'import ast\n' not in vtext:

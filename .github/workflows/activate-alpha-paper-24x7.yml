@@ -67,7 +67,7 @@ jobs:
           set -Eeuo pipefail
           test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
       - name: Activate fail-closed paper runtime
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}

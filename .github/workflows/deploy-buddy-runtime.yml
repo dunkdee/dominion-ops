@@ -6,6 +6,7 @@ on:
     paths:
       - 'buddy_core/**'
       - 'apps/youtube/**'
+      - 'scripts/runtime/remediate_authorization_key_boundary.sh'
       - 'tests/test_buddy_brain_router_v2.py'
       - 'tests/test_buddy_canonical_governance.py'
       - 'tests/test_buddy_standalone_runtime.py'
@@ -193,6 +194,11 @@ jobs:
           git pull --ff-only origin main
           test "$(git rev-parse HEAD)" = "$RUN_SHA"
 
+          # Preserve the existing authorization HMAC while relocating its
+          # canonical file outside HOME/repository/Buddy writable state. This
+          # must complete before any Buddy process is restarted.
+          bash "$repo/scripts/runtime/remediate_authorization_key_boundary.sh"
+
           avail_kb="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
           test "${avail_kb:-0}" -ge 524288
 
@@ -329,7 +335,7 @@ jobs:
           runtime=Path.home()/'buddy_core'
           files={}
           for rel in [
-              'core/authorization.py','core/brain.py','core/brain_router.py',
+              'core/__init__.py','core/authorization.py','core/brain.py','core/brain_router.py',
               'core/capability_health.py','core/message_delivery.py','core/operator.py',
               'core/operator_extensions.py','core/mcp_client.py','core/self_heal.py',
               'watchmen/saraqael.py',

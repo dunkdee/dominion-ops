@@ -1,8 +1,10 @@
 """Governed read-only internet research for Buddy.
 
-This module intentionally supports only public HTTP(S) reads. It does not log in,
-submit forms, post, upload, message, purchase, or mutate remote state. External
-interactive browser work belongs behind Founder authorization.
+This module supports only public-web retrieval. It does not log in, submit forms,
+post, upload, message, purchase, or mutate remote target state. Some read-only
+provider APIs use POST as their transport; that does not authorize browser or
+external side effects. External interactive work remains behind Founder
+authorization.
 """
 from __future__ import annotations
 
@@ -19,7 +21,12 @@ import json
 import os
 import requests
 
-USER_AGENT = "Dominion-Buddy-Research/2.0 (+read-only)"
+try:
+    from . import scrapegraph_provider
+except ImportError:  # standalone core runtime
+    import scrapegraph_provider
+
+USER_AGENT = "Dominion-Buddy-Research/2.1 (+read-only)"
 MAX_BYTES = 1_000_000
 MAX_REDIRECTS = 4
 
@@ -189,15 +196,8 @@ def search(query: str, limit: int = 6) -> list[dict]:
     return out
 
 
-
 def _serpapi_search(query: str, limit: int = 6) -> list:
-    """
-    SerpAPI is discovery only.
-
-    The API credential is used only for the direct SerpAPI request.
-    It never enters the generic _get()/redirect path and never appears
-    in returned evidence, errors, logs, receipts, or discovery URLs.
-    """
+    """SerpAPI is discovery only; its credential never enters generic fetches."""
     key = os.environ.get("SERPAPI_KEY", "")
     if not key or not query.strip():
         return []
@@ -206,7 +206,6 @@ def _serpapi_search(query: str, limit: int = 6) -> list:
 
     try:
         _public_host(endpoint)
-
         response = requests.get(
             endpoint,
             params={
@@ -223,17 +222,13 @@ def _serpapi_search(query: str, limit: int = 6) -> list:
             allow_redirects=False,
             stream=True,
         )
-
-        # Never follow a redirect carrying a credential-bearing request.
         if response.is_redirect or response.is_permanent_redirect:
             response.close()
             return []
-
         response.raise_for_status()
 
         chunks = []
         total = 0
-
         for chunk in response.iter_content(chunk_size=65536):
             if not chunk:
                 continue
@@ -245,12 +240,9 @@ def _serpapi_search(query: str, limit: int = 6) -> list:
 
         body = b"".join(chunks)
         data = json.loads(body.decode("utf-8", errors="replace"))
-
         discovered = []
-
         for item in data.get("organic_results", []):
             candidate_url = item.get("link", "")
-
             if not isinstance(candidate_url, str):
                 continue
             if not candidate_url.startswith(("http://", "https://")):
@@ -259,28 +251,20 @@ def _serpapi_search(query: str, limit: int = 6) -> list:
                 _public_host(candidate_url)
             except ValueError:
                 continue
-
-            # Discovery metadata only.
-            # research() must use only candidate_url for governed page fetch.
             discovered.append({
                 "url": candidate_url,
                 "title": item.get("title", ""),
                 "snippet": item.get("snippet", ""),
             })
-
             if len(discovered) >= limit:
                 break
-
         return discovered
-
     except Exception:
-        # Do not expose exception text from the credential-bearing request.
         return []
 
 
 def _ddg_json_search(query: str, limit: int = 6) -> list:
-    """DuckDuckGo Instant Answer JSON fallback. Returns limited metadata only.
-    Results are DEGRADED — never page-fetched, never HEALTHY."""
+    """DuckDuckGo Instant Answer JSON fallback; metadata only, never HEALTHY."""
     try:
         url = (
             "https://api.duckduckgo.com/?q="
@@ -333,11 +317,18 @@ def fetch_public_page(url: str) -> Source:
 
 
 def research(query: str, max_sources: int = 5) -> dict:
-    """Search via SerpAPI (A) -> DDG HTML (B) -> DDG JSON DEGRADED (C) -> UNAVAILABLE (D).
+    """Search with governed provider fallback.
+
+    Provider order:
+      A. ScrapeGraphAI V2 search/extraction when SGAI_API_KEY is configured.
+      B. SerpAPI discovery followed by Dominion's governed page fetch.
+      C. DuckDuckGo HTML discovery followed by governed page fetch.
+      D. DuckDuckGo Instant Answer JSON metadata only (DEGRADED).
+      E. UNAVAILABLE.
 
     backend_status values:
-      HEALTHY     - at least one governed page fetched (provider A or B)
-      DEGRADED    - only DDG Instant Answer JSON metadata; no page fetch performed
+      HEALTHY     - at least one public source has retrieved page content
+      DEGRADED    - only DDG Instant Answer JSON metadata; no page content
       UNAVAILABLE - no usable sources from any provider
     """
     fetched_at = datetime.now(timezone.utc).isoformat()
@@ -346,20 +337,64 @@ def research(query: str, max_sources: int = 5) -> dict:
     domains: set = set()
     backend_status = "UNAVAILABLE"
 
-    # Provider A: SerpAPI — discovery -> governed page fetch
+    # Provider A: ScrapeGraphAI V2. The provider performs read-only retrieval and
+    # returns page content plus source URLs. Every returned URL is independently
+    # checked against Dominion's public-host boundary before it becomes evidence.
+    if os.environ.get("SGAI_API_KEY", ""):
+        try:
+            sgai = scrapegraph_provider.search(query, max_sources * 2)
+        except Exception as exc:
+            sgai = {
+                "status": "ERROR",
+                "reason": type(exc).__name__,
+            }
+        if sgai.get("status") == "HEALTHY":
+            for item in sgai.get("results", []):
+                if len(sources) >= max_sources:
+                    break
+                item_url = item.get("url", "")
+                content = item.get("content", "")
+                if not isinstance(item_url, str) or not isinstance(content, str) or not content.strip():
+                    continue
+                try:
+                    _public_host(item_url)
+                except ValueError:
+                    errors.append({"provider": "scrapegraphai", "url": item_url, "error": "PublicHostRejected"})
+                    continue
+                domain = (urlparse(item_url).hostname or "").lower()
+                if domain in domains and len(domains) < max_sources:
+                    continue
+                domains.add(domain)
+                sources.append({
+                    "url": item_url,
+                    "title": str(item.get("title", "") or "")[:300],
+                    "excerpt": content.strip()[:12000],
+                    "fetched_at": item.get("fetched_at") or sgai.get("observed_at") or fetched_at,
+                    "status": 0,
+                    "quality": _quality(item_url),
+                    "provider": "scrapegraphai",
+                    "content_sha256": item.get("content_sha256"),
+                })
+            if sources:
+                backend_status = "HEALTHY"
+        elif sgai.get("status") == "ERROR":
+            errors.append({
+                "provider": "scrapegraphai",
+                "error": str(sgai.get("reason") or "PROVIDER_ERROR")[:100],
+            })
+
+    # Provider B: SerpAPI discovery -> governed page fetch.
     serpapi_candidates: list = []
-    if os.environ.get("SERPAPI_KEY", ""):
+    if backend_status != "HEALTHY" and os.environ.get("SERPAPI_KEY", ""):
         serpapi_candidates = _serpapi_search(query, max_sources * 2)
 
-    if serpapi_candidates:
+    if backend_status != "HEALTHY" and serpapi_candidates:
         for item in serpapi_candidates:
             if len(sources) >= max_sources:
                 break
-            item_url = item.get("url", "")   # real page URL, never carries the API key
+            item_url = item.get("url", "")
             try:
                 src = fetch_public_page(item_url)
-                # SerpAPI: title/excerpt/status/quality from fetch_public_page ONLY.
-                # Do NOT fall back to item["title"] — SerpAPI title is discovery metadata.
                 domain = (urlparse(src.url).hostname or "").lower()
                 if domain in domains and len(domains) < max_sources:
                     continue
@@ -369,7 +404,7 @@ def research(query: str, max_sources: int = 5) -> dict:
             except Exception as exc:
                 errors.append({"url": item_url, "error": type(exc).__name__})
 
-    # Provider B: DDG HTML — discovery -> governed page fetch
+    # Provider C: DDG HTML discovery -> governed page fetch.
     if backend_status != "HEALTHY":
         ddg_candidates: list = []
         try:
@@ -384,7 +419,7 @@ def research(query: str, max_sources: int = 5) -> dict:
             try:
                 src = fetch_public_page(item_url)
                 if not src.title:
-                    src.title = item.get("title", "")   # DDG HTML: preserve existing behaviour
+                    src.title = item.get("title", "")
                 domain = (urlparse(src.url).hostname or "").lower()
                 if domain in domains and len(domains) < max_sources:
                     continue
@@ -394,7 +429,7 @@ def research(query: str, max_sources: int = 5) -> dict:
             except Exception as exc:
                 errors.append({"url": item_url, "error": type(exc).__name__})
 
-    # Provider C: DDG JSON — DEGRADED only, no page fetch, never promoted to HEALTHY
+    # Provider D: DDG JSON — DEGRADED only, no page fetch, never HEALTHY.
     if backend_status == "UNAVAILABLE":
         ddg_json = _ddg_json_search(query, max_sources * 2)
         if ddg_json:
@@ -407,7 +442,6 @@ def research(query: str, max_sources: int = 5) -> dict:
                 if domain in domains:
                     continue
                 domains.add(domain)
-                # status=0, quality=0.0, excerpt="" signal DEGRADED (not page-fetched)
                 sources.append({
                     "url": url,
                     "title": item.get("title", ""),
@@ -416,8 +450,6 @@ def research(query: str, max_sources: int = 5) -> dict:
                     "status": 0,
                     "quality": 0.0,
                 })
-
-    # Provider D: UNAVAILABLE — no candidates from any provider
 
     return {
         "query": query,

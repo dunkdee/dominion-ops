@@ -1,0 +1,177 @@
+name: Apply Governed External Message Backend
+
+on:
+  push:
+    branches:
+      - capability/governed-external-message-backend
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: capability/governed-external-message-backend
+          fetch-depth: 0
+
+      - name: Apply bounded wiring patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          operator_path = Path('buddy_core/core/operator.py')
+          text = operator_path.read_text(encoding='utf-8')
+
+          old_freeze = '''    def _freeze_external_step(self, step: dict, context: dict) -> dict:
+              """Bind authority to the exact content/destination the executor will receive."""
+              frozen = copy.deepcopy(step)
+              if "content" not in frozen or frozen.get("content") is None:
+                  outputs = [value for value in context.get("outputs", []) if value is not None]
+                  frozen["content"] = copy.deepcopy(outputs[-1]) if outputs else None
+              # Destination may legitimately be None, but no later executor may invent one.
+              frozen["destination"] = step.get("destination")
+              return frozen
+          '''
+          new_freeze = '''    def _freeze_external_step(self, step: dict, context: dict) -> dict:
+              """Bind authority to the exact content/destination the executor will receive."""
+              if step.get("capability") == "external.message":
+                  try:
+                      from core.message_delivery import freeze_authorized_email_step
+                  except ImportError:
+                      from buddy_core.core.message_delivery import freeze_authorized_email_step
+                  return freeze_authorized_email_step(
+                      copy.deepcopy(step),
+                      list(context.get("outputs", [])),
+                      self.staged_dir,
+                  )
+              frozen = copy.deepcopy(step)
+              if "content" not in frozen or frozen.get("content") is None:
+                  outputs = [value for value in context.get("outputs", []) if value is not None]
+                  frozen["content"] = copy.deepcopy(outputs[-1]) if outputs else None
+              # Destination may legitimately be None, but no later executor may invent one.
+              frozen["destination"] = step.get("destination")
+              return frozen
+          '''
+          if text.count(old_freeze) != 1:
+              raise SystemExit('freeze block did not match exactly once')
+          text = text.replace(old_freeze, new_freeze)
+
+          old_exec_prep = '''                frozen_step = self._freeze_external_step(step, context)
+                          destination = frozen_step.get("destination")
+                          supplied = frozen_step.get("authorization_id")
+          '''
+          new_exec_prep = '''                try:
+                              frozen_step = self._freeze_external_step(step, context)
+                          except (OperatorError, TypeError, ValueError) as exc:
+                              receipts.append({
+                                  "step": index,
+                                  "capability": step["capability"],
+                                  "status": "BLOCKED",
+                                  "attempts": 0,
+                                  "errors": [{
+                                      "attempt": 0,
+                                      "error": "ExternalPayloadPreparationError",
+                                      "detail": str(exc)[:200],
+                                  }],
+                                  "result": None,
+                                  "evidence": [],
+                              })
+                              break
+                          destination = frozen_step.get("destination")
+                          supplied = frozen_step.get("authorization_id")
+          '''
+          if text.count(old_exec_prep) != 1:
+              raise SystemExit('execution preparation block did not match exactly once')
+          text = text.replace(old_exec_prep, new_exec_prep)
+
+          old_message = '''    def _external_message(self, step: dict, context: dict) -> dict:
+              return self._no_delivery_backend("external.message")
+          '''
+          new_message = '''    def _external_message(self, step: dict, context: dict) -> dict:
+              # `_execute_external` passes only the authorization-fingerprinted shape.
+              # Ambient/regenerated mission context is intentionally ignored here.
+              try:
+                  from core.message_delivery import deliver_authorized_email
+              except ImportError:
+                  from buddy_core.core.message_delivery import deliver_authorized_email
+              return deliver_authorized_email(step)
+          '''
+          if text.count(old_message) != 1:
+              raise SystemExit('external.message block did not match exactly once')
+          operator_path.write_text(text.replace(old_message, new_message), encoding='utf-8')
+
+          delivery_path = Path('buddy_core/core/message_delivery.py')
+          delivery = delivery_path.read_text(encoding='utf-8')
+          old_structured = '''    supplied = frozen.get("content")
+              if supplied is None:
+                  candidates = [value for value in outputs if value is not None]
+                  supplied = candidates[-1] if candidates else None
+              raw = _artifact_text(supplied, staged_root)
+              subject, body = _subject_and_body(raw)
+          '''
+          new_structured = '''    supplied = frozen.get("content")
+              if supplied is None:
+                  candidates = [value for value in outputs if value is not None]
+                  supplied = candidates[-1] if candidates else None
+
+              # A resumed held plan already contains the canonical envelope. Preserve
+              # it byte-for-byte so replay executes the exact payload Founder granted.
+              if isinstance(supplied, dict):
+                  existing_subject = str(supplied.get("subject") or "").strip()
+                  existing_body = str(supplied.get("body_text") or "")
+                  existing_hash = str(supplied.get("content_sha256") or "").strip().lower()
+                  if existing_subject and existing_body:
+                      actual = _sha256_text(existing_subject + "\\n" + existing_body)
+                      if existing_hash != actual:
+                          raise ValueError("external.message frozen content hash mismatch")
+                      if len(existing_subject) > _MAX_SUBJECT or len(existing_body.encode("utf-8")) > _MAX_BODY_BYTES:
+                          raise ValueError("external.message frozen content exceeds bounded size")
+                      frozen["destination"] = destination
+                      frozen["content"] = {
+                          "subject": existing_subject,
+                          "body_text": existing_body,
+                          "content_sha256": existing_hash,
+                      }
+                      return frozen
+
+              raw = _artifact_text(supplied, staged_root)
+              subject, body = _subject_and_body(raw)
+          '''
+          if delivery.count(old_structured) != 1:
+              raise SystemExit('structured resume block did not match exactly once')
+          delivery_path.write_text(delivery.replace(old_structured, new_structured), encoding='utf-8')
+          PY
+
+      - name: Run focused regression suite
+        shell: bash
+        env:
+          PYTHONPATH: .:buddy_core
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r requirements-test.txt
+          python -m py_compile buddy_core/core/operator.py buddy_core/core/message_delivery.py
+          python -m pytest -q \
+            tests/test_governed_external_message_backend.py \
+            tests/test_buddy_authority_policy.py \
+            tests/test_buddy_authority_execution.py \
+            tests/test_pr235_final_security_closure.py
+
+      - name: Commit wiring and remove applicator
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/apply-governed-external-message-backend.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add buddy_core/core/operator.py buddy_core/core/message_delivery.py .github/workflows/apply-governed-external-message-backend.yml
+          git diff --cached --check
+          git commit -m "feat: wire governed external message delivery"
+          git push origin HEAD:capability/governed-external-message-backend

@@ -1,0 +1,32 @@
+{
+  "schema": "dominion-remediation-validation-receipt-v1",
+  "pr": 235,
+  "validated_source_sha": "c682214708d0a24984f4dcb48a5cf73783e98c76",
+  "source_parent_before_final_authority_fix": "55545be0fc12d7fac77dab6b0f954b6bef356542",
+  "workflow_run_id": 33940738414,
+  "workflow_job_id": 101237537611,
+  "focused_regressions": {
+    "status": "PASS",
+    "passed": 91
+  },
+  "elite_governance": {
+    "status": "PASS",
+    "failure_count": 0,
+    "fail_closed": true
+  },
+  "full_python_suite": {
+    "status": "PASS",
+    "passed": 880,
+    "warnings": 74
+  },
+  "review_closure": {
+    "authorization_parent_directory_fsync_fail_closed": true,
+    "held_plan_directory_exact_0700_on_posix": true,
+    "held_plan_permission_failure_fails_closed": true,
+    "persistence_failure_preserves_approval_id_and_payload_hash": true,
+    "temporary_helper_files_removed": true
+  },
+  "release_claim": "TESTED_NOT_DEPLOYED_NOT_PROVEN",
+  "next_gate": "current_head_independent_review_then_five_council",
+  "note": "This non-executable receipt records the tested source SHA and triggers normal PR CI on a user-authored head. It does not authorize merge or deployment."
+}

@@ -1,0 +1,368 @@
+name: PR235 Final Blocker Closure V15
+
+on:
+  push:
+    branches:
+      - governance/elite-end-to-end-remediation
+
+permissions:
+  contents: write
+
+jobs:
+  close-final-review-blockers:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: governance/elite-end-to-end-remediation
+          fetch-depth: 0
+
+      - name: Verify lineage
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git merge-base --is-ancestor 5b6a9baa8aed9deefbb6a61f4b17bc36ce643e99 HEAD
+          test -z "$(git status --porcelain)"
+
+      - name: Apply exact final blocker fixes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import textwrap
+
+          def read(path):
+              return Path(path).read_text(encoding="utf-8")
+
+          def write(path, value):
+              Path(path).write_text(value, encoding="utf-8")
+
+          # ---- Buddy external delivery: meaningful receipt + Saraqael binding ----
+          path = "buddy_core/core/operator.py"
+          source = read(path)
+
+          if "governed_audit_log" not in source:
+              anchor = "from buddy_core.core.authorization import AuthorizationError, AuthorizationLedger, payload_fingerprint\n"
+              if anchor not in source:
+                  raise SystemExit("operator authorization import anchor missing")
+              source = source.replace(
+                  anchor,
+                  anchor + "\ntry:\n    from watchmen.saraqael import log as governed_audit_log\nexcept ImportError:  # repository/package execution used by CI/tests\n    from buddy_core.watchmen.saraqael import log as governed_audit_log\n",
+                  1,
+              )
+
+          method_match = re.search(
+              r"\n    def _execute_external\(self, index: int, step: dict, cap: dict, context: dict,\n\s+authorization: dict\) -> dict:\n",
+              source,
+          )
+          if not method_match:
+              raise SystemExit("operator external method signature not found")
+
+          helper = '''
+    @staticmethod
+    def _validate_delivery_evidence(capability: str, evidence: Any) -> tuple[bool, str | None]:
+        """Require capability-specific receipt identity, provenance, and observation time."""
+        if not isinstance(evidence, list) or not evidence:
+            return False, None
+
+        receipt_keys = {
+            "external.publish": ("platform_receipt_id", "publication_id", "post_id", "receipt_id"),
+            "external.message": ("send_receipt_id", "message_id", "receipt_id"),
+            "external.spend": ("financial_receipt_id", "transaction_id", "payment_id", "receipt_id"),
+        }.get(capability, ("receipt_id",))
+        provenance_keys = ("platform", "provider", "system", "source")
+        time_keys = ("observed_at", "delivered_at", "timestamp", "created_at")
+
+        for item in evidence:
+            if not isinstance(item, dict) or not item:
+                continue
+            receipt_id = next(
+                (str(item.get(key)).strip() for key in receipt_keys if str(item.get(key) or "").strip()),
+                None,
+            )
+            provenance = next(
+                (str(item.get(key)).strip() for key in provenance_keys if str(item.get(key) or "").strip()),
+                None,
+            )
+            observed_at = next(
+                (str(item.get(key)).strip() for key in time_keys if str(item.get(key) or "").strip()),
+                None,
+            )
+            if receipt_id and provenance and observed_at:
+                return True, receipt_id
+        return False, None
+'''
+          source = source[:method_match.start()] + "\n" + helper + source[method_match.start():]
+
+          method_start = source.index("    def _execute_external(")
+          next_method = source.index("\n    def _no_delivery_backend", method_start)
+          method = source[method_start:next_method]
+          evidence_start = method.index('        evidence = outcome.get("evidence")')
+          prefix = method[:evidence_start]
+          replacement_tail = '''        evidence = outcome.get("evidence")
+        evidence_ok, receipt_id = self._validate_delivery_evidence(
+            step["capability"], evidence
+        )
+        if not evidence_ok:
+            return {**base, "status": "DELIVERED_UNVERIFIED",
+                    "errors": [{"attempt": 1, "error": "DeliveryEvidenceMissing",
+                                "detail": "delivery occurred but no capability-specific receipt with provenance and timestamp was present"}],
+                    "result": outcome.get("result"),
+                    "evidence": evidence if isinstance(evidence, list) else []}
+
+        evidence_hash = hashlib.sha256(
+            json.dumps(
+                evidence,
+                sort_keys=True,
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        try:
+            governed_entry = governed_audit_log(
+                "buddy_operator",
+                "external_action_executed",
+                "ok",
+                {
+                    "capability": step["capability"],
+                    "approval_id": authorization.get("approval_id"),
+                    "destination": step.get("destination"),
+                    "payload_hash": authorization.get("payload_hash"),
+                    "delivery_receipt_id": receipt_id,
+                    "delivery_evidence_sha256": evidence_hash,
+                },
+            )
+        except Exception as exc:
+            return {**base, "status": "DELIVERED_AUDIT_UNAVAILABLE",
+                    "errors": [{"attempt": 1, "error": "PostDeliveryAuditUnavailable",
+                                "detail": type(exc).__name__}],
+                    "result": outcome.get("result"), "evidence": evidence}
+
+        return {**base, "status": "VERIFIED", "errors": [],
+                "result": outcome.get("result"), "evidence": evidence,
+                "governed_audit": {
+                    "seq": governed_entry.get("seq"),
+                    "hash": governed_entry.get("hash"),
+                    "event": governed_entry.get("event"),
+                }}
+'''
+          new_method = prefix + replacement_tail
+          source = source[:method_start] + new_method + source[next_method:]
+          write(path, source)
+
+          # ---- Deployment rollback: never restore patches on an unknown commit ----
+          path = "scripts/deploy_foundation_vm_remote.sh"
+          source = read(path)
+          old = '''  set +e
+  # Move HEAD and worktree back to the previous release. `switch --detach`
+  # without --force refuses on unexpected drift instead of destroying it,
+  # which is the fail-closed behaviour governance requires.
+  git switch --detach --quiet "$PREVIOUS_SHA"
+  git clean -fdq
+
+  if [ -s "$LOCAL_STATE_BACKUP/index.patch" ]; then
+    git apply --index --binary --whitespace=nowarn "$LOCAL_STATE_BACKUP/index.patch"
+    rc=$?
+  fi
+'''
+          new = '''  set +e
+  # A failed switch is terminal for restore: never clean/apply state on an
+  # unknown commit.
+  restore_output="$(git switch --detach --quiet "$PREVIOUS_SHA" 2>&1)"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    clean_output="$(git clean -fdq 2>&1)"
+    rc=$?
+    if [ -n "$clean_output" ]; then
+      restore_output="${restore_output};${clean_output}"
+    fi
+  fi
+
+  if [ "$rc" -eq 0 ] && [ -s "$LOCAL_STATE_BACKUP/index.patch" ]; then
+    restore_output="$(git apply --index --binary --whitespace=nowarn "$LOCAL_STATE_BACKUP/index.patch" 2>&1)"
+    rc=$?
+  fi
+'''
+          if source.count(old) != 1:
+              raise SystemExit(f"rollback block match count={source.count(old)}")
+          write(path, source.replace(old, new, 1))
+
+          # ---- Authority execution regressions ----
+          path = "tests/test_buddy_authority_execution.py"
+          source = read(path)
+          if "from unittest import mock" not in source:
+              source = source.replace("import unittest\n", "import unittest\nfrom unittest import mock\n", 1)
+
+          old_evidence = '''            return {"delivered": True,
+                    "result": {"posted": True, "url": "https://example.invalid/p/1"},
+                    "evidence": [{"url": "https://example.invalid/p/1"}]}
+'''
+          new_evidence = '''            return {"delivered": True,
+                    "result": {"posted": True, "url": "https://example.invalid/p/1"},
+                    "evidence": [{
+                        "platform_receipt_id": "post_123",
+                        "platform": "example.invalid",
+                        "observed_at": "2026-09-05T06:40:00Z",
+                        "url": "https://example.invalid/p/1",
+                    }]}
+'''
+          if source.count(old_evidence) != 1:
+              raise SystemExit(f"valid evidence fixture match count={source.count(old_evidence)}")
+          source = source.replace(old_evidence, new_evidence, 1)
+
+          old_assert = '''        record = self.run_plan(authorization_id=held["approval_id"])
+        self.assertEqual(record["status"], "COMPLETE")
+        receipt = self.last(record)
+        self.assertEqual(receipt["status"], "VERIFIED")
+        self.assertTrue(receipt["result"]["posted"])
+'''
+          new_assert = '''        with mock.patch(
+            "core.operator.governed_audit_log",
+            return_value={"seq": 9, "hash": "a" * 64, "event": "external_action_executed"},
+        ) as governed_audit:
+            record = self.run_plan(authorization_id=held["approval_id"])
+        self.assertEqual(record["status"], "COMPLETE")
+        receipt = self.last(record)
+        self.assertEqual(receipt["status"], "VERIFIED")
+        self.assertTrue(receipt["result"]["posted"])
+        self.assertEqual(receipt["governed_audit"]["seq"], 9)
+        governed_audit.assert_called_once()
+'''
+          if source.count(old_assert) != 1:
+              raise SystemExit(f"valid delivery assertion match count={source.count(old_assert)}")
+          source = source.replace(old_assert, new_assert, 1)
+
+          anchor = "    def test_every_declared_external_capability_has_a_bound_executor(self):\n"
+          if anchor not in source:
+              raise SystemExit("authority test insertion anchor missing")
+          added = '''    def test_error_only_evidence_is_not_a_delivery_receipt(self):
+        def deliver(step, context):
+            return {
+                "delivered": True,
+                "result": {"posted": True},
+                "evidence": [{"error": "receipt unavailable"}],
+            }
+
+        self.operator._external_executors["external:publish"] = deliver
+        held = self.run_plan()["held"]
+        self.ledger.grant(held["approval_id"])
+        record = self.run_plan(authorization_id=held["approval_id"])
+        self.assertEqual(record["status"], "BLOCKED")
+        receipt = self.last(record)
+        self.assertEqual(receipt["status"], "DELIVERED_UNVERIFIED")
+
+    def test_governed_audit_failure_blocks_verified_completion(self):
+        def deliver(step, context):
+            return {
+                "delivered": True,
+                "result": {"posted": True},
+                "evidence": [{
+                    "platform_receipt_id": "post_456",
+                    "platform": "example.invalid",
+                    "observed_at": "2026-09-05T06:41:00Z",
+                }],
+            }
+
+        self.operator._external_executors["external:publish"] = deliver
+        held = self.run_plan()["held"]
+        self.ledger.grant(held["approval_id"])
+        with mock.patch("core.operator.governed_audit_log", side_effect=RuntimeError("audit down")):
+            record = self.run_plan(authorization_id=held["approval_id"])
+        self.assertEqual(record["status"], "BLOCKED")
+        self.assertEqual(self.last(record)["status"], "DELIVERED_AUDIT_UNAVAILABLE")
+
+'''
+          source = source.replace(anchor, added + anchor, 1)
+          write(path, source)
+
+          regression = r'''"""Final independent-review blocker regressions for PR #235."""
+          from __future__ import annotations
+
+          import unittest
+          from pathlib import Path
+
+          ROOT = Path(__file__).resolve().parents[1]
+
+
+          class FinalReviewBlockerTests(unittest.TestCase):
+              def test_bridge_bearer_authorization_is_real_token_validation(self):
+                  source = (ROOT / "buddy_core" / "buddy_bridge_api.py").read_text(encoding="utf-8")
+                  self.assertIn('expected = f"Bearer {BUDDY_WEB_TOKEN}"', source)
+                  self.assertIn("hmac.compare_digest(auth, expected)", source)
+                  self.assertNotIn('Authorization: ******', source)
+
+              def test_rollback_gates_clean_and_patch_on_successful_switch(self):
+                  source = (ROOT / "scripts" / "deploy_foundation_vm_remote.sh").read_text(encoding="utf-8")
+                  restore = source.split("restore_local_state()", 1)[1].split("quarantine_local_state()", 1)[0]
+                  self.assertIn('restore_output="$(git switch --detach --quiet "$PREVIOUS_SHA" 2>&1)"', restore)
+                  self.assertIn('if [ "$rc" -eq 0 ]; then', restore)
+                  self.assertIn('if [ "$rc" -eq 0 ] && [ -s "$LOCAL_STATE_BACKUP/index.patch" ]', restore)
+
+              def test_external_delivery_uses_tamper_evident_audit(self):
+                  source = (ROOT / "buddy_core" / "core" / "operator.py").read_text(encoding="utf-8")
+                  external = source.split("def _execute_external", 1)[1].split("def _no_delivery_backend", 1)[0]
+                  self.assertIn("governed_audit_log(", external)
+                  self.assertIn("delivery_evidence_sha256", external)
+                  self.assertNotIn('audit("external_action_executed"', external)
+
+              def test_external_delivery_requires_receipt_provenance_and_time(self):
+                  source = (ROOT / "buddy_core" / "core" / "operator.py").read_text(encoding="utf-8")
+                  self.assertIn("platform_receipt_id", source)
+                  self.assertIn("provenance_keys", source)
+                  self.assertIn("time_keys", source)
+
+
+          if __name__ == "__main__":
+              unittest.main()
+          '''
+          Path("tests/test_pr235_final_review_blockers.py").write_text(
+              textwrap.dedent(regression), encoding="utf-8"
+          )
+
+          for helper in (
+              ".github/workflows/pr235-final-blocker-fix-v14.yml",
+              ".github/workflows/pr235-final-blocker-fix-v15.yml",
+          ):
+              hp = Path(helper)
+              if hp.exists():
+                  hp.unlink()
+
+          print("PR235_FINAL_BLOCKERS_V15_PATCHED")
+          PY
+
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
+
+      - name: Run focused closure tests
+        run: |
+          set -Eeuo pipefail
+          python -m pytest -q \
+            tests/test_pr235_final_review_blockers.py \
+            tests/test_buddy_authority_execution.py \
+            tests/test_pr235_approval_auth_boundary.py \
+            tests/test_pr235_final_authority_closure.py \
+            tests/test_watchmen_review_closure.py
+
+      - name: Run Elite Governance validator
+        run: python scripts/validate_elite_governance.py
+
+      - name: Run full repository Python suite
+        run: python -m pytest -q
+
+      - name: Publish tested final blocker fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check
+          test ! -e .github/workflows/pr235-final-blocker-fix-v14.yml
+          test ! -e .github/workflows/pr235-final-blocker-fix-v15.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: close final PR235 review blockers"
+          git push origin HEAD:governance/elite-end-to-end-remediation
+          echo "FINAL_FIX_SHA=$(git rev-parse HEAD)"

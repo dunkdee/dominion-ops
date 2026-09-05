@@ -1,9 +1,9 @@
 name: Governed External Message Canary
 
-# Verifies the deployed Buddy runtime and, only when explicitly confirmed,
-# proves ONE Founder-authorized external.message delivery through Buddy's real
-# authority path. The recipient is always supplied explicitly by the Founder at
-# dispatch time; nothing is inferred and no default recipient exists.
+# Routine verification is system-owned: every successful Buddy Runtime deploy
+# automatically runs VERIFY ONLY against the exact deployed SHA. External
+# delivery remains Founder-gated and can only occur through an explicit manual
+# SEND CANARY dispatch.
 
 on:
   workflow_dispatch:
@@ -20,6 +20,9 @@ on:
         description: "Type SEND CANARY to deliver, or VERIFY ONLY to stop before sending"
         required: true
         type: string
+  workflow_run:
+    workflows: ["Deploy Buddy Runtime"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -30,21 +33,51 @@ concurrency:
 
 jobs:
   canary:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: foundation-vm-production
     steps:
-      - name: Checkout main
+      - name: Resolve execution mode
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_RECIPIENT: ${{ inputs.recipient }}
+          MANUAL_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          MANUAL_CONFIRM: ${{ inputs.confirm }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+          AUTO_RECIPIENT: ${{ vars.GOVERNED_CANARY_RECIPIENT }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            recipient="${AUTO_RECIPIENT:-dewayne@dominionhealing.org}"
+            expected_sha="$DEPLOY_SHA"
+            confirm="VERIFY ONLY"
+            mode="AUTO_VERIFY_AFTER_DEPLOY"
+          else
+            recipient="$MANUAL_RECIPIENT"
+            expected_sha="$MANUAL_EXPECTED_SHA"
+            confirm="$MANUAL_CONFIRM"
+            mode="MANUAL_FOUNDER_DISPATCH"
+          fi
+          printf 'recipient=%s\n' "$recipient" >> "$GITHUB_OUTPUT"
+          printf 'expected_sha=%s\n' "$expected_sha" >> "$GITHUB_OUTPUT"
+          printf 'confirm=%s\n' "$confirm" >> "$GITHUB_OUTPUT"
+          printf 'mode=%s\n' "$mode" >> "$GITHUB_OUTPUT"
+          echo "CANARY_EXECUTION_MODE=$mode"
+
+      - name: Checkout exact verification source
         uses: actions/checkout@v5
         with:
-          ref: main
+          ref: ${{ steps.resolve.outputs.expected_sha }}
 
       - name: Validate inputs and Founder authority
         shell: bash
         env:
-          RECIPIENT: ${{ inputs.recipient }}
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
-          CONFIRM: ${{ inputs.confirm }}
+          RECIPIENT: ${{ steps.resolve.outputs.recipient }}
+          EXPECTED_SHA: ${{ steps.resolve.outputs.expected_sha }}
+          CONFIRM: ${{ steps.resolve.outputs.confirm }}
           ACTOR: ${{ github.actor }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           FOUNDER_ACTOR: dunkdee
@@ -92,9 +125,9 @@ jobs:
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
-          RECIPIENT: ${{ inputs.recipient }}
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
-          CONFIRM: ${{ inputs.confirm }}
+          RECIPIENT: ${{ steps.resolve.outputs.recipient }}
+          EXPECTED_SHA: ${{ steps.resolve.outputs.expected_sha }}
+          CONFIRM: ${{ steps.resolve.outputs.confirm }}
         run: |
           set -euo pipefail
           remote_dir="/tmp/dominion_governed_canary_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
@@ -129,8 +162,7 @@ jobs:
 
           # Execute the canary with the exact Python runtime already proven by
           # the healthy Buddy web service. Bare /usr/bin/python3 on the VM does
-          # not necessarily carry Buddy's installed dependencies (python-dotenv
-          # was the observed mismatch in canary run 33967100286).
+          # not necessarily carry Buddy's installed dependencies.
           buddy_exec="$(systemctl show dominion-buddy-web.service -p ExecStart --value 2>/dev/null || true)"
           buddy_python="$(printf '%s\n' "$buddy_exec" | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)"
           test -n "$buddy_python" || { echo 'CANARY_BUDDY_PYTHON=UNRESOLVED'; exit 8; }

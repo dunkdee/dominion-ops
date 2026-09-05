@@ -1,10 +1,14 @@
 name: PR235 Final Security Closure
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - governance/elite-end-to-end-remediation
+    paths:
+      - governance/remediation_receipts/pr235-founder-apply.json
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: pr235-final-security-closure
@@ -12,32 +16,62 @@ concurrency:
 
 jobs:
   close-final-security-findings:
-    if: ${{ false }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/governance/elite-end-to-end-remediation'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Checkout exact remediation branch
+      - name: Checkout exact authorized trigger SHA
         uses: actions/checkout@v4
         with:
-          ref: governance/elite-end-to-end-remediation
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Verify bounded lineage
+      - name: Verify Founder-bounded lineage and exact applicator
         shell: bash
+        env:
+          AUTHORIZED_BASE_SHA: ce2f90f68f4f1d8f2975d8d1dc112badc89303fd
+          EXPECTED_APPLICATOR_BLOB: b6e02b0ef740c0cb4a5f0fa0ab80b82d009c7ddd
         run: |
           set -euo pipefail
-          test "$(git branch --show-current)" = "governance/elite-end-to-end-remediation"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^^)" = "$AUTHORIZED_BASE_SHA"
           git merge-base --is-ancestor 07011a941b86d829a010ce9267e845b5fb68ec9c HEAD
+          test "$(git diff --name-only HEAD^^ HEAD^)" = ".github/workflows/pr235-final-security-closure.yml"
+          test "$(git diff --name-only HEAD^ HEAD)" = "governance/remediation_receipts/pr235-founder-apply.json"
+          test "$(git hash-object scripts/pr235_final_security_closure.py)" = "$EXPECTED_APPLICATOR_BLOB"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p = Path('governance/remediation_receipts/pr235-founder-apply.json')
+          data = json.loads(p.read_text(encoding='utf-8'))
+          assert data == {
+              'schema': 'dominion-founder-apply-v1',
+              'pr': 235,
+              'branch': 'governance/elite-end-to-end-remediation',
+              'authorized_base_sha': 'ce2f90f68f4f1d8f2975d8d1dc112badc89303fd',
+              'applicator_blob_sha': 'b6e02b0ef740c0cb4a5f0fa0ab80b82d009c7ddd',
+              'scope': 'Apply the existing PR235 final security closure only; test; self-remove; do not merge or deploy.',
+              'approver': 'Founder',
+              'release_authorized': False,
+          }
+          PY
           test -z "$(git status --porcelain)"
 
       - name: Apply exact security closure
         run: python scripts/pr235_final_security_closure.py
 
-      - name: Remove one-shot applicator before tested commit
+      - name: Remove one-shot execution path before tested commit
         shell: bash
         run: |
           set -euo pipefail
-          git rm scripts/pr235_final_security_closure.py .github/workflows/pr235-final-security-closure.yml
+          git rm \
+            scripts/pr235_final_security_closure.py \
+            .github/workflows/pr235-final-security-closure.yml \
+            governance/remediation_receipts/pr235-founder-apply.json
+          if find .github/workflows -maxdepth 1 -type f \( -name 'pr235-review-fix*.yml' -o -name 'pr235-review-fix*.yaml' -o -name 'pr235-final-security-closure.yml' \) | grep -q .; then
+            echo 'temporary PR235 remediation workflow remains' >&2
+            exit 1
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -62,7 +96,12 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add buddy_core/core/authorization.py buddy_core/core/operator.py buddy_core/buddy_web.py buddy_core/watchmen/saraqael.py tests/test_pr235_final_security_closure.py
+          git add \
+            buddy_core/core/authorization.py \
+            buddy_core/core/operator.py \
+            buddy_core/buddy_web.py \
+            buddy_core/watchmen/saraqael.py \
+            tests/test_pr235_final_security_closure.py
           git commit -m "fix: close final authority and audit attack surface"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           test -z "$(git status --porcelain)"
@@ -97,6 +136,7 @@ jobs:
       - name: Record exact-SHA closure receipt
         env:
           CODE_SHA: ${{ steps.code.outputs.sha }}
+          AUTH_TRIGGER_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -113,6 +153,13 @@ jobs:
           receipt = {
               "schema": "dominion-remediation-receipt-v1",
               "pr": 235,
+              "authorization": {
+                  "approver": "Founder",
+                  "authorized_base_sha": "ce2f90f68f4f1d8f2975d8d1dc112badc89303fd",
+                  "trigger_sha": os.environ["AUTH_TRIGGER_SHA"],
+                  "applicator_blob_sha": "b6e02b0ef740c0cb4a5f0fa0ab80b82d009c7ddd",
+                  "scope": "PR235 final security closure only",
+              },
               "tested_code_sha": os.environ["CODE_SHA"],
               "focused_suite": {"status": "PASS", "summary": summary("/tmp/pr235-focused.log")},
               "elite_governance": {"status": "PASS", "summary": summary("/tmp/pr235-elite.log")},
@@ -146,5 +193,6 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin governance/elite-end-to-end-remediation
+          test "$(git rev-parse origin/governance/elite-end-to-end-remediation)" = "$GITHUB_SHA"
           git merge-base --is-ancestor origin/governance/elite-end-to-end-remediation HEAD
           git push origin HEAD:governance/elite-end-to-end-remediation

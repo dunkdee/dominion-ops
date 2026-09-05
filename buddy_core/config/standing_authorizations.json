@@ -1,7 +1,7 @@
 {
   "schema": "dominion-standing-authorizations-v1",
-  "version": "1.1.0",
-  "updated_at": "2026-08-31T21:40:00-04:00",
+  "version": "1.2.0",
+  "updated_at": "2026-09-05T12:24:00-04:00",
   "authorizations": [
     {
       "id": "founder-safe-internal-self-heal-v1",
@@ -44,6 +44,47 @@
         "rollback when acceptance fails and rollback is technically possible",
         "record a receipt",
         "report unresolved or high-consequence failures as HELD or BLOCKED instead of pretending they were fixed"
+      ]
+    },
+    {
+      "id": "founder-governed-obsidian-sync-v1",
+      "status": "ACTIVE",
+      "authority": "authenticated_founder_directive",
+      "scope": "governed_internal_knowledge_mirror",
+      "purpose": "Keep the Dominion Brain / Obsidian operational mirror synchronized continuously without Founder babysitting while preserving the existing truth, security, and consequence boundaries.",
+      "allowed": [
+        "automatically render and publish the Dominion Brain from the exact current main commit after relevant governed source changes",
+        "run an hourly reconciliation against the current main commit so missed or interrupted synchronization self-recovers",
+        "update the generated Dominion-Brain mirror through the reviewed production publish workflow",
+        "seed only missing sanitized operator-owned note files without overwriting existing operator notes",
+        "reload the already-governed vault Caddy route while preserving authenticated access",
+        "verify loopback-only backend binding, authenticated external health, and unauthenticated HTTP 401 enforcement",
+        "serialize production work through the foundation-vm-production concurrency boundary",
+        "record exact commit SHA, validation outcome, publish outcome, route acceptance, rollback state, and workflow receipt"
+      ],
+      "forbidden_without_fresh_founder_authorization": [
+        "make the Dominion vault unauthenticated or publicly readable",
+        "publish customer records secrets tokens credentials raw environment values or private keys",
+        "change DNS firewall public ingress provider identity authentication policy or credential values",
+        "send external messages or customer communications",
+        "spend or move money",
+        "place or modify live trades or orders",
+        "overwrite existing operator-owned note files",
+        "force-push rewrite git history or bypass repository protections",
+        "expand agent permissions beyond this standing authorization",
+        "treat Obsidian as runtime proof when production evidence disagrees"
+      ],
+      "requirements": [
+        "source must be the exact current main commit",
+        "brain input gates and render verification must pass",
+        "VM repository synchronization must be fast-forward only",
+        "tracked VM state must be clean after synchronization",
+        "deployment must preserve rollback material and automatically restore the previous brain generation on failure",
+        "vault backend must remain loopback-only",
+        "authenticated vault route must pass and unauthenticated access must return HTTP 401",
+        "no secret values may be written to logs source control receipts prompts or Obsidian",
+        "every automatic run must emit a retrievable receipt",
+        "failures must remain visible as HELD or BLOCKED and must never be reported as production success"
       ]
     }
   ]

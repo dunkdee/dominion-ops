@@ -7,6 +7,7 @@ on:
       - 'buddy_core/**'
       - 'apps/youtube/**'
       - 'scripts/runtime/remediate_authorization_key_boundary.sh'
+      - 'scripts/runtime/remediate_watchmen_state_boundary.sh'
       - 'tests/test_buddy_brain_router_v2.py'
       - 'tests/test_buddy_canonical_governance.py'
       - 'tests/test_buddy_standalone_runtime.py'
@@ -16,6 +17,7 @@ on:
       - 'tests/test_buddy_self_heal_extensions.py'
       - 'tests/test_revenue_runtime.py'
       - 'tests/test_authorization_runtime_layout.py'
+      - 'tests/test_watchmen_runtime_layout.py'
   workflow_dispatch:
 
 permissions:
@@ -81,6 +83,9 @@ jobs:
           )
           if [ -f tests/test_authorization_runtime_layout.py ]; then
             tests+=(tests/test_authorization_runtime_layout.py)
+          fi
+          if [ -f tests/test_watchmen_runtime_layout.py ]; then
+            tests+=(tests/test_watchmen_runtime_layout.py)
           fi
           python -m pytest -q "${tests[@]}"
       - name: Assert canonical prompt content
@@ -198,6 +203,12 @@ jobs:
           # canonical file outside HOME/repository/Buddy writable state. This
           # must complete before any Buddy process is restarted.
           bash "$repo/scripts/runtime/remediate_authorization_key_boundary.sh"
+
+          # Preserve Saraqael's signing key, audit log, and chain while moving
+          # their canonical state outside a production HOME that is itself a
+          # concrete Git checkout boundary. The compatibility path resolves to
+          # the machine-local target before any Buddy process is restarted.
+          bash "$repo/scripts/runtime/remediate_watchmen_state_boundary.sh"
 
           avail_kb="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
           test "${avail_kb:-0}" -ge 524288

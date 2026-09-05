@@ -1,0 +1,32 @@
+{
+  "schema": "dominion-remediation-validation-receipt-v1",
+  "pr": 235,
+  "validated_source_sha": "1a83e3f344ebee4b599f4fe0e99ed663ce712e1c",
+  "source_parent_before_final_fix": "4cc44036f8d5da4206d59582d400eb34facc22b9",
+  "workflow_run_id": 33940321531,
+  "workflow_job_id": 101236326180,
+  "focused_regressions": {
+    "status": "PASS",
+    "passed": 87
+  },
+  "elite_governance": {
+    "status": "PASS",
+    "failure_count": 0,
+    "fail_closed": true
+  },
+  "full_python_suite": {
+    "status": "PASS",
+    "passed": 876,
+    "warnings": 74
+  },
+  "final_review_closure": {
+    "state_dir_outside_checkout_enforced": true,
+    "missing_key_with_history_fails_closed": true,
+    "cross_process_audit_transaction_lock": true,
+    "tail_verifies_chain_before_return": true,
+    "temporary_helper_files_removed": true
+  },
+  "release_claim": "TESTED_NOT_DEPLOYED_NOT_PROVEN",
+  "next_gate": "independent_review_then_five_council",
+  "note": "This receipt records the tested source SHA. The receipt commit itself is non-executable evidence and must still pass exact-head PR CI before release authorization."
+}

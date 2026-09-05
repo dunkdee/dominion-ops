@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 import sys
 import traceback
@@ -66,7 +65,6 @@ def config_report():
         missing.append("BUDDY_EXTERNAL_MESSAGE_MODE=live")
 
     sender = str(os.getenv("SMTP_EMAIL") or os.getenv("EMAIL_ADDRESS") or "").strip()
-    # Domain only. The local part is never printed.
     emit("CONFIG_SENDER_DOMAIN", sender.rsplit("@", 1)[-1] if "@" in sender else "UNRESOLVED")
     return missing
 
@@ -85,18 +83,21 @@ def main():
     sys.path.insert(0, str(home / "dominion-ops"))
     load_runtime_env(home)
 
-    # ---- deployed revision -------------------------------------------------
     import subprocess
-    for label, cwd in (("RUNTIME_SHA", home / "dominion-ops"),):
-        try:
-            sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(cwd),
-                                 capture_output=True, text=True, check=True).stdout.strip()
-        except Exception as exc:
-            sha = f"UNAVAILABLE({type(exc).__name__})"
-        emit(label, sha)
-        emit("RUNTIME_SHA_MATCHES_EXPECTED", "YES" if sha == args.expected_sha else "NO")
+    try:
+        sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=str(home / "dominion-ops"),
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except Exception as exc:
+        sha = f"UNAVAILABLE({type(exc).__name__})"
+    emit("RUNTIME_SHA", sha)
+    sha_matches = sha == args.expected_sha
+    emit("RUNTIME_SHA_MATCHES_EXPECTED", "YES" if sha_matches else "NO")
+    if not sha_matches:
+        emit("RESULT", "STOP_RUNTIME_SHA_MISMATCH")
+        return 3
 
-    # ---- imports / ledger / saraqael / executor ----------------------------
     from core.operator import BuddyOperator
     from core.authorization import AuthorizationLedger
     emit("IMPORTS", "OK")
@@ -125,7 +126,6 @@ def main():
         emit("RESULT", "STOP_EXECUTOR_UNREGISTERED")
         return 5
 
-    # ---- required configuration -------------------------------------------
     missing = config_report()
     if missing:
         emit("MISSING_CONFIG", ",".join(missing))
@@ -140,7 +140,6 @@ def main():
         emit("RESULT", "VERIFY_ONLY_NO_SEND")
         return 0
 
-    # ---- EVIDENCE -> hold --------------------------------------------------
     content = {"subject": SUBJECT, "body_text": BODY, "content_sha256": content_sha}
 
     def plan(**over):
@@ -163,7 +162,6 @@ def main():
         emit("RESULT", "STOP_NO_HOLD")
         return 7
 
-    # ---- FOUNDER AUTHORIZATION -> ACTION (exact stored plan, exact id) -----
     resumed = operator.grant_and_resume(approval_id, session_id="founder_canary",
                                         approver="founder")
     emit("RESUMED_STATUS", resumed.get("status"))
@@ -191,7 +189,6 @@ def main():
     delivered = receipt.get("status") == "VERIFIED"
     emit("DELIVERED", "YES" if delivered else "NO")
 
-    # ---- REPLAY BLOCK ------------------------------------------------------
     replay = operator.execute(plan(authorization_id=approval_id), session_id="founder_canary")
     replay_receipts = [r for r in (replay.get("receipts") or []) if isinstance(r, dict)]
     replay_last = replay_receipts[-1] if replay_receipts else {}

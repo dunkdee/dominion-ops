@@ -84,3 +84,32 @@ def test_dotenv_shim_supports_override_for_runtime_imports(monkeypatch, tmp_path
             sys.modules["dotenv"] = saved
         else:
             sys.modules.pop("dotenv", None)
+
+
+def test_dotenv_shim_ignores_inline_comments_and_skips_unsupported_unquoted_spaces(monkeypatch, tmp_path):
+    canary = _load_canary_module()
+    env_file = tmp_path / "commented.env"
+    env_file.write_text(
+        "INLINE=value # comment\n"
+        "QUOTED=\"value # kept\"\n"
+        "UNSUPPORTED=two words\n",
+        encoding="utf-8",
+    )
+
+    saved = sys.modules.pop("dotenv", None)
+    _force_missing_dotenv(monkeypatch)
+    for key in ("INLINE", "QUOTED", "UNSUPPORTED"):
+        monkeypatch.delenv(key, raising=False)
+    try:
+        canary.load_runtime_env(tmp_path)
+        from dotenv import load_dotenv
+
+        assert load_dotenv(dotenv_path=env_file, override=False) is True
+        assert os.environ["INLINE"] == "value"
+        assert os.environ["QUOTED"] == "value # kept"
+        assert "UNSUPPORTED" not in os.environ
+    finally:
+        if saved is not None:
+            sys.modules["dotenv"] = saved
+        else:
+            sys.modules.pop("dotenv", None)

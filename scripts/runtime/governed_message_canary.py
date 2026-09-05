@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import traceback
@@ -51,8 +52,19 @@ def _load_env_file(path: Path, *, override: bool) -> bool:
         if not key:
             continue
         value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
+        lexer = shlex.shlex(value, posix=True)
+        lexer.whitespace_split = True
+        lexer.commenters = "#"
+        try:
+            parts = list(lexer)
+        except ValueError:
+            continue
+        if not parts:
+            value = ""
+        elif len(parts) == 1:
+            value = parts[0]
+        else:
+            continue
         if override or key not in os.environ:
             os.environ[key] = value
         loaded = True

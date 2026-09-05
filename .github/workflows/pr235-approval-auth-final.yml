@@ -32,7 +32,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           python .github/scripts/pr235_approval_auth_final_patch.py
-          rm -f .github/workflows/pr235-approval-auth-final.yml
+          rm -f .github/workflows/pr235-approval-auth-final.yml .github/scripts/pr235_approval_auth_final_patch.py
           git diff --check
           test ! -e .github/scripts/pr235_approval_auth_final_patch.py
           test ! -e .github/workflows/pr235-approval-auth-final.yml

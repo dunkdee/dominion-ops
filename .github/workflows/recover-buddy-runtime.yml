@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: foundation-vm-buddy-production
+  group: foundation-vm-production
   cancel-in-progress: false
 
 jobs:
@@ -82,6 +82,11 @@ jobs:
           test -s "$repo/buddy_core/core/brain.py"
           test -s "$repo/buddy_core/core/brain_router.py"
           test -s "$repo/buddy_core/config/FOUNDER_OPERATING_CONTEXT.md"
+
+          # Repair the authorization key boundary before any Buddy service can
+          # restart against the copied runtime. The migration preserves an
+          # existing HMAC key, never prints it, and fails closed on conflicts.
+          bash "$repo/scripts/runtime/remediate_authorization_key_boundary.sh"
 
           # In-place recovery preserves runtime-only .env/data while restoring
           # every canonical tracked Buddy file from the intact repository.

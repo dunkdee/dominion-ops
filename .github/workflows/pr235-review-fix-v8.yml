@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD^)" = "37a4ee49f2f0ae1d30756681ef32d73c6bd64e84"
+          test "$(git rev-parse HEAD^)" = "27b9701f53bbd4e0e49cd06a56564a58e27d12af"
           test -z "$(git status --porcelain)"
 
       - name: Apply reviewed remediation with canonical external executor block
@@ -35,22 +35,11 @@ jobs:
           import textwrap
           from pathlib import Path
 
-          # Reuse the reviewed v7 remediation payload exactly.
-          v7 = Path('.github/workflows/pr235-review-fix-v7.yml').read_text(encoding='utf-8')
           start = "          python - <<'PY'\n"
           end = "\n          PY\n\n      - name: Install repository-wide test dependencies"
-          if start not in v7 or end not in v7:
-              raise SystemExit('v7 remediation payload markers missing')
-          payload = v7.split(start, 1)[1].split(end, 1)[0]
-          normalized_v7 = '\n'.join(
-              line[10:] if line.startswith('          ') else line
-              for line in payload.splitlines()
-          ) + '\n'
-          compile(normalized_v7, '<pr235-v7-remediation>', 'exec')
-          exec(normalized_v7, {'__name__': '__main__'})
 
-          # Canonically regenerate new_external from the reviewed v4 source.
-          # Do not infer indentation from the malformed generated result.
+          # Cache the canonical new_external source BEFORE v7 executes, because
+          # the reviewed remediation intentionally deletes temporary workflows.
           v4 = Path('.github/workflows/pr235-review-fix-v4.yml').read_text(encoding='utf-8')
           if start not in v4 or end not in v4:
               raise SystemExit('v4 remediation payload markers missing')
@@ -69,7 +58,6 @@ jobs:
                   break
           if not isinstance(raw_external, str) or 'def _execute_external(' not in raw_external:
               raise SystemExit('reviewed new_external assignment missing')
-
           canonical_external = textwrap.indent(
               textwrap.dedent(raw_external).lstrip('\n'),
               '    ',
@@ -77,6 +65,20 @@ jobs:
           if not canonical_external.endswith('\n'):
               canonical_external += '\n'
 
+          # Reuse the reviewed v7 remediation payload exactly.
+          v7 = Path('.github/workflows/pr235-review-fix-v7.yml').read_text(encoding='utf-8')
+          if start not in v7 or end not in v7:
+              raise SystemExit('v7 remediation payload markers missing')
+          payload = v7.split(start, 1)[1].split(end, 1)[0]
+          normalized_v7 = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in payload.splitlines()
+          ) + '\n'
+          compile(normalized_v7, '<pr235-v7-remediation>', 'exec')
+          exec(normalized_v7, {'__name__': '__main__'})
+
+          # Replace the malformed generated external block with the cached,
+          # canonically class-indented reviewed block.
           op = Path('buddy_core/core/operator.py')
           lines = op.read_text(encoding='utf-8').splitlines(keepends=True)
           start_i = next(

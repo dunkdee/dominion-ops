@@ -1,0 +1,10 @@
+{
+  "schema": "dominion-founder-apply-v1",
+  "pr": 235,
+  "branch": "governance/elite-end-to-end-remediation",
+  "authorized_base_sha": "ce2f90f68f4f1d8f2975d8d1dc112badc89303fd",
+  "applicator_blob_sha": "b6e02b0ef740c0cb4a5f0fa0ab80b82d009c7ddd",
+  "scope": "Apply the existing PR235 final security closure only; test; self-remove; do not merge or deploy.",
+  "approver": "Founder",
+  "release_authorized": false
+}

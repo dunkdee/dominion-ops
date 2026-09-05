@@ -34,6 +34,41 @@ class FinalReviewBlockerTests(unittest.TestCase):
         self.assertIn("provenance_keys", source)
         self.assertIn("time_keys", source)
 
+    def test_saraqael_self_check_entrypoint_runs_in_standalone_layout(self):
+        """The migration runbook tells operators to run the chain self-check.
+
+        On the standalone VM layout there is no importable `buddy_core`
+        package, so if `core.operator` imports `watchmen.saraqael` at module
+        scope the cycle through phi_memory raises ImportError, falls through to
+        the buddy_core.* branch, and kills the entrypoint with
+        ModuleNotFoundError. Importing saraqael first must keep working.
+        """
+        import os
+        import subprocess
+        import sys
+        import tempfile
+
+        core_dir = ROOT / "buddy_core"
+        for statement in ("from watchmen.saraqael import log",
+                          "import sentinel",
+                          "import core; from watchmen.saraqael import log"):
+            with tempfile.TemporaryDirectory() as tmp:
+                result = subprocess.run(
+                    [sys.executable, "-c", statement],
+                    cwd=str(core_dir), capture_output=True, text=True,
+                    env={**os.environ,
+                         "DOMINION_WATCHMEN_STATE_DIR": tmp + "/w"},
+                )
+                self.assertEqual(result.returncode, 0,
+                                 f"{statement!r} failed: {result.stderr[-400:]}")
+
+    def test_governed_audit_log_is_resolved_at_call_time(self):
+        source = (ROOT / "buddy_core" / "core" / "operator.py").read_text(encoding="utf-8")
+        self.assertIn("def governed_audit_log(", source)
+        # A module-scope import of saraqael would reintroduce the cycle.
+        self.assertNotIn("\nfrom watchmen.saraqael import", source)
+        self.assertNotIn("\nfrom buddy_core.watchmen.saraqael import", source)
+
 
 if __name__ == "__main__":
     unittest.main()

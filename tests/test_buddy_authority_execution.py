@@ -246,6 +246,33 @@ class AuthorityExecutionTests(unittest.TestCase):
         self.assertEqual(record["status"], "BLOCKED")
         self.assertEqual(self.last(record)["status"], "DELIVERED_AUDIT_UNAVAILABLE")
 
+    def test_executor_receives_only_authorization_bound_fields(self):
+        """Un-fingerprinted step keys must never reach a real executor.
+
+        payload_fingerprint() covers capability, instruction, content and
+        destination only. Anything else on the persisted held plan passes
+        redemption unchanged, so if it reached the executor an attacker who
+        could write the held plan would steer a real delivery behind a valid
+        Founder grant.
+        """
+        seen = {}
+
+        def spy(step, context):
+            seen["step"] = sorted(step.keys())
+            seen["context"] = sorted(context.keys())
+            seen["leaked"] = step.get("UNFINGERPRINTED_PAYLOAD")
+            return {"delivered": False, "detail": "probe"}
+
+        self.operator._external_executors["external:publish"] = spy
+        held = self.run_plan()["held"]
+        self.ledger.grant(held["approval_id"])
+        self.run_plan(authorization_id=held["approval_id"],
+                      UNFINGERPRINTED_PAYLOAD="attacker-controlled")
+        authorized = ["capability", "content", "destination", "instruction"]
+        self.assertEqual(seen["step"], authorized)
+        self.assertEqual(seen["context"], authorized)
+        self.assertIsNone(seen["leaked"])
+
     def test_every_declared_external_capability_has_a_bound_executor(self):
         for cap_id, cap in self.operator.capabilities.items():
             if not cap_id.startswith("external."):

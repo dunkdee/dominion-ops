@@ -164,6 +164,11 @@ def evaluate(
         revenue = status.get("revenue") or {}
         autopilot = status.get("autopilot") or {}
         systems = status.get("systems") or {}
+        mcp_state = systems.get("mcp_cli")
+        mcp_online = (
+            mcp_state == "online"
+            or (isinstance(mcp_state, dict) and mcp_state.get("ok") is True)
+        )
         observed = parse_time(truth.get("observed_at"))
         age = None if observed is None else max(0.0, (datetime.now(timezone.utc) - observed).total_seconds())
         required_lanes = int(truth_cfg.get("required_open_lanes", 11))
@@ -175,7 +180,7 @@ def evaluate(
             lane_summary.get("all_open") is True,
             (not truth_cfg.get("require_revenue_runtime")) or revenue.get("runtime_connected") is True,
             (not truth_cfg.get("require_autopilot")) or autopilot.get("connected") is True,
-            (not truth_cfg.get("require_mcp")) or systems.get("mcp_cli") == "online",
+            (not truth_cfg.get("require_mcp")) or mcp_online,
             (not truth_cfg.get("require_receipt")) or bool(status.get("latest_receipts")),
             age is not None and age <= int(truth_cfg.get("max_age_seconds", 180)),
         ]

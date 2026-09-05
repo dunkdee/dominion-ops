@@ -1,0 +1,54 @@
+name: Dominion Agent Knowledge CI
+
+on:
+  pull_request:
+    paths:
+      - 'buddy_core/core/agent_knowledge.py'
+      - 'buddy_core/core/operator_extensions.py'
+      - 'buddy_core/config/capability_extensions.json'
+      - 'agents/registry.json'
+      - 'scripts/render_dominion_brain.py'
+      - 'tests/test_agent_knowledge.py'
+      - 'tests/test_buddy_self_heal_extensions.py'
+      - '.github/workflows/agent-knowledge-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'buddy_core/core/agent_knowledge.py'
+      - 'buddy_core/core/operator_extensions.py'
+      - 'buddy_core/config/capability_extensions.json'
+      - 'agents/registry.json'
+      - 'scripts/render_dominion_brain.py'
+      - 'tests/test_agent_knowledge.py'
+      - 'tests/test_buddy_self_heal_extensions.py'
+      - '.github/workflows/agent-knowledge-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install bounded test dependencies
+        run: python -m pip install --disable-pip-version-check pytest requests python-dotenv fastapi httpx uvicorn
+      - name: Compile agent knowledge paths
+        env:
+          PYTHONPATH: .:buddy_core
+        run: |
+          python -m py_compile \
+            buddy_core/core/agent_knowledge.py \
+            buddy_core/core/operator_extensions.py
+      - name: Verify every registered agent knowledge contract and Buddy injection
+        env:
+          PYTHONPATH: .:buddy_core
+          BUDDY_STATE_DIR: /tmp/dominion-agent-knowledge-test
+        run: |
+          python -m pytest -q \
+            tests/test_agent_knowledge.py \
+            tests/test_buddy_self_heal_extensions.py

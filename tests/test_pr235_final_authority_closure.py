@@ -1,4 +1,3 @@
-\
 """Regression tests for the final PR #235 authority/durability review closure."""
 from __future__ import annotations
 

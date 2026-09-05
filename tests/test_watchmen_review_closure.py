@@ -1,4 +1,3 @@
-\
 """Final regressions for independent Saraqael review findings on PR #235."""
 from __future__ import annotations
 

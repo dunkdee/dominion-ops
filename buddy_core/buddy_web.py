@@ -179,10 +179,12 @@ def is_authenticated(request: Request) -> bool:
 
 
 def verify_token(request: Request):
-    """Fail-closed auth for every Buddy surface.
+    """Fail-closed auth for ordinary Buddy surfaces.
 
     Accepts, in order: a signed phone session cookie, a bearer token, an
-    X-Buddy-Token header, ?token=, or the legacy buddy_token cookie.
+    X-Buddy-Token header, ?token=, or the legacy buddy_token cookie. The
+    loopback open-dev exception is intentionally limited to non-authority
+    operations; Founder approval/resume uses verify_founder_authority().
     """
     if not BUDDY_WEB_TOKEN:
         # Fail closed by default. Explicit open-dev is loopback only.
@@ -193,6 +195,21 @@ def verify_token(request: Request):
     if is_authenticated(request):
         return
     raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def verify_founder_authority(request: Request):
+    """Require configured, real authentication for authority-changing calls.
+
+    BUDDY_ALLOW_OPEN_DEV must never grant or resume Founder authority, even
+    from loopback. A valid signed session or master token is required.
+    """
+    if not BUDDY_WEB_TOKEN:
+        raise HTTPException(
+            status_code=503,
+            detail="Founder approval authentication is not configured",
+        )
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Founder approval requires authentication")
 
 
 def _login_blocked(ip: str, now: float | None = None) -> bool:
@@ -705,6 +722,7 @@ async def chat(request: Request):
     session_id = body.get("session_id", "default")
     approval_id = str(body.get("authorization_id") or "").strip()
     if body.get("approve") is True and approval_id:
+        verify_founder_authority(request)
         result = get_operator().grant_and_resume(
             approval_id, session_id=session_id, approver="founder"
         )

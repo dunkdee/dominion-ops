@@ -1,0 +1,38 @@
+{
+  "authorization": {
+    "applicator_blob_sha": "b6e02b0ef740c0cb4a5f0fa0ab80b82d009c7ddd",
+    "approver": "Founder",
+    "authorized_base_sha": "81cf6f9753192b0dfb8216352d80da7d9b8c9d3c",
+    "scope": "PR235 final security closure only",
+    "trigger_sha": "096cfe93927cf76f32f356d6f81a7b684781783a"
+  },
+  "closed_findings": [
+    "authorization records HMAC-authenticated with machine-local secret",
+    "external executor inputs restricted to exact authorized payload",
+    "capability-specific receipts enforced for every external capability",
+    "non-JSON delivery evidence fails closed into truthful receipt",
+    "browser Founder approval wired to exact held authorization id",
+    "Saraqael checkout detection no longer aliases HOME to repository root",
+    "explicit Watchmen signing-key files inside source checkout rejected"
+  ],
+  "elite_governance": {
+    "status": "PASS",
+    "summary": "ELITE_GOVERNANCE=PASS"
+  },
+  "focused_suite": {
+    "status": "PASS",
+    "summary": "107 passed in 1.66s"
+  },
+  "full_python_suite": {
+    "status": "PASS",
+    "summary": "901 passed, 72 warnings in 8.94s"
+  },
+  "note": "Test evidence only; independent exact-SHA review and Five Council remain required before merge/deploy.",
+  "observed_at": "2026-09-05T08:11:51.191793+00:00",
+  "pr": 235,
+  "production_proven": false,
+  "release_authorized": false,
+  "schema": "dominion-remediation-receipt-v1",
+  "temporary_applicator_removed": true,
+  "tested_code_sha": "7e7e0dbf48721ea2515a535d63c73d04e6ccdc74"
+}

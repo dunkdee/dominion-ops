@@ -43,7 +43,18 @@ import stat
 import secrets
 import hashlib
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows path
+    fcntl = None
+
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover - POSIX path
+    msvcrt = None
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -125,9 +136,15 @@ def _assert_private_file(path: Path, *, label: str) -> bool:
 # ── Paths ─────────────────────────────────────────────────────
 
 def state_dir() -> Path:
-    """The machine-local audit state directory (not created by this call)."""
+    """Resolve machine-local audit state and reject any path inside this checkout."""
     override = os.environ.get(ENV_STATE_DIR, "").strip()
-    return Path(override).expanduser() if override else DEFAULT_STATE_DIR
+    candidate = (Path(override).expanduser() if override else DEFAULT_STATE_DIR).resolve(strict=False)
+    repo_root = _BASE_DIR.parent.resolve(strict=False)
+    if candidate == repo_root or repo_root in candidate.parents:
+        raise WatchmenStateError(
+            f"audit state directory must be outside the repository checkout: {candidate}"
+        )
+    return candidate
 
 
 def audit_file() -> Path:
@@ -151,6 +168,55 @@ def _ensure_state_dir() -> Path:
         raise WatchmenStateError(f"cannot create audit state directory: {exc}") from exc
     _enforce_mode(d, DIR_MODE)
     return d
+
+
+@contextmanager
+def _exclusive_audit_lock():
+    """Serialize verify -> append -> chain-state replacement across processes."""
+    directory = _ensure_state_dir()
+    lock_path = directory / "watchmen_audit.lock"
+    try:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, FILE_MODE)
+    except OSError as exc:
+        raise WatchmenStateError(f"cannot open audit transaction lock: {exc}") from exc
+    try:
+        _enforce_mode(lock_path, FILE_MODE)
+        if fcntl is not None:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            except OSError as exc:
+                raise WatchmenStateError(f"cannot acquire audit transaction lock: {exc}") from exc
+            try:
+                yield
+            finally:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                except OSError:
+                    pass
+            return
+
+        if msvcrt is not None:  # pragma: no cover - Windows runner path
+            try:
+                if os.fstat(fd).st_size == 0:
+                    os.write(fd, b"0")
+                    os.fsync(fd)
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+            except OSError as exc:
+                raise WatchmenStateError(f"cannot acquire audit transaction lock: {exc}") from exc
+            try:
+                yield
+            finally:
+                try:
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+            return
+
+        raise WatchmenStateError("cross-process audit transaction locking is unsupported")
+    finally:
+        os.close(fd)
 
 
 def legacy_repo_artifacts() -> list:
@@ -240,6 +306,10 @@ def _resolve_key() -> bytes:
             raise WatchmenStateError(
                 f"audit signing key file is unreadable: {exc}") from exc
         return _validate_key(raw, str(path))
+    if audit_file().exists() or chain_file().exists():
+        raise WatchmenStateError(
+            "audit signing key is missing while audit history exists; explicit recovery is required"
+        )
     return _generate_key(path)
 
 
@@ -378,37 +448,39 @@ def log(
     unreadable, improperly protected, or cannot be verified with the active
     key, the write is refused rather than extending untrusted history.
     """
-    key = _resolve_key()
-    _ensure_state_dir()
+    with _exclusive_audit_lock():
+        key = _resolve_key()
+        _ensure_state_dir()
 
-    if audit_file().exists() or chain_file().exists():
-        existing = verify_chain()
-        if existing.get("valid") is not True:
-            raise WatchmenStateError(
-                f"existing audit history is untrusted: {existing.get('message', 'unknown failure')}")
+        if audit_file().exists() or chain_file().exists():
+            existing = verify_chain()
+            if existing.get("valid") is not True:
+                raise WatchmenStateError(
+                    f"existing audit history is untrusted: {existing.get('message', 'unknown failure')}"
+                )
 
-    chain = _load_chain()
-    ts = datetime.now(timezone.utc).isoformat()
+        chain = _load_chain()
+        ts = datetime.now(timezone.utc).isoformat()
 
-    entry = {
-        "seq":          chain["count"] + 1,
-        "ts":           ts,
-        "source":       source,
-        "event":        event,
-        "status":       status,
-        "threat_level": threat_level,
-        "details":      details or {},
-        "prev_hash":    chain["last_hash"],
-    }
+        entry = {
+            "seq":          chain["count"] + 1,
+            "ts":           ts,
+            "source":       source,
+            "event":        event,
+            "status":       status,
+            "threat_level": threat_level,
+            "details":      details or {},
+            "prev_hash":    chain["last_hash"],
+        }
 
-    entry_hash = _entry_hash(entry, chain["last_hash"], key)
-    entry["hash"] = entry_hash
+        entry_hash = _entry_hash(entry, chain["last_hash"], key)
+        entry["hash"] = entry_hash
 
-    _append_entry(audit_file(), json.dumps(entry, ensure_ascii=True) + "\n")
+        _append_entry(audit_file(), json.dumps(entry, ensure_ascii=True) + "\n")
 
-    chain["last_hash"] = entry_hash
-    chain["count"] = entry["seq"]
-    _save_chain(chain)
+        chain["last_hash"] = entry_hash
+        chain["count"] = entry["seq"]
+        _save_chain(chain)
 
     # PhiMemory: store critical events. This is secondary memory, not authority.
     if threat_level in ("high", "critical"):
@@ -537,7 +609,12 @@ def _read_entries() -> list:
 
 
 def tail(n: int = 20) -> list:
-    """Return the last N entries, raising if the underlying history is corrupt."""
+    """Return the last N entries only after the entire chain verifies."""
+    status = verify_chain()
+    if status.get("valid") is not True:
+        raise WatchmenStateError(
+            f"audit history is untrusted: {status.get('message', 'unknown verification failure')}"
+        )
     return _read_entries()[-n:]
 
 

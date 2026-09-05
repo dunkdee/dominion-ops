@@ -15,6 +15,7 @@ SERVICE = ROOT / "deploy/systemd/dominion-system-integrity.service"
 TIMER = ROOT / "deploy/systemd/dominion-system-integrity.timer"
 INSTALL = ROOT / "scripts/install_system_integrity_agent.sh"
 BRIDGE = ROOT / "scripts/command_center_state_bridge_v3.py"
+WATCHDOG = ROOT / ".github/workflows/watchdog.yml"
 
 spec = importlib.util.spec_from_file_location("system_integrity_agent", AGENT)
 assert spec and spec.loader
@@ -62,7 +63,7 @@ class SystemIntegrityAgentTests(unittest.TestCase):
             "lane_summary": {"open": 0, "registered": 0, "all_open": True},
             "revenue": {},
             "autopilot": {},
-            "systems": {},
+            "systems": {"mcp_cli": {"ok": True, "status": 200}},
             "latest_receipts": [],
         }
 
@@ -159,6 +160,27 @@ class SystemIntegrityAgentTests(unittest.TestCase):
         self.assertTrue(scheduled["deep_probe_executed"])
         scheduled_check = next(item for item in scheduled["checks"] if item["id"] == "intelligence:end-to-end")
         self.assertTrue(scheduled_check["ok"])
+
+    def test_structured_mcp_health_satisfies_required_command_center_truth(self):
+        contract = self._evaluation_contract()
+        contract["command_center_truth"]["require_mcp"] = True
+        with (
+            mock.patch.object(agent, "http_json", side_effect=self._http_side_effect),
+            mock.patch.object(agent, "git_sha", return_value="a" * 40),
+            mock.patch.object(agent.shutil, "disk_usage", return_value=mock.Mock(used=10, total=100)),
+        ):
+            state = agent.evaluate(contract, ROOT, {"cycle": 4})
+
+        truth_check = next(item for item in state["checks"] if item["id"] == "command-center:truth")
+        self.assertTrue(truth_check["ok"])
+        self.assertEqual(state["status"], "PASS")
+
+    def test_runtime_observer_reads_structured_integrity_health(self):
+        text = WATCHDOG.read_text(encoding="utf-8")
+        self.assertNotIn("state['systems']['system_integrity'] == 'online'", text)
+        self.assertIn("integrity=state['systems']['system_integrity']", text)
+        self.assertIn("integrity.get('ok') is True", text)
+        self.assertIn("integrity.get('status') == 'PASS'", text)
 
     def test_command_center_truth_surfaces_fresh_and_rejects_stale_integrity(self):
         text = BRIDGE.read_text(encoding="utf-8")

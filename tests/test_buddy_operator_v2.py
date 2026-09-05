@@ -125,12 +125,25 @@ def test_autonomous_learning_cycle_is_internal_and_evidence_backed(op):
     assert result["receipts"][0]["evidence"][0]["url"] == "https://example.com/learn"
 
 
-def test_message_is_drafted_then_held(op):
+def test_message_without_explicit_destination_drafts_then_blocks_before_authority(op):
     result = op.handle("Send an outreach email to these prospects")
+    assert result["status"] == "BLOCKED"
+    assert result["receipts"][0]["capability"] == "artifact.stage"
+    assert result["receipts"][0]["status"] == "VERIFIED"
+    boundary = result["receipts"][1]
+    assert boundary["capability"] == "external.message"
+    assert boundary["status"] == "BLOCKED"
+    assert boundary["errors"][0]["error"] == "ExternalPayloadPreparationError"
+    assert result["held"] is None
+
+
+def test_message_with_explicit_destination_is_drafted_then_held(op):
+    result = op.handle("Send an outreach email to founder@example.com")
     assert result["status"] == "HELD"
     assert result["receipts"][0]["capability"] == "artifact.stage"
     assert result["receipts"][0]["status"] == "VERIFIED"
     assert result["held"]["capability"] == "external.message"
+    assert result["held"]["payload_hash"]
 
 
 def test_spend_is_analyzed_then_held(op):

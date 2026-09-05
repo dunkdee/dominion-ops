@@ -23,84 +23,103 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD^)" = "27b9701f53bbd4e0e49cd06a56564a58e27d12af"
+          test "$(git rev-parse HEAD^)" = "b06522f12fba2e64b39135f880a75f0429824ef5"
           test -z "$(git status --porcelain)"
 
-      - name: Apply reviewed remediation with canonical external executor block
+      - name: Apply reviewed remediation with source-correct class indentation
         shell: bash
         run: |
           set -Eeuo pipefail
           python - <<'PY'
-          import ast
-          import textwrap
           from pathlib import Path
 
           start = "          python - <<'PY'\n"
           end = "\n          PY\n\n      - name: Install repository-wide test dependencies"
-
-          # Cache the canonical new_external source BEFORE v7 executes, because
-          # the reviewed remediation intentionally deletes temporary workflows.
-          v4 = Path('.github/workflows/pr235-review-fix-v4.yml').read_text(encoding='utf-8')
-          if start not in v4 or end not in v4:
+          v4_path = Path('.github/workflows/pr235-review-fix-v4.yml')
+          source = v4_path.read_text(encoding='utf-8')
+          if start not in source or end not in source:
               raise SystemExit('v4 remediation payload markers missing')
-          v4_payload = v4.split(start, 1)[1].split(end, 1)[0]
-          normalized_v4 = '\n'.join(
-              line[10:] if line.startswith('          ') else line
-              for line in v4_payload.splitlines()
-          ) + '\n'
-          tree = ast.parse(normalized_v4)
-          raw_external = None
-          for node in tree.body:
-              if not isinstance(node, ast.Assign):
-                  continue
-              if any(isinstance(t, ast.Name) and t.id == 'new_external' for t in node.targets):
-                  raw_external = ast.literal_eval(node.value)
-                  break
-          if not isinstance(raw_external, str) or 'def _execute_external(' not in raw_external:
-              raise SystemExit('reviewed new_external assignment missing')
-          canonical_external = textwrap.indent(
-              textwrap.dedent(raw_external).lstrip('\n'),
-              '    ',
-          )
-          if not canonical_external.endswith('\n'):
-              canonical_external += '\n'
-
-          # Reuse the reviewed v7 remediation payload exactly.
-          v7 = Path('.github/workflows/pr235-review-fix-v7.yml').read_text(encoding='utf-8')
-          if start not in v7 or end not in v7:
-              raise SystemExit('v7 remediation payload markers missing')
-          payload = v7.split(start, 1)[1].split(end, 1)[0]
-          normalized_v7 = '\n'.join(
+          payload = source.split(start, 1)[1].split(end, 1)[0]
+          script = '\n'.join(
               line[10:] if line.startswith('          ') else line
               for line in payload.splitlines()
           ) + '\n'
-          compile(normalized_v7, '<pr235-v7-remediation>', 'exec')
-          exec(normalized_v7, {'__name__': '__main__'})
 
-          # Replace the malformed generated external block with the cached,
-          # canonically class-indented reviewed block.
-          op = Path('buddy_core/core/operator.py')
-          lines = op.read_text(encoding='utf-8').splitlines(keepends=True)
-          start_i = next(
-              (i for i, line in enumerate(lines)
-               if line.lstrip().startswith('def _execute_external(')),
-              None,
+          # Correct the class-method generation at the source instead of trying
+          # to repair malformed output after the fact. The reviewed v4 strings
+          # intentionally include class indentation; dedent alone removed it.
+          old_execute = 'textwrap.dedent(new_execute).lstrip("\\n"),'
+          old_external = 'textwrap.dedent(new_external).lstrip("\\n"),'
+          if script.count(old_execute) != 1 or script.count(old_external) != 1:
+              raise SystemExit('reviewed operator generation expressions missing')
+          script = script.replace(
+              old_execute,
+              'textwrap.indent(textwrap.dedent(new_execute).lstrip("\\n"), "    "),',
+              1,
           )
-          end_i = next(
-              (i for i, line in enumerate(lines)
-               if i > (start_i if start_i is not None else -1)
-               and line.lstrip().startswith('def _no_delivery_backend(')),
-              None,
+          script = script.replace(
+              old_external,
+              'textwrap.indent(textwrap.dedent(new_external).lstrip("\\n"), "    "),',
+              1,
           )
-          if start_i is None or end_i is None:
-              raise SystemExit('operator external executor boundaries missing')
-          canonical_lines = canonical_external.splitlines(keepends=True)
-          op.write_text(''.join(lines[:start_i] + canonical_lines + lines[end_i:]), encoding='utf-8')
 
-          # Remove every one-shot PR235 remediation workflow from the candidate tree.
-          for helper in Path('.github/workflows').glob('pr235-review-fix*.yml'):
-              helper.unlink()
-          print('PR235_CANONICAL_EXTERNAL_REMEDIATION=APPLIED')
+          # The original v4 validator edit depended on an exact old text block
+          # and was the only brittle part of that payload. Skip it here and
+          # apply the same gate structurally below.
+          left_marker = '# 8. Elite validator: actual AST map binding, never comments/strings.'
+          right_marker = '# 9. Test-suite correctness/dependencies.'
+          left = script.find(left_marker)
+          right = script.find(right_marker, left + 1)
+          if left < 0 or right < 0:
+              raise SystemExit('validator section markers missing')
+          script = script[:left] + '# validator patched structurally after reviewed remediation\n' + script[right:]
+
+          compile(script, '<pr235-v4-source-corrected>', 'exec')
+          exec(script, {'__name__': '__main__'})
+
+          # Structural validator patch: only literal keys in the actual
+          # self._external_executors dict assignment satisfy the gate.
+          p = Path('scripts/validate_elite_governance.py')
+          text = p.read_text(encoding='utf-8')
+          if 'import ast\n' not in text:
+              text = text.replace('import json\nimport re\n', 'import ast\nimport json\nimport re\n', 1)
+
+          helper = '''\ndef external_executor_bindings(source: str) -> set[str]:\n    try:\n        tree = ast.parse(source)\n    except SyntaxError:\n        return set()\n    found: set[str] = set()\n    for node in ast.walk(tree):\n        if not isinstance(node, (ast.Assign, ast.AnnAssign)):\n            continue\n        targets = node.targets if isinstance(node, ast.Assign) else [node.target]\n        matches = any(\n            isinstance(target, ast.Attribute)\n            and isinstance(target.value, ast.Name)\n            and target.value.id == "self"\n            and target.attr == "_external_executors"\n            for target in targets\n        )\n        if not matches or not isinstance(node.value, ast.Dict):\n            continue\n        for key in node.value.keys:\n            if isinstance(key, ast.Constant) and isinstance(key.value, str):\n                found.add(key.value)\n    return found\n\n'''
+          if 'def external_executor_bindings(' not in text:
+              marker = '\ndef collect_failures() -> list[dict]:\n'
+              if marker not in text:
+                  raise SystemExit('validator collect_failures marker missing')
+              text = text.replace(marker, helper + 'def collect_failures() -> list[dict]:\n', 1)
+
+          block_start = text.find('    enabled_external = [\n')
+          block_end = text.find('    authorization = read(AUTHORIZATION)\n', block_start)
+          if block_start < 0 or block_end < 0:
+              raise SystemExit('validator external block boundaries missing')
+          replacement = '''    enabled_external = [\n        cap for cap in registry.get("capabilities", [])\n        if cap.get("enabled", True) and str(cap.get("executor", "")).startswith("external:")\n    ]\n    wired_external = external_executor_bindings(operator)\n    for cap in enabled_external:\n        executor = str(cap.get("executor"))\n        if executor not in wired_external:\n            failures.append({\n                "gate": "external_executor",\n                "reason": f"enabled external capability has no governed runtime executor: {cap.get('id')} ({executor})",\n            })\n\n'''
+          text = text[:block_start] + replacement + text[block_end:]
+          p.write_text(text, encoding='utf-8')
+
+          # Fail in this step with exact context if either generated source is
+          # syntactically invalid; do not defer a malformed tree to later CI.
+          for candidate in (
+              Path('buddy_core/core/operator.py'),
+              Path('scripts/validate_elite_governance.py'),
+          ):
+              body = candidate.read_text(encoding='utf-8')
+              try:
+                  compile(body, str(candidate), 'exec')
+              except SyntaxError as exc:
+                  lines = body.splitlines()
+                  lo = max(0, (exc.lineno or 1) - 4)
+                  hi = min(len(lines), (exc.lineno or 1) + 3)
+                  print(f'SYNTAX_FAILURE={candidate}:{exc.lineno}:{exc.msg}')
+                  for n in range(lo, hi):
+                      print(f'{n+1:04d}: {lines[n]!r}')
+                  raise
+
+          for helper_path in Path('.github/workflows').glob('pr235-review-fix*.yml'):
+              helper_path.unlink()
+          print('PR235_SOURCE_CORRECTED_REMEDIATION=APPLIED')
           PY
 
       - name: Install repository-wide test dependencies

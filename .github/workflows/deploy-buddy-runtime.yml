@@ -14,13 +14,14 @@ on:
       - 'tests/test_buddy_phone_login.py'
       - 'tests/test_buddy_self_heal_extensions.py'
       - 'tests/test_revenue_runtime.py'
+      - 'tests/test_authorization_runtime_layout.py'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: foundation-vm-buddy-production
+  group: foundation-vm-production
   cancel-in-progress: false
 
 jobs:
@@ -41,9 +42,11 @@ jobs:
           set -euo pipefail
           python -m py_compile \
             buddy_core/core/__init__.py \
+            buddy_core/core/authorization.py \
             buddy_core/core/brain.py \
             buddy_core/core/brain_router.py \
             buddy_core/core/operator.py \
+            buddy_core/core/message_delivery.py \
             buddy_core/core/operator_extensions.py \
             buddy_core/core/learning_engine.py \
             buddy_core/core/autonomous_learning.py \
@@ -52,6 +55,7 @@ jobs:
             buddy_core/core/mcp_client.py \
             buddy_core/core/self_heal.py \
             buddy_core/core/token_resolver.py \
+            buddy_core/watchmen/saraqael.py \
             buddy_core/buddy_bridge_api.py \
             buddy_core/buddy_web.py \
             apps/youtube/script_generator.py \
@@ -62,17 +66,22 @@ jobs:
           BUDDY_STATE_DIR: /tmp/buddy-runtime-deploy-test-state
         run: |
           set -euo pipefail
-          python -m pytest -q \
-            tests/test_buddy_brain_router_v2.py \
-            tests/test_buddy_canonical_governance.py \
-            tests/test_buddy_standalone_runtime.py \
-            tests/test_buddy_capability_health.py \
-            tests/test_buddy_self_heal_extensions.py \
-            tests/test_buddy_operator_v2.py \
-            tests/test_buddy_autonomous_learning.py \
-            tests/test_buddy_token_resolver.py \
-            tests/test_buddy_phone_login.py \
+          tests=(
+            tests/test_buddy_brain_router_v2.py
+            tests/test_buddy_canonical_governance.py
+            tests/test_buddy_standalone_runtime.py
+            tests/test_buddy_capability_health.py
+            tests/test_buddy_self_heal_extensions.py
+            tests/test_buddy_operator_v2.py
+            tests/test_buddy_autonomous_learning.py
+            tests/test_buddy_token_resolver.py
+            tests/test_buddy_phone_login.py
             tests/test_revenue_runtime.py
+          )
+          if [ -f tests/test_authorization_runtime_layout.py ]; then
+            tests+=(tests/test_authorization_runtime_layout.py)
+          fi
+          python -m pytest -q "${tests[@]}"
       - name: Assert canonical prompt content
         env:
           PYTHONPATH: .:buddy_core
@@ -212,9 +221,11 @@ jobs:
 
           python3 -m py_compile \
             "$runtime/core/__init__.py" \
+            "$runtime/core/authorization.py" \
             "$runtime/core/brain.py" \
             "$runtime/core/brain_router.py" \
             "$runtime/core/operator.py" \
+            "$runtime/core/message_delivery.py" \
             "$runtime/core/operator_extensions.py" \
             "$runtime/core/learning_engine.py" \
             "$runtime/core/autonomous_learning.py" \
@@ -223,6 +234,7 @@ jobs:
             "$runtime/core/mcp_client.py" \
             "$runtime/core/self_heal.py" \
             "$runtime/core/token_resolver.py" \
+            "$runtime/watchmen/saraqael.py" \
             "$runtime/buddy_bridge_api.py" \
             "$runtime/buddy_web.py"
 
@@ -317,8 +329,10 @@ jobs:
           runtime=Path.home()/'buddy_core'
           files={}
           for rel in [
-              'core/brain.py','core/brain_router.py','core/capability_health.py',
+              'core/authorization.py','core/brain.py','core/brain_router.py',
+              'core/capability_health.py','core/message_delivery.py','core/operator.py',
               'core/operator_extensions.py','core/mcp_client.py','core/self_heal.py',
+              'watchmen/saraqael.py',
               'config/FOUNDER_OPERATING_CONTEXT.md','config/BUDDY_CONSTITUTION.md',
               'config/standing_authorizations.json','config/capability_extensions.json'
           ]:

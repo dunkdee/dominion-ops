@@ -150,9 +150,16 @@ jobs:
             *) echo 'EXTERNAL_MESSAGE_MODE=FAIL invalid_deployed_sha'; exit 1 ;;
           esac
 
+          buddy_exec="$(systemctl show dominion-buddy-web.service -p ExecStart --value 2>/dev/null || true)"
+          buddy_python="$(printf '%s\n' "$buddy_exec" | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)"
+          test -n "$buddy_python" || { echo 'EXTERNAL_MESSAGE_BUDDY_PYTHON=UNRESOLVED'; exit 1; }
+          test -x "$buddy_python" || { echo 'EXTERNAL_MESSAGE_BUDDY_PYTHON=NOT_EXECUTABLE'; exit 1; }
+          "$buddy_python" -c 'import dotenv' >/dev/null 2>&1 || { echo 'EXTERNAL_MESSAGE_BUDDY_PYTHON_DOTENV=UNAVAILABLE'; exit 1; }
+          echo 'EXTERNAL_MESSAGE_BUDDY_PYTHON=RESOLVED'
+
           verify_log="$(mktemp /tmp/dominion-external-message-verify.XXXXXX)"
           trap 'rm -f "$verify_log"' EXIT
-          python3 -I "$repo/scripts/runtime/governed_message_canary.py" \
+          "$buddy_python" "$repo/scripts/runtime/governed_message_canary.py" \
             --recipient 'dewayne@dominionhealing.org' \
             --expected-sha "$expected_sha" | tee "$verify_log"
           grep -Fq 'CANARY_RESULT=VERIFY_ONLY_NO_SEND' "$verify_log"

@@ -1,0 +1,200 @@
+name: External Message Live Mode — Production Activation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/runtime/enable_governed_external_message_live_mode.sh'
+      - 'tests/test_external_message_live_mode_runtime.py'
+      - '.github/workflows/external-message-live-mode-production.yml'
+  workflow_run:
+    workflows: ['Deploy Buddy Runtime']
+    types: [completed]
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  activate-and-verify:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    steps:
+      - name: Require protected VM access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Configure protected SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Activate bounded live mode and verify without sending
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
+            "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          repo="$HOME/dominion-ops"
+          runtime="$HOME/buddy_core"
+          state="$HOME/.dominion/buddy"
+          env_file="$runtime/.env"
+          receipt="$state/external_message_live_mode_receipt.json"
+
+          test -d "$repo/.git"
+          install -d -m 700 "$state"
+
+          cd "$repo"
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+
+          current_mode="$(python3 - "$env_file" <<'PY'
+          import sys
+          from pathlib import Path
+          path = Path(sys.argv[1])
+          mode = ''
+          if path.is_file():
+              for raw in path.read_text(encoding='utf-8').splitlines():
+                  text = raw.strip()
+                  if not text or text.startswith('#'):
+                      continue
+                  if text.startswith('export '):
+                      text = text[7:].lstrip()
+                  if text.startswith('BUDDY_EXTERNAL_MESSAGE_MODE='):
+                      mode = text.split('=', 1)[1].strip().strip('"').strip("'")
+          print(mode.lower())
+          PY
+          )"
+
+          changed=0
+          if [ "$current_mode" != 'live' ]; then
+            bash "$repo/scripts/runtime/enable_governed_external_message_live_mode.sh"
+            changed=1
+            for service in dominion-buddy-web.service buddy-bridge.service dominion-buddy.service; do
+              if systemctl cat "$service" >/dev/null 2>&1; then
+                sudo systemctl restart "$service"
+                sudo systemctl is-active --quiet "$service"
+                echo "EXTERNAL_MESSAGE_SERVICE_RESTARTED=$service"
+              fi
+            done
+          else
+            echo 'EXTERNAL_MESSAGE_MODE=ALREADY_LIVE'
+          fi
+
+          effective_mode="$(python3 - "$env_file" <<'PY'
+          import sys
+          from pathlib import Path
+          path = Path(sys.argv[1])
+          values = []
+          if path.is_file():
+              for raw in path.read_text(encoding='utf-8').splitlines():
+                  text = raw.strip()
+                  if not text or text.startswith('#'):
+                      continue
+                  if text.startswith('export '):
+                      text = text[7:].lstrip()
+                  if text.startswith('BUDDY_EXTERNAL_MESSAGE_MODE='):
+                      values.append(text.split('=', 1)[1].strip().strip('"').strip("'").lower())
+          print(values[-1] if values else '')
+          PY
+          )"
+          test "$effective_mode" = 'live'
+
+          bridge_code='000'
+          for _ in $(seq 1 30); do
+            bridge_code="$(curl -sS -o /tmp/buddy-bridge-health.json -w '%{http_code}' --max-time 4 http://127.0.0.1:5052/health 2>/dev/null || true)"
+            [ "$bridge_code" = '200' ] && break
+            sleep 1
+          done
+          test "$bridge_code" = '200'
+
+          expected_sha="$(python3 - "$state/deployed_release.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          p = Path(sys.argv[1])
+          data = json.loads(p.read_text(encoding='utf-8'))
+          print(str(data.get('release_sha') or ''))
+          PY
+          )"
+          case "$expected_sha" in
+            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+            *) echo 'EXTERNAL_MESSAGE_MODE=FAIL invalid_deployed_sha'; exit 1 ;;
+          esac
+
+          verify_log="$(mktemp /tmp/dominion-external-message-verify.XXXXXX)"
+          trap 'rm -f "$verify_log"' EXIT
+          python3 -I "$repo/scripts/runtime/governed_message_canary.py" \
+            --recipient 'dewayne@dominionhealing.org' \
+            --expected-sha "$expected_sha" | tee "$verify_log"
+          grep -Fq 'CANARY_RESULT=VERIFY_ONLY_NO_SEND' "$verify_log"
+          grep -Fq 'CANARY_CONFIG_MODE_IS_LIVE=YES' "$verify_log"
+          grep -Fq 'CANARY_EXTERNAL_MESSAGE_REGISTERED=YES' "$verify_log"
+          grep -Fq 'CANARY_SARAQAEL_SELF_CHECK=PASS' "$verify_log"
+
+          python3 - "$receipt" "$expected_sha" "$changed" <<'PY'
+          import json, os, sys, tempfile
+          from datetime import datetime, timezone
+          from pathlib import Path
+          out = Path(sys.argv[1])
+          payload = {
+              'schema': 'dominion.external-message-live-mode.v1',
+              'observed_at': datetime.now(timezone.utc).isoformat(),
+              'deployed_release_sha': sys.argv[2],
+              'mode': 'live',
+              'changed_this_run': sys.argv[3] == '1',
+              'verify_only': 'PASS',
+              'external_send_performed': False,
+          }
+          out.parent.mkdir(parents=True, exist_ok=True)
+          fd, tmp = tempfile.mkstemp(prefix='external-message-live-mode.', dir=str(out.parent))
+          try:
+              os.fchmod(fd, 0o600)
+              with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+                  json.dump(payload, fh, sort_keys=True, separators=(',', ':'))
+                  fh.write('\n')
+                  fh.flush()
+                  os.fsync(fh.fileno())
+              os.replace(tmp, out)
+              os.chmod(out, 0o600)
+          finally:
+              try:
+                  os.unlink(tmp)
+              except FileNotFoundError:
+                  pass
+          PY
+
+          echo "EXTERNAL_MESSAGE_LIVE_MODE=PASS deployed_release=$expected_sha verify_only=PASS changed=$changed"
+          REMOTE
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -rf "$HOME/.ssh"

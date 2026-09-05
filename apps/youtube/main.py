@@ -1,14 +1,12 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel
-from typing import Optional
-import asyncio
 import concurrent.futures
 
 from script_generator import generate_script, generate_title_and_description
 from pipeline import run_pipeline, PipelineResult
 from youtube_uploader import get_oauth_url, exchange_code
 
-app = FastAPI(title="Movie Generator", description="Governed AI scripting + Higgins → YouTube")
+app = FastAPI(title="Movie Generator", description="Governed AI scripting + Higgins video production")
 
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 _jobs: dict[str, PipelineResult] = {}
@@ -24,12 +22,18 @@ class PipelineRequest(BaseModel):
     title: str
     description: str = ""
     privacy: str = "private"
-    upload: bool = True
+    upload: bool = False
 
 
 @app.get("/healthz")
 def health():
-    return {"status": "ok", "service": "movie-generator"}
+    return {
+        "status": "ok",
+        "service": "movie-generator",
+        "faceless_generation": True,
+        "direct_publish": False,
+        "publish_boundary": "governed_external_publish_required",
+    }
 
 
 @app.post("/script/generate")
@@ -42,11 +46,18 @@ def create_script(req: ScriptRequest):
 
 @app.post("/pipeline/start")
 def start_pipeline(req: PipelineRequest, bg: BackgroundTasks):
+    """Launch internal faceless production without crossing the publish boundary.
+
+    The endpoint may generate script/video/metadata and persist the resulting
+    internal job artifact. Public or private YouTube upload is a real external
+    side effect and must go through Dominion's separately governed publish path.
     """
-    Launch the full movie pipeline in the background:
-    script → Higgins video clips → concatenate → YouTube upload.
-    Returns a job_id to poll with /pipeline/status/{job_id}.
-    """
+    if req.upload:
+        raise HTTPException(
+            status_code=409,
+            detail="Direct YouTube upload is disabled. Use the Founder-gated governed external.publish path.",
+        )
+
     import uuid
     job_id = str(uuid.uuid4())
     _jobs[job_id] = PipelineResult(title=req.title, script="", scene_count=0, status="queued")
@@ -57,12 +68,12 @@ def start_pipeline(req: PipelineRequest, bg: BackgroundTasks):
             title=req.title,
             description=req.description,
             privacy=req.privacy,
-            upload=req.upload,
+            upload=False,
         )
         _jobs[job_id] = result
 
     bg.add_task(_run)
-    return {"job_id": job_id, "status": "queued"}
+    return {"job_id": job_id, "status": "queued", "upload": False}
 
 
 @app.get("/pipeline/status/{job_id}")
@@ -82,7 +93,7 @@ def pipeline_status(job_id: str):
 
 @app.get("/youtube/auth")
 def youtube_auth():
-    """Returns the URL to open in a browser to authorize YouTube uploads."""
+    """Return the OAuth URL used to establish the future governed upload rail."""
     return {"auth_url": get_oauth_url()}
 
 

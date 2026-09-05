@@ -7,6 +7,7 @@ operator's plan validation or external-action boundaries. It is installed by
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from pathlib import Path
@@ -16,13 +17,17 @@ try:
     from core.capability_health import audit_capabilities
     from core import mcp_client
     from core.self_heal import diagnose, repair_safe
+    from core.agent_knowledge import AgentKnowledgeError, load_agent_knowledge, verify_registered_agents
 except ImportError:
     from buddy_core.core.capability_health import audit_capabilities
     from buddy_core.core import mcp_client
     from buddy_core.core.self_heal import diagnose, repair_safe
+    from buddy_core.core.agent_knowledge import AgentKnowledgeError, load_agent_knowledge, verify_registered_agents
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSION_FILE = ROOT / "config" / "capability_extensions.json"
+REPO_ROOT = Path(os.getenv("DOMINION_REPO_ROOT", str(Path.home() / "dominion-ops")))
+AGENT_REGISTRY = REPO_ROOT / "agents" / "registry.json"
 
 
 class OperatorExtensionError(RuntimeError):
@@ -51,6 +56,19 @@ def _capability_health_executor(operator: Any) -> Callable[[str, dict], tuple[An
             "registered_enabled": result.get("registered_enabled"),
             "native_connected": result.get("native_connected"),
             "mcp_status": (result.get("mcp") or {}).get("status"),
+        }]
+        return result, evidence
+    return execute
+
+
+def _agent_knowledge_health_executor(operator: Any) -> Callable[[str, dict], tuple[Any, list]]:
+    def execute(instruction: str, context: dict):
+        result = verify_registered_agents(AGENT_REGISTRY)
+        evidence = [{
+            "type": "agent_knowledge_health",
+            "status": result.get("status"),
+            "agent_count": result.get("agent_count"),
+            "authority_expanded": result.get("authority_expanded"),
         }]
         return result, evidence
     return execute
@@ -151,6 +169,57 @@ def _build_direct_plan(operator: Any, objective: str, steps: list[tuple[str, str
     }
 
 
+def _knowledge_receipt(knowledge: dict[str, Any] | None, error: str | None = None) -> dict[str, Any]:
+    if knowledge is None:
+        return {
+            "status": "UNAVAILABLE",
+            "agent_id": "buddy",
+            "error": (error or "agent_knowledge_unavailable")[:160],
+            "authority_expanded": False,
+        }
+    return {
+        "status": "LOADED",
+        "agent_id": knowledge.get("agent_id"),
+        "brain_source_revision_sha256": knowledge.get("brain_source_revision_sha256"),
+        "context_sha256": knowledge.get("context_sha256"),
+        "files_loaded": len(knowledge.get("files") or []),
+        "authority_expanded": False,
+    }
+
+
+def _request_context(text: str, conversation_context: str | None) -> tuple[str, dict[str, Any]]:
+    """Attach the current governed Brain snapshot to each Buddy request.
+
+    Production can fail closed by setting DOMINION_AGENT_KNOWLEDGE_REQUIRED=1.
+    Tests/dev remain able to run without a mounted production vault.
+    """
+    try:
+        knowledge = load_agent_knowledge("buddy")
+    except AgentKnowledgeError as exc:
+        required = os.getenv("DOMINION_AGENT_KNOWLEDGE_REQUIRED", "0").strip().lower() in {
+            "1", "true", "yes", "required",
+        }
+        if required:
+            raise OperatorExtensionError(f"agent_knowledge_required:{type(exc).__name__}") from exc
+        prior = (conversation_context or "")[-4000:]
+        merged = f"{prior}\n\nCURRENT USER MESSAGE:\n{text}".strip()
+        return merged, _knowledge_receipt(None, str(exc))
+
+    prior = (conversation_context or "")[-4000:]
+    merged = (
+        f"{prior}\n\nCURRENT USER MESSAGE:\n{text}\n\n"
+        f"{knowledge['context']}"
+    ).strip()
+    return merged, _knowledge_receipt(knowledge)
+
+
+def _attach_knowledge_receipt(result: Any, receipt: dict[str, Any]) -> Any:
+    if isinstance(result, dict):
+        result = dict(result)
+        result["agent_knowledge"] = receipt
+    return result
+
+
 def _wrap_handle(operator: Any) -> None:
     if getattr(operator, "_dominion_handle_extended", False):
         return
@@ -165,6 +234,17 @@ def _wrap_handle(operator: Any) -> None:
     ):
         text = (message or "").strip()
         lower = text.lower()
+        try:
+            governed_context, knowledge_receipt = _request_context(text, conversation_context)
+        except OperatorExtensionError as exc:
+            return {
+                "status": "BLOCKED",
+                "response": "Dominion Brain context is required but unavailable; no agent reasoning was executed.",
+                "error": "AgentKnowledgeUnavailable",
+                "detail": str(exc)[:200],
+                "agent_knowledge": _knowledge_receipt(None, str(exc)),
+                "evidence": [],
+            }
 
         capability_phrases = (
             "capability audit",
@@ -173,6 +253,14 @@ def _wrap_handle(operator: Any) -> None:
             "what capabilities are connected",
             "what tools are connected",
             "are your capabilities working",
+        )
+        knowledge_phrases = (
+            "check agent knowledge",
+            "check dominion brain",
+            "verify agent knowledge",
+            "verify dominion brain",
+            "are all agents learning",
+            "are all agents connected to obsidian",
         )
         diagnose_phrases = (
             "diagnose yourself",
@@ -195,6 +283,21 @@ def _wrap_handle(operator: Any) -> None:
             "repair everything you can",
         )
 
+        if any(phrase in lower for phrase in knowledge_phrases):
+            plan = _build_direct_plan(
+                operator,
+                text,
+                [("system.agent_knowledge_health", "Verify that every registered Dominion agent resolves to a bounded governed Dominion Brain context with source hashes and no authority expansion.")],
+                "agent_knowledge_health",
+            )
+            plan["conversation_context"] = governed_context
+            if simulate:
+                return _attach_knowledge_receipt(
+                    {"status": "PLANNED", "objective": text, "plan": plan, "response": operator._plan_summary(plan)},
+                    knowledge_receipt,
+                )
+            return _attach_knowledge_receipt(operator.execute(plan, session_id=session_id), knowledge_receipt)
+
         if any(phrase in lower for phrase in capability_phrases):
             plan = _build_direct_plan(
                 operator,
@@ -202,9 +305,13 @@ def _wrap_handle(operator: Any) -> None:
                 [("system.capability_health", "Audit all registered and extended Buddy capabilities against real executors and MCP runtime health.")],
                 "capability_health",
             )
+            plan["conversation_context"] = governed_context
             if simulate:
-                return {"status": "PLANNED", "objective": text, "plan": plan, "response": operator._plan_summary(plan)}
-            return operator.execute(plan, session_id=session_id)
+                return _attach_knowledge_receipt(
+                    {"status": "PLANNED", "objective": text, "plan": plan, "response": operator._plan_summary(plan)},
+                    knowledge_receipt,
+                )
+            return _attach_knowledge_receipt(operator.execute(plan, session_id=session_id), knowledge_receipt)
 
         if any(phrase in lower for phrase in repair_phrases):
             plan = _build_direct_plan(
@@ -214,30 +321,43 @@ def _wrap_handle(operator: Any) -> None:
                     ("system.self_diagnose", "Diagnose Buddy and every registered governed Dominion runtime connector before any mutation."),
                     ("system.self_repair", "Apply only standing-authorized allowlisted service/container/source repair recipes, verify all governed runtime signals, and roll back failed source repairs."),
                     ("system.capability_health", "Re-audit capability health after repair so unresolved gaps remain visible."),
+                    ("system.agent_knowledge_health", "Re-verify that every registered agent resolves to current governed Dominion Brain context."),
                 ],
                 "self_heal",
             )
+            plan["conversation_context"] = governed_context
             if simulate:
-                return {"status": "PLANNED", "objective": text, "plan": plan, "response": operator._plan_summary(plan)}
-            return operator.execute(plan, session_id=session_id)
+                return _attach_knowledge_receipt(
+                    {"status": "PLANNED", "objective": text, "plan": plan, "response": operator._plan_summary(plan)},
+                    knowledge_receipt,
+                )
+            return _attach_knowledge_receipt(operator.execute(plan, session_id=session_id), knowledge_receipt)
 
         if any(phrase in lower for phrase in diagnose_phrases):
             plan = _build_direct_plan(
                 operator,
                 text,
-                [("system.self_diagnose", "Diagnose Buddy and every registered governed Dominion runtime connector without mutation.")],
+                [
+                    ("system.self_diagnose", "Diagnose Buddy and every registered governed Dominion runtime connector without mutation."),
+                    ("system.agent_knowledge_health", "Verify that every registered agent resolves to current governed Dominion Brain context."),
+                ],
                 "self_diagnose",
             )
+            plan["conversation_context"] = governed_context
             if simulate:
-                return {"status": "PLANNED", "objective": text, "plan": plan, "response": operator._plan_summary(plan)}
-            return operator.execute(plan, session_id=session_id)
+                return _attach_knowledge_receipt(
+                    {"status": "PLANNED", "objective": text, "plan": plan, "response": operator._plan_summary(plan)},
+                    knowledge_receipt,
+                )
+            return _attach_knowledge_receipt(operator.execute(plan, session_id=session_id), knowledge_receipt)
 
-        return original(
+        result = original(
             text,
             session_id=session_id,
             simulate=simulate,
-            conversation_context=conversation_context,
+            conversation_context=governed_context,
         )
+        return _attach_knowledge_receipt(result, knowledge_receipt)
 
     operator.handle = extended_handle
     operator._dominion_handle_extended = True
@@ -259,6 +379,7 @@ def install_operator_extensions(operator: Any) -> Any:
     operator._executors.update(
         {
             "native:capability_health": _capability_health_executor(operator),
+            "native:agent_knowledge_health": _agent_knowledge_health_executor(operator),
             "native:self_diagnose": _self_diagnose_executor(operator),
             "native:self_repair": _self_repair_executor(operator),
             "native:mcp_list": _mcp_list_executor(operator),

@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: foundation-vm-buddy-production
+  group: foundation-vm-production
   cancel-in-progress: false
 
 jobs:

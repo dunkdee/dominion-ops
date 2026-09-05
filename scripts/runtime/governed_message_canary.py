@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import shlex
@@ -34,12 +35,8 @@ def emit(key, value):
     print(line, flush=True)
 
 
-def _load_env_file(path: Path, *, override: bool) -> bool:
-    """Load one dotenv-style file with shell ordering semantics."""
-    try:
-        raw = path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return False
+def _apply_env_text(raw: str, *, override: bool) -> bool:
+    """Load dotenv-style text with a conservative shell-like subset."""
     loaded = False
     for line in raw.splitlines():
         line = line.strip()
@@ -71,13 +68,37 @@ def _load_env_file(path: Path, *, override: bool) -> bool:
     return loaded
 
 
+def _load_env_file(path: Path, *, override: bool, encoding: str = "utf-8") -> bool:
+    """Load one dotenv-style file with shell ordering semantics."""
+    try:
+        raw = path.read_text(encoding=encoding, errors="ignore")
+    except OSError:
+        return False
+    return _apply_env_text(raw, override=override)
+
+
+def _load_env_stream(stream: io.TextIOBase | io.StringIO, *, override: bool) -> bool:
+    """Load dotenv-style text from a file-like object."""
+    try:
+        raw = stream.read()
+    except Exception:
+        return False
+    if not isinstance(raw, str):
+        return False
+    return _apply_env_text(raw, override=override)
+
+
 def _install_dotenv_shim() -> None:
     """Provide the minimal dotenv API this canary and Buddy runtime import."""
     module = types.ModuleType("dotenv")
 
-    def load_dotenv(dotenv_path=None, override=False):
+    def load_dotenv(dotenv_path=None, stream=None, verbose=False, override=False,
+                    interpolate=True, encoding="utf-8"):
+        del verbose, interpolate
+        if stream is not None:
+            return _load_env_stream(stream, override=bool(override))
         candidate = Path(dotenv_path).expanduser() if dotenv_path else (Path.cwd() / ".env")
-        return _load_env_file(candidate, override=bool(override))
+        return _load_env_file(candidate, override=bool(override), encoding=str(encoding or "utf-8"))
 
     module.load_dotenv = load_dotenv
     sys.modules["dotenv"] = module

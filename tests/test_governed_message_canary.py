@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import importlib.util
+import io
 import os
 import sys
 from pathlib import Path
@@ -108,6 +109,26 @@ def test_dotenv_shim_ignores_inline_comments_and_skips_unsupported_unquoted_spac
         assert os.environ["INLINE"] == "value"
         assert os.environ["QUOTED"] == "value # kept"
         assert "UNSUPPORTED" not in os.environ
+    finally:
+        if saved is not None:
+            sys.modules["dotenv"] = saved
+        else:
+            sys.modules.pop("dotenv", None)
+
+
+def test_dotenv_shim_supports_stream_input(monkeypatch, tmp_path):
+    canary = _load_canary_module()
+
+    saved = sys.modules.pop("dotenv", None)
+    _force_missing_dotenv(monkeypatch)
+    monkeypatch.delenv("STREAM_VALUE", raising=False)
+    try:
+        canary.load_runtime_env(tmp_path)
+        from dotenv import load_dotenv
+
+        stream = io.StringIO("STREAM_VALUE=from-stream\n")
+        assert load_dotenv(stream=stream, override=False) is True
+        assert os.environ["STREAM_VALUE"] == "from-stream"
     finally:
         if saved is not None:
             sys.modules["dotenv"] = saved

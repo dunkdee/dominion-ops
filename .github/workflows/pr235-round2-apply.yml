@@ -24,17 +24,17 @@ jobs:
         run: |
           set -Eeuo pipefail
           git merge-base --is-ancestor a26ca7a44dc2b7c1270ed84990e83836fc00d392 HEAD
-          test -f .github/scripts/pr235_round2_patch.py
+          test -f .github/scripts/pr235_round2_patch_v2.py
           test -z "$(git status --porcelain)"
 
       - name: Apply final independent-review fixes
         shell: bash
         run: |
           set -Eeuo pipefail
-          python .github/scripts/pr235_round2_patch.py
-          rm -f .github/workflows/pr235-round2-apply.yml
+          python .github/scripts/pr235_round2_patch_v2.py
           git diff --check
           test ! -e .github/scripts/pr235_round2_patch.py
+          test ! -e .github/scripts/pr235_round2_patch_v2.py
           test ! -e .github/workflows/pr235-round2-apply.yml
 
       - name: Install test dependencies

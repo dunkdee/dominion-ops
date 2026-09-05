@@ -1,6 +1,6 @@
 {
   "schema": "dominion-buddy-authority-v1",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "identity": {
     "agent_id": "buddy",
     "role": "PRIMARY_PERSONAL_AI",
@@ -127,7 +127,7 @@
   },
   "autonomy_control": {
     "schema": "dominion-autonomy-control-v1",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "authority": {
       "principal": "Dewayne Singleton",
       "final_decision_maker": "FOUNDER",
@@ -157,6 +157,21 @@
         "max_attempts": 2,
         "cooldown_seconds": 300,
         "on_exhaustion": "OPEN_CIRCUIT_AND_REPORT_BLOCKED"
+      },
+      "external_message_live_mode_reconciliation": {
+        "automatic": true,
+        "workflow": ".github/workflows/external-message-live-mode-production.yml",
+        "authorization_reference": "DIRECT_FOUNDER_INSTRUCTION_2026-09-05",
+        "allowed_mutation": "BUDDY_EXTERNAL_MESSAGE_MODE_UPSERT_AND_BOUNDED_SERVICE_RESTART",
+        "allowed_services": [
+          "dominion-buddy-web.service",
+          "buddy-bridge.service",
+          "dominion-buddy.service"
+        ],
+        "external_send_permitted": false,
+        "verify_only_required": true,
+        "receipt_required": true,
+        "reconciliation_cadence": "HOURLY_AND_POST_DEPLOY"
       },
       "founder_approved_apply": {
         "automatic": false,
@@ -209,7 +224,8 @@
       ".github/workflows/buddy-production-repair.yml": "TEMPORARY_LEGACY_BUDDY_EXCEPTION",
       ".github/workflows/deploy-buddy-runtime.yml": "FOUNDER_STANDING_BUDDY_RUNTIME_DEPLOY",
       ".github/workflows/recover-buddy-runtime.yml": "FOUNDER_STANDING_BUDDY_RUNTIME_RECOVERY",
-      ".github/workflows/publish-dominion-brain-production.yml": "FOUNDER_STANDING_OBSIDIAN_SYNC"
+      ".github/workflows/publish-dominion-brain-production.yml": "FOUNDER_STANDING_OBSIDIAN_SYNC",
+      ".github/workflows/external-message-live-mode-production.yml": "FOUNDER_STANDING_EXTERNAL_MESSAGE_LIVE_MODE_RECONCILIATION"
     },
     "legacy_buddy_exception": {
       "workflow": ".github/workflows/buddy-production-repair.yml",

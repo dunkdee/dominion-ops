@@ -56,10 +56,22 @@ try:
 except ImportError:  # standalone runtime vs canonical repo import path
     from buddy_core.core.authorization import AuthorizationError, AuthorizationLedger, payload_fingerprint
 
-try:
-    from watchmen.saraqael import log as governed_audit_log
-except ImportError:  # repository/package execution used by CI/tests
-    from buddy_core.watchmen.saraqael import log as governed_audit_log
+def governed_audit_log(*args, **kwargs):
+    """Write the governed Saraqael receipt, resolving the module at call time.
+
+    watchmen.saraqael imports phi_memory, which imports this package, so
+    importing saraqael here at module scope makes `import watchmen.saraqael`
+    first — the documented chain self-check entrypoint — fail: the circular
+    ImportError falls through to the buddy_core.* branch, which does not exist
+    in the standalone runtime layout. Resolving at call time keeps both import
+    orders working and still lets an unavailable audit raise, so callers
+    report DELIVERED_AUDIT_UNAVAILABLE rather than claiming a verified action.
+    """
+    try:
+        from watchmen.saraqael import log as _governed_log
+    except ImportError:  # repository/package execution used by CI/tests
+        from buddy_core.watchmen.saraqael import log as _governed_log
+    return _governed_log(*args, **kwargs)
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "config"
@@ -982,7 +994,13 @@ CAPABILITY REGISTRY:
                                 "detail": f"no governed executor bound for {executor_name or step['capability']}"}],
                     "result": None, "evidence": []}
         try:
-            outcome = executor(copy.deepcopy(step), self._authorized_external_context(step))
+            # Both arguments carry only the authorized shape. The raw step also
+            # holds un-fingerprinted keys (authorization_id, and anything a
+            # writer could add to the persisted held plan), and those are not
+            # covered by payload_fingerprint(), so passing the step itself would
+            # let unapproved input reach a real executor behind a valid grant.
+            authorized = self._authorized_external_context(step)
+            outcome = executor(copy.deepcopy(authorized), self._authorized_external_context(step))
         except Exception as exc:
             return {**base, "status": "BLOCKED",
                     "errors": [{"attempt": 1, "error": type(exc).__name__, "detail": str(exc)[:300]}],

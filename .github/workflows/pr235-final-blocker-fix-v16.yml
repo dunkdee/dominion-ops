@@ -1,0 +1,65 @@
+name: PR235 Final Blocker Closure V16
+
+on:
+  push:
+    branches:
+      - governance/elite-end-to-end-remediation
+
+permissions:
+  contents: write
+
+jobs:
+  close-final-review-blockers:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: governance/elite-end-to-end-remediation
+          fetch-depth: 0
+
+      - name: Verify exact lineage and clean tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git merge-base --is-ancestor 5b6a9baa8aed9deefbb6a61f4b17bc36ce643e99 HEAD
+          test -z "$(git status --porcelain)"
+
+      - name: Apply bounded final patch
+        run: python .github/scripts/pr235_final_fix.py
+
+      - name: Install declared test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
+
+      - name: Focused independent-review regressions
+        run: |
+          set -Eeuo pipefail
+          python -m pytest -q \
+            tests/test_pr235_final_review_blockers.py \
+            tests/test_buddy_authority_execution.py \
+            tests/test_pr235_approval_auth_boundary.py \
+            tests/test_pr235_final_authority_closure.py \
+            tests/test_watchmen_review_closure.py
+
+      - name: Elite governance validator
+        run: python scripts/validate_elite_governance.py
+
+      - name: Full repository Python suite
+        run: python -m pytest -q
+
+      - name: Publish tested final fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check
+          test ! -e .github/workflows/pr235-final-blocker-fix-v14.yml
+          test ! -e .github/workflows/pr235-final-blocker-fix-v15.yml
+          test ! -e .github/workflows/pr235-final-blocker-fix-v16.yml
+          test ! -e .github/scripts/pr235_final_fix.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: close final PR235 independent-review blockers"
+          git push origin HEAD:governance/elite-end-to-end-remediation
+          echo "FINAL_FIX_SHA=$(git rev-parse HEAD)"

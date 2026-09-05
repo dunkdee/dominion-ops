@@ -1,6 +1,6 @@
 {
   "schema": "dominion-buddy-authority-v1",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "identity": {
     "agent_id": "buddy",
     "role": "PRIMARY_PERSONAL_AI",
@@ -127,7 +127,7 @@
   },
   "autonomy_control": {
     "schema": "dominion-autonomy-control-v1",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "authority": {
       "principal": "Dewayne Singleton",
       "final_decision_maker": "FOUNDER",
@@ -181,7 +181,6 @@
       ".github/workflows/email-drip-readonly-planner.yml": "RUN EMAIL DRIP PLANNER",
       ".github/workflows/finish-production-activation.yml": "FINISH PRODUCTION ACTIVATION",
       ".github/workflows/netlify_sync_env.yml": "SYNC NETLIFY ENV",
-      ".github/workflows/publish-dominion-brain-production.yml": "PUBLISH DOMINION BRAIN",
       ".github/workflows/repair-email-drip-suppression-and-hold.yml": "REPAIR EMAIL DRIP HOLD",
       ".github/workflows/repair-obsidian-remote.yml": "REPAIR OBSIDIAN REMOTE",
       ".github/workflows/vault-health.yml": "RUN VAULT DOCTOR",
@@ -209,7 +208,8 @@
       ".github/workflows/fix-buddy-brains.yml": "BUDDY_BOUNDED_RESTART",
       ".github/workflows/buddy-production-repair.yml": "TEMPORARY_LEGACY_BUDDY_EXCEPTION",
       ".github/workflows/deploy-buddy-runtime.yml": "FOUNDER_STANDING_BUDDY_RUNTIME_DEPLOY",
-      ".github/workflows/recover-buddy-runtime.yml": "FOUNDER_STANDING_BUDDY_RUNTIME_RECOVERY"
+      ".github/workflows/recover-buddy-runtime.yml": "FOUNDER_STANDING_BUDDY_RUNTIME_RECOVERY",
+      ".github/workflows/publish-dominion-brain-production.yml": "FOUNDER_STANDING_OBSIDIAN_SYNC"
     },
     "legacy_buddy_exception": {
       "workflow": ".github/workflows/buddy-production-repair.yml",

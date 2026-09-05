@@ -53,6 +53,7 @@ def op(tmp_path, monkeypatch):
 def test_extensions_are_installed_on_every_operator(op):
     expected = {
         "system.capability_health": "native:capability_health",
+        "system.agent_knowledge_health": "native:agent_knowledge_health",
         "system.self_diagnose": "native:self_diagnose",
         "system.self_repair": "native:self_repair",
         "mcp.connectors_list": "native:mcp_list",
@@ -64,7 +65,7 @@ def test_extensions_are_installed_on_every_operator(op):
         assert executor in op._executors
 
 
-def test_fix_yourself_routes_to_diagnose_repair_and_reaudit(op, monkeypatch):
+def test_fix_yourself_routes_to_diagnose_repair_reaudit_and_brain_check(op, monkeypatch):
     monkeypatch.setattr(
         extensions,
         "diagnose",
@@ -78,7 +79,12 @@ def test_fix_yourself_routes_to_diagnose_repair_and_reaudit(op, monkeypatch):
     monkeypatch.setattr(
         extensions,
         "audit_capabilities",
-        lambda operator: {"status": "HEALTHY", "registered_enabled": 21, "native_connected": 16, "mcp": {"status": "HEALTHY"}},
+        lambda operator: {"status": "HEALTHY", "registered_enabled": 22, "native_connected": 17, "mcp": {"status": "HEALTHY"}},
+    )
+    monkeypatch.setattr(
+        extensions,
+        "verify_registered_agents",
+        lambda path: {"status": "PASS", "agent_count": 15, "authority_expanded": False, "agents": []},
     )
 
     result = op.handle("fix yourself", session_id="self-heal-test")
@@ -87,6 +93,7 @@ def test_fix_yourself_routes_to_diagnose_repair_and_reaudit(op, monkeypatch):
         "system.self_diagnose",
         "system.self_repair",
         "system.capability_health",
+        "system.agent_knowledge_health",
     ]
     assert all(r["status"] == "VERIFIED" for r in result["receipts"])
 
@@ -119,8 +126,8 @@ def test_capability_audit_is_direct_and_truthful(op, monkeypatch):
         "audit_capabilities",
         lambda operator: {
             "status": "DEGRADED",
-            "registered_enabled": 21,
-            "native_connected": 16,
+            "registered_enabled": 22,
+            "native_connected": 17,
             "mcp": {"status": "UNAVAILABLE"},
         },
     )
@@ -129,6 +136,40 @@ def test_capability_audit_is_direct_and_truthful(op, monkeypatch):
     receipt = result["receipts"][0]
     assert receipt["capability"] == "system.capability_health"
     assert receipt["result"]["status"] == "DEGRADED"
+
+
+def test_agent_knowledge_health_route_is_direct_and_read_only(op, monkeypatch):
+    monkeypatch.setattr(
+        extensions,
+        "verify_registered_agents",
+        lambda path: {"status": "PASS", "agent_count": 15, "authority_expanded": False, "agents": []},
+    )
+    result = op.handle("verify dominion brain")
+    assert result["status"] == "COMPLETE"
+    receipt = result["receipts"][0]
+    assert receipt["capability"] == "system.agent_knowledge_health"
+    assert receipt["result"]["status"] == "PASS"
+    assert receipt["result"]["authority_expanded"] is False
+
+
+def test_request_context_injects_brain_without_expanding_authority(op, monkeypatch):
+    monkeypatch.setattr(
+        extensions,
+        "load_agent_knowledge",
+        lambda agent_id: {
+            "agent_id": agent_id,
+            "brain_source_revision_sha256": "a" * 64,
+            "context_sha256": "b" * 64,
+            "files": [{"path": "04-Agents/buddy/00-Identity.md"}],
+            "context": "DOMINION GOVERNED KNOWLEDGE CONTEXT\nKNOWLEDGE_MARKER",
+            "authority_expanded": False,
+        },
+    )
+    result = op.handle("hello", conversation_context="prior context")
+    assert result["status"] == "ANSWERED"
+    assert result["agent_knowledge"]["status"] == "LOADED"
+    assert result["agent_knowledge"]["context_sha256"] == "b" * 64
+    assert result["agent_knowledge"]["authority_expanded"] is False
 
 
 def test_mcp_connector_executor_uses_registered_id_only(op, monkeypatch):
@@ -157,7 +198,7 @@ def test_capability_health_merges_extension_registry(op, monkeypatch):
         lambda timeout=4.0: {"status": "HEALTHY", "connector_count": 8},
     )
     report = capability_health.audit_capabilities(op)
-    assert report["extension_version"] == "1.0.0"
+    assert report["extension_version"] == "1.1.0"
     assert report["native_missing"] == []
     assert report["status"] == "HEALTHY"
     assert report["registered_enabled"] == len(op.capabilities)

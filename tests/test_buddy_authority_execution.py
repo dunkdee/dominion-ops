@@ -12,6 +12,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -185,19 +186,65 @@ class AuthorityExecutionTests(unittest.TestCase):
             delivered["destination"] = step.get("destination")
             return {"delivered": True,
                     "result": {"posted": True, "url": "https://example.invalid/p/1"},
-                    "evidence": [{"url": "https://example.invalid/p/1"}]}
+                    "evidence": [{
+                        "platform_receipt_id": "post_123",
+                        "platform": "example.invalid",
+                        "observed_at": "2026-09-05T06:45:00Z",
+                        "url": "https://example.invalid/p/1",
+                    }]}
+
+        self.operator._external_executors["external:publish"] = deliver
+        held = self.run_plan()["held"]
+        self.ledger.grant(held["approval_id"])
+        with mock.patch(
+            "core.operator.governed_audit_log",
+            return_value={"seq": 9, "hash": "a" * 64, "event": "external_action_executed"},
+        ) as governed_audit:
+            record = self.run_plan(authorization_id=held["approval_id"])
+        self.assertEqual(record["status"], "COMPLETE")
+        receipt = self.last(record)
+        self.assertEqual(receipt["status"], "VERIFIED")
+        self.assertTrue(receipt["result"]["posted"])
+        self.assertEqual(receipt["governed_audit"]["seq"], 9)
+        governed_audit.assert_called_once()
+        self.assertEqual(delivered["destination"], DEST)
+        # Authority is spent exactly once on a real delivery.
+        self.assertEqual(self.ledger.load(held["approval_id"])["status"], "CONSUMED")
+
+    def test_error_only_evidence_is_not_a_delivery_receipt(self):
+        def deliver(step, context):
+            return {
+                "delivered": True,
+                "result": {"posted": True},
+                "evidence": [{"error": "receipt unavailable"}],
+            }
 
         self.operator._external_executors["external:publish"] = deliver
         held = self.run_plan()["held"]
         self.ledger.grant(held["approval_id"])
         record = self.run_plan(authorization_id=held["approval_id"])
-        self.assertEqual(record["status"], "COMPLETE")
-        receipt = self.last(record)
-        self.assertEqual(receipt["status"], "VERIFIED")
-        self.assertTrue(receipt["result"]["posted"])
-        self.assertEqual(delivered["destination"], DEST)
-        # Authority is spent exactly once on a real delivery.
-        self.assertEqual(self.ledger.load(held["approval_id"])["status"], "CONSUMED")
+        self.assertEqual(record["status"], "BLOCKED")
+        self.assertEqual(self.last(record)["status"], "DELIVERED_UNVERIFIED")
+
+    def test_governed_audit_failure_blocks_verified_completion(self):
+        def deliver(step, context):
+            return {
+                "delivered": True,
+                "result": {"posted": True},
+                "evidence": [{
+                    "platform_receipt_id": "post_456",
+                    "platform": "example.invalid",
+                    "observed_at": "2026-09-05T06:46:00Z",
+                }],
+            }
+
+        self.operator._external_executors["external:publish"] = deliver
+        held = self.run_plan()["held"]
+        self.ledger.grant(held["approval_id"])
+        with mock.patch("core.operator.governed_audit_log", side_effect=RuntimeError("audit down")):
+            record = self.run_plan(authorization_id=held["approval_id"])
+        self.assertEqual(record["status"], "BLOCKED")
+        self.assertEqual(self.last(record)["status"], "DELIVERED_AUDIT_UNAVAILABLE")
 
     def test_every_declared_external_capability_has_a_bound_executor(self):
         for cap_id, cap in self.operator.capabilities.items():

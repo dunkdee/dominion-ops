@@ -118,14 +118,20 @@ restore_local_state() {
   fi
 
   set +e
-  # Move HEAD and worktree back to the previous release. `switch --detach`
-  # without --force refuses on unexpected drift instead of destroying it,
-  # which is the fail-closed behaviour governance requires.
-  git switch --detach --quiet "$PREVIOUS_SHA"
-  git clean -fdq
+  # A failed switch is terminal for restore: never clean/apply state on an
+  # unknown commit.
+  restore_output="$(git switch --detach --quiet "$PREVIOUS_SHA" 2>&1)"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    clean_output="$(git clean -fdq 2>&1)"
+    rc=$?
+    if [ -n "$clean_output" ]; then
+      restore_output="${restore_output};${clean_output}"
+    fi
+  fi
 
-  if [ -s "$LOCAL_STATE_BACKUP/index.patch" ]; then
-    git apply --index --binary --whitespace=nowarn "$LOCAL_STATE_BACKUP/index.patch"
+  if [ "$rc" -eq 0 ] && [ -s "$LOCAL_STATE_BACKUP/index.patch" ]; then
+    restore_output="$(git apply --index --binary --whitespace=nowarn "$LOCAL_STATE_BACKUP/index.patch" 2>&1)"
     rc=$?
   fi
 

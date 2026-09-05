@@ -56,6 +56,11 @@ try:
 except ImportError:  # standalone runtime vs canonical repo import path
     from buddy_core.core.authorization import AuthorizationError, AuthorizationLedger, payload_fingerprint
 
+try:
+    from watchmen.saraqael import log as governed_audit_log
+except ImportError:  # repository/package execution used by CI/tests
+    from buddy_core.watchmen.saraqael import log as governed_audit_log
+
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "config"
 STATE = Path(os.getenv("BUDDY_STATE_DIR", str(Path.home() / ".dominion" / "buddy")))
@@ -880,6 +885,45 @@ CAPABILITY REGISTRY:
     # ---------- Native executors ----------
     # ---------- Governed external execution ----------
 
+
+    @staticmethod
+    def _validate_delivery_evidence(capability: str, evidence: Any) -> tuple[bool, str | None]:
+        """Require a real capability-specific delivery receipt.
+
+        A truthy dictionary, URL, or error object is not evidence of delivery.
+        At least one item must contain a recognized receipt identifier,
+        source/platform provenance, and an observation timestamp.
+        """
+        if not isinstance(evidence, list) or not evidence:
+            return False, None
+
+        receipt_keys = {
+            "external.publish": ("platform_receipt_id", "publication_id", "post_id", "receipt_id"),
+            "external.message": ("send_receipt_id", "message_id", "receipt_id"),
+            "external.spend": ("financial_receipt_id", "transaction_id", "payment_id", "receipt_id"),
+        }.get(capability, ("receipt_id",))
+        provenance_keys = ("platform", "provider", "system", "source")
+        time_keys = ("observed_at", "delivered_at", "timestamp", "created_at")
+
+        for item in evidence:
+            if not isinstance(item, dict) or not item:
+                continue
+            receipt_id = next(
+                (str(item.get(key)).strip() for key in receipt_keys if str(item.get(key) or "").strip()),
+                None,
+            )
+            provenance = next(
+                (str(item.get(key)).strip() for key in provenance_keys if str(item.get(key) or "").strip()),
+                None,
+            )
+            observed_at = next(
+                (str(item.get(key)).strip() for key in time_keys if str(item.get(key) or "").strip()),
+                None,
+            )
+            if receipt_id and provenance and observed_at:
+                return True, receipt_id
+        return False, None
+
     def _execute_external(self, index: int, step: dict, cap: dict, context: dict,
                         authorization: dict) -> dict:
         """Execute only redeemed exact authority; never fabricate delivery proof."""
@@ -921,21 +965,38 @@ CAPABILITY REGISTRY:
                     "result": None, "evidence": []}
 
         evidence = outcome.get("evidence")
-        if not (isinstance(evidence, list) and evidence and
-                all(isinstance(item, dict) and bool(item) for item in evidence)):
+        evidence_ok, receipt_id = self._validate_delivery_evidence(
+            step["capability"], evidence
+        )
+        if not evidence_ok:
             return {**base, "status": "DELIVERED_UNVERIFIED",
                     "errors": [{"attempt": 1, "error": "DeliveryEvidenceMissing",
-                                "detail": "delivery occurred but governed delivery evidence is absent or malformed"}],
+                                "detail": "delivery occurred but no capability-specific receipt with provenance and timestamp was present"}],
                     "result": outcome.get("result"),
                     "evidence": evidence if isinstance(evidence, list) else []}
 
+        evidence_hash = hashlib.sha256(
+            json.dumps(
+                evidence,
+                sort_keys=True,
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
         try:
-            audit("external_action_executed", {
-                "capability": step["capability"],
-                "approval_id": authorization.get("approval_id"),
-                "destination": step.get("destination"),
-                "payload_hash": authorization.get("payload_hash"),
-            })
+            governed_entry = governed_audit_log(
+                "buddy_operator",
+                "external_action_executed",
+                "ok",
+                {
+                    "capability": step["capability"],
+                    "approval_id": authorization.get("approval_id"),
+                    "destination": step.get("destination"),
+                    "payload_hash": authorization.get("payload_hash"),
+                    "delivery_receipt_id": receipt_id,
+                    "delivery_evidence_sha256": evidence_hash,
+                },
+            )
         except Exception as exc:
             return {**base, "status": "DELIVERED_AUDIT_UNAVAILABLE",
                     "errors": [{"attempt": 1, "error": "PostDeliveryAuditUnavailable",
@@ -943,7 +1004,12 @@ CAPABILITY REGISTRY:
                     "result": outcome.get("result"), "evidence": evidence}
 
         return {**base, "status": "VERIFIED", "errors": [],
-                "result": outcome.get("result"), "evidence": evidence}
+                "result": outcome.get("result"), "evidence": evidence,
+                "governed_audit": {
+                    "seq": governed_entry.get("seq"),
+                    "hash": governed_entry.get("hash"),
+                    "event": governed_entry.get("event"),
+                }}
 
     def _no_delivery_backend(self, channel: str) -> dict:
         """The honest result when a governed executor exists but has no

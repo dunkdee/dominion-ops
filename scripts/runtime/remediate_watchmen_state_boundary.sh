@@ -13,7 +13,12 @@ case "$target" in
     ;;
 esac
 
-sudo install -d -m 700 -o "$run_user" -g "$run_group" "$target"
+# Tests and non-root installations may use an already-writable machine-local
+# target. Production /var/lib requires the bounded sudo fallback.
+if ! install -d -m 700 "$target" 2>/dev/null; then
+  sudo install -d -m 700 -o "$run_user" -g "$run_group" "$target"
+fi
+chmod 700 "$target"
 install -d -m 700 "$(dirname "$legacy")"
 
 python3 - "$legacy" "$target" "$HOME" <<'PY'
@@ -94,12 +99,17 @@ if legacy.is_dir():
             if not dst.is_file() or not same_bytes(src, dst):
                 fail(f"conflicting_{name}")
             continue
-        tmp = Path(tempfile.mkstemp(prefix=f".{name}.", dir=str(target))[1])
+        fd, tmp_name = tempfile.mkstemp(prefix=f".{name}.", dir=str(target))
+        os.close(fd)
+        tmp = Path(tmp_name)
         try:
             shutil.copyfile(src, tmp)
             os.chmod(tmp, 0o600)
-            with tmp.open("rb") as fh:
-                os.fsync(fh.fileno())
+            sync_fd = os.open(str(tmp), os.O_RDONLY)
+            try:
+                os.fsync(sync_fd)
+            finally:
+                os.close(sync_fd)
             tmp.replace(dst)
         finally:
             if tmp.exists():

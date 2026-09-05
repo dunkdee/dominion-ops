@@ -2,18 +2,19 @@ name: Buddy Production Repair
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/buddy-production-repair.yml'
 
 permissions:
   contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
 
 jobs:
   repair:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: foundation-vm-production
     steps:
       - name: Repair and validate Buddy stack
         uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0

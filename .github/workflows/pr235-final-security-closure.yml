@@ -1,14 +1,10 @@
 name: PR235 Final Security Closure
 
 on:
-  push:
-    branches:
-      - governance/elite-end-to-end-remediation
-    paths:
-      - scripts/pr235_final_security_closure.py
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: pr235-final-security-closure
@@ -16,7 +12,7 @@ concurrency:
 
 jobs:
   close-final-security-findings:
-    if: github.actor != 'github-actions[bot]'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

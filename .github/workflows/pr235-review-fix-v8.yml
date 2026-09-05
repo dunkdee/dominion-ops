@@ -23,20 +23,20 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD^)" = "b06522f12fba2e64b39135f880a75f0429824ef5"
+          test "$(git rev-parse HEAD^)" = "89f470b87f2013c8db9640ab137903e5293a39ae"
           test -z "$(git status --porcelain)"
 
-      - name: Apply reviewed remediation with source-correct class indentation
+      - name: Apply reviewed remediation and canonicalize generated methods
         shell: bash
         run: |
           set -Eeuo pipefail
           python - <<'PY'
+          import ast
           from pathlib import Path
 
           start = "          python - <<'PY'\n"
           end = "\n          PY\n\n      - name: Install repository-wide test dependencies"
-          v4_path = Path('.github/workflows/pr235-review-fix-v4.yml')
-          source = v4_path.read_text(encoding='utf-8')
+          source = Path('.github/workflows/pr235-review-fix-v4.yml').read_text(encoding='utf-8')
           if start not in source or end not in source:
               raise SystemExit('v4 remediation payload markers missing')
           payload = source.split(start, 1)[1].split(end, 1)[0]
@@ -45,66 +45,116 @@ jobs:
               for line in payload.splitlines()
           ) + '\n'
 
-          # Correct the class-method generation at the source instead of trying
-          # to repair malformed output after the fact. The reviewed v4 strings
-          # intentionally include class indentation; dedent alone removed it.
-          old_execute = 'textwrap.dedent(new_execute).lstrip("\\n"),'
-          old_external = 'textwrap.dedent(new_external).lstrip("\\n"),'
-          if script.count(old_execute) != 1 or script.count(old_external) != 1:
-              raise SystemExit('reviewed operator generation expressions missing')
-          script = script.replace(
-              old_execute,
-              'textwrap.indent(textwrap.dedent(new_execute).lstrip("\\n"), "    "),',
-              1,
-          )
-          script = script.replace(
-              old_external,
-              'textwrap.indent(textwrap.dedent(new_external).lstrip("\\n"), "    "),',
-              1,
-          )
+          tree = ast.parse(script)
+          literals = {}
+          for node in tree.body:
+              if not isinstance(node, ast.Assign):
+                  continue
+              for target in node.targets:
+                  if isinstance(target, ast.Name) and target.id in {'new_execute', 'new_external'}:
+                      literals[target.id] = ast.literal_eval(node.value)
+          if set(literals) != {'new_execute', 'new_external'}:
+              raise SystemExit('reviewed operator method payloads missing')
 
-          # The original v4 validator edit depended on an exact old text block
-          # and was the only brittle part of that payload. Skip it here and
-          # apply the same gate structurally below.
+          # The v4 validator edit used brittle source-text matching. Skip only
+          # that section and apply the same rule structurally after execution.
           left_marker = '# 8. Elite validator: actual AST map binding, never comments/strings.'
           right_marker = '# 9. Test-suite correctness/dependencies.'
           left = script.find(left_marker)
           right = script.find(right_marker, left + 1)
           if left < 0 or right < 0:
               raise SystemExit('validator section markers missing')
-          script = script[:left] + '# validator patched structurally after reviewed remediation\n' + script[right:]
+          executable = script[:left] + '# validator patched structurally below\n' + script[right:]
+          compile(executable, '<pr235-v4-reviewed>', 'exec')
+          exec(executable, {'__name__': '__main__'})
 
-          compile(script, '<pr235-v4-source-corrected>', 'exec')
-          exec(script, {'__name__': '__main__'})
+          def canonical_method_block(raw: str, *, drop_planning_comment: bool = False) -> str:
+              lines = raw.lstrip('\n').splitlines()
+              if drop_planning_comment:
+                  lines = [ln for ln in lines if ln.strip() != '# ---------- Planning / policy ----------']
+              method_rows = [i for i, ln in enumerate(lines) if ln.lstrip().startswith('def ')]
+              if not method_rows:
+                  raise SystemExit('generated method block has no methods')
+              method_indent = min(len(lines[i]) - len(lines[i].lstrip(' ')) for i in method_rows)
 
-          # Structural validator patch: only literal keys in the actual
-          # self._external_executors dict assignment satisfy the gate.
-          p = Path('scripts/validate_elite_governance.py')
-          text = p.read_text(encoding='utf-8')
-          if 'import ast\n' not in text:
-              text = text.replace('import json\nimport re\n', 'import ast\nimport json\nimport re\n', 1)
+              # Determine whether the reviewed raw string omitted one body level.
+              first = method_rows[0]
+              sig_end = first
+              while sig_end < len(lines) and not lines[sig_end].rstrip().endswith(':'):
+                  sig_end += 1
+              body_idx = sig_end + 1
+              while body_idx < len(lines) and not lines[body_idx].strip():
+                  body_idx += 1
+              if body_idx >= len(lines):
+                  raise SystemExit('generated method block has no body')
+              body_indent = len(lines[body_idx]) - len(lines[body_idx].lstrip(' '))
+              add_body_level = body_indent <= method_indent
 
-          helper = '''\ndef external_executor_bindings(source: str) -> set[str]:\n    try:\n        tree = ast.parse(source)\n    except SyntaxError:\n        return set()\n    found: set[str] = set()\n    for node in ast.walk(tree):\n        if not isinstance(node, (ast.Assign, ast.AnnAssign)):\n            continue\n        targets = node.targets if isinstance(node, ast.Assign) else [node.target]\n        matches = any(\n            isinstance(target, ast.Attribute)\n            and isinstance(target.value, ast.Name)\n            and target.value.id == "self"\n            and target.attr == "_external_executors"\n            for target in targets\n        )\n        if not matches or not isinstance(node.value, ast.Dict):\n            continue\n        for key in node.value.keys:\n            if isinstance(key, ast.Constant) and isinstance(key.value, str):\n                found.add(key.value)\n    return found\n\n'''
-          if 'def external_executor_bindings(' not in text:
-              marker = '\ndef collect_failures() -> list[dict]:\n'
-              if marker not in text:
-                  raise SystemExit('validator collect_failures marker missing')
-              text = text.replace(marker, helper + 'def collect_failures() -> list[dict]:\n', 1)
+              out = []
+              for ln in lines:
+                  stripped = ln.lstrip(' ')
+                  if not stripped:
+                      out.append('')
+                      continue
+                  raw_indent = len(ln) - len(stripped)
+                  if stripped.startswith('def '):
+                      desired = 4 + max(0, raw_indent - method_indent)
+                  else:
+                      desired = 4 + max(0, raw_indent - method_indent) + (4 if add_body_level else 0)
+                  out.append(' ' * desired + stripped)
+              return '\n'.join(out).rstrip() + '\n\n'
 
-          block_start = text.find('    enabled_external = [\n')
-          block_end = text.find('    authorization = read(AUTHORIZATION)\n', block_start)
-          if block_start < 0 or block_end < 0:
-              raise SystemExit('validator external block boundaries missing')
-          replacement = '''    enabled_external = [\n        cap for cap in registry.get("capabilities", [])\n        if cap.get("enabled", True) and str(cap.get("executor", "")).startswith("external:")\n    ]\n    wired_external = external_executor_bindings(operator)\n    for cap in enabled_external:\n        executor = str(cap.get("executor"))\n        if executor not in wired_external:\n            failures.append({\n                "gate": "external_executor",\n                "reason": f"enabled external capability has no governed runtime executor: {cap.get('id')} ({executor})",\n            })\n\n'''
-          text = text[:block_start] + replacement + text[block_end:]
-          p.write_text(text, encoding='utf-8')
+          canonical_execute = canonical_method_block(literals['new_execute'], drop_planning_comment=True)
+          canonical_external = canonical_method_block(literals['new_external'])
 
-          # Fail in this step with exact context if either generated source is
-          # syntactically invalid; do not defer a malformed tree to later CI.
-          for candidate in (
-              Path('buddy_core/core/operator.py'),
-              Path('scripts/validate_elite_governance.py'),
+          op = Path('buddy_core/core/operator.py')
+          op_lines = op.read_text(encoding='utf-8').splitlines(keepends=True)
+
+          freeze_i = next((i for i, ln in enumerate(op_lines)
+                           if ln.lstrip().startswith('def _freeze_external_step(')), None)
+          planning_i = next((i for i, ln in enumerate(op_lines)
+                             if freeze_i is not None and i > freeze_i
+                             and ln.strip() == '# ---------- Planning / policy ----------'), None)
+          if freeze_i is None or planning_i is None:
+              raise SystemExit('operator execute block boundaries missing')
+          end_i = planning_i + 1
+          while end_i < len(op_lines) and (
+              not op_lines[end_i].strip()
+              or op_lines[end_i].strip() == '# ---------- Planning / policy ----------'
           ):
+              end_i += 1
+          replacement = canonical_execute + '    # ---------- Planning / policy ----------\n\n'
+          op_lines[freeze_i:end_i] = replacement.splitlines(keepends=True)
+
+          ext_i = next((i for i, ln in enumerate(op_lines)
+                        if ln.lstrip().startswith('def _execute_external(')), None)
+          backend_i = next((i for i, ln in enumerate(op_lines)
+                            if ext_i is not None and i > ext_i
+                            and ln.lstrip().startswith('def _no_delivery_backend(')), None)
+          if ext_i is None or backend_i is None:
+              raise SystemExit('operator external block boundaries missing')
+          op_lines[ext_i:backend_i] = canonical_external.splitlines(keepends=True)
+          op.write_text(''.join(op_lines), encoding='utf-8')
+
+          # Structural Elite Governance external-executor binding check.
+          vp = Path('scripts/validate_elite_governance.py')
+          vtext = vp.read_text(encoding='utf-8')
+          if 'import ast\n' not in vtext:
+              vtext = vtext.replace('import json\nimport re\n', 'import ast\nimport json\nimport re\n', 1)
+          helper = '''\ndef external_executor_bindings(source: str) -> set[str]:\n    try:\n        tree = ast.parse(source)\n    except SyntaxError:\n        return set()\n    found: set[str] = set()\n    for node in ast.walk(tree):\n        if not isinstance(node, (ast.Assign, ast.AnnAssign)):\n            continue\n        targets = node.targets if isinstance(node, ast.Assign) else [node.target]\n        matches = any(\n            isinstance(target, ast.Attribute)\n            and isinstance(target.value, ast.Name)\n            and target.value.id == "self"\n            and target.attr == "_external_executors"\n            for target in targets\n        )\n        if not matches or not isinstance(node.value, ast.Dict):\n            continue\n        for key in node.value.keys:\n            if isinstance(key, ast.Constant) and isinstance(key.value, str):\n                found.add(key.value)\n    return found\n\n'''
+          if 'def external_executor_bindings(' not in vtext:
+              marker = '\ndef collect_failures() -> list[dict]:\n'
+              if marker not in vtext:
+                  raise SystemExit('validator collect_failures marker missing')
+              vtext = vtext.replace(marker, helper + 'def collect_failures() -> list[dict]:\n', 1)
+          bs = vtext.find('    enabled_external = [\n')
+          be = vtext.find('    authorization = read(AUTHORIZATION)\n', bs)
+          if bs < 0 or be < 0:
+              raise SystemExit('validator external block boundaries missing')
+          vblock = '''    enabled_external = [\n        cap for cap in registry.get("capabilities", [])\n        if cap.get("enabled", True) and str(cap.get("executor", "")).startswith("external:")\n    ]\n    wired_external = external_executor_bindings(operator)\n    for cap in enabled_external:\n        executor = str(cap.get("executor"))\n        if executor not in wired_external:\n            failures.append({\n                "gate": "external_executor",\n                "reason": f"enabled external capability has no governed runtime executor: {cap.get('id')} ({executor})",\n            })\n\n'''
+          vp.write_text(vtext[:bs] + vblock + vtext[be:], encoding='utf-8')
+
+          for candidate in (op, vp):
               body = candidate.read_text(encoding='utf-8')
               try:
                   compile(body, str(candidate), 'exec')
@@ -119,7 +169,7 @@ jobs:
 
           for helper_path in Path('.github/workflows').glob('pr235-review-fix*.yml'):
               helper_path.unlink()
-          print('PR235_SOURCE_CORRECTED_REMEDIATION=APPLIED')
+          print('PR235_CANONICAL_METHOD_REMEDIATION=APPLIED')
           PY
 
       - name: Install repository-wide test dependencies

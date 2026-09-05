@@ -28,3 +28,7 @@ If the connection fails before DATA begins, the action is `BLOCKED`. If a transp
 - live transport remains opt-in at runtime.
 
 This backend deliberately does not add bulk outreach, list expansion, contact discovery, or automatic retry. Those require separate governed capabilities and evidence contracts.
+
+## Verification evidence
+
+After aligning the legacy Buddy regression with the new explicit-destination safety boundary, the focused candidate suite completed **89 passed, 0 failed** across Buddy operator behavior, the governed message backend, authorization policy/execution, and the #235 security-closure regressions. Exact-head repository CI remains the controlling pre-merge evidence.

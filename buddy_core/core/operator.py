@@ -525,6 +525,16 @@ class BuddyOperator:
 
     def _freeze_external_step(self, step: dict, context: dict) -> dict:
         """Bind authority to the exact content/destination the executor will receive."""
+        if step.get("capability") == "external.message":
+            try:
+                from core.message_delivery import freeze_authorized_email_step
+            except ImportError:
+                from buddy_core.core.message_delivery import freeze_authorized_email_step
+            return freeze_authorized_email_step(
+                copy.deepcopy(step),
+                list(context.get("outputs", [])),
+                self.staged_dir,
+            )
         frozen = copy.deepcopy(step)
         if "content" not in frozen or frozen.get("content") is None:
             outputs = [value for value in context.get("outputs", []) if value is not None]
@@ -532,7 +542,6 @@ class BuddyOperator:
         # Destination may legitimately be None, but no later executor may invent one.
         frozen["destination"] = step.get("destination")
         return frozen
-
     def _held_path(self, approval_id: str) -> Path:
         if not re.fullmatch(r"approval_[0-9a-f]{12}", approval_id or ""):
             raise AuthorizationError("invalid approval_id")
@@ -645,7 +654,23 @@ class BuddyOperator:
             if cap.get("auth_required") or cap.get("classification") in {
                 "privileged_write", "destructive"
             }:
-                frozen_step = self._freeze_external_step(step, context)
+                try:
+                    frozen_step = self._freeze_external_step(step, context)
+                except (OperatorError, TypeError, ValueError) as exc:
+                    receipts.append({
+                        "step": index,
+                        "capability": step["capability"],
+                        "status": "BLOCKED",
+                        "attempts": 0,
+                        "errors": [{
+                            "attempt": 0,
+                            "error": "ExternalPayloadPreparationError",
+                            "detail": str(exc)[:200],
+                        }],
+                        "result": None,
+                        "evidence": [],
+                    })
+                    break
                 destination = frozen_step.get("destination")
                 supplied = frozen_step.get("authorization_id")
 
@@ -1089,8 +1114,13 @@ CAPABILITY REGISTRY:
         return self._no_delivery_backend("external.publish")
 
     def _external_message(self, step: dict, context: dict) -> dict:
-        return self._no_delivery_backend("external.message")
-
+        # `_execute_external` passes only the authorization-fingerprinted shape.
+        # Ambient/regenerated mission context is intentionally ignored here.
+        try:
+            from core.message_delivery import deliver_authorized_email
+        except ImportError:
+            from buddy_core.core.message_delivery import deliver_authorized_email
+        return deliver_authorized_email(step)
     def _external_spend(self, step: dict, context: dict) -> dict:
         return self._no_delivery_backend("external.spend")
 

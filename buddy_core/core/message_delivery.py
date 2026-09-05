@@ -134,6 +134,27 @@ def freeze_authorized_email_step(step: dict, outputs: list[Any], staged_root: Pa
     if supplied is None:
         candidates = [value for value in outputs if value is not None]
         supplied = candidates[-1] if candidates else None
+
+    # A resumed held plan already contains the canonical envelope. Preserve
+    # it byte-for-byte so replay executes the exact payload Founder granted.
+    if isinstance(supplied, dict):
+        existing_subject = str(supplied.get("subject") or "").strip()
+        existing_body = str(supplied.get("body_text") or "")
+        existing_hash = str(supplied.get("content_sha256") or "").strip().lower()
+        if existing_subject and existing_body:
+            actual = _sha256_text(existing_subject + "\n" + existing_body)
+            if existing_hash != actual:
+                raise ValueError("external.message frozen content hash mismatch")
+            if len(existing_subject) > _MAX_SUBJECT or len(existing_body.encode("utf-8")) > _MAX_BODY_BYTES:
+                raise ValueError("external.message frozen content exceeds bounded size")
+            frozen["destination"] = destination
+            frozen["content"] = {
+                "subject": existing_subject,
+                "body_text": existing_body,
+                "content_sha256": existing_hash,
+            }
+            return frozen
+
     raw = _artifact_text(supplied, staged_root)
     subject, body = _subject_and_body(raw)
     if not subject or not body:

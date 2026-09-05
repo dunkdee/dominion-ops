@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -264,10 +265,16 @@ class BuddyOperator:
         self.staged_dir = self.state_dir / "staged"
         self.held_dir = self.state_dir / "held"
         self.held_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            self.held_dir.chmod(0o700)
-        except OSError:
-            pass
+        if os.name == "posix":
+            try:
+                self.held_dir.chmod(0o700)
+                actual_mode = stat.S_IMODE(self.held_dir.stat().st_mode)
+            except (OSError, NotImplementedError) as exc:
+                raise AuthorizationError("held_plan_directory_permissions_unavailable") from exc
+            if actual_mode != 0o700:
+                raise AuthorizationError(
+                    f"held_plan_directory_not_private:{oct(actual_mode)}"
+                )
         registry = _load_json(CAPABILITY_FILE)
         self.capabilities = {
             c["id"]: c for c in registry.get("capabilities", []) if c.get("enabled", True)
@@ -656,6 +663,7 @@ class BuddyOperator:
                     context["outputs"].append(receipt.get("result"))
                     continue
 
+                request = None
                 try:
                     request = self._ledger.request(
                         mission_id=plan["mission_id"],
@@ -676,7 +684,7 @@ class BuddyOperator:
                         "plan": frozen_plan,
                     })
                 except (AuthorizationError, OSError, TypeError, ValueError) as exc:
-                    receipts.append({
+                    blocked = {
                         "step": index,
                         "capability": frozen_step["capability"],
                         "status": "BLOCKED",
@@ -685,7 +693,15 @@ class BuddyOperator:
                                     "detail": str(exc)[:200]}],
                         "result": None,
                         "evidence": [],
-                    })
+                    }
+                    if isinstance(request, dict):
+                        approval_id = request.get("approval_id")
+                        payload_hash = request.get("payload_hash")
+                        if approval_id:
+                            blocked["approval_id"] = approval_id
+                        if payload_hash:
+                            blocked["payload_hash"] = payload_hash
+                    receipts.append(blocked)
                     break
 
                 held = {

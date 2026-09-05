@@ -1,0 +1,80 @@
+name: Remediate Authorization Key Boundary
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/runtime/remediate_authorization_key_boundary.sh'
+      - '.github/workflows/remediate-authorization-key-boundary.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  remediate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: foundation-vm-production
+    steps:
+      - name: Require protected VM access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Configure protected SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Preserve and move authorization signing key outside HOME
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+            "$VM_USER@$VM_HOST" "RUN_SHA='$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          repo="$HOME/dominion-ops"
+          cd "$repo"
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          test "$(git rev-parse HEAD)" = "$RUN_SHA"
+
+          bash scripts/runtime/remediate_authorization_key_boundary.sh
+
+          legacy="$HOME/.dominion/authorization/ledger_hmac.key"
+          target="/var/lib/dominion/authorization/ledger_hmac.key"
+          test -L "$legacy"
+          test -f "$target"
+          test "$(readlink -f "$legacy")" = "$(readlink -f "$target")"
+          case "$(readlink -f "$target")" in
+            "$HOME"|"$HOME"/*) echo 'AUTH_KEY_BOUNDARY_VERIFY=FAIL target_inside_home'; exit 1 ;;
+          esac
+          echo 'AUTH_KEY_BOUNDARY_VERIFY=PASS'
+          REMOTE
+
+      - name: Cleanup SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

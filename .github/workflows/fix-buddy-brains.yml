@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: buddy-bounded-self-heal
+  group: foundation-vm-production
   cancel-in-progress: false
 
 jobs:

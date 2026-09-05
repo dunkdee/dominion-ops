@@ -135,14 +135,42 @@ def _assert_private_file(path: Path, *, label: str) -> bool:
 
 # ── Paths ─────────────────────────────────────────────────────
 
+def _path_within(path: Path, parent: Path) -> bool:
+    path = path.resolve(strict=False)
+    parent = parent.resolve(strict=False)
+    return path == parent or parent in path.parents
+
+
+def _detect_checkout_root(start: Path | None = None) -> Path | None:
+    """Return a concrete checkout root; never infer HOME merely from layout."""
+    current = (start or _BASE_DIR).resolve(strict=False)
+    if current.is_file():
+        current = current.parent
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists():
+            return candidate.resolve(strict=False)
+        if (candidate / ".github").is_dir() and (candidate / "buddy_core").is_dir():
+            return candidate.resolve(strict=False)
+    return None
+
+
+def _path_is_source_controlled(path: Path) -> bool:
+    candidate = path.expanduser().resolve(strict=False)
+    # Always protect the runtime Buddy source tree, even in a copied deployment
+    # that intentionally has no .git metadata.
+    if _path_within(candidate, _BASE_DIR):
+        return True
+    checkout = _detect_checkout_root(_BASE_DIR)
+    return checkout is not None and _path_within(candidate, checkout)
+
+
 def state_dir() -> Path:
-    """Resolve machine-local audit state and reject any path inside this checkout."""
+    """Resolve machine-local audit state without aliasing $HOME to a checkout."""
     override = os.environ.get(ENV_STATE_DIR, "").strip()
     candidate = (Path(override).expanduser() if override else DEFAULT_STATE_DIR).resolve(strict=False)
-    repo_root = _BASE_DIR.parent.resolve(strict=False)
-    if candidate == repo_root or repo_root in candidate.parents:
+    if _path_is_source_controlled(candidate):
         raise WatchmenStateError(
-            f"audit state directory must be outside the repository checkout: {candidate}"
+            f"audit state directory must be outside Buddy source/repository checkout: {candidate}"
         )
     return candidate
 
@@ -283,9 +311,13 @@ def _resolve_key() -> bytes:
 
     env_file = os.environ.get(ENV_HMAC_FILE)
     if env_file is not None:
-        path = Path(env_file.strip()).expanduser()
         if not env_file.strip():
             raise WatchmenStateError(f"${ENV_HMAC_FILE} is set but empty")
+        path = Path(env_file.strip()).expanduser().resolve(strict=False)
+        if _path_is_source_controlled(path):
+            raise WatchmenStateError(
+                f"explicit audit signing key file must be outside Buddy source/repository checkout: {path}"
+            )
         try:
             _assert_private_file(path, label="explicit audit signing key file")
             raw = path.read_bytes()

@@ -142,14 +142,12 @@ def _path_within(path: Path, parent: Path) -> bool:
 
 
 def _detect_checkout_root(start: Path | None = None) -> Path | None:
-    """Return a concrete checkout root; never infer HOME merely from layout."""
+    """Return a concrete Git checkout root; never infer one from HOME layout."""
     current = (start or _BASE_DIR).resolve(strict=False)
     if current.is_file():
         current = current.parent
     for candidate in (current, *current.parents):
         if (candidate / ".git").exists():
-            return candidate.resolve(strict=False)
-        if (candidate / ".github").is_dir() and (candidate / "buddy_core").is_dir():
             return candidate.resolve(strict=False)
     return None
 

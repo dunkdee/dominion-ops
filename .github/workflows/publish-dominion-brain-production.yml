@@ -2,6 +2,22 @@ name: Publish Dominion Brain — Production
 # Authorized vault password rotation trigger — 2026-08-10T22:28-04:00
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'brain/**'
+      - 'obsidian/**'
+      - 'governance/**'
+      - 'agents/registry.json'
+      - 'buddy_core/config/standing_authorizations.json'
+      - 'scripts/render_dominion_brain.py'
+      - 'scripts/check_brain_inputs.py'
+      - 'scripts/deploy_dominion_brain_remote.sh'
+      - 'scripts/quarantine_vm_repo_state.sh'
+      - 'scripts/converge_command_center_vault_route.sh'
+      - '.github/workflows/publish-dominion-brain-production.yml'
+  schedule:
+    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       confirm:
@@ -23,10 +39,14 @@ concurrency:
 jobs:
   validate:
     if: >-
-      github.event_name == 'workflow_dispatch' &&
-      inputs.confirm == 'PUBLISH DOMINION BRAIN' &&
-      inputs.commit_sha == github.sha &&
-      github.ref == 'refs/heads/main'
+      github.ref == 'refs/heads/main' &&
+      (
+        github.event_name != 'workflow_dispatch' ||
+        (
+          inputs.confirm == 'PUBLISH DOMINION BRAIN' &&
+          inputs.commit_sha == github.sha
+        )
+      )
     runs-on: ubuntu-24.04
     outputs:
       deploy_sha: ${{ steps.sha.outputs.value }}
@@ -40,6 +60,15 @@ jobs:
           python-version: '3.12'
       - id: sha
         run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Record bounded execution mode
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "BRAIN_EXECUTION_MODE=FOUNDER_MANUAL"
+          else
+            echo "BRAIN_EXECUTION_MODE=STANDING_AUTHORIZATION"
+          fi
+          echo "BRAIN_EXECUTION_SHA=${GITHUB_SHA}"
       - name: Verify exact main commit and brain gates
         run: |
           set -euo pipefail
@@ -62,10 +91,14 @@ jobs:
 
   publish:
     if: >-
-      github.event_name == 'workflow_dispatch' &&
-      inputs.confirm == 'PUBLISH DOMINION BRAIN' &&
-      inputs.commit_sha == github.sha &&
-      github.ref == 'refs/heads/main'
+      github.ref == 'refs/heads/main' &&
+      (
+        github.event_name != 'workflow_dispatch' ||
+        (
+          inputs.confirm == 'PUBLISH DOMINION BRAIN' &&
+          inputs.commit_sha == github.sha
+        )
+      )
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 20

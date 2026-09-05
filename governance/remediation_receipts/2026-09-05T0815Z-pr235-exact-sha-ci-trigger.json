@@ -1,0 +1,11 @@
+{
+  "schema": "dominion-ci-trigger-v1",
+  "pr": 235,
+  "purpose": "Trigger the full pull-request CI suite on the exact current remediation head after the bounded closure workflow produced its receipt commit.",
+  "prior_head_sha": "0cf17b4703fa6ac62c3ff3035bf367c05ea5049d",
+  "code_delta": false,
+  "approver": "Founder",
+  "release_authorized": false,
+  "deploy_authorized": false,
+  "production_proven": false
+}

@@ -537,6 +537,20 @@ class BuddyOperator:
                 fh.flush()
                 os.fsync(fh.fileno())
             os.replace(tmp, path)
+            if os.name == "posix":
+                dir_fd = None
+                try:
+                    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                    dir_fd = os.open(str(path.parent), flags)
+                    os.fsync(dir_fd)
+                except (OSError, NotImplementedError) as exc:
+                    raise AuthorizationError("held_plan_directory_fsync_failed") from exc
+                finally:
+                    if dir_fd is not None:
+                        try:
+                            os.close(dir_fd)
+                        except OSError:
+                            pass
             try:
                 path.chmod(0o600)
             except OSError:

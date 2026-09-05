@@ -97,6 +97,86 @@ def external_executor_bindings(source: str) -> set[str]:
                 found.add(key.value)
     return found
 
+def _subscript_key(node: ast.AST) -> str | None:
+    if not isinstance(node, ast.Subscript):
+        return None
+    value = node.slice
+    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+        return value.value
+    return None
+
+
+def autopilot_productivity_semantics(source: str) -> tuple[bool, str]:
+    """Verify progress timestamps are guarded by productive_complete(receipt)."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        return False, f"autopilot source is not valid Python: {exc.msg}"
+
+    functions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    productive = functions.get("productive_complete")
+    persist = functions.get("persist_cycle")
+    if productive is None or persist is None:
+        return False, "productive_complete/persist_cycle enforcement function missing"
+
+    productive_constants = {
+        node.value for node in ast.walk(productive)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    if "COMPLETE" not in productive_constants or "HELD" in productive_constants:
+        return False, "productive_complete does not exclusively model COMPLETE outcomes"
+
+    parent: dict[ast.AST, ast.AST] = {}
+    for node in ast.walk(persist):
+        for child in ast.iter_child_nodes(node):
+            parent[child] = node
+
+    guarded_keys: set[str] = set()
+    tracked = {"last_progress_at", "last_productive_at"}
+    for node in ast.walk(persist):
+        targets = []
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        elif isinstance(node, ast.AugAssign):
+            targets = [node.target]
+        else:
+            continue
+        for target in targets:
+            key = _subscript_key(target)
+            if key not in tracked:
+                continue
+            cursor = parent.get(node)
+            guarded = False
+            while cursor is not None and cursor is not persist:
+                if isinstance(cursor, ast.If):
+                    test = cursor.test
+                    if (
+                        isinstance(test, ast.Call)
+                        and isinstance(test.func, ast.Name)
+                        and test.func.id == "productive_complete"
+                        and len(test.args) == 1
+                        and isinstance(test.args[0], ast.Name)
+                        and test.args[0].id == "receipt"
+                    ):
+                        guarded = True
+                        break
+                cursor = parent.get(cursor)
+            if not guarded:
+                return False, f"{key} can be written without productive_complete(receipt)"
+            guarded_keys.add(key)
+
+    if guarded_keys != tracked:
+        missing = ", ".join(sorted(tracked - guarded_keys))
+        return False, f"productive timestamp assignment missing: {missing}"
+    return True, "ok"
+
+
 def collect_failures() -> list[dict]:
     failures: list[dict] = []
 
@@ -152,15 +232,11 @@ def collect_failures() -> list[dict]:
         })
 
     autopilot = read(AUTOPILOT)
-    if 'if bounded_cycle_ok(receipt):\n        lane_state["last_progress_at"]' in autopilot:
+    autopilot_safe, autopilot_reason = autopilot_productivity_semantics(autopilot)
+    if not autopilot_safe:
         failures.append({
             "gate": "truthful_progress",
-            "reason": "autopilot marks structurally-valid HELD/BLOCKED cycles as progress",
-        })
-    if 'receipt["status"] in {"COMPLETE", "HELD"}' in autopilot:
-        failures.append({
-            "gate": "truthful_productivity",
-            "reason": "autopilot marks HELD as productive",
+            "reason": autopilot_reason,
         })
 
     for path in iter_scan_files():

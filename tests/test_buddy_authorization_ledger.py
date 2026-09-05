@@ -1,136 +1,161 @@
+"""Founder authorization ledger — the key to the external boundary.
+
+These tests are written adversarially on purpose. This module is the only
+thing standing between a prepared mission and a real external effect, so the
+failure modes that matter are replay, payload swap, tampering, and expiry.
+"""
+
 from __future__ import annotations
 
 import json
-import os
+import sys
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "buddy_core"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "buddy_core"))
 
 from core.authorization import (  # noqa: E402
-    AuthorizationLedger,
     CONSUMED,
     DENIED,
     GRANTED,
     PENDING,
+    AuthorizationError,
+    AuthorizationLedger,
     payload_fingerprint,
 )
 
 CAP = "external.publish"
-INSTRUCTION = "publish governed content"
-CONTENT = "hello"
-DEST = "channel://dominion"
+INSTRUCTION = "publish the traffic package"
+CONTENT = {"title": "Divine Sovereignty", "body": "the approved words"}
+DEST = "youtube:dominion-channel"
 
 
 class LedgerTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self._old_key = os.environ.get("DOMINION_AUTHORIZATION_HMAC_KEY")
-        os.environ["DOMINION_AUTHORIZATION_HMAC_KEY"] = "a" * 64
+        self.addCleanup(self._tmp.cleanup)
         self.ledger = AuthorizationLedger(Path(self._tmp.name))
 
-    def tearDown(self):
-        if self._old_key is None:
-            os.environ.pop("DOMINION_AUTHORIZATION_HMAC_KEY", None)
-        else:
-            os.environ["DOMINION_AUTHORIZATION_HMAC_KEY"] = self._old_key
-        self._tmp.cleanup()
+    def make(self, **over):
+        kwargs = dict(mission_id="m1", step=5, capability=CAP,
+                      instruction=INSTRUCTION, content=CONTENT, destination=DEST)
+        kwargs.update(over)
+        return self.ledger.request(**kwargs)
 
-    def make(self, **kw):
-        return self.ledger.request(
-            mission_id=kw.pop("mission_id", "m1"),
-            capability=kw.pop("capability", CAP),
-            instruction=kw.pop("instruction", INSTRUCTION),
-            content=kw.pop("content", CONTENT),
-            destination=kw.pop("destination", DEST),
-            **kw,
-        )
+    def consume(self, approval_id, **over):
+        kwargs = dict(capability=CAP, instruction=INSTRUCTION,
+                      content=CONTENT, destination=DEST)
+        kwargs.update(over)
+        return self.ledger.verify_and_consume(approval_id, **kwargs)
 
-    def consume(self, approval_id, **kw):
-        return self.ledger.consume(
-            approval_id,
-            mission_id=kw.pop("mission_id", "m1"),
-            capability=kw.pop("capability", CAP),
-            instruction=kw.pop("instruction", INSTRUCTION),
-            content=kw.pop("content", CONTENT),
-            destination=kw.pop("destination", DEST),
-            **kw,
-        )
+    # ── the happy path exists at all ─────────────────────────────────────
 
-    # ── happy path ───────────────────────────────────────────────────────
-
-    def test_request_starts_pending_and_grant_makes_it_consumable(self):
+    def test_request_grant_consume_is_the_only_path_to_execution(self):
         req = self.make()
-        self.assertTrue(req["ok"])
-        self.assertEqual(req["authorization"]["status"], PENDING)
-        grant = self.ledger.grant(req["approval_id"])
-        self.assertTrue(grant["ok"])
-        self.assertEqual(grant["authorization"]["status"], GRANTED)
-        consumed = self.consume(req["approval_id"])
-        self.assertTrue(consumed["ok"])
-        self.assertEqual(consumed["authorization"]["status"], CONSUMED)
+        self.assertEqual(req["status"], PENDING)
+        self.assertIsNone(req["authorization_sequence"])
 
-    def test_pending_lists_only_live_pending_requests(self):
-        a = self.make(mission_id="a")
-        b = self.make(mission_id="b")
-        self.ledger.grant(b["approval_id"])
-        pending = self.ledger.pending()
-        self.assertEqual([r["approval_id"] for r in pending], [a["approval_id"]])
+        granted = self.ledger.grant(req["approval_id"])
+        self.assertTrue(granted["ok"])
+        self.assertEqual(granted["authorization"]["status"], GRANTED)
+        self.assertEqual(granted["authorization"]["approver"], "founder")
 
-    def test_deny_blocks_consumption(self):
+        used = self.consume(req["approval_id"])
+        self.assertTrue(used["ok"])
+        self.assertEqual(used["authorization"]["status"], CONSUMED)
+
+    def test_pending_lists_what_awaits_the_founder(self):
+        a = self.make()
+        b = self.make(mission_id="m2")
+        ids = {r["approval_id"] for r in self.ledger.pending()}
+        self.assertEqual(ids, {a["approval_id"], b["approval_id"]})
+
+        self.ledger.grant(a["approval_id"])
+        self.assertEqual([r["approval_id"] for r in self.ledger.pending()], [b["approval_id"]])
+
+    def test_preview_shows_the_founder_what_is_being_published(self):
+        req = self.make(content="the exact words that will go out")
+        self.assertIn("the exact words", req["content_preview"])
+
+    # ── ungranted work never executes ────────────────────────────────────
+
+    def test_pending_authorization_cannot_be_consumed(self):
         req = self.make()
-        denied = self.ledger.deny(req["approval_id"], reason="no")
-        self.assertTrue(denied["ok"])
-        self.assertEqual(denied["authorization"]["status"], DENIED)
-        self.assertEqual(self.consume(req["approval_id"])["error"], "denied")
+        self.assertEqual(self.consume(req["approval_id"])["error"], "not_granted")
 
-    # ── binding / substitution ──────────────────────────────────────────
-
-    def test_payload_is_bound_to_mission_capability_instruction_content_and_destination(self):
+    def test_denied_authorization_cannot_be_consumed_or_granted(self):
         req = self.make()
-        self.ledger.grant(req["approval_id"])
-        variants = [
-            {"mission_id": "other"},
-            {"capability": "external.message"},
-            {"instruction": "different"},
-            {"content": "different"},
-            {"destination": "other"},
-        ]
-        for change in variants:
-            with self.subTest(change=change):
-                result = self.consume(req["approval_id"], **change)
-                self.assertFalse(result["ok"])
-                self.assertEqual(result["error"], "authorization_payload_mismatch")
+        self.ledger.deny(req["approval_id"], reason="off brand")
+        self.assertEqual(self.consume(req["approval_id"])["error"], "not_granted")
+        self.assertEqual(self.ledger.grant(req["approval_id"])["error"], "already_denied")
 
-    def test_grant_does_not_change_payload_hash(self):
-        req = self.make()
-        before = req["authorization"]["payload_hash"]
-        after = self.ledger.grant(req["approval_id"])["authorization"]
-        self.assertEqual(before, after["payload_hash"])
+    def test_unknown_approval_id_is_refused(self):
+        self.assertEqual(self.consume("approval_deadbeefcafe")["error"], "unknown_approval_id")
+        self.assertEqual(self.ledger.grant("approval_deadbeefcafe")["error"], "unknown_approval_id")
 
-    # ── single use / replay ─────────────────────────────────────────────
+    # ── replay ───────────────────────────────────────────────────────────
 
     def test_authorization_is_single_use(self):
         req = self.make()
         self.ledger.grant(req["approval_id"])
         self.assertTrue(self.consume(req["approval_id"])["ok"])
-        replay = self.consume(req["approval_id"])
-        self.assertFalse(replay["ok"])
-        self.assertEqual(replay["error"], "authorization_already_consumed")
+        second = self.consume(req["approval_id"])
+        self.assertFalse(second["ok"])
+        self.assertEqual(second["error"], "already_consumed")
 
-    def test_different_approval_id_cannot_consume_another_request(self):
-        a = self.make(mission_id="a")
-        b = self.make(mission_id="b")
-        self.ledger.grant(a["approval_id"])
-        result = self.consume(b["approval_id"], mission_id="a")
-        self.assertFalse(result["ok"])
+    def test_consumed_authorization_cannot_be_re_granted(self):
+        req = self.make()
+        self.ledger.grant(req["approval_id"])
+        self.consume(req["approval_id"])
+        self.assertEqual(self.ledger.grant(req["approval_id"])["error"], "already_consumed")
 
-    # ── tamper evidence ─────────────────────────────────────────────────
+    def test_double_grant_is_refused(self):
+        req = self.make()
+        self.assertTrue(self.ledger.grant(req["approval_id"])["ok"])
+        self.assertEqual(self.ledger.grant(req["approval_id"])["error"], "already_granted")
 
-    def test_payload_tamper_is_detected(self):
+    # ── the approval cannot be redirected ────────────────────────────────
+
+    def test_approval_cannot_be_redirected_to_different_content(self):
+        req = self.make()
+        self.ledger.grant(req["approval_id"])
+        swapped = self.consume(req["approval_id"], content={"body": "something else entirely"})
+        self.assertFalse(swapped["ok"])
+        self.assertEqual(swapped["error"], "payload_mismatch")
+
+    def test_approval_cannot_be_redirected_to_a_different_destination(self):
+        # Approving a post to one place must never authorize the same words
+        # somewhere else.
+        req = self.make()
+        self.ledger.grant(req["approval_id"])
+        swapped = self.consume(req["approval_id"], destination="tiktok:other-account")
+        self.assertEqual(swapped["error"], "payload_mismatch")
+
+    def test_approval_cannot_be_redirected_to_a_different_capability(self):
+        req = self.make()
+        self.ledger.grant(req["approval_id"])
+        self.assertEqual(self.consume(req["approval_id"], capability="external.message")["error"],
+                         "payload_mismatch")
+
+    def test_a_failed_payload_match_does_not_burn_the_authorization(self):
+        # A mismatch is refused, but the Founder's genuine approval survives
+        # so the correct payload can still go out.
+        req = self.make()
+        self.ledger.grant(req["approval_id"])
+        self.assertEqual(self.consume(req["approval_id"], content="wrong")["error"], "payload_mismatch")
+        self.assertTrue(self.consume(req["approval_id"])["ok"])
+
+    def test_fingerprint_is_stable_and_destination_sensitive(self):
+        a = payload_fingerprint(CAP, INSTRUCTION, CONTENT, DEST)
+        self.assertEqual(a, payload_fingerprint(CAP, INSTRUCTION, CONTENT, DEST))
+        self.assertNotEqual(a, payload_fingerprint(CAP, INSTRUCTION, CONTENT, "elsewhere"))
+
+    # ── tampering ────────────────────────────────────────────────────────
+
+    def test_tampered_record_is_detected_on_consume(self):
         req = self.make()
         self.ledger.grant(req["approval_id"])
         path = self.ledger.root / f"{req['approval_id']}.json"
@@ -187,35 +212,42 @@ class LedgerTests(unittest.TestCase):
 
     # ── durability and hygiene ───────────────────────────────────────────
 
-    def test_atomic_write_does_not_leave_temp_files(self):
-        req = self.make()
-        self.ledger.grant(req["approval_id"])
-        leftovers = [p for p in self.ledger.root.iterdir() if p.name.endswith(".tmp")]
-        self.assertEqual(leftovers, [])
-
-    def test_receipt_is_written_on_consume(self):
-        req = self.make()
-        self.ledger.grant(req["approval_id"])
-        self.consume(req["approval_id"])
-        lines = self.ledger.receipts_path.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(len(lines), 1)
-        receipt = json.loads(lines[0])
-        self.assertEqual(receipt["approval_id"], req["approval_id"])
-        self.assertEqual(receipt["status"], CONSUMED)
-
-    def test_new_ledger_same_key_can_verify_existing_records(self):
+    def test_authorizations_persist_across_instances(self):
         req = self.make()
         self.ledger.grant(req["approval_id"])
         reopened = AuthorizationLedger(Path(self._tmp.name))
-        self.assertEqual(reopened.load(req["approval_id"])["status"], GRANTED)
-        self.assertTrue(reopened.consume(
-            req["approval_id"],
-            mission_id="m1",
-            capability=CAP,
-            instruction=INSTRUCTION,
-            content=CONTENT,
-            destination=DEST,
-        )["ok"])
+        self.assertTrue(reopened.verify_and_consume(
+            req["approval_id"], capability=CAP, instruction=INSTRUCTION,
+            content=CONTENT, destination=DEST)["ok"])
+
+    def test_every_decision_leaves_a_receipt(self):
+        req = self.make()
+        self.ledger.grant(req["approval_id"])
+        self.consume(req["approval_id"])
+        events = [json.loads(line)["event"]
+                  for line in self.ledger.receipts_path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(events, ["authorization_requested", "authorization_granted",
+                                  "authorization_consumed"])
+
+    def test_replay_and_mismatch_attempts_are_recorded(self):
+        req = self.make()
+        self.ledger.grant(req["approval_id"])
+        self.consume(req["approval_id"], content="wrong")
+        self.consume(req["approval_id"])
+        self.consume(req["approval_id"])
+        body = self.ledger.receipts_path.read_text(encoding="utf-8")
+        self.assertIn("payload_mismatch", body)
+        self.assertIn("replay", body)
+
+    def test_traversal_in_approval_id_is_refused(self):
+        for bad in ("../escape", "a/b", "..", ".hidden"):
+            with self.assertRaises(AuthorizationError):
+                self.ledger.load(bad)
+
+    def test_records_are_not_world_readable(self):
+        req = self.make()
+        mode = (self.ledger.root / f"{req['approval_id']}.json").stat().st_mode
+        self.assertEqual(mode & 0o077, 0)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: foundation-vm-buddy-self-heal
+  group: foundation-vm-production
   cancel-in-progress: false
 
 jobs:

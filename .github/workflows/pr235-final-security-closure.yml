@@ -29,7 +29,7 @@ jobs:
       - name: Verify Founder-bounded lineage and exact applicator
         shell: bash
         env:
-          AUTHORIZED_BASE_SHA: ce2f90f68f4f1d8f2975d8d1dc112badc89303fd
+          AUTHORIZED_BASE_SHA: 81cf6f9753192b0dfb8216352d80da7d9b8c9d3c
           EXPECTED_APPLICATOR_BLOB: b6e02b0ef740c0cb4a5f0fa0ab80b82d009c7ddd
         run: |
           set -euo pipefail
@@ -40,7 +40,7 @@ jobs:
           test "$(git diff --name-only HEAD^ HEAD)" = "governance/remediation_receipts/pr235-founder-apply.json"
           test "$(git hash-object scripts/pr235_final_security_closure.py)" = "$EXPECTED_APPLICATOR_BLOB"
           python - <<'PY'
-          import json, os
+          import json
           from pathlib import Path
           p = Path('governance/remediation_receipts/pr235-founder-apply.json')
           data = json.loads(p.read_text(encoding='utf-8'))
@@ -48,7 +48,7 @@ jobs:
               'schema': 'dominion-founder-apply-v1',
               'pr': 235,
               'branch': 'governance/elite-end-to-end-remediation',
-              'authorized_base_sha': 'ce2f90f68f4f1d8f2975d8d1dc112badc89303fd',
+              'authorized_base_sha': '81cf6f9753192b0dfb8216352d80da7d9b8c9d3c',
               'applicator_blob_sha': 'b6e02b0ef740c0cb4a5f0fa0ab80b82d009c7ddd',
               'scope': 'Apply the existing PR235 final security closure only; test; self-remove; do not merge or deploy.',
               'approver': 'Founder',
@@ -87,6 +87,7 @@ jobs:
             buddy_core/core/operator.py \
             buddy_core/buddy_web.py \
             buddy_core/watchmen/saraqael.py \
+            tests/test_buddy_authorization_ledger.py \
             tests/test_pr235_final_security_closure.py
 
       - name: Commit exact code under test
@@ -115,6 +116,7 @@ jobs:
           set -euo pipefail
           python -m pytest -q \
             tests/test_pr235_final_security_closure.py \
+            tests/test_buddy_authorization_ledger.py \
             tests/test_buddy_authority_execution.py \
             tests/test_governance_review_regressions.py \
             tests/test_watchmen_audit_state.py \
@@ -155,7 +157,7 @@ jobs:
               "pr": 235,
               "authorization": {
                   "approver": "Founder",
-                  "authorized_base_sha": "ce2f90f68f4f1d8f2975d8d1dc112badc89303fd",
+                  "authorized_base_sha": "81cf6f9753192b0dfb8216352d80da7d9b8c9d3c",
                   "trigger_sha": os.environ["AUTH_TRIGGER_SHA"],
                   "applicator_blob_sha": "b6e02b0ef740c0cb4a5f0fa0ab80b82d009c7ddd",
                   "scope": "PR235 final security closure only",

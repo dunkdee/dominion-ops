@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD^)" = "30174dfdbbbbb7ddf2280ac64ca55c2aacb91778"
+          test "$(git rev-parse HEAD^)" = "3ac829a1196bd58fe4992b8ee9a252a8ba029344"
           test -z "$(git status --porcelain)"
 
       - name: Apply reviewed remediation and repair generated indentation
@@ -44,22 +44,42 @@ jobs:
           compile(normalized, '<pr235-v7-remediation>', 'exec')
           exec(normalized, {'__name__': '__main__'})
 
-          # v7 fixed the main execute/resume block. The separately generated
-          # _execute_external replacement has the same YAML-dedent defect: its
-          # method body is one class indentation level short. Repair only that
-          # exact generated region and preserve all nested relative indentation.
+          # The v4-generated _execute_external block may be emitted at class
+          # column 0 after textwrap.dedent. Locate semantic def boundaries by
+          # stripped text, then add exactly one class indentation level to the
+          # entire generated block. This preserves its internal relative layout.
           op = Path('buddy_core/core/operator.py')
-          text = op.read_text(encoding='utf-8')
-          a = text.find('    def _execute_external(')
-          b = text.find('    def _no_delivery_backend(', a)
-          if a < 0 or b < 0:
-              raise SystemExit('external executor generated block boundaries missing')
-          repaired = []
-          for line in text[a:b].splitlines(keepends=True):
-              if line.strip() and not line.startswith('    def '):
-                  line = '    ' + line
-              repaired.append(line)
-          op.write_text(text[:a] + ''.join(repaired) + text[b:], encoding='utf-8')
+          lines = op.read_text(encoding='utf-8').splitlines(keepends=True)
+          start_i = next(
+              (i for i, line in enumerate(lines)
+               if line.lstrip().startswith('def _execute_external(')),
+              None,
+          )
+          end_i = next(
+              (i for i, line in enumerate(lines)
+               if i > (start_i if start_i is not None else -1)
+               and line.lstrip().startswith('def _no_delivery_backend(')),
+              None,
+          )
+          if start_i is None or end_i is None:
+              raise SystemExit('external executor semantic boundaries missing')
+
+          # If the generated def is already correctly class-indented, only its
+          # body may be short; otherwise indent the whole generated block once.
+          def_indent = len(lines[start_i]) - len(lines[start_i].lstrip(' '))
+          if def_indent == 0:
+              for i in range(start_i, end_i):
+                  if lines[i].strip():
+                      lines[i] = '    ' + lines[i]
+          elif def_indent == 4:
+              for i in range(start_i + 1, end_i):
+                  if lines[i].strip():
+                      body_indent = len(lines[i]) - len(lines[i].lstrip(' '))
+                      if body_indent < 8:
+                          lines[i] = '    ' + lines[i]
+          else:
+              raise SystemExit(f'unexpected _execute_external indentation: {def_indent}')
+          op.write_text(''.join(lines), encoding='utf-8')
 
           # v7 removes itself; remove this one-shot runner too. The v4/v7 payload
           # removes the earlier temporary applicators.

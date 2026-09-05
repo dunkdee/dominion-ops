@@ -98,16 +98,25 @@ jobs:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           set -euo pipefail
-          resolved_sha="$EXPECTED_SHA"
-          if [ -z "$resolved_sha" ] || [ "$resolved_sha" = "DEPLOYED" ]; then
-            resolved_sha="$(
+          if [ -z "$EXPECTED_SHA" ] || [ "$EXPECTED_SHA" = "DEPLOYED" ]; then
+            receipt_json="$(
               ssh -i "$HOME/.ssh/canary_key" \
                 -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
                 "$VM_USER@$VM_HOST" \
-                "python3 -c \"import json,pathlib,sys; receipt=pathlib.Path.home()/'.dominion'/'buddy'/'deployed_release.json'; data=json.loads(receipt.read_text(encoding='utf-8')); sha=str(data.get('release_sha') or ''); ok=len(sha)==40 and all(c in '0123456789abcdefABCDEF' for c in sha); print(sha) if ok else sys.exit(1)\""
+                "cat ~/.dominion/buddy/deployed_release.json"
+            )"
+            resolved_sha="$(
+              printf '%s' "$receipt_json" \
+                | python3 scripts/runtime/resolve_canary_expected_sha.py \
+                    --expected-sha DEPLOYED \
+                    --receipt-stdin
+            )"
+          else
+            resolved_sha="$(
+              python3 scripts/runtime/resolve_canary_expected_sha.py \
+                --expected-sha "$EXPECTED_SHA"
             )"
           fi
-          [[ "$resolved_sha" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "Resolved expected SHA is invalid"; exit 1; }
           echo "expected_sha=$resolved_sha" >> "$GITHUB_OUTPUT"
 
       - name: Run governed canary on foundation-vm

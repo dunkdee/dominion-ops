@@ -41,10 +41,22 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows
+    fcntl = None
+
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover - POSIX
+    msvcrt = None
 
 SCHEMA = "dominion-founder-authorization-v1"
 
@@ -118,8 +130,86 @@ class AuthorizationLedger:
         self.root.mkdir(parents=True, exist_ok=True)
         self.receipts_path = self.root / "receipts.jsonl"
         self.sequence_path = self.root / "sequence.json"
+        self.lock_path = self.root / ".ledger.lock"
 
     # ── storage ──────────────────────────────────────────────────────────
+
+    @contextmanager
+    def _exclusive_lock(self):
+        """Serialize grant/deny/redeem across processes, failing closed."""
+        try:
+            fd = os.open(self.lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        except OSError as exc:
+            raise AuthorizationError("authorization_lock_unavailable") from exc
+        try:
+            try:
+                os.chmod(self.lock_path, 0o600)
+            except OSError:
+                pass
+            if fcntl is not None:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX)
+                except OSError as exc:
+                    raise AuthorizationError("authorization_lock_unavailable") from exc
+                try:
+                    yield
+                finally:
+                    try:
+                        fcntl.flock(fd, fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+                return
+            if msvcrt is not None:  # pragma: no cover - Windows
+                try:
+                    if os.fstat(fd).st_size == 0:
+                        os.write(fd, b"0")
+                        os.fsync(fd)
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+                except OSError as exc:
+                    raise AuthorizationError("authorization_lock_unavailable") from exc
+                try:
+                    yield
+                finally:
+                    try:
+                        os.lseek(fd, 0, os.SEEK_SET)
+                        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                    except OSError:
+                        pass
+                return
+            raise AuthorizationError("authorization_lock_unsupported")
+        finally:
+            os.close(fd)
+
+    def _atomic_write_text(self, path: Path, value: str) -> None:
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+        try:
+            if hasattr(os, "fchmod"):
+                try:
+                    os.fchmod(fd, 0o600)
+                except OSError:
+                    pass
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fd = None
+                fh.write(value)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, path)
+            try:
+                path.chmod(0o600)
+            except OSError:
+                pass
+        except BaseException:
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
     def _path(self, approval_id: str) -> Path:
         # Guard against traversal via a crafted id.
@@ -129,13 +219,7 @@ class AuthorizationLedger:
 
     def _write(self, record: dict) -> dict:
         path = self._path(record["approval_id"])
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(canonical_json(record) + "\n", encoding="utf-8")
-        os.replace(tmp, path)
-        try:
-            path.chmod(0o600)
-        except OSError:
-            pass
+        self._atomic_write_text(path, canonical_json(record) + "\n")
         return record
 
     def load(self, approval_id: str) -> dict | None:
@@ -155,9 +239,9 @@ class AuthorizationLedger:
             except (OSError, ValueError, KeyError, TypeError):
                 current = 0
         nxt = current + 1
-        tmp = self.sequence_path.with_suffix(".tmp")
-        tmp.write_text(canonical_json({"sequence": nxt}) + "\n", encoding="utf-8")
-        os.replace(tmp, self.sequence_path)
+        self._atomic_write_text(
+            self.sequence_path, canonical_json({"sequence": nxt}) + "\n"
+        )
         return nxt
 
     def _receipt(self, event: str, record: dict, **extra) -> None:
@@ -233,6 +317,10 @@ class AuthorizationLedger:
         return bool(expires and _now() > expires)
 
     def grant(self, approval_id: str, *, approver: str = "founder") -> dict:
+        with self._exclusive_lock():
+            return self._grant_locked(approval_id, approver=approver)
+
+    def _grant_locked(self, approval_id: str, *, approver: str = "founder") -> dict:
         """Founder authorizes this specific held action. Fails closed."""
         record = self.load(approval_id)
         if record is None:
@@ -266,6 +354,10 @@ class AuthorizationLedger:
         return {"ok": True, "authorization": record}
 
     def deny(self, approval_id: str, *, approver: str = "founder", reason: str = "") -> dict:
+        with self._exclusive_lock():
+            return self._deny_locked(approval_id, approver=approver, reason=reason)
+
+    def _deny_locked(self, approval_id: str, *, approver: str = "founder", reason: str = "") -> dict:
         record = self.load(approval_id)
         if record is None:
             return {"ok": False, "error": "unknown_approval_id"}
@@ -282,6 +374,17 @@ class AuthorizationLedger:
 
     def verify_and_consume(self, approval_id: str, *, capability: str, instruction: str,
                            content: Any = None, destination: str | None = None) -> dict:
+        with self._exclusive_lock():
+            return self._verify_and_consume_locked(
+                approval_id,
+                capability=capability,
+                instruction=instruction,
+                content=content,
+                destination=destination,
+            )
+
+    def _verify_and_consume_locked(self, approval_id: str, *, capability: str, instruction: str,
+                                    content: Any = None, destination: str | None = None) -> dict:
         """Single-use redemption, immediately before execution.
 
         Every failure denies. The payload presented here must hash identically

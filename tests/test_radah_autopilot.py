@@ -186,7 +186,7 @@ class RadahAutopilotTests(unittest.TestCase):
             receipt = {
                 "schema": "radah-autopilot-receipt-v1", "lane": lane.lane_id, "status": "COMPLETE",
                 "mission_id": "mission_complete", "external_actions_authorized": False,
-                "receipts": [{"capability": "brain.reason", "status": "COMPLETE"}],
+                "receipts": [{"step": 1, "capability": "brain.reason", "status": "VERIFIED"}],
             }
             lane_supervisor.persist_cycle(state_dir=state_dir, state=state, lane=lane, receipt=receipt, now=now)
             lane_state = lane_supervisor.load_state(state_dir / "state.json")["lanes"][lane.lane_id]

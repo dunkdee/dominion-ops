@@ -10,6 +10,7 @@ EVIDENCE -> AUTHORITY -> ACTION -> RECEIPT -> MEASUREMENT -> LEARNING
 """
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -72,6 +73,30 @@ def iter_scan_files():
             yield path
 
 
+def external_executor_bindings(source: str) -> set[str]:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set()
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        matches = any(
+            isinstance(target, ast.Attribute)
+            and isinstance(target.value, ast.Name)
+            and target.value.id == "self"
+            and target.attr == "_external_executors"
+            for target in targets
+        )
+        if not matches or not isinstance(node.value, ast.Dict):
+            continue
+        for key in node.value.keys:
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                found.add(key.value)
+    return found
+
 def collect_failures() -> list[dict]:
     failures: list[dict] = []
 
@@ -108,11 +133,10 @@ def collect_failures() -> list[dict]:
         cap for cap in registry.get("capabilities", [])
         if cap.get("enabled", True) and str(cap.get("executor", "")).startswith("external:")
     ]
+    wired_external = external_executor_bindings(operator)
     for cap in enabled_external:
         executor = str(cap.get("executor"))
-        # An enabled external capability is only real if the operator has a
-        # governed dispatch path. Merely declaring external:* is not an executor.
-        if executor not in operator or "_external_executors" not in operator:
+        if executor not in wired_external:
             failures.append({
                 "gate": "external_executor",
                 "reason": f"enabled external capability has no governed runtime executor: {cap.get('id')} ({executor})",

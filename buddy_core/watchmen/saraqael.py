@@ -168,6 +168,8 @@ def _validate_key(raw: bytes, origin: str) -> bytes:
     key = raw.strip()
     if not key:
         raise WatchmenStateError(f"audit signing key from {origin} is empty or blank")
+    if len(key) < 32:
+        raise WatchmenStateError(f"audit signing key from {origin} is weaker than 256 bits")
     return key
 
 
@@ -260,6 +262,21 @@ def _atomic_write(path: Path, data: bytes) -> None:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
+        if _posix_modes_required():
+            dir_fd = None
+            try:
+                dir_fd = os.open(str(directory), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                os.fsync(dir_fd)
+            except (OSError, NotImplementedError) as exc:
+                raise WatchmenStateError(
+                    f"cannot fsync audit state directory after replacement: {exc}"
+                ) from exc
+            finally:
+                if dir_fd is not None:
+                    try:
+                        os.close(dir_fd)
+                    except OSError:
+                        pass
     except BaseException:
         if fd is not None:
             try:

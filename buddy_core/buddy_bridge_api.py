@@ -359,9 +359,16 @@ def buddy_command():
         return jsonify(error="unauthorized"), 401
     data = request.get_json(silent=True) or {}
     command = (data.get("command") or "").strip()
+    session_id = (data.get("session_id") or "bridge").strip()[:120]
+    approval_id = str(data.get("authorization_id") or "").strip()
+    if data.get("approve") is True and approval_id:
+        result = get_operator().grant_and_resume(
+            approval_id, session_id=session_id, approver="founder"
+        )
+        log(f"[AUTH_RESUME] status={result.get('status')} approval={approval_id}")
+        return jsonify(result), 200 if result.get("status") == "COMPLETE" else 409
     if not command:
         return jsonify(error="no command"), 400
-    session_id = (data.get("session_id") or "bridge").strip()[:120]
     simulate = bool(data.get("simulate", False))
     try:
         result = get_operator().handle(command, session_id=session_id, simulate=simulate)

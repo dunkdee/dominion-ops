@@ -278,6 +278,18 @@ def bounded_cycle_ok(receipt: dict[str, Any]) -> bool:
     return False
 
 
+
+def productive_complete(receipt: dict[str, Any]) -> bool:
+    if str(receipt.get("status", "")) != "COMPLETE" or not receipt.get("mission_id"):
+        return False
+    rows = receipt.get("receipts")
+    if not isinstance(rows, list) or not rows:
+        return False
+    if not all(isinstance(row, dict) and isinstance(row.get("step"), int) for row in rows):
+        return False
+    statuses = [str(row.get("status", "")) for row in rows]
+    return all(status in {"VERIFIED", "SKIPPED"} for status in statuses) and "VERIFIED" in statuses
+
 def persist_cycle(
     *,
     state_dir: Path,
@@ -294,7 +306,7 @@ def persist_cycle(
 
     # Only an actually completed mission is progress/productivity evidence.
     # HELD/BLOCKED remain scheduler evidence and are tracked separately.
-    if status == "COMPLETE":
+    if productive_complete(receipt):
         lane_state["last_progress_at"] = iso(now)
         lane_state["last_productive_at"] = iso(now)
     elif status == "HELD":

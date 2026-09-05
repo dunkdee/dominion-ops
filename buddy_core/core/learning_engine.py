@@ -30,7 +30,9 @@ def _safe(value):
         out = {}
         for k, v in value.items():
             lk = str(k).lower()
-            if any(x in lk for x in ("password", "secret", "token", "api_key", "apikey", "authorization", "cookie")):
+            secretish = ("password", "secret", "token", "api_key", "apikey", "cookie", "hmac_key")
+            if (any(x in lk for x in secretish) or lk == "approval_hash" or
+                    (lk == "authorization" and not isinstance(v, dict))):
                 out[k] = "[REDACTED]"
             else:
                 out[k] = _safe(v)

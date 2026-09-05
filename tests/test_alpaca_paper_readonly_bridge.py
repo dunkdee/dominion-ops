@@ -606,8 +606,6 @@ class AuthenticatedSurfaceTests(unittest.TestCase):
         self.assertFalse(body["live_trading_enabled"])
 
 
-@unittest.skipUnless(HTTP_DEPS, "fastapi/httpx not installed on this runner")
-
 def _route_paths(routes) -> set:
     """Every route path an app serves, including routes behind include_router.
 
@@ -628,6 +626,7 @@ def _route_paths(routes) -> set:
     return found
 
 
+@unittest.skipUnless(HTTP_DEPS, "fastapi/httpx not installed on this runner")
 class LiveServicePreservationTests(unittest.TestCase):
     """The pre-existing Command Center surface must be unchanged."""
 

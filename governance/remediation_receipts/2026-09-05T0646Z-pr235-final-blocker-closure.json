@@ -1,0 +1,26 @@
+{
+  "schema": "dominion-remediation-receipt-v1",
+  "pr": 235,
+  "tested_code_sha": "1b55c739d13db514f93dab9922933d9d68bef8e5",
+  "focused_tests": {
+    "passed": 34,
+    "warnings": 2
+  },
+  "full_python_suite": {
+    "passed": 893,
+    "warnings": 72
+  },
+  "elite_governance": {
+    "status": "PASS",
+    "failure_count": 0
+  },
+  "fixes": [
+    "capability-specific delivery receipt validation",
+    "tamper-evident Saraqael binding before VERIFIED external completion",
+    "rollback restore fails closed when switching to PREVIOUS_SHA fails"
+  ],
+  "temporary_applicators_removed": true,
+  "release_authorized": false,
+  "production_proven": false,
+  "note": "Evidence-only closure receipt. Does not authorize merge or deployment."
+}

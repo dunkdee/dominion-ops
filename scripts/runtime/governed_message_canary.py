@@ -48,6 +48,10 @@ def _sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def verify_runtime_release(home: Path, expected_sha: str) -> bool:
     """Prove the copied Buddy runtime came from the exact successful deploy."""
     receipt_path = home / ".dominion" / "buddy" / "deployed_release.json"
@@ -94,6 +98,7 @@ def verify_runtime_release(home: Path, expected_sha: str) -> bool:
         return False
 
     critical = (
+        "core/__init__.py",
         "core/operator.py",
         "core/authorization.py",
         "core/message_delivery.py",
@@ -161,6 +166,58 @@ def config_report(normalize_email) -> list[str]:
     return missing
 
 
+def stable_saraqael_snapshot(saraqael):
+    """Verify and read one consistent audit snapshot under Saraqael's transaction lock."""
+    with saraqael._exclusive_audit_lock():
+        chain = saraqael.verify_chain()
+        entries = saraqael._read_entries() if chain.get("valid") is True else []
+    return chain, entries
+
+
+def governed_audit_matches(entries: list[dict], audit: dict, evidence: list[dict], *,
+                           approval_id: str, destination: str, payload_hash: str,
+                           receipt_id: str) -> bool:
+    """Bind the receipt audit pointer to the exact durable external-action entry."""
+    try:
+        seq = int(audit.get("seq"))
+    except (TypeError, ValueError):
+        return False
+    audit_hash = str(audit.get("hash") or "")
+    if seq < 1 or len(audit_hash) != 64 or audit.get("event") != "external_action_executed":
+        return False
+
+    entry = next((item for item in entries if isinstance(item, dict) and item.get("seq") == seq), None)
+    if not entry or entry.get("hash") != audit_hash:
+        return False
+    details = entry.get("details") or {}
+    if not isinstance(details, dict):
+        return False
+
+    try:
+        evidence_blob = json.dumps(
+            evidence,
+            sort_keys=True,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError, OverflowError):
+        return False
+    evidence_hash = hashlib.sha256(evidence_blob).hexdigest()
+
+    return (
+        entry.get("source") == "buddy_operator"
+        and entry.get("event") == "external_action_executed"
+        and entry.get("status") == "ok"
+        and details.get("capability") == "external.message"
+        and details.get("approval_id") == approval_id
+        and details.get("destination") == destination
+        and details.get("payload_hash") == payload_hash
+        and details.get("delivery_receipt_id") == receipt_id
+        and details.get("delivery_evidence_sha256") == evidence_hash
+    )
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--recipient", required=True)
@@ -191,7 +248,7 @@ def main():
     emit("LEDGER_PENDING_COUNT", len(ledger.pending()))
 
     from watchmen import saraqael
-    chain = saraqael.verify_chain()
+    chain, _ = stable_saraqael_snapshot(saraqael)
     emit("SARAQAEL_SELF_CHECK", "PASS" if chain.get("valid") else "FAIL")
     emit("SARAQAEL_ENTRIES", chain.get("entries_checked"))
     if not chain.get("valid"):
@@ -219,8 +276,10 @@ def main():
         emit("RESULT", "STOP_RECIPIENT_INVALID")
         return 6
 
-    content_sha = hashlib.sha256((SUBJECT + "\n" + BODY).encode("utf-8")).hexdigest()
+    content_sha = _sha256_text(SUBJECT + "\n" + BODY)
+    destination_sha = _sha256_text(normalized_recipient)
     emit("CONTENT_SHA256_EXPECTED", content_sha)
+    emit("DESTINATION_SHA256_EXPECTED", destination_sha)
     emit("RECIPIENT_DOMAIN", normalized_recipient.rsplit("@", 1)[-1])
 
     if not args.send:
@@ -242,10 +301,11 @@ def main():
     emit("FIRST_STATUS", first.get("status"))
     held = first.get("held") or {}
     approval_id = held.get("approval_id", "")
+    held_payload_hash = held.get("payload_hash", "")
     emit("HELD", "YES" if first.get("status") == "HELD" and approval_id else "NO")
     emit("AUTHORIZATION_ID", approval_id or "NONE")
-    emit("HELD_PAYLOAD_HASH", held.get("payload_hash", "NONE"))
-    if first.get("status") != "HELD" or not approval_id:
+    emit("HELD_PAYLOAD_HASH", held_payload_hash or "NONE")
+    if first.get("status") != "HELD" or not approval_id or not held_payload_hash:
         emit("RESULT", "STOP_NO_HOLD")
         return 7
 
@@ -259,12 +319,17 @@ def main():
 
     evidence = receipt.get("evidence") or []
     ev = evidence[0] if evidence and isinstance(evidence[0], dict) else {}
+    receipt_id = ev.get("send_receipt_id") or ev.get("message_id") or ""
     emit("SMTP_MESSAGE_ID", ev.get("message_id", "NONE"))
     emit("SMTP_PROVIDER", ev.get("provider", "NONE"))
     emit("SMTP_OBSERVED_AT", ev.get("observed_at") or ev.get("delivered_at") or "NONE")
     emit("RECEIPT_CONTENT_SHA256", ev.get("content_sha256", "NONE"))
-    emit("RECEIPT_ID", ev.get("send_receipt_id") or ev.get("message_id") or "NONE")
-    emit("CONTENT_SHA256_MATCHES", "YES" if ev.get("content_sha256") == content_sha else "NO")
+    emit("RECEIPT_DESTINATION_SHA256", ev.get("destination_sha256", "NONE"))
+    emit("RECEIPT_ID", receipt_id or "NONE")
+    content_matches = ev.get("content_sha256") == content_sha
+    destination_matches = ev.get("destination_sha256") == destination_sha
+    emit("CONTENT_SHA256_MATCHES", "YES" if content_matches else "NO")
+    emit("DESTINATION_SHA256_MATCHES", "YES" if destination_matches else "NO")
 
     audit = receipt.get("governed_audit") or {}
     emit("SARAQAEL_RECEIPT_SEQ", audit.get("seq", "NONE"))
@@ -298,14 +363,26 @@ def main():
     final = ledger.load(approval_id) or {}
     emit("AUTHORIZATION_FINAL_STATE", final.get("status", "UNKNOWN"))
 
-    chain_after = saraqael.verify_chain()
+    chain_after, entries_after = stable_saraqael_snapshot(saraqael)
     emit("SARAQAEL_CHAIN_AFTER", "VALID" if chain_after.get("valid") else "INVALID")
     emit("SARAQAEL_ENTRIES_AFTER", chain_after.get("entries_checked"))
+    audit_bound = governed_audit_matches(
+        entries_after,
+        audit,
+        evidence if isinstance(evidence, list) else [],
+        approval_id=approval_id,
+        destination=normalized_recipient,
+        payload_hash=held_payload_hash,
+        receipt_id=receipt_id,
+    )
+    emit("SARAQAEL_RECEIPT_BOUND", "YES" if audit_bound else "NO")
 
     ok = (
         delivered
         and replay_rejected
-        and ev.get("content_sha256") == content_sha
+        and content_matches
+        and destination_matches
+        and audit_bound
         and final.get("status") == "CONSUMED"
         and chain_after.get("valid")
     )

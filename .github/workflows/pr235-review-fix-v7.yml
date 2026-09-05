@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD^)" = "ef329c6ebed119d1739488d597beb67b8b32b391"
+          test "$(git rev-parse HEAD^)" = "25ac0a6c9be0d15814243db70ec7b5a661198695"
           test -z "$(git status --porcelain)"
 
       - name: Execute reviewed remediation except brittle validator block
@@ -45,6 +45,23 @@ jobs:
           compile(normalized, '<pr235-remediation>', 'exec')
           exec(normalized, {'__name__': '__main__'})
 
+          # The embedded v4 operator replacement lost one class-body indent level
+          # when extracted from YAML. Repair only that generated method region:
+          # class-level def lines stay at four spaces; every nonblank method-body
+          # line gains one level. Nested relative indentation is preserved.
+          op = Path('buddy_core/core/operator.py')
+          op_text = op.read_text(encoding='utf-8')
+          op_start = op_text.find('    def _freeze_external_step(')
+          op_end = op_text.find('    # ---------- Planning / policy ----------', op_start)
+          if op_start < 0 or op_end < 0:
+              raise SystemExit('operator generated block boundaries missing')
+          repaired = []
+          for line in op_text[op_start:op_end].splitlines(keepends=True):
+              if line.strip() and not line.startswith('    def '):
+                  line = '    ' + line
+              repaired.append(line)
+          op.write_text(op_text[:op_start] + ''.join(repaired) + op_text[op_end:], encoding='utf-8')
+
           p = Path('scripts/validate_elite_governance.py')
           text = p.read_text(encoding='utf-8')
           if 'import ast\n' not in text:
@@ -65,8 +82,6 @@ jobs:
           text = text[:block_start] + replacement + text[block_end:]
           p.write_text(text, encoding='utf-8')
 
-          # The v4 payload removes every pr235-review-fix*.yml it sees. This runner
-          # was created after that source payload, so remove itself explicitly too.
           me = Path('.github/workflows/pr235-review-fix-v7.yml')
           if me.exists():
               me.unlink()

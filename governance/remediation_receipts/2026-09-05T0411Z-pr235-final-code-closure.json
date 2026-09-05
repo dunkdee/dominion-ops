@@ -1,0 +1,44 @@
+{
+  "schema": "dominion-pr235-code-closure-v1",
+  "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+  "pr": 235,
+  "recorded_at": "2026-09-05T04:11:00Z",
+  "source_candidate_sha": "cc9946df861811533976048b33b46ab64b18841b",
+  "source_candidate_evidence": {
+    "focused_review_regressions": {
+      "passed": 54,
+      "warnings": 4
+    },
+    "elite_governance": {
+      "status": "PASS",
+      "failure_count": 0,
+      "fail_closed": true
+    },
+    "repository_python_suite": {
+      "passed": 887,
+      "warnings": 72
+    }
+  },
+  "latest_authority_boundary_fix": "Founder approval/resume requires configured real authentication; loopback open-dev cannot grant or resume Founder authority.",
+  "truth_state": {
+    "built": true,
+    "tested": true,
+    "merged": false,
+    "deployed": false,
+    "runtime_proven": false,
+    "final_release_approved": false
+  },
+  "remaining_release_gates": [
+    "exact-head CI after this evidence-only receipt",
+    "independent exact-head review",
+    "Five Council final release decision",
+    "merge",
+    "controlled deployment",
+    "runtime proof and closure receipt"
+  ],
+  "prohibitions": [
+    "no direct push to main",
+    "no force merge",
+    "no production claim before runtime proof"
+  ]
+}

@@ -101,8 +101,10 @@ class SigningKeyTests(WatchmenStateTestCase):
     def test_default_key_is_generated_and_is_high_entropy(self):
         key = saraqael._resolve_key()
         self.assertTrue(saraqael.key_file().exists())
-        self.assertGreaterEqual(len(key), 32)
-        self.assertEqual(len(set(key)), len(set(key)))
+        self.assertEqual(len(key), 64)
+        decoded = key.decode("ascii")
+        self.assertTrue(all(ch in "0123456789abcdef" for ch in decoded))
+        self.assertNotEqual(int(decoded, 16), 0)
         self.assertNotIn(b"dominion", key.lower())
 
     def test_generated_key_persists_across_resolutions(self):
@@ -117,18 +119,18 @@ class SigningKeyTests(WatchmenStateTestCase):
         self.assertNotEqual(first, saraqael._resolve_key())
 
     def test_environment_supplied_key_is_used_and_never_written_to_disk(self):
-        self._env(saraqael.ENV_HMAC_KEY, "an-explicit-operator-key")
-        self.assertEqual(saraqael._resolve_key(), b"an-explicit-operator-key")
+        self._env(saraqael.ENV_HMAC_KEY, "0123456789abcdef0123456789abcdef")
+        self.assertEqual(saraqael._resolve_key(), b"0123456789abcdef0123456789abcdef")
         saraqael.log("test", "env_key", "ok")
         self.assertFalse(saraqael.key_file().exists(), "an in-memory key must never be persisted")
 
     def test_key_file_override_is_used(self):
         external = Path(self._tmp.name) / "external.key"
-        external.write_bytes(b"key-from-an-external-file\n")
+        external.write_bytes(b"fedcba9876543210fedcba9876543210\n")
         if POSIX:
             external.chmod(0o600)
         self._env(saraqael.ENV_HMAC_FILE, str(external))
-        self.assertEqual(saraqael._resolve_key(), b"key-from-an-external-file")
+        self.assertEqual(saraqael._resolve_key(), b"fedcba9876543210fedcba9876543210")
 
     def test_missing_explicit_key_file_fails_closed(self):
         self._env(saraqael.ENV_HMAC_FILE, str(Path(self._tmp.name) / "absent.key"))
@@ -137,6 +139,11 @@ class SigningKeyTests(WatchmenStateTestCase):
         with self.assertRaises(WatchmenStateError):
             saraqael.log("test", "should_not_be_written", "ok")
         self.assertFalse(saraqael.audit_file().exists())
+
+    def test_weak_explicit_key_fails_closed(self):
+        self._env(saraqael.ENV_HMAC_KEY, "too-short")
+        with self.assertRaises(WatchmenStateError):
+            saraqael._resolve_key()
 
     def test_blank_key_sources_fail_closed_rather_than_defaulting(self):
         self._env(saraqael.ENV_HMAC_KEY, "   ")

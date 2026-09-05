@@ -703,6 +703,14 @@ async def chat(request: Request):
 
     message = body.get("message", "").strip()
     session_id = body.get("session_id", "default")
+    approval_id = str(body.get("authorization_id") or "").strip()
+    if body.get("approve") is True and approval_id:
+        result = get_operator().grant_and_resume(
+            approval_id, session_id=session_id, approver="founder"
+        )
+        payload = {"response": result.get("response") or result.get("error") or result.get("status"),
+                   "session_id": session_id, **result}
+        return JSONResponse(payload, status_code=200 if result.get("status") == "COMPLETE" else 409)
 
     if not message:
         return JSONResponse({"error": "Empty message"}, status_code=400)

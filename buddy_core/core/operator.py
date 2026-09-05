@@ -13,10 +13,12 @@ Security invariants:
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
 import re
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,9 +51,9 @@ except ImportError:
         vault_io = None
 
 try:
-    from core.authorization import AuthorizationLedger, payload_fingerprint
+    from core.authorization import AuthorizationError, AuthorizationLedger, payload_fingerprint
 except ImportError:  # standalone runtime vs canonical repo import path
-    from buddy_core.core.authorization import AuthorizationLedger, payload_fingerprint
+    from buddy_core.core.authorization import AuthorizationError, AuthorizationLedger, payload_fingerprint
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "config"
@@ -260,6 +262,12 @@ class BuddyOperator:
         self.learning_cycle = learning_cycle or autonomous_learning_cycle
         self.state_dir = Path(state_dir) if state_dir else STATE
         self.staged_dir = self.state_dir / "staged"
+        self.held_dir = self.state_dir / "held"
+        self.held_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.held_dir.chmod(0o700)
+        except OSError:
+            pass
         registry = _load_json(CAPABILITY_FILE)
         self.capabilities = {
             c["id"]: c for c in registry.get("capabilities", []) if c.get("enabled", True)
@@ -491,6 +499,89 @@ class BuddyOperator:
         self._validate_plan(plan)
         return plan
 
+    def _freeze_external_step(self, step: dict, context: dict) -> dict:
+        """Bind authority to the exact content/destination the executor will receive."""
+        frozen = copy.deepcopy(step)
+        if "content" not in frozen or frozen.get("content") is None:
+            outputs = [value for value in context.get("outputs", []) if value is not None]
+            frozen["content"] = copy.deepcopy(outputs[-1]) if outputs else None
+        # Destination may legitimately be None, but no later executor may invent one.
+        frozen["destination"] = step.get("destination")
+        return frozen
+
+    def _held_path(self, approval_id: str) -> Path:
+        if not re.fullmatch(r"approval_[0-9a-f]{12}", approval_id or ""):
+            raise AuthorizationError("invalid approval_id")
+        return self.held_dir / f"{approval_id}.json"
+
+    def _persist_held_plan(self, approval_id: str, payload: dict) -> None:
+        path = self._held_path(approval_id)
+        fd, tmp = tempfile.mkstemp(dir=str(self.held_dir), prefix=path.name + ".", suffix=".tmp")
+        try:
+            if hasattr(os, "fchmod"):
+                try:
+                    os.fchmod(fd, 0o600)
+                except OSError:
+                    pass
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fd = None
+                json.dump(payload, fh, ensure_ascii=False, sort_keys=True)
+                fh.write("\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, path)
+            try:
+                path.chmod(0o600)
+            except OSError:
+                pass
+        except BaseException:
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    def grant_and_resume(self, approval_id: str, *, session_id: str = "default",
+                         approver: str = "founder") -> dict:
+        """Authenticated product surfaces call this to grant and resume one stored hold."""
+        try:
+            path = self._held_path(approval_id)
+            stored = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(stored, dict):
+                raise ValueError("held state malformed")
+            pending = self._ledger.load(approval_id)
+        except (AuthorizationError, OSError, ValueError, json.JSONDecodeError) as exc:
+            return {
+                "status": "BLOCKED",
+                "error": "HeldMissionUnavailable",
+                "detail": str(exc)[:200],
+                "approval_id": approval_id,
+            }
+        if not pending or pending.get("payload_hash") != stored.get("payload_hash"):
+            return {"status": "BLOCKED", "error": "held_authority_mismatch", "approval_id": approval_id}
+
+        granted = self._ledger.grant(approval_id, approver=approver)
+        if not granted.get("ok"):
+            if granted.get("error") == "already_granted":
+                current = self._ledger.load(approval_id)
+                if not current or current.get("status") != "GRANTED":
+                    return {"status": "BLOCKED", "error": granted.get("error"), "approval_id": approval_id}
+            else:
+                return {"status": "BLOCKED", "error": granted.get("error"), "approval_id": approval_id}
+
+        plan = stored.get("plan")
+        step_index = int(stored.get("step_index", 0))
+        if not isinstance(plan, dict) or step_index < 1 or step_index > len(plan.get("steps") or []):
+            return {"status": "BLOCKED", "error": "held_plan_invalid", "approval_id": approval_id}
+        plan = copy.deepcopy(plan)
+        plan["steps"][step_index - 1]["authorization_id"] = approval_id
+        return self.execute(plan, session_id=session_id)
+
     def execute(self, plan: dict, *, session_id: str = "default") -> dict:
         self._validate_plan(plan)
         evidence_policy = None
@@ -516,66 +607,91 @@ class BuddyOperator:
             if cap.get("auth_required") or cap.get("classification") in {
                 "privileged_write", "destructive"
             }:
-                # A consequential boundary. Either the Founder has already
-                # authorized this exact action, in which case the authority is
-                # redeemed once and the governed executor runs, or the mission
-                # holds and a durable authorization request is recorded.
-                destination = step.get("destination")
-                supplied = step.get("authorization_id")
+                frozen_step = self._freeze_external_step(step, context)
+                destination = frozen_step.get("destination")
+                supplied = frozen_step.get("authorization_id")
 
                 if supplied:
-                    redeemed = self._ledger.verify_and_consume(
-                        supplied,
-                        capability=step["capability"],
-                        instruction=step["instruction"],
-                        content=step.get("content"),
-                        destination=destination,
-                    )
+                    try:
+                        redeemed = self._ledger.verify_and_consume(
+                            supplied,
+                            capability=frozen_step["capability"],
+                            instruction=frozen_step["instruction"],
+                            content=frozen_step.get("content"),
+                            destination=destination,
+                        )
+                    except AuthorizationError as exc:
+                        redeemed = {"ok": False, "error": str(exc) or "authorization_error"}
+                    except OSError:
+                        redeemed = {"ok": False, "error": "authorization_storage_unavailable"}
                     if not redeemed.get("ok"):
-                        # Missing, expired, replayed or mismatched authority
-                        # fails closed. It never degrades into execution.
                         receipt = {
                             "step": index,
-                            "capability": step["capability"],
+                            "capability": frozen_step["capability"],
                             "status": "BLOCKED",
                             "attempts": 0,
-                            "errors": [{
-                                "attempt": 0,
-                                "error": "AuthorizationRejected",
-                                "detail": redeemed.get("error", "authorization_denied"),
-                            }],
+                            "errors": [{"attempt": 0, "error": "AuthorizationRejected",
+                                        "detail": redeemed.get("error", "authorization_denied")}],
                             "result": None,
                             "evidence": [],
                         }
                         receipts.append(receipt)
-                        audit("external_authorization_rejected", {
-                            "mission_id": plan["mission_id"],
-                            "capability": step["capability"],
-                            "approval_id": supplied,
-                            "error": redeemed.get("error"),
-                        })
+                        try:
+                            audit("external_authorization_rejected", {
+                                "mission_id": plan["mission_id"],
+                                "capability": frozen_step["capability"],
+                                "approval_id": supplied,
+                                "error": redeemed.get("error"),
+                            })
+                        except Exception:
+                            pass
                         break
 
-                    receipt = self._execute_external(index, step, cap, context, redeemed["authorization"])
+                    receipt = self._execute_external(
+                        index, frozen_step, cap, context, redeemed["authorization"]
+                    )
                     receipts.append(receipt)
                     if receipt["status"] != "VERIFIED":
                         break
                     context["outputs"].append(receipt.get("result"))
                     continue
 
-                request = self._ledger.request(
-                    mission_id=plan["mission_id"],
-                    step=index,
-                    capability=step["capability"],
-                    instruction=step["instruction"],
-                    content=step.get("content"),
-                    destination=destination,
-                    policy_tags=cap.get("tags", []),
-                )
+                try:
+                    request = self._ledger.request(
+                        mission_id=plan["mission_id"],
+                        step=index,
+                        capability=frozen_step["capability"],
+                        instruction=frozen_step["instruction"],
+                        content=frozen_step.get("content"),
+                        destination=destination,
+                        policy_tags=cap.get("tags", []),
+                    )
+                    frozen_plan = copy.deepcopy(plan)
+                    frozen_plan["steps"][index - 1] = frozen_step
+                    self._persist_held_plan(request["approval_id"], {
+                        "approval_id": request["approval_id"],
+                        "payload_hash": request["payload_hash"],
+                        "step_index": index,
+                        "session_id": session_id,
+                        "plan": frozen_plan,
+                    })
+                except (AuthorizationError, OSError, TypeError, ValueError) as exc:
+                    receipts.append({
+                        "step": index,
+                        "capability": frozen_step["capability"],
+                        "status": "BLOCKED",
+                        "attempts": 0,
+                        "errors": [{"attempt": 0, "error": "AuthorizationStorageUnavailable",
+                                    "detail": str(exc)[:200]}],
+                        "result": None,
+                        "evidence": [],
+                    })
+                    break
+
                 held = {
                     "step": index,
-                    "capability": step["capability"],
-                    "instruction": step["instruction"],
+                    "capability": frozen_step["capability"],
+                    "instruction": frozen_step["instruction"],
                     "approval_id": request["approval_id"],
                     "payload_hash": request["payload_hash"],
                     "expires_at": request["expires_at"],
@@ -583,48 +699,36 @@ class BuddyOperator:
                     "policy_tags": cap.get("tags", []),
                 }
                 receipts.append({"step": index, "status": "HELD", **held})
-                audit("external_boundary_held", {
-                    "mission_id": plan["mission_id"], **held
-                })
+                try:
+                    audit("external_boundary_held", {"mission_id": plan["mission_id"], **held})
+                except Exception:
+                    pass
                 break
 
-            # evidence_any_of gate: enforce BEFORE dispatching the step
             qualifying = set(step.get("evidence_any_of") or [])
             if qualifying:
                 verified_caps = {
-                    r["capability"]
-                    for r in receipts
+                    r["capability"] for r in receipts
                     if r.get("capability") in qualifying and r.get("status") == "VERIFIED"
                 }
                 if not verified_caps:
-                    gate_receipt = {
-                        "step": index,
-                        "capability": step["capability"],
-                        "status": "BLOCKED",
+                    receipts.append({
+                        "step": index, "capability": step["capability"], "status": "BLOCKED",
                         "attempts": 0,
-                        "errors": [{
-                            "attempt": 0,
-                            "error": "EvidenceGate",
-                            "detail": (
-                                "requires at least one VERIFIED governed evidence "
-                                f"capability from {sorted(qualifying)}"
-                            ),
-                        }],
-                        "result": None,
-                        "evidence": [],
-                    }
-                    receipts.append(gate_receipt)
+                        "errors": [{"attempt": 0, "error": "EvidenceGate",
+                                    "detail": "requires at least one VERIFIED governed evidence capability "
+                                              f"from {sorted(qualifying)}"}],
+                        "result": None, "evidence": [],
+                    })
                     break
 
             receipt = self._execute_internal(index, step, cap, context)
             receipts.append(receipt)
-
             if receipt["status"] != "VERIFIED":
                 if step.get("evidence_required", True) is False:
                     receipts[-1] = {**receipt, "status": "SKIPPED"}
                     continue
                 break
-
             context["outputs"].append(receipt.get("result"))
             for ev in receipt.get("evidence", []):
                 if isinstance(ev, dict) and ev.get("url"):
@@ -636,18 +740,24 @@ class BuddyOperator:
             else "BLOCKED"
         )
         record = {
-            "mission_id": plan["mission_id"],
-            "session_id": session_id,
-            "objective": plan["objective"],
-            "status": status,
-            "evidence_policy": evidence_policy,
-            "receipts": receipts,
-            "held": held,
+            "mission_id": plan["mission_id"], "session_id": session_id,
+            "objective": plan["objective"], "status": status,
+            "evidence_policy": evidence_policy, "receipts": receipts, "held": held,
         }
-        record_mission(record)
+        try:
+            record_mission(record)
+        except Exception as exc:
+            delivered = any(
+                isinstance(r, dict) and r.get("authority_ref") and
+                r.get("status") in {"VERIFIED", "DELIVERED_UNVERIFIED", "DELIVERED_AUDIT_UNAVAILABLE"}
+                for r in receipts
+            )
+            record["status"] = "DELIVERED_AUDIT_UNAVAILABLE" if delivered else "BLOCKED"
+            record["persistence_error"] = type(exc).__name__
         return {**record, "response": self._mission_response(record)}
 
     # ---------- Planning / policy ----------
+
     def _step(
         self,
         capability: str,
@@ -741,20 +851,20 @@ CAPABILITY REGISTRY:
     # ---------- Governed external execution ----------
 
     def _execute_external(self, index: int, step: dict, cap: dict, context: dict,
-                          authorization: dict) -> dict:
-        """Dispatch a consequential action that carries redeemed Founder authority.
-
-        Reached only after the authorization ledger has verified and consumed a
-        grant bound to this exact capability, instruction, content and
-        destination. The receipt records which authority was used, by id and
-        sequence, never by any secret value.
-        """
+                        authorization: dict) -> dict:
+        """Execute only redeemed exact authority; never fabricate delivery proof."""
         executor_name = cap.get("executor", "")
         executor = self._external_executors.get(executor_name)
         base = {
             "step": index,
             "capability": step["capability"],
             "attempts": 1,
+            "authority_ref": {
+                "approval_id": authorization.get("approval_id"),
+                "authorization_sequence": authorization.get("authorization_sequence"),
+                "payload_hash": authorization.get("payload_hash"),
+                "approver": authorization.get("approver"),
+            },
             "authorization": {
                 "approval_id": authorization.get("approval_id"),
                 "authorization_sequence": authorization.get("authorization_sequence"),
@@ -762,60 +872,48 @@ CAPABILITY REGISTRY:
                 "approver": authorization.get("approver"),
             },
         }
-
         if executor is None:
-            # A declared capability with no bound executor is BLOCKED. It is
-            # never reported as a completed action.
-            return {
-                **base,
-                "status": "BLOCKED",
-                "errors": [{
-                    "attempt": 1,
-                    "error": "ExecutorUnavailable",
-                    "detail": f"no governed executor bound for {executor_name or step['capability']}",
-                }],
-                "result": None,
-                "evidence": [],
-            }
-
+            return {**base, "status": "BLOCKED",
+                    "errors": [{"attempt": 1, "error": "ExecutorUnavailable",
+                                "detail": f"no governed executor bound for {executor_name or step['capability']}"}],
+                    "result": None, "evidence": []}
         try:
             outcome = executor(step, context)
-        except Exception as exc:  # executor faults are failures, never successes
-            return {
-                **base,
-                "status": "BLOCKED",
-                "errors": [{
-                    "attempt": 1,
-                    "error": type(exc).__name__,
-                    "detail": str(exc)[:300],
-                }],
-                "result": None,
-                "evidence": [],
-            }
-
+        except Exception as exc:
+            return {**base, "status": "BLOCKED",
+                    "errors": [{"attempt": 1, "error": type(exc).__name__, "detail": str(exc)[:300]}],
+                    "result": None, "evidence": []}
         if not isinstance(outcome, dict) or not outcome.get("delivered"):
-            detail = (outcome or {}).get("detail", "external delivery not performed") \
-                if isinstance(outcome, dict) else "executor returned no governed result"
-            return {
-                **base,
-                "status": "BLOCKED",
-                "errors": [{"attempt": 1, "error": "ExternalDeliveryUnavailable", "detail": detail}],
-                "result": None,
-                "evidence": [],
-            }
+            detail = ((outcome or {}).get("detail", "external delivery not performed")
+                      if isinstance(outcome, dict) else "executor returned no governed result")
+            return {**base, "status": "BLOCKED",
+                    "errors": [{"attempt": 1, "error": "ExternalDeliveryUnavailable", "detail": detail}],
+                    "result": None, "evidence": []}
 
-        audit("external_action_executed", {
-            "capability": step["capability"],
-            "approval_id": authorization.get("approval_id"),
-            "destination": step.get("destination"),
-        })
-        return {
-            **base,
-            "status": "VERIFIED",
-            "errors": [],
-            "result": outcome.get("result"),
-            "evidence": outcome.get("evidence", []),
-        }
+        evidence = outcome.get("evidence")
+        if not (isinstance(evidence, list) and evidence and
+                all(isinstance(item, dict) and bool(item) for item in evidence)):
+            return {**base, "status": "DELIVERED_UNVERIFIED",
+                    "errors": [{"attempt": 1, "error": "DeliveryEvidenceMissing",
+                                "detail": "delivery occurred but governed delivery evidence is absent or malformed"}],
+                    "result": outcome.get("result"),
+                    "evidence": evidence if isinstance(evidence, list) else []}
+
+        try:
+            audit("external_action_executed", {
+                "capability": step["capability"],
+                "approval_id": authorization.get("approval_id"),
+                "destination": step.get("destination"),
+                "payload_hash": authorization.get("payload_hash"),
+            })
+        except Exception as exc:
+            return {**base, "status": "DELIVERED_AUDIT_UNAVAILABLE",
+                    "errors": [{"attempt": 1, "error": "PostDeliveryAuditUnavailable",
+                                "detail": type(exc).__name__}],
+                    "result": outcome.get("result"), "evidence": evidence}
+
+        return {**base, "status": "VERIFIED", "errors": [],
+                "result": outcome.get("result"), "evidence": evidence}
 
     def _no_delivery_backend(self, channel: str) -> dict:
         """The honest result when a governed executor exists but has no

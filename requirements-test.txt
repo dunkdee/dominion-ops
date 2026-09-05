@@ -17,6 +17,7 @@ httpx
 uvicorn
 python-dotenv
 requests
+jinja2
 
 # FastAPI form parsing (apps/video-studio worker + public routes)
 python-multipart

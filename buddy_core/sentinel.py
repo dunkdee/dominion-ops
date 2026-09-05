@@ -883,6 +883,9 @@ def check_env_keys(state):
                         fixed.append(f"{action.capitalize()} {key} in {CANONICAL_TOKEN_FILE.name} (canonical)")
                         state.record_fix()
                         log.info(f"  {action.capitalize()} {key} in {CANONICAL_TOKEN_FILE.name} (canonical)")
+                    except AuditUnavailable as e:
+                        issues.append(f"Canonical {key} mutation blocked/unaccepted: governed audit unavailable ({e})")
+                        log.critical(f"  Canonical {key} mutation blocked/unaccepted: governed audit unavailable ({e})")
                     except Exception as e:
                         issues.append(f"Failed to write canonical {key} to {CANONICAL_TOKEN_FILE.name}: {e}")
             else:
@@ -908,6 +911,9 @@ def check_env_keys(state):
                         fixed.append(f"Stripped {key} from {env_file.name} (non-canonical)")
                         state.record_fix()
                         log.info(f"  Stripped {key} from {env_file.name} (non-canonical)")
+                except AuditUnavailable as e:
+                    issues.append(f"{key} desync mutation blocked/unaccepted: governed audit unavailable ({e})")
+                    log.critical(f"  {key} desync mutation blocked/unaccepted: governed audit unavailable ({e})")
                 except Exception as e:
                     issues.append(f"Failed to strip {key} from {env_file.name}: {e}")
             continue
@@ -937,6 +943,9 @@ def check_env_keys(state):
                 fixed.append(f"{action.capitalize()} {key} in {env_file.name}")
                 state.record_fix()
                 log.info(f"  {action.capitalize()} {key} in {env_file.name}")
+            except AuditUnavailable as e:
+                issues.append(f"{key} sync mutation blocked/unaccepted: governed audit unavailable ({e})")
+                log.critical(f"  {key} sync mutation blocked/unaccepted: governed audit unavailable ({e})")
             except Exception as e:
                 issues.append(f"Failed to sync {key} to {env_file.name}: {e}")
 

@@ -1,6 +1,6 @@
 {
   "schema": "dominion-buddy-capability-extensions-v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "capabilities": [
     {
       "id": "system.capability_health",
@@ -12,6 +12,17 @@
       "max_retries": 0,
       "enabled": true,
       "tags": ["capability", "health", "truth", "audit"]
+    },
+    {
+      "id": "system.agent_knowledge_health",
+      "name": "Verify Dominion Brain knowledge for every agent",
+      "description": "Read-only verification that every registered Dominion agent resolves to current bounded Dominion Brain context and provenance hashes. Knowledge is context only and never expands authority.",
+      "executor": "native:agent_knowledge_health",
+      "classification": "read",
+      "auth_required": false,
+      "max_retries": 0,
+      "enabled": true,
+      "tags": ["obsidian", "dominion_brain", "agents", "knowledge", "health", "read_only"]
     },
     {
       "id": "system.self_diagnose",

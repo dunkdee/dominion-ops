@@ -23,31 +23,60 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD^)" = "3ac829a1196bd58fe4992b8ee9a252a8ba029344"
+          test "$(git rev-parse HEAD^)" = "37a4ee49f2f0ae1d30756681ef32d73c6bd64e84"
           test -z "$(git status --porcelain)"
 
-      - name: Apply reviewed remediation and repair generated indentation
+      - name: Apply reviewed remediation with canonical external executor block
         shell: bash
         run: |
           set -Eeuo pipefail
           python - <<'PY'
+          import ast
+          import textwrap
           from pathlib import Path
 
-          # Reuse the already-reviewed v7 remediation payload exactly.
-          source = Path('.github/workflows/pr235-review-fix-v7.yml').read_text(encoding='utf-8')
+          # Reuse the reviewed v7 remediation payload exactly.
+          v7 = Path('.github/workflows/pr235-review-fix-v7.yml').read_text(encoding='utf-8')
           start = "          python - <<'PY'\n"
           end = "\n          PY\n\n      - name: Install repository-wide test dependencies"
-          if start not in source or end not in source:
+          if start not in v7 or end not in v7:
               raise SystemExit('v7 remediation payload markers missing')
-          payload = source.split(start, 1)[1].split(end, 1)[0]
-          normalized = '\n'.join(line[10:] if line.startswith('          ') else line for line in payload.splitlines()) + '\n'
-          compile(normalized, '<pr235-v7-remediation>', 'exec')
-          exec(normalized, {'__name__': '__main__'})
+          payload = v7.split(start, 1)[1].split(end, 1)[0]
+          normalized_v7 = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in payload.splitlines()
+          ) + '\n'
+          compile(normalized_v7, '<pr235-v7-remediation>', 'exec')
+          exec(normalized_v7, {'__name__': '__main__'})
 
-          # The v4-generated _execute_external block may be emitted at class
-          # column 0 after textwrap.dedent. Locate semantic def boundaries by
-          # stripped text, then add exactly one class indentation level to the
-          # entire generated block. This preserves its internal relative layout.
+          # Canonically regenerate new_external from the reviewed v4 source.
+          # Do not infer indentation from the malformed generated result.
+          v4 = Path('.github/workflows/pr235-review-fix-v4.yml').read_text(encoding='utf-8')
+          if start not in v4 or end not in v4:
+              raise SystemExit('v4 remediation payload markers missing')
+          v4_payload = v4.split(start, 1)[1].split(end, 1)[0]
+          normalized_v4 = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in v4_payload.splitlines()
+          ) + '\n'
+          tree = ast.parse(normalized_v4)
+          raw_external = None
+          for node in tree.body:
+              if not isinstance(node, ast.Assign):
+                  continue
+              if any(isinstance(t, ast.Name) and t.id == 'new_external' for t in node.targets):
+                  raw_external = ast.literal_eval(node.value)
+                  break
+          if not isinstance(raw_external, str) or 'def _execute_external(' not in raw_external:
+              raise SystemExit('reviewed new_external assignment missing')
+
+          canonical_external = textwrap.indent(
+              textwrap.dedent(raw_external).lstrip('\n'),
+              '    ',
+          )
+          if not canonical_external.endswith('\n'):
+              canonical_external += '\n'
+
           op = Path('buddy_core/core/operator.py')
           lines = op.read_text(encoding='utf-8').splitlines(keepends=True)
           start_i = next(
@@ -62,31 +91,14 @@ jobs:
               None,
           )
           if start_i is None or end_i is None:
-              raise SystemExit('external executor semantic boundaries missing')
+              raise SystemExit('operator external executor boundaries missing')
+          canonical_lines = canonical_external.splitlines(keepends=True)
+          op.write_text(''.join(lines[:start_i] + canonical_lines + lines[end_i:]), encoding='utf-8')
 
-          # If the generated def is already correctly class-indented, only its
-          # body may be short; otherwise indent the whole generated block once.
-          def_indent = len(lines[start_i]) - len(lines[start_i].lstrip(' '))
-          if def_indent == 0:
-              for i in range(start_i, end_i):
-                  if lines[i].strip():
-                      lines[i] = '    ' + lines[i]
-          elif def_indent == 4:
-              for i in range(start_i + 1, end_i):
-                  if lines[i].strip():
-                      body_indent = len(lines[i]) - len(lines[i].lstrip(' '))
-                      if body_indent < 8:
-                          lines[i] = '    ' + lines[i]
-          else:
-              raise SystemExit(f'unexpected _execute_external indentation: {def_indent}')
-          op.write_text(''.join(lines), encoding='utf-8')
-
-          # v7 removes itself; remove this one-shot runner too. The v4/v7 payload
-          # removes the earlier temporary applicators.
-          me = Path('.github/workflows/pr235-review-fix-v8.yml')
-          if me.exists():
-              me.unlink()
-          print('PR235_V8_REMEDIATION=APPLIED')
+          # Remove every one-shot PR235 remediation workflow from the candidate tree.
+          for helper in Path('.github/workflows').glob('pr235-review-fix*.yml'):
+              helper.unlink()
+          print('PR235_CANONICAL_EXTERNAL_REMEDIATION=APPLIED')
           PY
 
       - name: Install repository-wide test dependencies

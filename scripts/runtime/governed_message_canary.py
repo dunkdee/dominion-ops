@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 import traceback
+import types
 from pathlib import Path
 
 SUBJECT = "Dominion Governed Delivery Canary"
@@ -32,13 +33,52 @@ def emit(key, value):
     print(line, flush=True)
 
 
+def _load_env_file(path: Path, *, override: bool) -> bool:
+    """Load one dotenv-style file with shell ordering semantics."""
+    try:
+        raw = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    loaded = False
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if not key:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        if override or key not in os.environ:
+            os.environ[key] = value
+        loaded = True
+    return loaded
+
+
+def _install_dotenv_shim() -> None:
+    """Provide the minimal dotenv API this canary and Buddy runtime import."""
+    module = types.ModuleType("dotenv")
+
+    def load_dotenv(dotenv_path=None, override=False):
+        candidate = Path(dotenv_path).expanduser() if dotenv_path else (Path.cwd() / ".env")
+        return _load_env_file(candidate, override=bool(override))
+
+    module.load_dotenv = load_dotenv
+    sys.modules["dotenv"] = module
+
+
 def load_runtime_env(home: Path):
     """Load the same dotenv files the Buddy runtime loads, first assignment wins."""
     try:
         from dotenv import load_dotenv
     except ImportError:
-        emit("DOTENV", "UNAVAILABLE")
-        return
+        emit("DOTENV", "SHIM")
+        _install_dotenv_shim()
+        from dotenv import load_dotenv
     for candidate in (home / "buddy_core" / ".env", home / "conductor" / ".env", home / ".env"):
         if candidate.is_file():
             load_dotenv(dotenv_path=candidate, override=False)

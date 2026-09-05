@@ -1,10 +1,9 @@
 """Verify the deployed Buddy runtime and prove one governed external.message canary.
 
-This runs ON the foundation VM against the deployed checkout. It performs the
-whole proof through Buddy's real authority path -- plan, hold, Founder grant,
-redemption of the exact frozen payload, delivery, governed audit, replay block.
-It never calls the SMTP helper directly, because doing so would bypass the
-authorization it is supposed to prove.
+This runs ON the foundation VM against the deployed Buddy runtime. It proves the
+whole path through Buddy's real authority boundary: exact deployed release,
+plan, hold, Founder grant, exact frozen-payload redemption, SMTP acceptance,
+governed audit, and single-use replay rejection.
 
 It prints presence, identifiers and digests only. No secret value, and no
 message body, is ever written to stdout.
@@ -13,7 +12,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -21,9 +22,6 @@ from pathlib import Path
 SUBJECT = "Dominion Governed Delivery Canary"
 BODY = ("This is a Founder-authorized Dominion production canary proving the "
         "governed external.message execution path. No action is required.")
-
-REQUIRED_SINGLE = ("BUDDY_EXTERNAL_MESSAGE_MODE", "SMTP_HOST", "SMTP_PORT")
-REQUIRED_EITHER = (("SMTP_EMAIL", "EMAIL_ADDRESS"), ("SMTP_PASSWORD", "EMAIL_PASSWORD"))
 
 out = []
 
@@ -46,26 +44,120 @@ def load_runtime_env(home: Path):
             load_dotenv(dotenv_path=candidate, override=False)
 
 
-def config_report():
-    missing = []
-    for name in REQUIRED_SINGLE:
-        present = bool(str(os.getenv(name) or "").strip())
-        emit(f"CONFIG_{name}", "PRESENT" if present else "MISSING")
-        if not present:
-            missing.append(name)
-    for pair in REQUIRED_EITHER:
-        present = any(str(os.getenv(n) or "").strip() for n in pair)
-        emit(f"CONFIG_{'_OR_'.join(pair)}", "PRESENT" if present else "MISSING")
-        if not present:
-            missing.append(" or ".join(pair))
+def _sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
 
-    mode = str(os.getenv("BUDDY_EXTERNAL_MESSAGE_MODE") or "").strip().lower()
+
+def verify_runtime_release(home: Path, expected_sha: str) -> bool:
+    """Prove the copied Buddy runtime came from the exact successful deploy."""
+    receipt_path = home / ".dominion" / "buddy" / "deployed_release.json"
+    repo = home / "dominion-ops"
+    runtime = home / "buddy_core"
+
+    if not receipt_path.is_file():
+        emit("DEPLOY_RECEIPT", "MISSING")
+        return False
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        emit("DEPLOY_RECEIPT", "INVALID")
+        return False
+    if not isinstance(receipt, dict):
+        emit("DEPLOY_RECEIPT", "INVALID")
+        return False
+
+    release_sha = str(receipt.get("release_sha") or "")
+    emit("DEPLOY_RECEIPT", "PRESENT")
+    emit("DEPLOYED_RELEASE_SHA", release_sha or "MISSING")
+    release_matches = release_sha == expected_sha
+    emit("DEPLOYED_RELEASE_SHA_MATCHES_EXPECTED", "YES" if release_matches else "NO")
+    if not release_matches:
+        return False
+
+    recorded = receipt.get("files_sha256") or {}
+    if not isinstance(recorded, dict) or not recorded:
+        emit("DEPLOY_RECEIPT_FILE_HASHES", "MISSING")
+        return False
+
+    recorded_ok = True
+    for rel, expected_hash in sorted(recorded.items()):
+        path = runtime / str(rel)
+        try:
+            actual = _sha256_bytes(path.read_bytes())
+        except OSError:
+            actual = ""
+        if actual != str(expected_hash):
+            recorded_ok = False
+            emit("DEPLOY_RECEIPT_FILE_HASH_MISMATCH", str(rel).replace("/", "_"))
+    emit("DEPLOY_RECEIPT_FILE_HASHES", "MATCH" if recorded_ok else "MISMATCH")
+    if not recorded_ok:
+        return False
+
+    critical = (
+        "core/operator.py",
+        "core/authorization.py",
+        "core/message_delivery.py",
+        "watchmen/saraqael.py",
+    )
+    critical_ok = True
+    for rel in critical:
+        path = runtime / rel
+        try:
+            runtime_bytes = path.read_bytes()
+            source_bytes = subprocess.run(
+                ["git", "show", f"{expected_sha}:buddy_core/{rel}"],
+                cwd=str(repo), capture_output=True, check=True,
+            ).stdout
+            matches = _sha256_bytes(runtime_bytes) == _sha256_bytes(source_bytes)
+        except (OSError, subprocess.CalledProcessError):
+            matches = False
+        emit(f"RUNTIME_HASH_{rel.upper().replace('/', '_').replace('.', '_')}",
+             "MATCH" if matches else "MISMATCH")
+        critical_ok = critical_ok and matches
+
+    emit("CRITICAL_RUNTIME_HASHES", "MATCH" if critical_ok else "MISMATCH")
+    return critical_ok
+
+
+def config_report(normalize_email) -> list[str]:
+    """Resolve SMTP configuration with the executor's exact precedence."""
+    missing: list[str] = []
+
+    mode = os.getenv("BUDDY_EXTERNAL_MESSAGE_MODE", "hold").strip().lower()
     emit("CONFIG_MODE_IS_LIVE", "YES" if mode == "live" else f"NO({mode or 'unset'})")
     if mode != "live":
         missing.append("BUDDY_EXTERNAL_MESSAGE_MODE=live")
 
-    sender = str(os.getenv("SMTP_EMAIL") or os.getenv("EMAIL_ADDRESS") or "").strip()
-    emit("CONFIG_SENDER_DOMAIN", sender.rsplit("@", 1)[-1] if "@" in sender else "UNRESOLVED")
+    host = os.getenv("SMTP_HOST", "mail.privateemail.com").strip()
+    try:
+        port = int(os.getenv("SMTP_PORT", "587"))
+        port_ok = 1 <= port <= 65535
+    except ValueError:
+        port_ok = False
+    emit("CONFIG_SMTP_HOST", "PRESENT" if host else "MISSING")
+    emit("CONFIG_SMTP_PORT", "VALID" if port_ok else "INVALID")
+    if not host:
+        missing.append("SMTP_HOST")
+    if not port_ok:
+        missing.append("SMTP_PORT")
+
+    username = os.getenv("SMTP_EMAIL", os.getenv("EMAIL_ADDRESS", "")).strip()
+    password = os.getenv("SMTP_PASSWORD", os.getenv("EMAIL_PASSWORD", ""))
+    from_email = normalize_email(
+        os.getenv("BUDDY_MESSAGE_FROM_EMAIL", os.getenv("DRIP_FROM_EMAIL", username))
+    )
+
+    emit("CONFIG_SMTP_USERNAME", "PRESENT" if username else "MISSING")
+    emit("CONFIG_SMTP_PASSWORD", "PRESENT" if password else "MISSING")
+    emit("CONFIG_FROM_EMAIL", "VALID" if from_email else "INVALID")
+    emit("CONFIG_SENDER_DOMAIN", from_email.rsplit("@", 1)[-1] if from_email else "UNRESOLVED")
+    if not username:
+        missing.append("SMTP_EMAIL/EMAIL_ADDRESS resolved value")
+    if not password:
+        missing.append("SMTP_PASSWORD/EMAIL_PASSWORD resolved value")
+    if not from_email:
+        missing.append("BUDDY_MESSAGE_FROM_EMAIL/DRIP_FROM_EMAIL resolved value")
+
     return missing
 
 
@@ -83,21 +175,11 @@ def main():
     sys.path.insert(0, str(home / "dominion-ops"))
     load_runtime_env(home)
 
-    import subprocess
-    try:
-        sha = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=str(home / "dominion-ops"),
-            capture_output=True, text=True, check=True,
-        ).stdout.strip()
-    except Exception as exc:
-        sha = f"UNAVAILABLE({type(exc).__name__})"
-    emit("RUNTIME_SHA", sha)
-    sha_matches = sha == args.expected_sha
-    emit("RUNTIME_SHA_MATCHES_EXPECTED", "YES" if sha_matches else "NO")
-    if not sha_matches:
-        emit("RESULT", "STOP_RUNTIME_SHA_MISMATCH")
+    if not verify_runtime_release(home, args.expected_sha):
+        emit("RESULT", "STOP_RUNTIME_RELEASE_MISMATCH")
         return 3
 
+    from core.message_delivery import normalize_email
     from core.operator import BuddyOperator
     from core.authorization import AuthorizationLedger
     emit("IMPORTS", "OK")
@@ -126,15 +208,20 @@ def main():
         emit("RESULT", "STOP_EXECUTOR_UNREGISTERED")
         return 5
 
-    missing = config_report()
+    missing = config_report(normalize_email)
     if missing:
         emit("MISSING_CONFIG", ",".join(missing))
         emit("RESULT", "STOP_CONFIG_MISSING")
         return 6
 
+    normalized_recipient = normalize_email(args.recipient)
+    if not normalized_recipient or normalized_recipient != args.recipient.strip().lower():
+        emit("RESULT", "STOP_RECIPIENT_INVALID")
+        return 6
+
     content_sha = hashlib.sha256((SUBJECT + "\n" + BODY).encode("utf-8")).hexdigest()
     emit("CONTENT_SHA256_EXPECTED", content_sha)
-    emit("RECIPIENT_DOMAIN", args.recipient.rsplit("@", 1)[-1])
+    emit("RECIPIENT_DOMAIN", normalized_recipient.rsplit("@", 1)[-1])
 
     if not args.send:
         emit("RESULT", "VERIFY_ONLY_NO_SEND")
@@ -145,7 +232,7 @@ def main():
     def plan(**over):
         step = {"capability": "external.message",
                 "instruction": "Send the Founder-authorized Dominion production canary.",
-                "content": dict(content), "destination": args.recipient}
+                "content": dict(content), "destination": normalized_recipient}
         step.update(over)
         return {"mission_id": "mission_governed_canary",
                 "objective": "Founder-authorized governed delivery canary",
@@ -192,16 +279,21 @@ def main():
     replay = operator.execute(plan(authorization_id=approval_id), session_id="founder_canary")
     replay_receipts = [r for r in (replay.get("receipts") or []) if isinstance(r, dict)]
     replay_last = replay_receipts[-1] if replay_receipts else {}
-    replay_err = (replay_last.get("errors") or [{}])[0]
+    replay_errors = replay_last.get("errors") or []
+    replay_err = replay_errors[0] if replay_errors and isinstance(replay_errors[0], dict) else {}
+    replay_rejected = (
+        replay_last.get("status") == "BLOCKED"
+        and replay_last.get("attempts") == 0
+        and replay_err.get("error") == "AuthorizationRejected"
+        and replay_err.get("detail") == "already_consumed"
+        and not (replay_last.get("evidence") or [])
+    )
     emit("REPLAY_STATUS", replay.get("status"))
+    emit("REPLAY_RECEIPT_STATUS", replay_last.get("status", "NONE"))
+    emit("REPLAY_ATTEMPTS", replay_last.get("attempts", "NONE"))
+    emit("REPLAY_ERROR", replay_err.get("error", "NONE"))
     emit("REPLAY_DETAIL", replay_err.get("detail", "NONE"))
-    replay_blocked = replay.get("status") == "BLOCKED"
-    emit("REPLAY_BLOCKED", "YES" if replay_blocked else "NO")
-
-    replay_ev = replay_last.get("evidence") or []
-    replay_msg_id = (replay_ev[0].get("message_id")
-                     if replay_ev and isinstance(replay_ev[0], dict) else None)
-    emit("REPLAY_SENT_SECOND_MESSAGE", "YES" if replay_msg_id else "NO")
+    emit("REPLAY_AUTHORIZATION_REJECTED", "YES" if replay_rejected else "NO")
 
     final = ledger.load(approval_id) or {}
     emit("AUTHORIZATION_FINAL_STATE", final.get("status", "UNKNOWN"))
@@ -210,8 +302,13 @@ def main():
     emit("SARAQAEL_CHAIN_AFTER", "VALID" if chain_after.get("valid") else "INVALID")
     emit("SARAQAEL_ENTRIES_AFTER", chain_after.get("entries_checked"))
 
-    ok = (delivered and replay_blocked and not replay_msg_id
-          and ev.get("content_sha256") == content_sha and chain_after.get("valid"))
+    ok = (
+        delivered
+        and replay_rejected
+        and ev.get("content_sha256") == content_sha
+        and final.get("status") == "CONSUMED"
+        and chain_after.get("valid")
+    )
     emit("RESULT", "CANARY_PASS" if ok else "CANARY_FAIL")
     return 0 if ok else 8
 

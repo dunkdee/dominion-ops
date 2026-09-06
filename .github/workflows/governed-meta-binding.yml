@@ -1,0 +1,180 @@
+name: Governed Meta Binding
+
+# Drives the existing scripts/dominion_publisher/meta_control.sh on the
+# foundation VM through one governed path, so Meta binding does not require a
+# separate manual lane. The Publisher listens on loopback only, so every
+# subcommand must run on the VM; this workflow is that single flow.
+#
+# status/start/candidates are read-only. bind is the one mutation, and it is
+# gated on the Founder actor plus an exact confirm string, and never selects an
+# account on its own -- the Page id is always supplied explicitly.
+#
+# Provider secrets and the Publisher operator token are never printed:
+# meta_control.sh reads the operator token from the 0600 runtime env on the VM
+# and it is never passed through workflow inputs, outputs, or logs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "status | start | candidates | bind"
+        required: true
+        type: choice
+        options:
+          - status
+          - start
+          - candidates
+          - bind
+      page_id:
+        description: "Facebook Page id — required for bind only, never inferred"
+        required: false
+        type: string
+      confirm:
+        description: "For bind, type BIND META PAGE. Ignored for other actions."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# Shared with the canary and Foundation VM deploys so two VM operations can
+# never overlap.
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  meta:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Validate action and Founder authority
+        shell: bash
+        env:
+          ACTION: ${{ inputs.action }}
+          PAGE_ID: ${{ inputs.page_id }}
+          CONFIRM: ${{ inputs.confirm }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          FOUNDER_ACTOR: dunkdee
+        run: |
+          set -euo pipefail
+          case "$ACTION" in
+            status|start|candidates) ;;
+            bind)
+              [ "$CONFIRM" = "BIND META PAGE" ] || { echo "bind requires confirm to be exactly 'BIND META PAGE'"; exit 1; }
+              # Numeric Facebook Page id. Rejects paths, flags and shell metacharacters.
+              [[ "$PAGE_ID" =~ ^[0-9]{5,}$ ]] || { echo "bind requires a numeric Facebook Page id"; exit 1; }
+              [ "$ACTOR" = "$FOUNDER_ACTOR" ] || { echo "bind requires the Founder actor"; exit 1; }
+              [ "$TRIGGERING_ACTOR" = "$FOUNDER_ACTOR" ] || { echo "bind requires the Founder triggering actor"; exit 1; }
+              ;;
+            *) echo "unknown action: $ACTION"; exit 1 ;;
+          esac
+          echo "META_BINDING_ACTION=$ACTION"
+
+      - name: Require protected VM access
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "VM_HOST secret is missing"; exit 1; }
+          test -n "$VM_USER" || { echo "VM_USER secret is missing"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "VM_SSH_KEY secret is missing"; exit 1; }
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/meta_key"
+          chmod 600 "$HOME/.ssh/meta_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Run governed meta control on foundation-vm
+        id: meta
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          ACTION: ${{ inputs.action }}
+          PAGE_ID: ${{ inputs.page_id }}
+          APPROVED_BY: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          remote_dir="/tmp/dominion_meta_binding_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          remote_script="$remote_dir/meta_control.sh"
+
+          # Keep the script out of /tmp itself: the VM carries legacy top-level
+          # Python files there that can shadow stdlib modules for helpers the
+          # script invokes.
+          ssh -i "$HOME/.ssh/meta_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            "install -d -m 700 '$remote_dir'"
+
+          scp -i "$HOME/.ssh/meta_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            scripts/dominion_publisher/meta_control.sh \
+            "$VM_USER@$VM_HOST:$remote_script"
+
+          set +e
+          ssh -i "$HOME/.ssh/meta_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            "ACTION='$ACTION' PAGE_ID='$PAGE_ID' APPROVED_BY='$APPROVED_BY' REMOTE_DIR='$remote_dir' REMOTE_SCRIPT='$remote_script' bash -s" <<'REMOTE' \
+            | tee meta-output.txt
+          set -uo pipefail
+          cleanup() { rm -rf -- "$REMOTE_DIR"; }
+          trap cleanup EXIT
+          chmod 700 "$REMOTE_SCRIPT"
+
+          case "$ACTION" in
+            status)
+              # Health only. Reports whether the Meta app is configured and
+              # whether a Page is bound, without touching either.
+              curl -fsS --max-time 10 http://127.0.0.1:5112/health \
+                | python3 -m json.tool
+              ;;
+            start)
+              bash "$REMOTE_SCRIPT" start
+              ;;
+            candidates)
+              bash "$REMOTE_SCRIPT" candidates
+              ;;
+            bind)
+              bash "$REMOTE_SCRIPT" bind "$PAGE_ID" "$APPROVED_BY"
+              ;;
+          esac
+          rc=$?
+          echo "META_CONTROL_EXIT=$rc"
+          exit $rc
+          REMOTE
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Upload meta binding evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governed-meta-binding-evidence
+          path: meta-output.txt
+          if-no-files-found: warn
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/meta_key" "$HOME/.ssh/known_hosts"

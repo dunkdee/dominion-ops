@@ -22,6 +22,7 @@ on:
         type: choice
         options:
           - status
+          - audit
           - start
           - candidates
           - bind
@@ -66,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$ACTION" in
-            status|start|candidates) ;;
+            status|audit|start|candidates) ;;
             bind)
               [ "$CONFIRM" = "BIND META PAGE" ] || { echo "bind requires confirm to be exactly 'BIND META PAGE'"; exit 1; }
               # Numeric Facebook Page id. Rejects paths, flags and shell metacharacters.
@@ -148,6 +149,33 @@ jobs:
               curl -fsS --max-time 10 http://127.0.0.1:5112/health \
                 | python3 -m json.tool
               ;;
+            audit)
+              # Read-only. Answers one question: does a Meta app record already
+              # exist in ANY candidate vault root? configure_meta.py defaults to
+              # ~/.dominion/publisher/credential-vault while service.py defaults
+              # to DB_PATH.parent/credential-vault, so a record written with
+              # DOMINION_PUBLISHER_VAULT unset would be invisible to the service.
+              # Only opens a vault that already has vault.json.enc, because
+              # CredentialVault.__init__ creates the directory and a key.
+              state_root="$HOME/.dominion/publisher"
+              env_file="$state_root/runtime.env"
+              effective="$(sed -n 's/^DOMINION_PUBLISHER_VAULT=//p' "$env_file" 2>/dev/null | head -1)"
+              echo "RUNTIME_ENV_PRESENT=$([ -s "$env_file" ] && echo YES || echo NO)"
+              echo "DOMINION_PUBLISHER_VAULT_SET=$([ -n "$effective" ] && echo YES || echo NO)"
+              echo "EFFECTIVE_VAULT_ROOT=${effective:-<unset>}"
+              cd "$state_root/runtime/release" || exit 30
+              for root in "$effective" "$HOME/.dominion/publisher/credential-vault" "$HOME/DominionsArk/data/credential-vault"; do
+                [ -n "$root" ] || continue
+                enc="$root/vault.json.enc"
+                if [ -f "$enc" ]; then
+                  echo "VAULT_ROOT=$root enc=YES bytes=$(stat -c %s "$enc") mtime=$(stat -c %y "$enc")"
+                  "$state_root/venv/bin/python" -c 'import sys;from apps.dominion_publisher.vault import CredentialVault;a=CredentialVault(sys.argv[1]).meta_app();print("  META_APP_RECORD=PRESENT app_id_suffix=%s configured_at=%s redirect=%s graph=%s"%(str(a.get("app_id",""))[-4:],a.get("configured_at"),a.get("redirect_uri"),a.get("graph_version")) if a else "  META_APP_RECORD=ABSENT")' "$root" || echo "  META_APP_RECORD=UNREADABLE"
+                else
+                  echo "VAULT_ROOT=$root dir=$([ -d "$root" ] && echo YES || echo NO) enc=NO"
+                fi
+              done
+              ;;
+
             start)
               bash "$REMOTE_SCRIPT" start
               ;;

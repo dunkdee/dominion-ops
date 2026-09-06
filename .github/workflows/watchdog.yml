@@ -1,6 +1,11 @@
 name: Dominion Runtime Observer — Read Only
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/watchdog.yml"
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:

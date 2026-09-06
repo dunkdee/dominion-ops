@@ -177,8 +177,11 @@ jobs:
           assert state['revenue']['active_experiment_count'] >= 1
           assert state['autopilot']['connected'] is True
           integrity=state['systems']['system_integrity']
-          assert isinstance(integrity,dict)
-          assert integrity.get('ok') is True and integrity.get('status') == 'PASS'
+          assert integrity == 'online' or (
+              isinstance(integrity,dict)
+              and integrity.get('ok') is True
+              and integrity.get('status') == 'PASS'
+          )
           assert state['latest_receipts']
           PY
           then

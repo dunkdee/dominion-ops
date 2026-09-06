@@ -9,6 +9,7 @@ release_root="$runtime_root/release"
 venv="$state_root/venv"
 env_file="$state_root/runtime.env"
 receipts="$state_root/receipts"
+vault_root="$state_root/credential-vault"
 service_name="dominion-publisher.service"
 unit="/etc/systemd/system/$service_name"
 port="${DOMINION_PUBLISHER_PORT:-5112}"
@@ -23,10 +24,13 @@ python3 -m py_compile \
   apps/dominion_publisher/models.py \
   apps/dominion_publisher/core.py \
   apps/dominion_publisher/service.py \
+  apps/dominion_publisher/vault.py \
+  apps/dominion_publisher/meta_binding.py \
+  apps/dominion_publisher/configure_meta.py \
   apps/dominion_publisher/adapters/meta.py
 
-mkdir -p "$runtime_root" "$receipts"
-chmod 700 "$state_root" "$runtime_root" "$receipts"
+mkdir -p "$runtime_root" "$receipts" "$vault_root"
+chmod 700 "$state_root" "$runtime_root" "$receipts" "$vault_root"
 rm -rf "$release_root"
 mkdir -p "$release_root/apps"
 cp -a apps/dominion_publisher "$release_root/apps/"
@@ -47,12 +51,18 @@ PY
   cat > "$env_file" <<EOF
 DOMINION_PUBLISHER_OPERATOR_TOKEN=$token
 DOMINION_PUBLISHER_DB=$state_root/dominion_publisher.db
+DOMINION_PUBLISHER_VAULT=$vault_root
 EOF
   chmod 600 "$env_file"
 fi
 
+if ! grep -q '^DOMINION_PUBLISHER_VAULT=.' "$env_file"; then
+  printf 'DOMINION_PUBLISHER_VAULT=%s\n' "$vault_root" >> "$env_file"
+fi
+chmod 600 "$env_file"
 grep -q '^DOMINION_PUBLISHER_OPERATOR_TOKEN=.' "$env_file"
 grep -q '^DOMINION_PUBLISHER_DB=.' "$env_file"
+grep -q '^DOMINION_PUBLISHER_VAULT=.' "$env_file"
 
 unit_tmp="$(mktemp)"
 cat > "$unit_tmp" <<EOF
@@ -113,7 +123,11 @@ assert h['status']=='ok'
 assert h['service']=='dominion-publisher'
 assert h['operator_gate_configured'] is True
 assert set(h['platforms'])=={'instagram','facebook'}
-print(f"DOMINION_PUBLISHER_HEALTH=PASS endpoint=127.0.0.1:{sys.argv[2]} operator_gate=configured meta_token={h['meta_token_configured']}")
+assert isinstance(h['meta_bound_counts'],dict)
+print(
+    f"DOMINION_PUBLISHER_HEALTH=PASS endpoint=127.0.0.1:{sys.argv[2]} "
+    f"operator_gate=configured meta_bound={h['meta_token_configured']}"
+)
 PY
 rm -f "$health_tmp"
 
@@ -130,7 +144,7 @@ data={
   'release_sha':os.environ['RUN_SHA_VALUE'],
   'binding':f"127.0.0.1:{os.environ['PORT_VALUE']}",
   'operator_gate':'configured',
-  'provider_credentials':'runtime_only',
+  'provider_credentials':'encrypted_runtime_vault',
   'observed_at':datetime.now(timezone.utc).isoformat(),
 }
 p.write_text(json.dumps(data,indent=2,sort_keys=True)+'\n',encoding='utf-8')

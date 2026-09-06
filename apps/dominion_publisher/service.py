@@ -31,6 +31,12 @@ class PublishJobInput(BaseModel):
     scheduled_at: str | None = None
     metadata: dict = Field(default_factory=dict)
 
+    @staticmethod
+    def _model_data(model: BaseModel) -> dict:
+        if hasattr(model, "model_dump"):
+            return model.model_dump()
+        return model.dict()
+
     def to_domain(self) -> PublishJob:
         return PublishJob(
             campaign_id=self.campaign_id,
@@ -38,7 +44,7 @@ class PublishJobInput(BaseModel):
             account_id=self.account_id,
             caption=self.caption,
             destination_url=self.destination_url,
-            assets=[Asset(**asset.model_dump()) for asset in self.assets],
+            assets=[Asset(**self._model_data(asset)) for asset in self.assets],
             approved_by=self.approved_by,
             approved_at=self.approved_at,
             scheduled_at=self.scheduled_at,

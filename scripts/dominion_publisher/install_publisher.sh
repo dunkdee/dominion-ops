@@ -98,7 +98,8 @@ rm -f "$unit_tmp"
 
 sudo systemctl daemon-reload
 sudo systemctl reset-failed "$service_name" >/dev/null 2>&1 || true
-sudo systemctl enable --now "$service_name" >/dev/null
+sudo systemctl enable "$service_name" >/dev/null
+sudo systemctl restart "$service_name"
 
 health_tmp="$(mktemp)"
 ready=0

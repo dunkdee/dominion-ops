@@ -1,0 +1,138 @@
+name: Deploy Dominion Publisher
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY DOMINION PUBLISHER"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.confirm == 'DEPLOY DOMINION PUBLISHER' &&
+      inputs.commit_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact release
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Validate publisher release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          bash -n scripts/dominion_publisher/install_publisher.sh
+          python -m py_compile \
+            apps/dominion_publisher/models.py \
+            apps/dominion_publisher/core.py \
+            apps/dominion_publisher/service.py \
+            apps/dominion_publisher/adapters/meta.py
+          python -m pytest tests/test_dominion_publisher.py -q
+          test -s apps/dominion_publisher/requirements.txt
+          echo 'DOMINION_PUBLISHER_RELEASE=PASS'
+
+      - name: Require protected VM access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Stage publisher release
+        id: stage
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          bundle="$RUNNER_TEMP/dominion-publisher-${GITHUB_RUN_ID}.tgz"
+          remote_bundle="/tmp/dominion-publisher-${GITHUB_RUN_ID}.tgz"
+          tar -czf "$bundle" apps/dominion_publisher scripts/dominion_publisher/install_publisher.sh
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
+          echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy loopback-only publisher service
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
+            "REMOTE_BUNDLE='$REMOTE_BUNDLE' RUN_SHA='$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          temp_root="$(mktemp -d)"
+          cleanup(){ rm -rf "$temp_root"; rm -f "$REMOTE_BUNDLE"; }
+          trap cleanup EXIT
+          tar -xzf "$REMOTE_BUNDLE" -C "$temp_root"
+
+          repo="$HOME/dominion-ops"
+          test -d "$repo/.git"
+          cd "$repo"
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          test "$(git rev-parse HEAD)" = "$RUN_SHA"
+
+          RUN_SHA="$RUN_SHA" REPO_DIR="$repo" bash scripts/dominion_publisher/install_publisher.sh
+
+          health="$(curl -fsS http://127.0.0.1:5112/health)"
+          python3 - "$health" "$RUN_SHA" <<'PY'
+          import json,sys
+          h=json.loads(sys.argv[1])
+          assert h['status']=='ok'
+          assert h['service']=='dominion-publisher'
+          assert h['operator_gate_configured'] is True
+          assert set(h['platforms'])=={'instagram','facebook'}
+          print(f"DOMINION_PUBLISHER_DEPLOY=PASS release_sha={sys.argv[2]} meta_bound={h['meta_token_configured']}")
+          PY
+          sudo systemctl is-active --quiet dominion-publisher.service
+          sudo systemctl is-enabled --quiet dominion-publisher.service
+          REMOTE
+
+      - name: Cleanup runner access material
+        if: always()
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          REMOTE_BUNDLE: ${{ steps.stage.outputs.remote_bundle }}
+        shell: bash
+        run: |
+          set +e
+          if [ -f "$HOME/.ssh/foundation_vm_key" ]; then
+            ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" "rm -f '$REMOTE_BUNDLE'" >/dev/null 2>&1 || true
+          fi
+          rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts" "$RUNNER_TEMP"/dominion-publisher-*.tgz

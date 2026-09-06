@@ -13,6 +13,7 @@ from .adapters import MetaFacebookAdapter, MetaInstagramAdapter
 from .core import PublisherCore, PublisherStore
 from .meta_binding import META_SCOPES, MetaBindingManager
 from .models import Asset, PublishJob
+from .paths import vault_root
 from .vault import CredentialVault
 
 
@@ -63,9 +64,9 @@ class MetaBindInput(BaseModel):
 
 DB_PATH = Path(os.getenv("DOMINION_PUBLISHER_DB", "~/DominionsArk/data/dominion_publisher.db")).expanduser()
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-VAULT_ROOT = Path(
-    os.getenv("DOMINION_PUBLISHER_VAULT", str(DB_PATH.parent / "credential-vault"))
-).expanduser()
+# Resolved through the shared helper so the reader and configure_meta (the
+# writer) can never fall back to different directories.
+VAULT_ROOT = vault_root()
 OPERATOR_TOKEN = os.getenv("DOMINION_PUBLISHER_OPERATOR_TOKEN", "").strip()
 
 store = PublisherStore(DB_PATH)

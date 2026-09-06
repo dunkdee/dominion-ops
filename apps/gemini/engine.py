@@ -4,8 +4,6 @@ import json
 import os
 from typing import Any
 
-from google import genai
-from google.oauth2 import service_account
 
 FLASH = "gemini-2.5-flash"
 PRO = "gemini-2.5-pro"
@@ -56,6 +54,14 @@ PLATFORM_SPECS = {
 
 
 def client():
+    # Imported here rather than at module scope so the CLI entrypoint stays
+    # importable without the Vertex AI SDK installed. `--help` and argument
+    # validation need no credentials or network, and the activation gate
+    # validates exactly that. Real generation still fails loudly right here
+    # if the SDK is genuinely missing.
+    from google import genai
+    from google.oauth2 import service_account
+
     project = os.environ.get("GCP_PROJECT_ID", "")
     location = os.environ.get("GCP_REGION", "us-central1")
     sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")

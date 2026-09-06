@@ -11,6 +11,7 @@ usage() {
   cat <<'EOF'
 Usage:
   meta_control.sh configure
+  meta_control.sh configure-stdin   (reads a JSON credential payload on stdin)
   meta_control.sh start
   meta_control.sh candidates
   meta_control.sh bind <facebook_page_id> <approved_by>
@@ -70,6 +71,19 @@ case "$command_name" in
     source "$env_file"
     set +a
     exec "$venv/bin/python" -m apps.dominion_publisher.configure_meta
+    ;;
+
+  configure-stdin)
+    # Non-interactive provisioning. The JSON payload arrives on stdin and is
+    # passed straight through to the configure module, so the App Secret never
+    # appears in argv (visible in ps), in a file, or in any log line.
+    require_runtime
+    cd "$release_root"
+    set -a
+    # shellcheck disable=SC1090
+    source "$env_file"
+    set +a
+    exec "$venv/bin/python" -m apps.dominion_publisher.configure_meta --stdin
     ;;
 
   start)

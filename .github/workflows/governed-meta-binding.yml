@@ -23,6 +23,7 @@ on:
         options:
           - status
           - audit
+          - configure
           - start
           - candidates
           - bind
@@ -64,10 +65,19 @@ jobs:
           ACTOR: ${{ github.actor }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           FOUNDER_ACTOR: dunkdee
+          META_APP_ID: ${{ secrets.META_APP_ID }}
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
         run: |
           set -euo pipefail
           case "$ACTION" in
             status|audit|start|candidates) ;;
+            configure)
+              # Provisioning credentials is a mutation. Founder only.
+              [ "$ACTOR" = "$FOUNDER_ACTOR" ] || { echo "configure requires the Founder actor"; exit 1; }
+              [ "$TRIGGERING_ACTOR" = "$FOUNDER_ACTOR" ] || { echo "configure requires the Founder triggering actor"; exit 1; }
+              test -n "$META_APP_ID" || { echo "META_APP_ID secret is missing"; exit 1; }
+              test -n "$META_APP_SECRET" || { echo "META_APP_SECRET secret is missing"; exit 1; }
+              ;;
             bind)
               [ "$CONFIRM" = "BIND META PAGE" ] || { echo "bind requires confirm to be exactly 'BIND META PAGE'"; exit 1; }
               # Numeric Facebook Page id. Rejects paths, flags and shell metacharacters.
@@ -113,6 +123,8 @@ jobs:
           ACTION: ${{ inputs.action }}
           PAGE_ID: ${{ inputs.page_id }}
           APPROVED_BY: ${{ github.actor }}
+          META_APP_ID: ${{ secrets.META_APP_ID }}
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
         run: |
           set -euo pipefail
           remote_dir="/tmp/dominion_meta_binding_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
@@ -130,6 +142,26 @@ jobs:
             -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
             scripts/dominion_publisher/meta_control.sh \
             "$VM_USER@$VM_HOST:$remote_script"
+
+          if [ "$ACTION" = "configure" ]; then
+            # The payload is built by python (correct JSON escaping) and piped
+            # directly into ssh stdin, which the remote forwards to the
+            # configure module. The secret is never an argument, never lands in
+            # a file, and GitHub redacts it from logs regardless.
+            set +e
+            python3 -c 'import json,os,sys; sys.stdout.write(json.dumps({"app_id": os.environ["META_APP_ID"], "app_secret": os.environ["META_APP_SECRET"]}))' \
+              | ssh -i "$HOME/.ssh/meta_key" \
+                -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+                "$VM_USER@$VM_HOST" \
+                "bash '$remote_script' configure-stdin" \
+                | tee meta-output.txt
+            rc=${PIPESTATUS[1]}
+            set -e
+            ssh -i "$HOME/.ssh/meta_key" -o BatchMode=yes -o IdentitiesOnly=yes \
+              "$VM_USER@$VM_HOST" "rm -rf -- '$remote_dir'" || true
+            echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+            exit "$rc"
+          fi
 
           set +e
           ssh -i "$HOME/.ssh/meta_key" \

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
 import requests
 
 from ..models import PublishJob
+
+
+TokenResolver = Callable[[str, str], str]
+VersionResolver = Callable[[], str]
 
 
 class _MetaBase:
@@ -16,23 +21,47 @@ class _MetaBase:
         access_token: str | None = None,
         graph_version: str | None = None,
         session: requests.Session | None = None,
+        token_resolver: TokenResolver | None = None,
+        version_resolver: VersionResolver | None = None,
     ) -> None:
-        self.access_token = (access_token or os.getenv("META_ACCESS_TOKEN", "")).strip()
-        self.graph_version = (graph_version or os.getenv("META_GRAPH_VERSION", "")).strip()
+        self._explicit_access_token = access_token.strip() if access_token is not None else None
+        self._explicit_graph_version = graph_version.strip() if graph_version is not None else None
+        self.token_resolver = token_resolver
+        self.version_resolver = version_resolver
         self.session = session or requests.Session()
+
+    def _token_for(self, account_id: str) -> str:
+        if self._explicit_access_token is not None:
+            token = self._explicit_access_token
+        elif self.token_resolver is not None:
+            token = (self.token_resolver(self.platform, account_id) or "").strip()
+        else:
+            token = os.getenv("META_ACCESS_TOKEN", "").strip()
+        if not token:
+            if self.token_resolver is not None:
+                raise RuntimeError(f"Meta credentials are not bound for {self.platform} account {account_id}")
+            raise RuntimeError("META_ACCESS_TOKEN is not configured")
+        return token
+
+    def _graph_version(self) -> str:
+        if self._explicit_graph_version is not None:
+            version = self._explicit_graph_version
+        elif self.version_resolver is not None:
+            version = (self.version_resolver() or "").strip()
+        else:
+            version = os.getenv("META_GRAPH_VERSION", "").strip()
+        if not version:
+            raise RuntimeError("META_GRAPH_VERSION is not configured")
+        return version if version.startswith("v") else f"v{version}"
 
     @property
     def base_url(self) -> str:
-        if not self.graph_version:
-            raise RuntimeError("META_GRAPH_VERSION is not configured")
-        version = self.graph_version if self.graph_version.startswith("v") else f"v{self.graph_version}"
-        return f"https://graph.facebook.com/{version}"
+        return f"https://graph.facebook.com/{self._graph_version()}"
 
     def validate_credentials(self, account_id: str) -> None:
-        if not self.access_token:
-            raise RuntimeError("META_ACCESS_TOKEN is not configured")
         if not account_id.strip():
             raise RuntimeError("Meta account_id is required")
+        _ = self._token_for(account_id)
         _ = self.base_url
 
     @staticmethod
@@ -67,6 +96,7 @@ class MetaInstagramAdapter(_MetaBase):
     def publish(self, job: PublishJob) -> str:
         self.validate_credentials(job.account_id)
         self.validate_job(job)
+        token = self._token_for(job.account_id)
         asset_url = job.assets[0].uri
         caption = f"{job.caption.strip()}\n\n{job.attributed_url()}"
 
@@ -75,7 +105,7 @@ class MetaInstagramAdapter(_MetaBase):
             data={
                 "image_url": asset_url,
                 "caption": caption,
-                "access_token": self.access_token,
+                "access_token": token,
             },
             timeout=self.timeout_seconds,
         )
@@ -88,7 +118,7 @@ class MetaInstagramAdapter(_MetaBase):
             f"{self.base_url}/{job.account_id}/media_publish",
             data={
                 "creation_id": creation_id,
-                "access_token": self.access_token,
+                "access_token": token,
             },
             timeout=self.timeout_seconds,
         )
@@ -112,13 +142,14 @@ class MetaFacebookAdapter(_MetaBase):
     def publish(self, job: PublishJob) -> str:
         self.validate_credentials(job.account_id)
         self.validate_job(job)
+        token = self._token_for(job.account_id)
         message = f"{job.caption.strip()}\n\n{job.attributed_url()}"
         response = self.session.post(
             f"{self.base_url}/{job.account_id}/photos",
             data={
                 "url": job.assets[0].uri,
                 "caption": message,
-                "access_token": self.access_token,
+                "access_token": token,
             },
             timeout=self.timeout_seconds,
         )

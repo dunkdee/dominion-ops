@@ -194,6 +194,13 @@ jobs:
 
           dispatch_and_wait watchdog.yml
           echo "DOMINION_TOP_TO_BOTTOM_CLOSURE=PASS sha=$TARGET_SHA"
+
+      - name: Install content engine dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check -r apps/gemini/requirements.txt
+
       - name: Validate content engine entrypoint
         shell: bash
         run: |

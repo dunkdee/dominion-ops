@@ -42,6 +42,11 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           bash -n scripts/dominion_publisher/install_publisher.sh
+          # The runner is bare: pytest is absent, and the test's import graph
+          # reaches apps/dominion_publisher/adapters/meta.py, which imports
+          # requests. Installing pytest alone would fail one line later.
+          python -m pip install --quiet --disable-pip-version-check \
+            pytest -r apps/dominion_publisher/requirements.txt
           python -m py_compile \
             apps/dominion_publisher/models.py \
             apps/dominion_publisher/core.py \

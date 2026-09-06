@@ -4,6 +4,7 @@ import getpass
 import os
 from pathlib import Path
 
+from .paths import vault_root
 from .vault import CredentialVault
 
 
@@ -14,9 +15,9 @@ def _prompt(label: str, default: str | None = None) -> str:
 
 
 def main() -> int:
-    vault_root = Path(
-        os.getenv("DOMINION_PUBLISHER_VAULT", "~/.dominion/publisher/credential-vault")
-    ).expanduser()
+    # Same helper the service uses, so credentials are always written where
+    # the service reads them.
+    vault_dir = vault_root()
     app_id = _prompt("Meta App ID")
     app_secret = getpass.getpass("Meta App Secret (hidden): ").strip()
     redirect_uri = _prompt(
@@ -25,7 +26,7 @@ def main() -> int:
     )
     graph_version = _prompt("Meta Graph API version", "v25.0")
 
-    vault = CredentialVault(vault_root)
+    vault = CredentialVault(vault_dir)
     vault.configure_meta_app(
         app_id=app_id,
         app_secret=app_secret,

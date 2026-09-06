@@ -31,6 +31,34 @@ pretty_json() {
   python3 -m json.tool
 }
 
+# curl -f discards the response body on HTTP errors, which hid the server's own
+# explanation (for example the 503 "Meta app configuration is not present in
+# the encrypted vault") behind a bare "curl: (22) ... error: 503". Capture the
+# body and the status separately so the operator sees the reason. Exit 22 is
+# preserved so callers that keyed off curl's failure code still behave the same.
+api_call() {
+  local method="$1" url="$2" body_file status
+  shift 2
+  body_file="$(mktemp)"
+  status="$(curl -sS -o "$body_file" -w '%{http_code}' --max-time 30 \
+    -X "$method" -H "X-Operator-Token: $operator_token" "$@" "$url")" || {
+      echo "META_CONTROL=FAIL reason=transport_error url=$url" >&2
+      rm -f "$body_file"
+      return 22
+    }
+  if [ "$status" -ge 400 ]; then
+    echo "META_CONTROL=FAIL http_status=$status" >&2
+    echo "META_CONTROL_ERROR_BODY<<EOF" >&2
+    cat "$body_file" >&2
+    echo >&2
+    echo "EOF" >&2
+    rm -f "$body_file"
+    return 22
+  fi
+  cat "$body_file"
+  rm -f "$body_file"
+}
+
 command_name="${1:-}"
 case "$command_name" in
   configure)
@@ -46,9 +74,7 @@ case "$command_name" in
 
   start)
     require_runtime
-    response="$(curl -fsS -X POST \
-      -H "X-Operator-Token: $operator_token" \
-      "$base_url/oauth/meta/start")"
+    response="$(api_call POST "$base_url/oauth/meta/start")"
     python3 - "$response" <<'PY'
 import json,sys
 payload=json.loads(sys.argv[1])
@@ -61,9 +87,8 @@ PY
 
   candidates)
     require_runtime
-    curl -fsS \
-      -H "X-Operator-Token: $operator_token" \
-      "$base_url/oauth/meta/candidates" | pretty_json
+    body="$(api_call GET "$base_url/oauth/meta/candidates")" || exit 22
+    printf '%s' "$body" | pretty_json
     ;;
 
   bind)
@@ -77,19 +102,17 @@ import json,sys
 print(json.dumps({'page_id':sys.argv[1],'approved_by':sys.argv[2]}))
 PY
 )"
-    curl -fsS -X POST \
-      -H "X-Operator-Token: $operator_token" \
+    body="$(api_call POST "$base_url/oauth/meta/bind" \
       -H 'X-Human-Approval: APPROVED' \
       -H 'Content-Type: application/json' \
-      --data "$payload" \
-      "$base_url/oauth/meta/bind" | pretty_json
+      --data "$payload")" || exit 22
+    printf '%s' "$body" | pretty_json
     ;;
 
   accounts)
     require_runtime
-    curl -fsS \
-      -H "X-Operator-Token: $operator_token" \
-      "$base_url/accounts" | pretty_json
+    body="$(api_call GET "$base_url/accounts")" || exit 22
+    printf '%s' "$body" | pretty_json
     ;;
 
   *)

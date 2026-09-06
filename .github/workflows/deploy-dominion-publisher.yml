@@ -43,6 +43,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           bash -n scripts/dominion_publisher/install_publisher.sh
           bash -n scripts/dominion_publisher/install_meta_callback_route.sh
+          bash -n scripts/dominion_publisher/meta_control.sh
           python -m pip install --quiet --disable-pip-version-check \
             pytest -r apps/dominion_publisher/requirements.txt
           python -m py_compile \

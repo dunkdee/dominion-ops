@@ -98,7 +98,10 @@ rm -f "$unit_tmp"
 
 sudo systemctl daemon-reload
 sudo systemctl reset-failed "$service_name" >/dev/null 2>&1 || true
-sudo systemctl enable --now "$service_name" >/dev/null
+# A release replacement must restart an already-active service; enable --now
+# alone leaves the prior process serving the old staged code.
+sudo systemctl enable "$service_name" >/dev/null
+sudo systemctl restart "$service_name"
 
 health_tmp="$(mktemp)"
 ready=0

@@ -117,7 +117,9 @@ class PublisherCore:
         job.require_approval()
         existing = self.store.status_for(job.idempotency_key)
         if existing in {PublishStatus.QUEUED, PublishStatus.PUBLISHED}:
-            return self._receipt(job, existing, error="duplicate suppressed")
+            receipt = self._receipt(job, existing, error="duplicate suppressed")
+            self.store.write_receipt(receipt)
+            return receipt
         self.store.upsert_job(job, PublishStatus.QUEUED)
         receipt = self._receipt(job, PublishStatus.QUEUED)
         self.store.write_receipt(receipt)

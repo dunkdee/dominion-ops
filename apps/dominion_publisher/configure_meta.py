@@ -55,6 +55,8 @@ def read_stdin_payload(stream) -> dict:
     app_secret = str(parsed.get("app_secret") or "").strip()
     redirect_uri = str(parsed.get("redirect_uri") or DEFAULT_REDIRECT_URI).strip()
     graph_version = str(parsed.get("graph_version") or DEFAULT_GRAPH_VERSION).strip()
+    # Optional: only Facebook Login for Business apps have one.
+    config_id = str(parsed.get("config_id") or "").strip()
 
     missing = [
         name for name, value in (("app_id", app_id), ("app_secret", app_secret))
@@ -68,6 +70,7 @@ def read_stdin_payload(stream) -> dict:
         "app_secret": app_secret,
         "redirect_uri": redirect_uri,
         "graph_version": graph_version,
+        "config_id": config_id,
     }
 
 
@@ -77,6 +80,7 @@ def _interactive_payload() -> dict:
         "app_secret": getpass.getpass("Meta App Secret (hidden): ").strip(),
         "redirect_uri": _prompt("Meta OAuth redirect URI", DEFAULT_REDIRECT_URI),
         "graph_version": _prompt("Meta Graph API version", DEFAULT_GRAPH_VERSION),
+        "config_id": _prompt("Facebook Login for Business configuration id (blank for classic login)"),
     }
 
 
@@ -107,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
             app_secret=payload["app_secret"],
             redirect_uri=payload["redirect_uri"],
             graph_version=payload["graph_version"],
+            config_id=payload["config_id"],
         )
     except ValueError as exc:
         print(f"META_APP_CONFIGURED=FAIL reason={exc}", file=sys.stderr)
@@ -116,7 +121,8 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "META_APP_CONFIGURED=PASS "
         f"app_id_suffix={app_id[-4:] if len(app_id) >= 4 else app_id} "
-        f"redirect_uri={payload['redirect_uri']} graph_version={vault.graph_version()}"
+        f"redirect_uri={payload['redirect_uri']} graph_version={vault.graph_version()} "
+        f"login_flow={'business' if payload['config_id'] else 'classic'}"
     )
     return 0
 

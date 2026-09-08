@@ -91,15 +91,28 @@ class MetaBindingManager:
         self.vault.mark_nonce_used(nonce)
 
     def authorization_url(self) -> str:
+        """Build the consent URL for whichever login product the app uses.
+
+        Facebook Login for Business draws its permissions from a saved
+        configuration and rejects a scope list outright -- an app configured
+        that way answers a classic scope request with "this app needs at least
+        one supported permission", however many permissions are enabled on it.
+        So a stored config_id selects that flow, and its absence keeps the
+        classic scope flow unchanged.
+        """
         app = self._app()
         state = self._create_state()
         params = {
             "client_id": app["app_id"],
             "redirect_uri": app["redirect_uri"],
             "state": state,
-            "scope": ",".join(META_SCOPES),
             "response_type": "code",
         }
+        config_id = str(app.get("config_id", "")).strip()
+        if config_id:
+            params["config_id"] = config_id
+        else:
+            params["scope"] = ",".join(META_SCOPES)
         return f"https://www.facebook.com/{app['graph_version']}/dialog/oauth?{urlencode(params)}"
 
     def _exchange_code(self, code: str) -> str:

@@ -59,7 +59,7 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
 
     def test_docker_image_packages_every_app_import(self):
         text = DOCKERFILE.read_text(encoding="utf-8")
-        self.assertIn("COPY app.py intelligence.py revenue.py runtime_state.py index.html ./", text); self.assertIn("import app, intelligence, revenue, runtime_state", text)
+        self.assertIn("COPY app.py intelligence.py model_gateway.py revenue.py runtime_state.py index.html ./", text); self.assertIn("import app, intelligence, model_gateway, revenue, runtime_state", text)
 
     def test_compose_mounts_canonical_runtime_snapshot(self):
         text = COMPOSE.read_text(encoding="utf-8")
@@ -70,19 +70,13 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
         compose = COMPOSE.read_text(encoding="utf-8")
         evidence = (ROOT / "apps/command-center/trading_evidence.py").read_text(encoding="utf-8")
         policy = json.loads((ROOT / "governance/alpaca_paper_readonly_bridge_policy.json").read_text(encoding="utf-8"))
-        # Ledger is mounted at /ledger (not /runtime/ledger — which is inside /runtime:ro)
         self.assertIn(":/ledger", compose)
         self.assertNotIn(":/runtime/ledger", compose)
-        # Runtime surface remains read-only
         self.assertIn("/runtime:ro", compose)
-        # Compose env var agrees with the separate mount point
         self.assertIn("TRADING_LEDGER_PATH: /ledger/alpaca-paper-observations.jsonl", compose)
-        # trading_evidence module default agrees with compose env var
         self.assertIn('DEFAULT_LEDGER_PATH = "/ledger/alpaca-paper-observations.jsonl"', evidence)
         self.assertNotIn("/runtime/ledger", evidence)
-        # Governance policy agrees with all three runtime contracts
         self.assertEqual(policy["evidence"]["default_path"], "/ledger/alpaca-paper-observations.jsonl")
-        # Host source directory is unchanged
         self.assertIn("/.dominion/ledger", compose)
 
     def test_intelligence_fallback_is_authenticated_buddy_operator_and_private_loopback(self):
@@ -159,45 +153,25 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
 
     def test_deploy_discovers_buddy_token_from_service_identity_not_deploy_home(self):
         text = DEPLOY.read_text(encoding="utf-8")
-
-        # Derive Buddy service user and home from the live service identity.
         self.assertIn("dominion-buddy-web.service", text)
         self.assertIn("BUDDY_SVC_USER", text)
         self.assertIn("BUDDY_SVC_HOME", text)
         self.assertIn("getent passwd", text)
-
-        # Use Buddy's runtime interpreter, not the deploy-user system python3.
         self.assertIn("BUDDY_PYTHON", text)
         self.assertIn('dominion_env/bin/python3', text)
         self.assertIn("test -x", text)
-
-        # Use noninteractive sudo under the Buddy service identity.
         self.assertIn('sudo -n -u "$BUDDY_SVC_USER"', text)
-
-        # Resolve through Buddy's own resolver rather than a second, private
-        # copy of the discovery rules. Re-implementing it here is exactly what
-        # let the Command Center hold a different token than Buddy Web.
         self.assertIn("from core.token_resolver import resolve_buddy_web_token", text)
         self.assertIn("resolve_buddy_web_token(home=runtime.parent)", text)
         self.assertNotIn("load_dotenv(candidate, override=False)", text)
         self.assertIn("BUDDY_FALLBACK_TOKEN_MISSING", text)
-
-        # A disagreement between sources stops the deploy instead of guessing.
         self.assertIn("BUDDY_TOKEN_CONFLICT", text)
         self.assertIn("resolution.conflict", text)
-
-        # Fail-closed interpreter path proofs.
         self.assertIn("$BUDDY_SVC_HOME/buddy_core", text)
         self.assertIn("BUDDY_TOKEN_RESOLVER_MISSING", text)
-
-        # No stale deploy-user $HOME paths for Buddy credential discovery.
         self.assertNotIn('"$HOME/buddy_core/.env"', text)
         self.assertNotIn('"$HOME/conductor/.env"', text)
-
-        # No manual shlex parser — that was the source of the mismatch.
         self.assertNotIn("shlex.split(value", text)
-
-        # Never expose the Buddy credential.
         self.assertNotIn("echo $BUDDY_TOKEN", text)
         self.assertNotIn("echo ${BUDDY_TOKEN}", text)
 
@@ -205,13 +179,9 @@ class CommandCenterLiveTruthTests(unittest.TestCase):
         """Prove the integrity contract accepts the live intelligence source."""
         policy = json.loads((ROOT / "governance/system_integrity_agent.json").read_text(encoding="utf-8"))
         accepted = set(policy["intelligence_probe"]["accepted_sources"])
-        # buddy_operator is the live fallback intelligence source
         self.assertIn("buddy_operator", accepted)
-        # nemotron remains valid when active
         self.assertIn("nemotron", accepted)
-        # conductor is not the intelligence source — it was removed when Buddy took over
         self.assertNotIn("conductor", accepted)
-        # deploy marker agrees: deploy script validates exactly this set
         deploy = DEPLOY.read_text(encoding="utf-8")
         self.assertIn("source in {'buddy_operator','nemotron'}", deploy)
 

@@ -6,31 +6,142 @@
       "base_url": "http://127.0.0.1:11434",
       "model": "nemotron-3-nano:4b",
       "enabled": true,
-      "priority": 10,
+      "priority": 90,
       "tasks": ["general", "routine", "private"],
-      "timeout_seconds": 60
+      "timeout_seconds": 60,
+      "allow_unauthenticated": true
     },
     {
       "name": "gpt6-astra",
       "provider": "openai_compatible",
-      "base_url": "https://api.openai.com",
-      "model": "gpt-6-astra",
-      "enabled": false,
-      "priority": 20,
-      "tasks": ["frontier", "coding", "research", "general"],
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_GPT6_ASTRA",
+      "enabled": true,
+      "priority": 10,
+      "tasks": ["frontier", "reasoning", "coding", "research", "general"],
       "timeout_seconds": 120,
-      "api_key_file": "/run/secrets/openai_api_key"
+      "api_key_file": "/run/secrets/dominion_router_key"
     },
     {
-      "name": "claude-fable-5-1",
-      "provider": "anthropic",
-      "base_url": "https://api.anthropic.com",
-      "model": "claude-fable-5-1",
-      "enabled": false,
-      "priority": 30,
-      "tasks": ["coding", "research", "long_horizon", "general"],
+      "name": "claude-fable-5",
+      "provider": "openai_compatible",
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_FABLE5",
+      "enabled": true,
+      "priority": 12,
+      "tasks": ["coding", "long_horizon", "reasoning", "research"],
       "timeout_seconds": 120,
-      "api_key_file": "/run/secrets/anthropic_api_key"
+      "api_key_file": "/run/secrets/dominion_router_key"
+    },
+    {
+      "name": "sonic",
+      "provider": "openai_compatible",
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_SONIC",
+      "enabled": true,
+      "priority": 20,
+      "tasks": ["fast", "routine", "general"],
+      "timeout_seconds": 90,
+      "api_key_file": "/run/secrets/dominion_router_key"
+    },
+    {
+      "name": "qwen-3-8-tron",
+      "provider": "openai_compatible",
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_QWEN_TRON",
+      "enabled": true,
+      "priority": 25,
+      "tasks": ["coding", "agentic", "reasoning", "general"],
+      "timeout_seconds": 120,
+      "api_key_file": "/run/secrets/dominion_router_key"
+    },
+    {
+      "name": "gemini",
+      "provider": "openai_compatible",
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_GEMINI",
+      "enabled": true,
+      "priority": 18,
+      "tasks": ["multimodal", "research", "reasoning", "general"],
+      "timeout_seconds": 120,
+      "api_key_file": "/run/secrets/dominion_router_key"
+    },
+    {
+      "name": "deepseek",
+      "provider": "openai_compatible",
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_DEEPSEEK",
+      "enabled": true,
+      "priority": 16,
+      "tasks": ["coding", "reasoning", "research", "general"],
+      "timeout_seconds": 120,
+      "api_key_file": "/run/secrets/dominion_router_key"
+    },
+    {
+      "name": "grok",
+      "provider": "openai_compatible",
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_GROK",
+      "enabled": true,
+      "priority": 22,
+      "tasks": ["research", "reasoning", "general"],
+      "timeout_seconds": 120,
+      "api_key_file": "/run/secrets/dominion_router_key"
+    },
+    {
+      "name": "perplexity",
+      "provider": "openai_compatible",
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_PERPLEXITY",
+      "enabled": true,
+      "priority": 14,
+      "tasks": ["research", "web_research", "verification"],
+      "timeout_seconds": 120,
+      "api_key_file": "/run/secrets/dominion_router_key"
+    },
+    {
+      "name": "manus",
+      "provider": "openai_compatible",
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_MANUS",
+      "enabled": true,
+      "priority": 24,
+      "tasks": ["agentic", "long_horizon", "operations"],
+      "timeout_seconds": 180,
+      "api_key_file": "/run/secrets/dominion_router_key"
+    },
+    {
+      "name": "antigravity",
+      "provider": "openai_compatible",
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_ANTIGRAVITY",
+      "enabled": true,
+      "priority": 28,
+      "tasks": ["agentic", "operations", "general"],
+      "timeout_seconds": 120,
+      "api_key_file": "/run/secrets/dominion_router_key"
+    },
+    {
+      "name": "open-clause",
+      "provider": "openai_compatible",
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_OPEN_CLAUSE",
+      "enabled": true,
+      "priority": 30,
+      "tasks": ["coding", "agentic", "general"],
+      "timeout_seconds": 120,
+      "api_key_file": "/run/secrets/dominion_router_key"
+    },
+    {
+      "name": "hermes",
+      "provider": "openai_compatible",
+      "base_url_env": "DOMINION_ROUTER_BASE_URL",
+      "model_env": "DOMINION_MODEL_HERMES",
+      "enabled": true,
+      "priority": 26,
+      "tasks": ["agentic", "coding", "general"],
+      "timeout_seconds": 120,
+      "api_key_file": "/run/secrets/dominion_router_key"
     }
   ]
 }

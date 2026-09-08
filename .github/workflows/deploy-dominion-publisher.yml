@@ -1,6 +1,13 @@
 name: Deploy Dominion Publisher
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/dominion_publisher/**'
+      - 'scripts/dominion_publisher/**'
+      - 'tests/test_dominion_publisher*.py'
+      - '.github/workflows/deploy-dominion-publisher.yml'
   workflow_dispatch:
     inputs:
       confirm:
@@ -22,10 +29,15 @@ concurrency:
 jobs:
   deploy:
     if: >-
-      github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
-      inputs.confirm == 'DEPLOY DOMINION PUBLISHER' &&
-      inputs.commit_sha == github.sha
+      (
+        github.event_name == 'push' ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          inputs.confirm == 'DEPLOY DOMINION PUBLISHER' &&
+          inputs.commit_sha == github.sha
+        )
+      )
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: foundation-vm-production

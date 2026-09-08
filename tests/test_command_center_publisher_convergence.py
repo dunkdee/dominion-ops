@@ -103,7 +103,7 @@ class CommandCenterPublisherConvergenceTests(unittest.TestCase):
             self.assertEqual(state["phase"], "PUBLISHING_PROVEN")
             self.assertTrue(state["canary_proven"])
 
-    def test_command_center_acceptance_requires_publisher_truth(self):
+    def test_command_center_acceptance_requires_publisher_truth_and_founder_gate(self):
         install = INSTALL.read_text(encoding="utf-8")
         self.assertIn("s['systems']['dominion_publisher']['ok'] is True", install)
         self.assertIn("s['systems']['publisher_queue_ledger']['ok'] is True", install)
@@ -111,17 +111,21 @@ class CommandCenterPublisherConvergenceTests(unittest.TestCase):
         self.assertIn("publisher_phase=", install)
 
         workflow = COMMAND_DEPLOY.read_text(encoding="utf-8")
-        self.assertIn("github.event_name == 'push'", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("\n  push:\n", workflow)
+        self.assertIn("inputs.confirm == 'DEPLOY DOMINION COMMAND CENTER'", workflow)
+        self.assertIn("inputs.commit_sha == github.sha", workflow)
         self.assertIn("scripts/command_center_state_bridge_v3.py", workflow)
         self.assertIn("s['systems']['dominion_publisher']=='online'", workflow)
         self.assertIn("publisher_controlled_publish", workflow)
         self.assertIn("DOMINION_PUBLISHER_COMMAND_CENTER=PASS", workflow)
 
-    def test_publisher_release_auto_converges_but_meta_binding_stays_separate(self):
+    def test_publisher_deploy_remains_founder_gated_and_meta_binding_separate(self):
         workflow = PUBLISHER_DEPLOY.read_text(encoding="utf-8")
-        self.assertIn("github.event_name == 'push'", workflow)
-        self.assertIn("apps/dominion_publisher/**", workflow)
-        self.assertIn("scripts/dominion_publisher/**", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("\n  push:\n", workflow)
+        self.assertIn("inputs.confirm == 'DEPLOY DOMINION PUBLISHER'", workflow)
+        self.assertIn("inputs.commit_sha == github.sha", workflow)
         self.assertIn("foundation-vm-production", workflow)
         self.assertIn("DOMINION_PUBLISHER_DEPLOY=PASS", workflow)
         self.assertNotIn("BIND META PAGE", workflow)

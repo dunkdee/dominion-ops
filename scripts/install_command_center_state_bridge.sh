@@ -78,5 +78,21 @@ assert s['release_sha']==sys.argv[2]
 assert s['lanes']['registered']==11 and s['lanes']['open']==11 and s['lanes']['all_open'] is True
 assert s['founder_holds']
 assert s['systems']['mcp_cli']['ok'] is True, s['systems']['mcp_cli']
-print(f"COMMAND_CENTER_STATE_BRIDGE=PASS lanes=11/11 mcp_cli=online cadence=60s receipts={len(s['latest_receipts'])}")
+assert s['systems']['dominion_publisher']['ok'] is True, s['systems']['dominion_publisher']
+assert s['systems']['publisher_queue_ledger']['ok'] is True, s['systems']['publisher_queue_ledger']
+p=s['publisher']
+assert p['service']=='dominion-publisher'
+assert isinstance(p['meta_bound_counts'],dict)
+assert p['ledger']['connected'] is True
+assert p['phase'] in {
+    'AWAITING_META_APP_CONFIGURATION',
+    'AWAITING_META_ACCOUNT_BINDING',
+    'BOUND_LEDGER_UNVERIFIED',
+    'BOUND_AWAITING_CONTROLLED_CANARY',
+    'PUBLISHING_PROVEN',
+}
+print(
+    f"COMMAND_CENTER_STATE_BRIDGE=PASS lanes=11/11 mcp_cli=online "
+    f"publisher=online publisher_phase={p['phase']} cadence=60s receipts={len(s['latest_receipts'])}"
+)
 PY

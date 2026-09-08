@@ -35,6 +35,10 @@ on:
         description: "For bind, type BIND META PAGE. Ignored for other actions."
         required: false
         type: string
+      config_id:
+        description: "For configure only — Facebook Login for Business configuration id. Not a secret. Blank uses classic login."
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -62,6 +66,7 @@ jobs:
           ACTION: ${{ inputs.action }}
           PAGE_ID: ${{ inputs.page_id }}
           CONFIRM: ${{ inputs.confirm }}
+          CONFIG_ID: ${{ inputs.config_id }}
           ACTOR: ${{ github.actor }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           FOUNDER_ACTOR: dunkdee
@@ -77,6 +82,11 @@ jobs:
               [ "$TRIGGERING_ACTOR" = "$FOUNDER_ACTOR" ] || { echo "configure requires the Founder triggering actor"; exit 1; }
               test -n "$META_APP_ID" || { echo "META_APP_ID secret is missing"; exit 1; }
               test -n "$META_APP_SECRET" || { echo "META_APP_SECRET secret is missing"; exit 1; }
+              # Optional, but when supplied it must be a bare numeric id: it is
+              # interpolated into the payload, never into a shell command.
+              if [ -n "$CONFIG_ID" ]; then
+                [[ "$CONFIG_ID" =~ ^[0-9]{5,}$ ]] || { echo "config_id must be a numeric Facebook Login for Business configuration id"; exit 1; }
+              fi
               ;;
             bind)
               [ "$CONFIRM" = "BIND META PAGE" ] || { echo "bind requires confirm to be exactly 'BIND META PAGE'"; exit 1; }
@@ -125,6 +135,7 @@ jobs:
           APPROVED_BY: ${{ github.actor }}
           META_APP_ID: ${{ secrets.META_APP_ID }}
           META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+          CONFIG_ID: ${{ inputs.config_id }}
         run: |
           set -euo pipefail
           remote_dir="/tmp/dominion_meta_binding_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
@@ -149,7 +160,7 @@ jobs:
             # configure module. The secret is never an argument, never lands in
             # a file, and GitHub redacts it from logs regardless.
             set +e
-            python3 -c 'import json,os,sys; sys.stdout.write(json.dumps({"app_id": os.environ["META_APP_ID"], "app_secret": os.environ["META_APP_SECRET"]}))' \
+            python3 -c 'import json,os,sys; sys.stdout.write(json.dumps({"app_id": os.environ["META_APP_ID"], "app_secret": os.environ["META_APP_SECRET"], "config_id": os.environ.get("CONFIG_ID", "")}))' \
               | ssh -i "$HOME/.ssh/meta_key" \
                 -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
                 "$VM_USER@$VM_HOST" \

@@ -104,11 +104,13 @@ class CredentialVault:
         app_secret: str,
         redirect_uri: str,
         graph_version: str,
+        config_id: str = "",
     ) -> None:
         app_id = app_id.strip()
         app_secret = app_secret.strip()
         redirect_uri = redirect_uri.strip()
         graph_version = graph_version.strip()
+        config_id = config_id.strip()
         if not all((app_id, app_secret, redirect_uri, graph_version)):
             raise ValueError("Meta app id, secret, redirect URI, and Graph version are required")
         if not redirect_uri.startswith("https://"):
@@ -122,6 +124,10 @@ class CredentialVault:
                 "app_secret": app_secret,
                 "redirect_uri": redirect_uri,
                 "graph_version": graph_version,
+                # Facebook Login for Business names its permissions in a saved
+                # configuration rather than an OAuth scope list. Empty means the
+                # app uses classic Facebook Login.
+                "config_id": config_id,
                 "configured_at": datetime.now(timezone.utc).isoformat(),
             }
 

@@ -24,6 +24,9 @@ class ModelRoute:
     timeout_seconds: int
     api_key_file: str = ""
     api_key_env: str = ""
+    base_url_env: str = ""
+    model_env: str = ""
+    allow_unauthenticated: bool = False
 
     @classmethod
     def from_mapping(cls, value: dict[str, Any]) -> "ModelRoute":
@@ -33,23 +36,41 @@ class ModelRoute:
         tasks = value.get("tasks") or ["general"]
         if not isinstance(tasks, list) or not all(isinstance(item, str) for item in tasks):
             raise ValueError("tasks-must-be-a-string-list")
+        base_url_env = str(value.get("base_url_env") or "").strip()
+        model_env = str(value.get("model_env") or "").strip()
+        base_url = str(value.get("base_url") or "").rstrip("/")
+        model = str(value.get("model") or "").strip()
+        if base_url_env:
+            base_url = os.getenv(base_url_env, base_url).strip().rstrip("/")
+        if model_env:
+            model = os.getenv(model_env, model).strip()
         return cls(
             name=str(value.get("name") or "").strip(),
             provider=provider,
-            base_url=str(value.get("base_url") or "").rstrip("/"),
-            model=str(value.get("model") or "").strip(),
+            base_url=base_url,
+            model=model,
             enabled=bool(value.get("enabled", False)),
             priority=int(value.get("priority", 100)),
-            tasks=tuple(item.strip() for item in tasks if item.strip()),
+            tasks=tuple(item.strip().lower() for item in tasks if item.strip()),
             timeout_seconds=max(1, int(value.get("timeout_seconds", 60))),
             api_key_file=str(value.get("api_key_file") or "").strip(),
             api_key_env=str(value.get("api_key_env") or "").strip(),
+            base_url_env=base_url_env,
+            model_env=model_env,
+            allow_unauthenticated=bool(value.get("allow_unauthenticated", False)),
         )
 
     def usable_for(self, task: str) -> bool:
         if not self.enabled or not self.name or not self.base_url or not self.model:
             return False
         return "*" in self.tasks or task in self.tasks or "general" in self.tasks
+
+    def specificity_for(self, task: str) -> int:
+        if task in self.tasks or "*" in self.tasks:
+            return 0
+        if "general" in self.tasks:
+            return 1
+        return 2
 
 
 def _read_secret_file(path: str) -> str:
@@ -62,8 +83,6 @@ def _read_secret_file(path: str) -> str:
 
 
 def _resolve_api_key(route: ModelRoute) -> str:
-    # Secret files are preferred so credentials do not need to be embedded in
-    # configuration, logs, process arguments, repository files, or screenshots.
     secret = _read_secret_file(route.api_key_file)
     if secret:
         return secret
@@ -92,9 +111,9 @@ def load_routes(path: str | None = None) -> list[ModelRoute]:
             route = ModelRoute.from_mapping(raw)
         except (TypeError, ValueError):
             continue
-        if route.usable_for("general") or route.tasks:
+        if route.name and route.tasks:
             routes.append(route)
-    return sorted(routes, key=lambda item: (item.priority, item.name))
+    return routes
 
 
 def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str], timeout: int) -> dict[str, Any]:
@@ -155,12 +174,11 @@ def _call_anthropic(route: ModelRoute, api_key: str, message: str, context: str,
     parsed = _post_json(f"{route.base_url}/v1/messages", payload, headers, route.timeout_seconds)
     blocks = parsed.get("content") or []
     if isinstance(blocks, list):
-        text = "\n".join(
+        return "\n".join(
             str(block.get("text") or "").strip()
             for block in blocks
             if isinstance(block, dict) and block.get("type") == "text"
         ).strip()
-        return text
     return ""
 
 
@@ -171,20 +189,20 @@ def route_model(
     task: str = "general",
     routes_file: str | None = None,
 ) -> dict[str, Any] | None:
-    """Route one reasoning request through the approved model list.
+    """Route through Dominion's approved model registry.
 
-    The function fails closed: disabled, malformed, unavailable, or unauthenticated
-    routes are skipped. It never discovers arbitrary providers and never emits a
-    credential. Provider failures fall through to the next approved route.
+    Exact task matches are tried before general fallbacks. External routes fail
+    closed without authentication unless explicitly marked allow_unauthenticated,
+    which is intended only for loopback/private self-hosted endpoints.
     """
     task = (task or "general").strip().lower()
-    for route in load_routes(routes_file):
-        if not route.usable_for(task):
-            continue
+    candidates = [route for route in load_routes(routes_file) if route.usable_for(task)]
+    candidates.sort(key=lambda route: (route.specificity_for(task), route.priority, route.name))
+
+    for route in candidates:
         api_key = _resolve_api_key(route)
-        # External Anthropic always requires a key. OpenAI-compatible local
-        # endpoints may intentionally be unauthenticated on loopback/private
-        # networks, so absence of a key is permitted for that provider kind.
+        if not api_key and not route.allow_unauthenticated:
+            continue
         if route.provider == "anthropic" and not api_key:
             continue
         try:

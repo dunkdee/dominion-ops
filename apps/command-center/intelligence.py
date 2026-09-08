@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
+from model_gateway import route_model
+
 
 @dataclass(frozen=True)
 class IntelligenceConfig:
@@ -141,7 +143,10 @@ def call_buddy_operator(message: str, context: str = "") -> dict[str, Any] | Non
     return None
 
 
-def route_intelligence(message: str, context: str = "") -> dict[str, Any] | None:
+def route_intelligence(message: str, context: str = "", task: str = "general") -> dict[str, Any] | None:
+    governed = route_model(message, context, SYSTEM_PROMPT, task=task)
+    if governed:
+        return governed
     primary = call_nemotron(message, context)
     if primary:
         return primary

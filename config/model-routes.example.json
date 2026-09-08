@@ -1,0 +1,36 @@
+{
+  "routes": [
+    {
+      "name": "local-nemotron",
+      "provider": "openai_compatible",
+      "base_url": "http://127.0.0.1:11434",
+      "model": "nemotron-3-nano:4b",
+      "enabled": true,
+      "priority": 10,
+      "tasks": ["general", "routine", "private"],
+      "timeout_seconds": 60
+    },
+    {
+      "name": "gpt6-astra",
+      "provider": "openai_compatible",
+      "base_url": "https://api.openai.com",
+      "model": "gpt-6-astra",
+      "enabled": false,
+      "priority": 20,
+      "tasks": ["frontier", "coding", "research", "general"],
+      "timeout_seconds": 120,
+      "api_key_file": "/run/secrets/openai_api_key"
+    },
+    {
+      "name": "claude-fable-5-1",
+      "provider": "anthropic",
+      "base_url": "https://api.anthropic.com",
+      "model": "claude-fable-5-1",
+      "enabled": false,
+      "priority": 30,
+      "tasks": ["coding", "research", "long_horizon", "general"],
+      "timeout_seconds": 120,
+      "api_key_file": "/run/secrets/anthropic_api_key"
+    }
+  ]
+}

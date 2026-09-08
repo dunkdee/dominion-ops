@@ -64,21 +64,34 @@ class MetaBindingManager:
             if isinstance(payload, dict):
                 error = payload.get("error")
                 if isinstance(error, dict):
-                    error_type = str(error.get("type", "")).strip()
-                    if error_type:
-                        details.append(f"type={error_type}")
+                    # Emit a fixed label, never arbitrary provider-controlled text.
+                    if error.get("type") == "OAuthException":
+                        details.append("type=OAuthException")
                     for field in ("code", "error_subcode"):
                         value = error.get(field)
-                        if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
+                        if (isinstance(value, str) and 1 <= len(value) <= 10
+                                and value.isascii() and value.isdecimal()):
+                            value = int(value)
+                        if type(value) is int and 0 <= value <= 2**31 - 1:
                             details.append(f"{field}={value}")
             suffix = f" ({', '.join(details)})" if details else ""
             raise RuntimeError(
                 f"Meta {operation} failed with HTTP {response.status_code}{suffix}"
             )
-        payload = response.json()
+        try:
+            payload = response.json()
+        except (ValueError, TypeError):
+            raise RuntimeError(f"Meta {operation} returned an invalid response") from None
         if not isinstance(payload, dict):
             raise RuntimeError(f"Meta {operation} returned an invalid response")
         return payload
+
+    def _provider_get(self, url: str, *, params: dict, operation: str) -> requests.Response:
+        try:
+            return self.session.get(url, params=params, timeout=self.timeout_seconds)
+        except requests.RequestException:
+            # Requests exceptions can include URLs containing credentials or tokens.
+            raise RuntimeError(f"Meta {operation} failed with a transport error") from None
 
     def _create_state(self) -> str:
         payload = {
@@ -136,7 +149,7 @@ class MetaBindingManager:
     def _exchange_code(self, code: str) -> str:
         app = self._app()
         base = f"https://graph.facebook.com/{app['graph_version']}"
-        response = self.session.get(
+        response = self._provider_get(
             f"{base}/oauth/access_token",
             params={
                 "client_id": app["app_id"],
@@ -144,14 +157,14 @@ class MetaBindingManager:
                 "redirect_uri": app["redirect_uri"],
                 "code": code,
             },
-            timeout=self.timeout_seconds,
+            operation="authorization-code exchange",
         )
         payload = self._provider_json(response, "authorization-code exchange")
         short_token = str(payload.get("access_token", "")).strip()
         if not short_token:
             raise RuntimeError("Meta authorization-code exchange returned no access token")
 
-        response = self.session.get(
+        response = self._provider_get(
             f"{base}/oauth/access_token",
             params={
                 "grant_type": "fb_exchange_token",
@@ -159,7 +172,7 @@ class MetaBindingManager:
                 "client_secret": app["app_secret"],
                 "fb_exchange_token": short_token,
             },
-            timeout=self.timeout_seconds,
+            operation="long-lived token exchange",
         )
         payload = self._provider_json(response, "long-lived token exchange")
         token = str(payload.get("access_token", "")).strip()
@@ -170,14 +183,14 @@ class MetaBindingManager:
     def _discover_pages(self, user_token: str) -> list[dict]:
         app = self._app()
         base = f"https://graph.facebook.com/{app['graph_version']}"
-        response = self.session.get(
+        response = self._provider_get(
             f"{base}/me/accounts",
             params={
                 "fields": "id,name,access_token,tasks,instagram_business_account",
                 "access_token": user_token,
                 "limit": 100,
             },
-            timeout=self.timeout_seconds,
+            operation="managed-Page discovery",
         )
         payload = self._provider_json(response, "managed-Page discovery")
         rows = payload.get("data")

@@ -1,88 +1,108 @@
 # Dominion Agent Team — Current Operating State
 
-**Prepared:** 2026-08-09  
-**Authority:** Dewayne Singleton  
-**Purpose:** Shared current-state briefing for all Dominion agents.  
+**Prepared:** 2026-09-08  
+**Authority:** Dewayne Singleton, Founder / Human Overseer  
+**Purpose:** Shared current-state briefing for all Dominion agents during final production convergence.  
 **This file does not grant new authority.**
 
 ## Command structure
 
-- **Human Overseer — Dewayne Singleton:** final approval for protected actions.
+- **Founder / Human Overseer:** final authority for protected actions.
 - **Coordinator:** sequences work, reconciles evidence, prevents conflicting changes.
 - **Conductor:** routes approved work and tracks execution state.
-- **Governor / Policy Gate:** applies default-deny authority rules.
+- **Governor / Policy Gate:** applies default-deny authority rules and Founder gates.
 - **Guardian:** runtime drift and regression detection.
 - **Sentinel:** independent runtime verification and challenge.
-- **Juris:** legal/compliance review; no signing, filing, or legal representation.
-- **Five Council:** independent review across Truth/Evidence, Law/Governance, Security/Risk, Engineering/Reliability, Business Value/Human Impact.
-- **Engineering:** implementation within approved scope.
-- **Research:** read-only evidence gathering unless separately authorized.
-- **Revenue Operations:** analysis, measurement, and approved funnel operations within effective authority; no autonomous protected external action.
+- **Five Council:** independent review across Truth/Evidence, Law/Governance, Security/Risk, Engineering/Reliability, and Business Value/Human Impact.
+- **Buddy:** Founder-facing operator using canonical Dominion context and governed model routing.
+- **Dominion Model Gateway:** selects approved intelligence routes; it does not authorize external effects.
+- **Publisher:** executes approved content distribution and records immutable receipts.
+- **Revenue Operations:** measures traffic, conversion, experiments, attribution, and revenue outcomes.
+- **Obsidian Scribe:** maintains the operational-memory mirror from governed sources and verified runtime evidence.
 
-## Named operational agents/services that require reconciliation into the registry
+## Final production closure — five modules
 
-The current governance map explicitly notes that production contains more named services than the machine-readable registry. These include, among others:
+Dominion is now operating against one narrow closure program. New architecture is not added unless a verified production defect requires it.
 
-- Buddy
-- Alchemist
-- Alpha Engine
-- Gatekeeper
-- Gemini
-- store / commerce operators
-- KDP / Email Drip operators
-- surplus operators
-- social/content/video operators
-- watchdog / health / healer services
-- platform and Wix operators
+### 1. Publisher + Meta
 
-Each live component must be classified as exactly one of:
+**Code state:** READY.  
+**Runtime completion state:** NOT YET VERIFIED.
 
-1. registered independent agent;
-2. worker owned by a registered agent;
-3. shared platform service;
-4. standby / rollback component;
-5. duplicate to consolidate;
-6. obsolete component to retire.
+The canonical `dominion_publisher` service owns Meta Facebook/Instagram binding, approval-gated queueing and publishing, idempotency, receipts, and attributed destination URLs. Meta app configuration, account binding, and controlled-publish proof are separate runtime gates.
 
-No live component may remain ownerless.
+Required runtime finish line:
 
-## Current revenue and production boundaries
+1. Publisher health is online.
+2. Meta app record exists in the encrypted Publisher vault.
+3. Founder-authorized Facebook Page / linked Instagram professional account is bound.
+4. One controlled approved VoltEdge canary publishes successfully.
+5. Provider post ID, destination URL, timestamp, and Publisher receipt are retained.
 
-### Email Drip
+Never mark Meta complete from code existence alone. Until the controlled publish receipt exists, the state remains `BLOCKED` or `UNKNOWN` according to the observed runtime phase.
 
-- RC3 canonicalization/hardening is under review in PR #102.
-- Production send mode is contained in HOLD.
-- PrivateEmail SMTP is the controlled production rail.
-- No automatic SendGrid fallback.
-- Free Audit remains zero-email hold.
-- Live activation requires exact-SHA deployment, production-faithful preflight, a current live-authorization gate, and acceptance verification.
+### 2. Obsidian / Dominion Brain
 
-### Meta / Facebook
+**Code state:** READY.  
+**Production synchronization state:** requires current publication receipt.
 
-`RESTRICTED_HOLD`.
+The only canonical brain path is `scripts/render_dominion_brain.py` followed by the governed production Brain publisher. Legacy vault seed/setup paths remain retired.
 
-No automated login, re-authentication, posting, ads, Pixel/CAPI restoration, replacement-account behavior, or workaround activity until restriction scope is legitimately resolved.
+Every governed generation must carry the current production priorities, agent roles, Publisher phase, storefront state, traffic/revenue outcomes, blockers, Founder approvals, and evidence links. GitHub remains authoritative for versioned law/code; Foundation VM remains authoritative for live runtime; Obsidian is the operational memory and coordination mirror.
 
-### Proposal Queue
+No secret value, provider token, customer PII, or credential may be written into the Brain.
 
-Protected and closed. Do not mutate, disable, or restart unless Dewayne explicitly reopens the work.
+### 3. Command Center
 
-### Trading
+**Code state:** READY FOR CURRENT RELEASE VERIFICATION.
 
-Paper-only. No live-money execution without explicit approval and applicable production gates.
+The Command Center is the canonical live convergence surface. It must report, without fabrication:
 
-### Obsidian / Browser Agents
+- Publisher runtime and Meta phase;
+- queue/receipt ledger truth;
+- controlled-publish proof;
+- system-integrity state;
+- lane access;
+- revenue runtime and current constraint;
+- latest evidence/receipts.
 
-**Current truth state: `UNKNOWN`.**
+A subsystem being built or configured is not equivalent to runtime PASS. Command Center truth must remain timestamped and evidence-backed.
 
-Evidence is contradictory and time-separated:
+### 4. VoltEdge / Wix storefront
 
-- older `governance/RUNTIME_ALIGNMENT.md` text records an unresolved Stage 2F-W1 Wix prerequisite;
-- later August 1 production evidence records the Wix healthcheck correction deployed with `DEPLOY_GATE=PASS` and Wix classified `ACTIVE — healthy`;
-- prior production inventory records `obsidian-remote` running healthy with Syncthing present, but the vault itself stale and not proven connected to the full control plane;
-- an authenticated exact-SHA Obsidian verification/deployment workflow exists on `main`.
+**Observed 2026-09-08:** the live VoltEdge site is published on Wix Catalog V3. Wix analytics for the store from launch through 2026-09-08 returned `orders_count=0`; therefore no product can truthfully be labeled a Best Seller yet.
 
-Therefore neither “blocked” nor “fully active” is currently justified without a fresh live verification. Preparation, review, and generation of the brain pack may proceed. Production claims about Obsidian require current runtime evidence.
+**Corrective action:** the empty visible `Best Sellers` category was hidden rather than populated with invented winners. Category ID `04d1b50a-f6c7-47b4-a0ac-92068af18500` advanced to revision `3` with `visible=false`.
+
+Storefront finish line is conversion-safe public presentation: no fabricated best-seller claims, no placeholder/trust copy, accurate policies/contact information, working product destinations, and checkout readiness. Storefront changes must be verified on the live site after publication.
+
+### 5. Traffic + revenue loop
+
+**Code state:** READY FOR CONTROLLED PRODUCTION EVIDENCE.
+
+The Revenue Runtime already supports deterministic experiment assignment, impression/click tracking, UTM attribution, server-side `add_to_cart`, `checkout`, `purchase`, and `refund` events, evaluation, pause, and rollback. Automatic paid spend is not authorized.
+
+Production finish line:
+
+`approved campaign -> Dominion Publisher -> platform post -> attributed VoltEdge visit -> click/session -> cart -> checkout -> purchase/refund event -> revenue receipt -> evaluation -> Dominion Brain`
+
+A traffic claim requires source/campaign attribution. A revenue claim requires purchase evidence. No agent may promote a winner from impressions or clicks alone when policy requires purchase evidence.
+
+## Current operating priority
+
+1. Finish only the remaining Meta runtime gates and controlled canary.
+2. Publish the current governed Dominion Brain and verify its production digest/receipt.
+3. Verify Command Center exact-release truth after Publisher/Brain convergence.
+4. Remove any remaining live VoltEdge trust/placeholder defects without fabricating merchandising evidence.
+5. Run one measurable traffic-to-purchase loop and retain attribution/revenue receipts.
+6. Only after those five gates close, resume secondary builds such as Orion, Juris, Alchemist, or additional platform adapters.
+
+## Platform boundaries
+
+- **Meta:** official governed Publisher path only; no credential scraping, MFA bypass, account circumvention, or unauthorized posting.
+- **TikTok:** existing governance hold remains effective until separately changed through reviewed policy; do not silently activate disabled TikTok runtime paths.
+- **Trading:** paper-only unless a separate live-money release is explicitly authorized.
+- **Payments / credentials / public publishing:** applicable Founder gates remain in force.
 
 ## Shared operating doctrine
 
@@ -94,19 +114,10 @@ Therefore neither “blocked” nor “fully active” is currently justified wi
 6. Runtime evidence decides live-state truth.
 7. Consequential production work requires bounded scope, rollback, and post-action verification.
 8. No secrets or customer PII in GitHub, Obsidian, prompts, screenshots, or reports.
-9. Fail closed on ambiguous configuration, corrupted state, missing suppression data, or unknown send history.
+9. Fail closed on ambiguous configuration, corrupted state, missing evidence, or stale runtime truth.
 10. No agent may expand its own authority.
 11. Truth states are exactly `VERIFIED`, `INFERRED`, `UNKNOWN`, or `BLOCKED`.
-
-## Current priority queue
-
-1. Finish RC3 Email Drip hardening and current independent review findings.
-2. Merge only exact reviewed GitHub SHAs with passing CI.
-3. Reconcile current Obsidian live state from production evidence; do not rely on the stale Wix block.
-4. Render and publish the governed brain generation while preserving `Dominion-Operator-Notes`.
-5. Reconcile named agents/services into `agents/registry.json` ownership classes and validate the control-plane chain.
-6. Validate GitHub ↔ Obsidian ↔ runtime parity without copying secrets.
-7. Activate revenue execution lanes only inside their approved contact, pricing, publishing, payment, and compliance gates.
+12. Do not reopen completed architecture while a narrower production closure is available.
 
 ## Required report format
 
@@ -120,4 +131,4 @@ next_action:
 human_approval_required:
 ```
 
-If evidence is insufficient, `result` must be `UNKNOWN`.
+If evidence is insufficient, `result` must be `UNKNOWN` or `BLOCKED`, never an inferred PASS.

@@ -1,6 +1,25 @@
 name: Deploy Dominion Command Center
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/command-center/**'
+      - 'docker-compose.command-center.yml'
+      - 'scripts/deploy_dominion_command_center.sh'
+      - 'scripts/deploy_command_center.sh'
+      - 'scripts/install_command_center_state_bridge.sh'
+      - 'scripts/command_center_state_bridge_v2.py'
+      - 'scripts/command_center_state_bridge_v3.py'
+      - 'scripts/install_mcp_cli_server.sh'
+      - 'scripts/install_system_integrity_agent.sh'
+      - 'scripts/converge_command_center_vault_route.sh'
+      - 'governance/lane_access_policy.json'
+      - 'governance/revenue_execution_policy.json'
+      - 'governance/mcp_connector_registry.json'
+      - 'governance/system_integrity_agent.json'
+      - 'obsidian/**'
+      - '.github/workflows/deploy-dominion-command-center.yml'
   workflow_dispatch:
     inputs:
       confirm:
@@ -22,10 +41,15 @@ concurrency:
 jobs:
   deploy:
     if: >-
-      github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
-      inputs.confirm == 'DEPLOY DOMINION COMMAND CENTER' &&
-      inputs.commit_sha == github.sha
+      (
+        github.event_name == 'push' ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          inputs.confirm == 'DEPLOY DOMINION COMMAND CENTER' &&
+          inputs.commit_sha == github.sha
+        )
+      )
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: foundation-vm-production
@@ -89,10 +113,13 @@ jobs:
           grep -Fq 'dominion-command-center-runtime-state-v2' scripts/command_center_state_bridge_v2.py
           grep -Fq 'systems["mcp_cli"]' scripts/command_center_state_bridge_v3.py
           grep -Fq 'systems["system_integrity"]' scripts/command_center_state_bridge_v3.py
+          grep -Fq 'systems["dominion_publisher"]' scripts/command_center_state_bridge_v3.py
+          grep -Fq 'publisher_queue_ledger' scripts/command_center_state_bridge_v3.py
+          grep -Fq 'BOUND_AWAITING_CONTROLLED_CANARY' scripts/command_center_state_bridge_v3.py
           grep -Fq 'OnUnitActiveSec=89s' deploy/systemd/dominion-system-integrity.timer
           grep -Fq 'MCP 2026-07-28' obsidian/command-center/17-MCP-CLI-Connector.md
           docker build -t dominion-command-center-release-check apps/command-center
-          echo 'DOMINION_COMPLETE_COMMAND_CENTER_ASSETS=PASS truth=canonical image=radah_memshalah buddy=personal_voice obsidian=canonical mcp=governed_2026_07_28 integrity=single_responsibility_89s'
+          echo 'DOMINION_COMPLETE_COMMAND_CENTER_ASSETS=PASS truth=canonical image=radah_memshalah buddy=personal_voice obsidian=canonical mcp=governed_2026_07_28 integrity=single_responsibility_89s publisher=canonical_truth'
 
       - name: Require protected VM access
         env:
@@ -155,8 +182,11 @@ jobs:
 
           curl -fsS http://127.0.0.1:8091/health | python3 -m json.tool
           curl -fsS http://127.0.0.1:8390/health | python3 -m json.tool
+          curl -fsS http://127.0.0.1:5112/health | python3 -m json.tool
           sudo systemctl is-active --quiet dominion-system-integrity.timer
           sudo systemctl is-enabled --quiet dominion-system-integrity.timer
+          sudo systemctl is-active --quiet dominion-publisher.service
+          sudo systemctl is-enabled --quiet dominion-publisher.service
           INTEGRITY="$(cat "$HOME/.dominion/system-integrity/latest.json")"
           python3 - "$INTEGRITY" <<'PY'
           import json,sys
@@ -170,6 +200,28 @@ jobs:
           print(f"SYSTEM_INTEGRITY_PRODUCTION=PASS cycle={s['cycle']} checks={s['checks_total']} cadence=89s")
           PY
 
+          python3 - "$HOME/.dominion/command-center/runtime-state.json" <<'PY'
+          import json,sys
+          s=json.load(open(sys.argv[1],encoding='utf-8'))
+          p=s['publisher']
+          assert s['systems']['dominion_publisher']['ok'] is True
+          assert s['systems']['publisher_queue_ledger']['ok'] is True
+          assert p['ledger']['connected'] is True
+          assert isinstance(p['meta_bound_counts'],dict)
+          assert p['phase'] in {
+              'AWAITING_META_APP_CONFIGURATION',
+              'AWAITING_META_ACCOUNT_BINDING',
+              'BOUND_LEDGER_UNVERIFIED',
+              'BOUND_AWAITING_CONTROLLED_CANARY',
+              'PUBLISHING_PROVEN',
+          }
+          print(
+              f"DOMINION_PUBLISHER_COMMAND_CENTER=PASS phase={p['phase']} "
+              f"facebook={p['meta_bound_counts']['facebook']} instagram={p['meta_bound_counts']['instagram']} "
+              f"published={p['ledger']['published']}"
+          )
+          PY
+
           STATUS="$(curl -fsS http://127.0.0.1:8091/api/status)"
           python3 - "$STATUS" "$RUN_SHA" <<'PY'
           import json,sys
@@ -180,8 +232,13 @@ jobs:
           assert s['autopilot']['connected'] is True
           assert s['systems']['mcp_cli']=='online'
           assert s['systems']['system_integrity']=='online'
+          assert s['systems']['dominion_publisher']=='online'
+          assert s['systems']['publisher_queue_ledger']=='online'
+          assert 'publisher_meta_app' in s['systems']
+          assert 'publisher_account_binding' in s['systems']
+          assert 'publisher_controlled_publish' in s['systems']
           assert s['latest_receipts']
-          print('DOMINION_COMMAND_CENTER_FINAL_ACCEPTANCE=PASS mcp_cli=online system_integrity=online obsidian=canonical_visual')
+          print('DOMINION_COMMAND_CENTER_FINAL_ACCEPTANCE=PASS mcp_cli=online system_integrity=online publisher=canonical obsidian=canonical_visual')
           PY
           REMOTE
 

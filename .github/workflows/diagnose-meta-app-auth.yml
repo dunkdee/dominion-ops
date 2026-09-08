@@ -1,0 +1,133 @@
+name: Diagnose Meta App Auth
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: foundation-vm-production
+    steps:
+      - name: Require protected VM access
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/meta_diag_key"
+          chmod 600 "$HOME/.ssh/meta_diag_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Validate encrypted-vault Meta app authentication
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/meta_diag_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          state_root="$HOME/.dominion/publisher"
+          env_file="$state_root/runtime.env"
+          release_root="$state_root/runtime/release"
+          venv="$state_root/venv"
+          test -s "$env_file" || { echo 'META_APP_AUTH=FAIL reason=runtime_env_missing'; exit 20; }
+          test -x "$venv/bin/python" || { echo 'META_APP_AUTH=FAIL reason=publisher_python_missing'; exit 21; }
+          cd "$release_root"
+          set -a
+          # shellcheck disable=SC1090
+          source "$env_file"
+          set +a
+          "$venv/bin/python" - <<'PY'
+          import os
+          import sys
+          import requests
+          from apps.dominion_publisher.vault import CredentialVault
+
+          root = os.environ.get("DOMINION_PUBLISHER_VAULT", "").strip()
+          if not root:
+              print("META_APP_AUTH=FAIL reason=vault_root_unset")
+              raise SystemExit(22)
+          app = CredentialVault(root).meta_app()
+          if not app:
+              print("META_APP_AUTH=FAIL reason=meta_app_record_absent")
+              raise SystemExit(23)
+
+          app_id = str(app.get("app_id", "")).strip()
+          app_secret = str(app.get("app_secret", "")).strip()
+          graph_version = str(app.get("graph_version", "v25.0")).strip()
+          if not app_id or not app_secret:
+              print("META_APP_AUTH=FAIL reason=app_credentials_incomplete")
+              raise SystemExit(24)
+
+          response = requests.get(
+              f"https://graph.facebook.com/{graph_version}/oauth/access_token",
+              params={
+                  "client_id": app_id,
+                  "client_secret": app_secret,
+                  "grant_type": "client_credentials",
+              },
+              timeout=30,
+          )
+
+          if response.ok:
+              try:
+                  payload = response.json()
+              except ValueError:
+                  payload = None
+              if isinstance(payload, dict) and str(payload.get("access_token", "")).strip():
+                  print("META_APP_AUTH=PASS")
+                  print(f"APP_ID_SUFFIX={app_id[-4:]}")
+                  print(f"GRAPH_VERSION={graph_version}")
+                  raise SystemExit(0)
+              print("META_APP_AUTH=FAIL reason=success_without_access_token")
+              raise SystemExit(25)
+
+          details = []
+          try:
+              payload = response.json()
+          except ValueError:
+              payload = None
+          if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
+              err = payload["error"]
+              error_type = str(err.get("type", "")).strip()
+              if error_type:
+                  details.append(f"type={error_type}")
+              for field in ("code", "error_subcode"):
+                  value = err.get(field)
+                  if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
+                      details.append(f"{field}={value}")
+          suffix = f" ({', '.join(details)})" if details else ""
+          print(f"META_APP_AUTH=FAIL http_status={response.status_code}{suffix}")
+          raise SystemExit(26)
+          PY
+          REMOTE
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/meta_diag_key" "$HOME/.ssh/known_hosts"

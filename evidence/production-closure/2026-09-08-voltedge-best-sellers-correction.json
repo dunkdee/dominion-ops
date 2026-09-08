@@ -1,0 +1,19 @@
+{
+  "schema": "dominion-production-closure-evidence-v1",
+  "observed_at": "2026-09-08T03:16:00Z",
+  "module": "voltedge_storefront",
+  "site": "VoltEdge Electronics",
+  "catalog_version": "V3",
+  "evidence": {
+    "sales_interval_start": "2026-06-27T04:00:00Z",
+    "sales_interval_end": "2026-09-08T04:00:00Z",
+    "orders_count": 0,
+    "best_sellers_category_id": "04d1b50a-f6c7-47b4-a0ac-92068af18500",
+    "previous_visible": true,
+    "current_visible": false,
+    "current_revision": "3"
+  },
+  "decision": "Hide the empty Best Sellers category instead of populating it without sales evidence.",
+  "truth": "VERIFIED",
+  "secrets_present": false
+}

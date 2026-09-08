@@ -56,7 +56,25 @@ class MetaBindingManager:
     @staticmethod
     def _provider_json(response: requests.Response, operation: str) -> dict:
         if not response.ok:
-            raise RuntimeError(f"Meta {operation} failed with HTTP {response.status_code}")
+            details: list[str] = []
+            try:
+                payload = response.json()
+            except (ValueError, TypeError):
+                payload = None
+            if isinstance(payload, dict):
+                error = payload.get("error")
+                if isinstance(error, dict):
+                    error_type = str(error.get("type", "")).strip()
+                    if error_type:
+                        details.append(f"type={error_type}")
+                    for field in ("code", "error_subcode"):
+                        value = error.get(field)
+                        if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
+                            details.append(f"{field}={value}")
+            suffix = f" ({', '.join(details)})" if details else ""
+            raise RuntimeError(
+                f"Meta {operation} failed with HTTP {response.status_code}{suffix}"
+            )
         payload = response.json()
         if not isinstance(payload, dict):
             raise RuntimeError(f"Meta {operation} returned an invalid response")

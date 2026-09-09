@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - "governance/**"
+      - "docs/DOMINION_SYSTEM_ALIGNMENT_V1.md"
       - "scripts/validate_ecosystem_alignment.py"
+      - "scripts/validate_system_alignment.py"
       - "apps/**"
       - "buddy_core/core/revenue_runtime.py"
       - "buddy_core/buddy_bridge_api.py"
@@ -20,7 +22,9 @@ on:
     branches: [main]
     paths:
       - "governance/**"
+      - "docs/DOMINION_SYSTEM_ALIGNMENT_V1.md"
       - "scripts/validate_ecosystem_alignment.py"
+      - "scripts/validate_system_alignment.py"
       - "apps/**"
       - "buddy_core/core/revenue_runtime.py"
       - "buddy_core/buddy_bridge_api.py"
@@ -51,6 +55,9 @@ jobs:
 
       - name: Validate vertical registry and repository contracts
         run: python3 scripts/validate_ecosystem_alignment.py
+
+      - name: Validate one-brain roles, governance, and mission pipeline alignment
+        run: python3 scripts/validate_system_alignment.py
 
       - name: Install revenue test dependency
         run: python3 -m pip install --disable-pip-version-check 'pytest>=8,<9'

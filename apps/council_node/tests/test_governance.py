@@ -24,6 +24,8 @@ def test_unanimous_approval_releases(constitution):
     decision = ReleaseGate(constitution).evaluate(_approvals())
     assert decision.released is True
     assert decision.status.value == "DONE"
+    assert decision.pending_councils == ()
+    assert decision.next_actions == ()
 
 
 def test_single_veto_from_veto_domain_blocks(constitution):
@@ -33,6 +35,7 @@ def test_single_veto_from_veto_domain_blocks(constitution):
     assert decision.released is False
     assert decision.status.value == "BLOCKED"
     assert any("independent veto domain" in r for r in decision.reasons)
+    assert "RESOLVE:security_risk:VETO" in decision.next_actions
 
 
 def test_unknown_blocks_and_is_reported_as_unknown(constitution):
@@ -57,6 +60,39 @@ def test_missing_council_blocks_silence_is_not_consent(constitution):
     assert decision.released is False
     assert decision.status.value == "UNKNOWN"
     assert any("did not report" in r for r in decision.reasons)
+    assert decision.pending_councils == ("business_human_impact",)
+    assert decision.next_actions == ("REVIEW:business_human_impact",)
+
+
+def test_missing_reviews_preserve_constitutional_order(constitution):
+    votes = [CouncilVote("security_risk", CouncilVerdict.APPROVE, "ok")]
+    decision = ReleaseGate(constitution).evaluate(votes)
+    assert decision.pending_councils == (
+        "truth_evidence",
+        "law_governance",
+        "engineering_reliability",
+        "business_human_impact",
+    )
+    assert decision.next_actions[:2] == (
+        "REVIEW:truth_evidence",
+        "REVIEW:law_governance",
+    )
+
+
+def test_duplicate_council_identity_fails_closed(constitution):
+    votes = _approvals() + [CouncilVote("truth_evidence", CouncilVerdict.APPROVE, "duplicate")]
+    decision = ReleaseGate(constitution).evaluate(votes)
+    assert decision.released is False
+    assert decision.status.value == "UNKNOWN"
+    assert "RESOLVE_DUPLICATE:truth_evidence" in decision.next_actions
+
+
+def test_unknown_council_identity_fails_closed(constitution):
+    votes = _approvals() + [CouncilVote("shadow_council", CouncilVerdict.APPROVE, "not a seat")]
+    decision = ReleaseGate(constitution).evaluate(votes)
+    assert decision.released is False
+    assert decision.status.value == "UNKNOWN"
+    assert "REMOVE_UNKNOWN:shadow_council" in decision.next_actions
 
 
 def test_dissent_is_preserved(constitution):
@@ -65,7 +101,6 @@ def test_dissent_is_preserved(constitution):
     decision = ReleaseGate(constitution).evaluate(votes)
     assert len(decision.dissent) == 1
     assert decision.dissent[0].reason == "unlicensed claim"
-    # The full ballot survives too, so the record shows who approved.
     assert len(decision.votes) == 5
 
 
@@ -73,6 +108,7 @@ def test_machine_votes_cannot_satisfy_human_approval(constitution):
     decision = ReleaseGate(constitution).evaluate(_approvals(), require_human_approval=True)
     assert decision.released is False
     assert any("human approval is required" in r for r in decision.reasons)
+    assert "RECORD_REQUIRED_HUMAN_APPROVAL" in decision.next_actions
 
 
 def test_human_approval_satisfies_the_requirement(constitution):

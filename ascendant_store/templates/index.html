@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ascendant Digital — Print-ready tools for a deliberate life</title>
+    <meta name="description" content="Large-print puzzle books, planners and journals from Ascendant Digital. Instant download, print at home, secure Stripe checkout.">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; -webkit-font-smoothing: antialiased; }
+        a { color: #DAA520; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
+
+        /* ── header ─────────────────────────────────────── */
+        header { padding: 56px 0 40px; border-bottom: 1px solid #1e1e2e; }
+        .brand { font-size: 0.8rem; letter-spacing: 0.18em; text-transform: uppercase; color: #DAA520; margin-bottom: 18px; }
+        h1 { font-size: clamp(2rem, 5vw, 3rem); color: #fff; line-height: 1.12; margin-bottom: 18px; max-width: 18ch; }
+        .lede { color: #b0b0b0; font-size: 1.15rem; line-height: 1.7; max-width: 58ch; }
+
+        /* ── trust strip ────────────────────────────────── */
+        .trust { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 30px; }
+        .trust span { color: #888; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; }
+        .trust svg { width: 15px; height: 15px; flex: none; }
+
+        /* ── products ───────────────────────────────────── */
+        .section-label {
+            font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase;
+            color: #666; margin: 56px 0 22px;
+        }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 22px; }
+
+        .card {
+            background: #12121e; border: 1px solid #232338; border-radius: 12px;
+            overflow: hidden; display: flex; flex-direction: column;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+        .card:hover { border-color: #3a3a58; transform: translateY(-2px); }
+
+        .cover {
+            aspect-ratio: 3 / 2; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 8px;
+            padding: 20px; text-align: center;
+            background: linear-gradient(150deg, #1c1c30 0%, #12121e 100%);
+            border-bottom: 1px solid #232338;
+        }
+        .cover .cat {
+            font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase;
+            color: #DAA520; opacity: 0.85;
+        }
+        .cover .mono { font-size: 1.05rem; color: #d8d8e8; line-height: 1.3; font-weight: 600; max-width: 20ch; }
+        .cover .rule { width: 32px; height: 2px; background: #DAA520; opacity: 0.7; }
+
+        .card-body { padding: 20px; display: flex; flex-direction: column; flex: 1; gap: 10px; }
+        .card h2 { font-size: 1.05rem; color: #fff; line-height: 1.35; }
+        .card p { color: #9a9aae; font-size: 0.92rem; line-height: 1.6; flex: 1; }
+        .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+        .price { color: #DAA520; font-weight: 700; font-size: 1.15rem; }
+
+        .cta {
+            display: inline-block; background: #DAA520; color: #0a0a0a;
+            padding: 9px 18px; border-radius: 6px; text-decoration: none;
+            font-weight: 700; font-size: 0.9rem; white-space: nowrap;
+            transition: background 0.2s;
+        }
+        .cta:hover { background: #f0c040; }
+        .cta.soon {
+            background: transparent; color: #6f6f84; border: 1px solid #2c2c44;
+            cursor: default; font-weight: 600;
+        }
+
+        /* ── affiliate ──────────────────────────────────── */
+        .tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+        .tool {
+            background: #12121e; border: 1px solid #232338; border-radius: 10px;
+            padding: 18px 20px; display: flex; flex-direction: column; gap: 7px;
+        }
+        .tool h3 { font-size: 0.98rem; color: #fff; }
+        .tool p { color: #9a9aae; font-size: 0.88rem; line-height: 1.55; }
+        .tool a { font-size: 0.88rem; font-weight: 600; text-decoration: none; margin-top: 3px; }
+        .tool a:hover { text-decoration: underline; }
+        .disclosure {
+            color: #6f6f84; font-size: 0.85rem; line-height: 1.65;
+            margin-top: 18px; max-width: 66ch;
+        }
+
+        /* ── footer ─────────────────────────────────────── */
+        footer { border-top: 1px solid #1e1e2e; margin-top: 64px; padding: 34px 0 48px; }
+        .foot-links { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-bottom: 18px; }
+        .foot-links a { color: #888; font-size: 0.9rem; text-decoration: none; }
+        .foot-links a:hover { color: #DAA520; }
+        .copy { color: #555; font-size: 0.88rem; line-height: 1.6; }
+
+        @media (max-width: 600px) {
+            header { padding-top: 40px; }
+            .container { padding: 0 16px; }
+        }
+    </style>
+    {% if ga4_id %}
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga4_id }}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', '{{ ga4_id }}');
+    </script>
+    {% endif %}
+</head>
+<body>
+
+<div class="container">
+
+    <header>
+        <div class="brand">Ascendant Digital</div>
+        <h1>Print-ready tools for a deliberate life.</h1>
+        <p class="lede">Large-print puzzle books, planners and journals. Buy once, download immediately, print as many copies as you need — at home or at any print shop.</p>
+
+        <div class="trust">
+            <span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#DAA520" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                Secure checkout by Stripe
+            </span>
+            <span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#DAA520" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Instant download
+            </span>
+            <span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#DAA520" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                14-day refund policy
+            </span>
+        </div>
+    </header>
+
+    <div class="section-label">Products</div>
+    <div class="grid">
+        {% for product in products %}
+        <article class="card">
+            <div class="cover">
+                <span class="cat">{{ product.category }}</span>
+                <span class="rule"></span>
+                <span class="mono">{{ product.name }}</span>
+            </div>
+            <div class="card-body">
+                <h2>{{ product.name }}</h2>
+                <p>{{ product.description }}</p>
+                <div class="card-foot">
+                    <span class="price">{{ product.price_display }}</span>
+                    {% if product.purchasable %}
+                    <a href="/product/{{ product.id }}" class="cta">View &amp; buy</a>
+                    {% else %}
+                    <span class="cta soon">Coming soon</span>
+                    {% endif %}
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+
+    {% if tools %}
+    <div class="section-label">Tools we use</div>
+    <div class="tools">
+        {% for tool in tools %}
+        <div class="tool">
+            <h3>{{ tool.name }}</h3>
+            <p>{{ tool.description }}</p>
+            <a href="{{ tool.url }}" rel="sponsored noopener" target="_blank">Visit {{ tool.name }} &rarr;</a>
+        </div>
+        {% endfor %}
+    </div>
+    <p class="disclosure">Some links above are affiliate links. If you buy through one, Ascendant Digital may earn a commission at no additional cost to you. We only list tools we actually use.</p>
+    {% endif %}
+
+    <footer>
+        <div class="foot-links">
+            <a href="/policies#refunds">Refunds</a>
+            <a href="/policies#privacy">Privacy</a>
+            <a href="/policies#terms">Terms</a>
+            <a href="mailto:support@ascendantdigital.store">Contact</a>
+        </div>
+        <p class="copy">&copy; 2026 Ascendant Digital. A Primal Dominion brand.<br>
+        Digital products are delivered by email as downloadable files. Nothing is shipped.</p>
+    </footer>
+
+</div>
+
+</body>
+</html>

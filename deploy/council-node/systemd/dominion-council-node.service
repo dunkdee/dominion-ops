@@ -1,0 +1,20 @@
+[Unit]
+Description=Dominion Council Node (governed orchestration under RADAH MEMSHALAH)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+WorkingDirectory=/opt/dominion/council-node/deploy/council-node
+EnvironmentFile=/etc/dominion/council-node/service.env
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose down
+ExecReload=/usr/bin/docker compose up -d --remove-orphans
+TimeoutStartSec=600
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

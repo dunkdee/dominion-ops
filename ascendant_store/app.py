@@ -40,6 +40,10 @@ load_dotenv(Path.home() / ".env")
 STRIPE_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_PUB = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
 DOMAIN = os.getenv("ASCENDANT_DOMAIN", "https://ascendantdigital.store")
+
+# Conversion tracking. Unset means no analytics script is emitted at all --
+# an absent measurement id must not produce a broken tag or a silent 404.
+GA4_MEASUREMENT_ID = os.getenv("GA4_MEASUREMENT_ID", "").strip()
 stripe.api_key = STRIPE_KEY
 
 app = FastAPI(title="Ascendant Digital", docs_url=None, redoc_url=None)
@@ -194,10 +198,10 @@ def save_lead(email: str, source: str = "store") -> bool:
 
 @app.get("/")
 async def home(request: Request):
-    return templates.TemplateResponse("index.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "index.html", {
         "products": PRODUCTS,
         "tools": AFFILIATE_TOOLS,
+        "ga4_id": GA4_MEASUREMENT_ID,
     })
 
 
@@ -206,10 +210,10 @@ async def product_detail(request: Request, product_id: str):
     product = next((p for p in PRODUCTS if p["id"] == product_id), None)
     if not product:
         return RedirectResponse("/")
-    return templates.TemplateResponse("product.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "product.html", {
         "product": product,
         "stripe_pub": STRIPE_PUB,
+        "ga4_id": GA4_MEASUREMENT_ID,
     })
 
 
@@ -257,8 +261,26 @@ async def create_checkout(request: Request):
 
 
 @app.get("/success")
-async def success(request: Request):
-    return templates.TemplateResponse("success.html", {"request": request})
+async def success(request: Request, product: str | None = None):
+    """Post-purchase page.
+
+    The product id arrives as a query parameter from the Stripe success_url, so
+    the conversion event can name what was bought. It is looked up against the
+    catalogue rather than trusted: a tampered id resolves to None and the page
+    still renders, it simply reports no product.
+    """
+    known = next((p for p in PRODUCTS if p["id"] == product), None)
+    return templates.TemplateResponse(request, "success.html", {
+        "ga4_id": GA4_MEASUREMENT_ID,
+        "product": known,
+    })
+
+
+@app.get("/policies")
+async def policies(request: Request):
+    return templates.TemplateResponse(request, "policies.html", {
+        "ga4_id": GA4_MEASUREMENT_ID,
+    })
 
 
 @app.post("/api/subscribe")

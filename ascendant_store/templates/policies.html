@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Policies — Ascendant Digital</title>
+    <meta name="description" content="Refund policy, privacy policy and terms of sale for Ascendant Digital.">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; }
+        a { color: #DAA520; }
+        .container { max-width: 720px; margin: 0 auto; padding: 56px 20px 72px; }
+        .back { display: inline-block; margin-bottom: 34px; color: #888; text-decoration: none; }
+        .back:hover { color: #DAA520; }
+        h1 { font-size: 2rem; color: #fff; margin-bottom: 10px; }
+        .updated { color: #666; font-size: 0.9rem; margin-bottom: 44px; }
+        section { margin-bottom: 46px; scroll-margin-top: 24px; }
+        h2 {
+            font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase;
+            color: #DAA520; margin-bottom: 16px; padding-bottom: 10px;
+            border-bottom: 1px solid #232338;
+        }
+        p, li { color: #b8b8c8; line-height: 1.75; margin-bottom: 14px; }
+        ul { padding-left: 22px; }
+        li { margin-bottom: 9px; }
+        strong { color: #e8e8f0; }
+        footer { text-align: center; padding: 34px 20px; color: #555; font-size: 0.9rem; border-top: 1px solid #1e1e2e; }
+    </style>
+    {% if ga4_id %}
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga4_id }}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', '{{ ga4_id }}');
+    </script>
+    {% endif %}
+</head>
+<body>
+<div class="container">
+    <a href="/" class="back">&larr; Back to store</a>
+    <h1>Policies</h1>
+    <p class="updated">Last updated 9 September 2026</p>
+
+    <section id="refunds">
+        <h2>Refund policy</h2>
+        <p>Every product sold here is a digital download. Because a file cannot be returned once delivered, we handle refunds on trust rather than on proof of deletion.</p>
+        <p><strong>You may request a full refund within 14 days of purchase</strong>, for any reason. Email <a href="mailto:support@ascendantdigital.store">support@ascendantdigital.store</a> with the order reference from your Stripe receipt. We do not ask you to justify the request.</p>
+        <p>Refunds are issued to the original payment method through Stripe and typically appear within 5–10 business days, depending on your bank.</p>
+        <p>If a file is corrupt, will not open, or does not match its description, tell us and we will fix or refund it regardless of how long ago you bought it.</p>
+    </section>
+
+    <section id="delivery">
+        <h2>Delivery</h2>
+        <p>Nothing is shipped. After payment you receive two emails: a Stripe receipt, and a separate delivery email from Ascendant Digital containing your download link.</p>
+        <p>Delivery is normally within a few minutes. If the delivery email has not arrived within 30 minutes, check your spam and promotions folders, then contact us with your order reference and we will resend it by hand.</p>
+        <p>Files are provided in print-ready format. You may print them for your own personal use as many times as you like.</p>
+    </section>
+
+    <section id="privacy">
+        <h2>Privacy policy</h2>
+        <p><strong>What we collect.</strong> When you buy something we receive your email address and the details of your order. If you join our email list, we store the address you gave us.</p>
+        <p><strong>What we never see.</strong> Card numbers and payment details go directly to Stripe and never touch our servers. We cannot see your full card number at any point.</p>
+        <p><strong>Why we hold it.</strong> To deliver what you bought, to answer support questions, and — only if you opted in — to send you email about our products.</p>
+        <p><strong>Who else sees it.</strong> Stripe, to process payment. Our email provider, to deliver your files. We do not sell, rent, or trade your information to anyone, for any purpose.</p>
+        <p><strong>Your control.</strong> Email us and we will tell you exactly what we hold about you, correct it, or delete it. Every marketing email carries a one-click unsubscribe that works immediately.</p>
+        <p><strong>Analytics.</strong> If site analytics are enabled, they record aggregate page views and purchases. They are not used to build a profile of you as an individual.</p>
+    </section>
+
+    <section id="terms">
+        <h2>Terms of sale</h2>
+        <p><strong>Licence.</strong> Buying a product gives you a personal, non-exclusive licence to use and print it for yourself and your household. You may not resell it, redistribute it, or republish it, in whole or in part.</p>
+        <p><strong>What these products are.</strong> Puzzle books, planners and journals are recreational and organisational tools. They are not medical, therapeutic, financial, or legal advice, and no outcome is promised or implied by their use.</p>
+        <p><strong>Pricing.</strong> Prices are in US dollars and may change. The price shown at checkout is the price you pay.</p>
+        <p><strong>Availability.</strong> Products marked "coming soon" are not yet for sale and cannot be purchased.</p>
+        <p><strong>Contact.</strong> Ascendant Digital, a Primal Dominion brand — <a href="mailto:support@ascendantdigital.store">support@ascendantdigital.store</a></p>
+    </section>
+</div>
+
+<footer>&copy; 2026 Ascendant Digital. A Primal Dominion brand.</footer>
+</body>
+</html>

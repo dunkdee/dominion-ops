@@ -15,6 +15,77 @@ FINAL_POLICY = ROOT / "governance" / "final_release_policy.json"
 COUNCIL_POLICY = ROOT / "governance" / "five_council_policy.json"
 ALLOWED_STATES = {"DONE", "IN_PROGRESS", "BLOCKED", "UNKNOWN", "PARKED"}
 
+REQUIRED_COMPONENTS = {
+    "founder", "five_council", "conductor", "buddy", "dominion_brain",
+    "command_center", "dominion_publisher", "content_engine", "voltedge_wix",
+    "n8n", "specialist_agents", "orion_alpha",
+}
+EXPECTED_EXCLUSIVE_ROLES = {
+    "governance_final_gate": "five_council",
+    "orchestration": "conductor",
+    "operator_interface": "buddy",
+    "operational_memory": "dominion_brain",
+    "operator_observability": "command_center",
+    "publishing_control_plane": "dominion_publisher",
+    "commerce_boundary": "voltedge_wix",
+}
+EXPECTED_AUTHORITY_CLASSES = {
+    "founder": "scope_and_priority",
+    "five_council": "final_affirmative_gate",
+    "conductor": "route_bounded_work",
+    "buddy": "intent_to_governed_capability",
+    "dominion_brain": "verified_coordination_memory",
+    "command_center": "read_and_control_surface",
+    "dominion_publisher": "approved_publication_execution",
+    "content_engine": "draft_and_transform",
+    "voltedge_wix": "catalog_checkout_order_truth",
+    "n8n": "execute_declared_workflows",
+    "specialist_agents": "evidence_and_recommendation",
+    "orion_alpha": "paper_only_market_intelligence",
+}
+EXPECTED_SCHEDULER_OWNERS = {
+    "founder": None,
+    "five_council": None,
+    "conductor": "conductor",
+    "buddy": None,
+    "dominion_brain": None,
+    "command_center": None,
+    "dominion_publisher": "dominion_publisher",
+    "content_engine": None,
+    "voltedge_wix": None,
+    "n8n": "n8n",
+    "specialist_agents": None,
+    "orion_alpha": "orion_alpha",
+}
+EXPECTED_PIPELINE_OWNERS = {
+    "production_release": "conductor",
+    "traffic_revenue": "dominion_publisher",
+    "platform_binding": "dominion_publisher",
+    "commerce": "voltedge_wix",
+    "research_knowledge": "specialist_agents",
+    "paper_trading": "orion_alpha",
+}
+EXPECTED_PRECEDENCE = [
+    "github",
+    "runtime",
+    "publisher_runtime_receipts",
+    "provider_receipts",
+    "command_center",
+    "dominion_brain",
+]
+REQUIRED_CONTRACT_MARKERS = (
+    "# Dominion System Alignment Contract v1",
+    "Authority model: RADAH MEMSHALAH",
+    "Dominion is one governed system with many specialized lanes.",
+    "A lane is not DONE until the full execution loop closes.",
+    "GitHub: versioned law, code, schemas, workflows, release policy, approved configuration descriptors.",
+    "Foundation VM/runtime: live service/runtime truth.",
+    "Publisher/runtime databases and immutable receipts: publication/job/account state.",
+    "Commerce/platform providers: provider-native order, traffic, account, and publication evidence.",
+    "Command Center: operator view of canonical state; never an independent truth producer.",
+    "Obsidian / Dominion-Brain: operational memory and coordination layer synchronized from verified truth; never permitted to overrule GitHub/runtime evidence.",
+)
+
 
 class AlignmentFailure(ValueError):
     pass
@@ -35,21 +106,24 @@ def load(path: Path) -> dict[str, Any]:
     return value
 
 
-def validate() -> tuple[int, int]:
+def validate_contract() -> None:
     require(CONTRACT.is_file(), "missing alignment contract")
+    text = CONTRACT.read_text(encoding="utf-8")
+    require(text.strip(), "alignment contract must not be empty")
+    for marker in REQUIRED_CONTRACT_MARKERS:
+        require(marker in text, f"alignment contract invariant missing: {marker}")
+
+
+def validate() -> tuple[int, int]:
+    validate_contract()
     registry = load(REGISTRY)
     final_policy = load(FINAL_POLICY)
     council_policy = load(COUNCIL_POLICY)
 
     require(registry.get("schema_version") == 1, "system component schema_version must be 1")
     require(registry.get("authority_model") == "RADAH_MEMSHALAH", "authority model drift")
-    require(
-        registry.get("source_of_truth_precedence")
-        == ["github", "runtime", "provider_receipts", "command_center", "dominion_brain"],
-        "source-of-truth precedence drift",
-    )
+    require(registry.get("source_of_truth_precedence") == EXPECTED_PRECEDENCE, "source-of-truth precedence drift")
 
-    # Governance policy must still declare Five Council as the final affirmative gate.
     require(final_policy.get("final_affirmative_gate") == "five_council", "final release gate drift")
     require(final_policy.get("default_behavior") == "deny", "final release policy must fail closed")
     final_release = council_policy.get("final_release", {})
@@ -77,19 +151,28 @@ def validate() -> tuple[int, int]:
         require(component["lifecycle_state"] in ALLOWED_STATES, f"{cid}: invalid lifecycle_state")
         require(isinstance(component["owner"], str) and component["owner"], f"{cid}: owner required")
         require(isinstance(component["source_of_truth"], str) and component["source_of_truth"], f"{cid}: source_of_truth required")
+        require(type(component["writes_external_state"]) is bool, f"{cid}: writes_external_state must be boolean")
+        require(type(component["requires_receipt_for_side_effect"]) is bool, f"{cid}: requires_receipt_for_side_effect must be boolean")
         if component["writes_external_state"]:
             require(component["requires_receipt_for_side_effect"] is True, f"{cid}: external side effects require receipts")
         role = component["role"]
+        require(isinstance(role, str) and role, f"{cid}: role required")
         require(role not in role_owners, f"duplicate canonical role authority: {role}")
         role_owners[role] = cid
 
+    require(set(by_id) == REQUIRED_COMPONENTS, "canonical component set drift")
+    for cid, expected_authority in EXPECTED_AUTHORITY_CLASSES.items():
+        require(by_id[cid]["authority_class"] == expected_authority, f"{cid}: authority_class drift")
+    for cid, expected_scheduler in EXPECTED_SCHEDULER_OWNERS.items():
+        require(by_id[cid]["scheduler_owner"] == expected_scheduler, f"{cid}: scheduler_owner drift")
+        if expected_scheduler is not None:
+            require(expected_scheduler in by_id, f"{cid}: scheduler owner must be canonical component")
+
     exclusive = registry.get("exclusive_roles")
-    require(isinstance(exclusive, dict) and exclusive, "exclusive_roles must be defined")
-    for role, expected_component in exclusive.items():
-        require(expected_component in by_id, f"exclusive role {role} points to unknown component {expected_component}")
+    require(exclusive == EXPECTED_EXCLUSIVE_ROLES, "exclusive role mapping drift")
+    for role, expected_component in EXPECTED_EXCLUSIVE_ROLES.items():
         require(by_id[expected_component]["role"] == role, f"exclusive role {role} owner mismatch")
 
-    # Safety boundaries that must never drift silently.
     require(by_id["dominion_publisher"]["role"] == "publishing_control_plane", "Publisher must remain canonical publishing control plane")
     require(by_id["dominion_brain"]["role"] == "operational_memory", "Dominion Brain must remain canonical operational memory")
     require(by_id["command_center"]["role"] == "operator_observability", "Command Center must remain an observability/control surface")
@@ -105,15 +188,12 @@ def validate() -> tuple[int, int]:
         require(isinstance(pid, str) and pid, "pipeline id required")
         require(pid not in pipeline_ids, f"duplicate mission pipeline: {pid}")
         pipeline_ids.add(pid)
+        require(pid in EXPECTED_PIPELINE_OWNERS, f"unexpected mission pipeline: {pid}")
+        require(owner == EXPECTED_PIPELINE_OWNERS[pid], f"{pid}: canonical pipeline owner drift")
         require(owner in by_id, f"{pid}: unknown pipeline owner {owner}")
         require(pipeline.get("requires_closed_loop") is True, f"{pid}: closed-loop requirement must be true")
 
-    required_pipelines = {
-        "production_release", "traffic_revenue", "platform_binding",
-        "commerce", "research_knowledge", "paper_trading",
-    }
-    require(required_pipelines == pipeline_ids, "canonical mission pipeline set drift")
-
+    require(set(EXPECTED_PIPELINE_OWNERS) == pipeline_ids, "canonical mission pipeline set drift")
     return len(components), len(pipelines)
 
 

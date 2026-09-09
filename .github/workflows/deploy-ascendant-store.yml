@@ -1,0 +1,135 @@
+name: Deploy Ascendant Store
+
+# Deploys the storefront to the foundation VM using the same shape as the
+# Publisher deploy, which is the proven pattern in this repository:
+# exact-SHA pinning, Founder gating, validation before any VM contact, and a
+# health check that decides success.
+#
+# The store binds to 127.0.0.1:5090. Public exposure is the reverse proxy's
+# job and is deliberately not configured here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY ASCENDANT STORE"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Shared with every other foundation-VM operation so two cannot overlap.
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.confirm == 'DEPLOY ASCENDANT STORE' &&
+      inputs.commit_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact release
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Validate storefront release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          bash -n scripts/ascendant_store/install_store.sh
+
+          # Every template the app renders must exist. This is the check that
+          # would have caught index.html and success.html being absent.
+          for t in index.html product.html success.html policies.html; do
+            test -f "ascendant_store/templates/$t" || {
+              echo "missing template: $t"; exit 1; }
+          done
+
+          python -m pip install --quiet --disable-pip-version-check \
+            pytest -r ascendant_store/requirements.txt
+          python -m py_compile ascendant_store/app.py
+          python -m pytest tests/test_ascendant_store_storefront.py \
+                           tests/test_ascendant_store_attribution.py -q
+
+      - name: Require protected VM access
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "VM_HOST secret is missing"; exit 1; }
+          test -n "$VM_USER" || { echo "VM_USER secret is missing"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "VM_SSH_KEY secret is missing"; exit 1; }
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/store_key"
+          chmod 600 "$HOME/.ssh/store_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Stage and install on foundation-vm
+        id: install
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          remote_dir="/tmp/ascendant_store_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+
+          ssh -i "$HOME/.ssh/store_key" -o BatchMode=yes -o ConnectTimeout=20 \
+            -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" \
+            "install -d -m 700 '$remote_dir'"
+
+          tar czf /tmp/store.tgz \
+            ascendant_store scripts/ascendant_store deploy/systemd/dominion-ascendant-store.service
+          scp -i "$HOME/.ssh/store_key" -o BatchMode=yes -o IdentitiesOnly=yes \
+            /tmp/store.tgz "$VM_USER@$VM_HOST:$remote_dir/store.tgz"
+
+          set +e
+          ssh -i "$HOME/.ssh/store_key" -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            "cd '$remote_dir' && tar xzf store.tgz && bash scripts/ascendant_store/install_store.sh '$remote_dir'" \
+            | tee store-install.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+
+          ssh -i "$HOME/.ssh/store_key" -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" "rm -rf -- '$remote_dir'" || true
+
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ascendant-store-deploy-evidence
+          path: store-install.txt
+          if-no-files-found: warn
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/store_key" "$HOME/.ssh/known_hosts" /tmp/store.tgz

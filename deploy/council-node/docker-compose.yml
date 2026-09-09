@@ -1,0 +1,73 @@
+# Dominion Council Node.
+#
+# Only Caddy publishes ports. Postgres, Redis, Ollama and the API bind to the
+# internal network exclusively -- Gate 8 asserts none of them is reachable from
+# outside the host, and publishing a port here is what would break that.
+name: dominion-council-node
+
+services:
+  council-api:
+    build:
+      context: ../..
+      dockerfile: apps/council_node/Dockerfile
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      COUNCIL_BIND_HOST: 0.0.0.0        # inside the container only
+      COUNCIL_BIND_PORT: "8200"
+    volumes:
+      - /var/lib/dominion/receipts:/var/lib/dominion/receipts
+      - ../../governance:/opt/dominion/council-node/governance:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+    networks: [council]
+    # No `ports:` — reachable only through Caddy.
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: [.env]
+    volumes:
+      - /var/lib/dominion/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [council]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Ephemeral by contract: never the source of truth, so no volume.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [council]
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - /var/lib/dominion/ollama:/root/.ollama
+    networks: [council]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [council-api]
+    networks: [council]
+
+networks:
+  council:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

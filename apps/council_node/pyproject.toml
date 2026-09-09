@@ -1,0 +1,13 @@
+[project]
+name = "dominion-council-node"
+version = "0.1.0"
+description = "Governed orchestration layer for Dominion under RADAH MEMSHALAH"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

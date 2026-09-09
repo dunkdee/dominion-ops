@@ -7,16 +7,15 @@ Aggregation is fail-closed and mirrors the existing Dominion policy:
   UNKNOWN                           blocks (rule 9: unknown stays unknown)
   a missing council                 blocks (silence is not consent)
 
-Dissent is preserved: the result carries every vote and every reason, so a
-minority objection survives into the record rather than being averaged away.
-
-An automated check may never be recorded as a human approval. Votes carry
-`is_human`, and where the constitution requires human approval an all-machine
-ballot cannot satisfy it.
+Dissent is preserved. Automated checks may never be recorded as human
+approval. The decision also exposes the exact ordered review queue so missing
+Council work becomes an actionable control-plane item rather than a manual
+bottleneck.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -53,6 +52,8 @@ class ReleaseDecision:
     reasons: tuple[str, ...]
     votes: tuple[CouncilVote, ...] = field(default_factory=tuple)
     dissent: tuple[CouncilVote, ...] = field(default_factory=tuple)
+    pending_councils: tuple[str, ...] = field(default_factory=tuple)
+    next_actions: tuple[str, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict:
         return {
@@ -61,6 +62,8 @@ class ReleaseDecision:
             "reasons": list(self.reasons),
             "votes": [v.to_dict() for v in self.votes],
             "dissent": [v.to_dict() for v in self.dissent],
+            "pending_councils": list(self.pending_councils),
+            "next_actions": list(self.next_actions),
         }
 
 
@@ -76,17 +79,35 @@ class ReleaseGate:
         proposer_council_id: str | None = None,
     ) -> ReleaseDecision:
         reasons: list[str] = []
-        by_council = {v.council_id: v for v in votes}
-        expected = set(self.constitution.council_ids)
+        expected_order = tuple(self.constitution.council_ids)
+        expected = set(expected_order)
+
+        # Duplicate identities are ambiguous and must not be collapsed silently.
+        counts = Counter(v.council_id for v in votes)
+        duplicates = tuple(cid for cid in expected_order if counts[cid] > 1)
+        for council_id in duplicates:
+            reasons.append(
+                f"council '{council_id}' submitted multiple reviews; ambiguous identity blocks release"
+            )
+
+        # Unknown identities can never satisfy a constitutional seat.
+        unknown_ids = tuple(sorted(set(counts) - expected))
+        for council_id in unknown_ids:
+            reasons.append(f"unknown council identity '{council_id}' blocks release")
+
+        by_council = {v.council_id: v for v in votes if v.council_id in expected}
         veto_domains = self.constitution.veto_councils
 
-        # Silence is not consent.
-        missing = sorted(expected - set(by_council))
+        # Preserve constitutional Council order so the control plane always knows
+        # exactly which review is next; silence is not consent.
+        missing = tuple(cid for cid in expected_order if cid not in by_council)
         for council_id in missing:
             reasons.append(f"council '{council_id}' did not report; missing review blocks release")
 
         blocking: list[CouncilVote] = []
         for vote in votes:
+            if vote.council_id not in expected:
+                continue
             if vote.verdict is CouncilVerdict.VETO:
                 if vote.council_id in veto_domains:
                     reasons.append(f"'{vote.council_id}' VETO (independent veto domain): {vote.reason}")
@@ -100,8 +121,10 @@ class ReleaseGate:
                 reasons.append(f"'{vote.council_id}' returned UNKNOWN: {vote.reason}")
                 blocking.append(vote)
 
-        # A proposer cannot be its own sole approver.
-        approvals = [v for v in votes if v.verdict is CouncilVerdict.APPROVE]
+        approvals = [
+            v for v in votes
+            if v.council_id in expected and v.verdict is CouncilVerdict.APPROVE
+        ]
         if (
             self.constitution.proposer_may_not_be_sole_approver
             and proposer_council_id
@@ -113,25 +136,45 @@ class ReleaseGate:
             )
             blocking.append(approvals[0])
 
-        # Human approval cannot be satisfied by machine votes.
         if require_human_approval and not any(v.is_human for v in approvals):
             reasons.append("human approval is required and no human approval was recorded")
 
         released = not reasons
         if released:
             status = Status.DONE
-        elif any(v.verdict is CouncilVerdict.UNKNOWN for v in votes) or missing:
+        elif missing or unknown_ids or duplicates or any(
+            v.verdict is CouncilVerdict.UNKNOWN for v in votes
+        ):
             status = Status.UNKNOWN
         elif any(v.verdict is CouncilVerdict.HOLD for v in votes):
             status = Status.HOLD
         else:
             status = Status.BLOCKED
 
-        dissent = tuple(v for v in votes if v.verdict is not CouncilVerdict.APPROVE)
+        dissent = tuple(
+            v for v in votes
+            if v.council_id in expected and v.verdict is not CouncilVerdict.APPROVE
+        )
+
+        next_actions: list[str] = [f"REVIEW:{cid}" for cid in missing]
+        if not missing:
+            next_actions.extend(
+                f"RESOLVE:{v.council_id}:{v.verdict.value}"
+                for v in blocking
+            )
+        if duplicates:
+            next_actions.extend(f"RESOLVE_DUPLICATE:{cid}" for cid in duplicates)
+        if unknown_ids:
+            next_actions.extend(f"REMOVE_UNKNOWN:{cid}" for cid in unknown_ids)
+        if require_human_approval and not any(v.is_human for v in approvals):
+            next_actions.append("RECORD_REQUIRED_HUMAN_APPROVAL")
+
         return ReleaseDecision(
             released=released,
             status=status,
             reasons=tuple(reasons) or ("all councils approved",),
             votes=tuple(votes),
             dissent=dissent if self.constitution.preserve_dissent else (),
+            pending_councils=missing,
+            next_actions=tuple(next_actions),
         )

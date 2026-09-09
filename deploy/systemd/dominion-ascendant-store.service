@@ -1,0 +1,25 @@
+[Unit]
+Description=Ascendant Digital Storefront (Stripe checkout, loopback only)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=malachisingleton8
+Group=malachisingleton8
+WorkingDirectory=/home/malachisingleton8/.dominion/ascendant-store/runtime/release/ascendant_store
+# Secrets live in a 0600 file written by the installer, never in this unit.
+EnvironmentFile=/home/malachisingleton8/.dominion/ascendant-store/runtime.env
+# Binds loopback only. Public exposure is the reverse proxy's job.
+ExecStart=/home/malachisingleton8/.dominion/ascendant-store/venv/bin/uvicorn app:app \
+  --host 127.0.0.1 --port 5090 --workers 2
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/malachisingleton8/.dominion/ascendant-store /home/malachisingleton8/logs
+
+[Install]
+WantedBy=multi-user.target

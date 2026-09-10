@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+import json
+from pathlib import Path
+
+POLICY = Path("governance/vertical_launch_policy.json")
+SYSTEM = Path("governance/system_components.json")
+
+REQUIRED_VERTICALS = [
+    "publisher_meta",
+    "content_traffic",
+    "voltedge_commerce",
+    "orion_alpha",
+]
+REQUIRED_FUNNEL_STAGES = [
+    "traffic_source",
+    "content_or_ad",
+    "tracked_link",
+    "landing_or_product_page",
+    "offer",
+    "checkout_or_lead_capture",
+    "follow_up",
+    "sale_or_goal_event",
+    "receipt",
+    "attribution",
+    "refinement",
+]
+
+
+def fail(message: str) -> None:
+    raise SystemExit(f"VERTICAL_LAUNCH_POLICY=FAIL reason={message}")
+
+
+def load(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        fail(f"invalid_json:{path}:{exc.__class__.__name__}")
+
+
+def main() -> None:
+    policy = load(POLICY)
+    system = load(SYSTEM)
+
+    if policy.get("authority_model") != "RADAH_MEMSHALAH":
+        fail("authority_model")
+    if policy.get("source_of_truth_precedence") != system.get("source_of_truth_precedence"):
+        fail("source_of_truth_precedence_drift")
+
+    rules = policy.get("activation_rules") or {}
+    for key in (
+        "new_verticals_activate_sequentially",
+        "proven_verticals_may_run_concurrently",
+        "external_effects_require_explicit_authorization",
+        "external_effects_require_runtime_receipt",
+        "missing_or_stale_evidence_fails_closed",
+        "next_vertical_requires_current_vertical_launch_receipt",
+    ):
+        if rules.get(key) is not True:
+            fail(f"activation_rule:{key}")
+
+    windows = policy.get("windows") or {}
+    if windows.get("burn_in_hours") != 72:
+        fail("burn_in_hours")
+    if windows.get("proof_window_hours") != 168:
+        fail("proof_window_hours")
+
+    stages = (policy.get("funnel_contract") or {}).get("required_stages")
+    if stages != REQUIRED_FUNNEL_STAGES:
+        fail("funnel_contract")
+
+    components = {row.get("id") for row in system.get("components", [])}
+    pipelines = {row.get("id") for row in system.get("mission_pipelines", [])}
+    verticals = policy.get("verticals") or []
+    ids = [row.get("id") for row in verticals]
+    if ids != REQUIRED_VERTICALS:
+        fail("vertical_order_or_membership")
+
+    orders = [row.get("order") for row in verticals]
+    if orders != [1, 2, 3, 4]:
+        fail("vertical_order")
+
+    for vertical in verticals:
+        owner = vertical.get("owner")
+        pipeline = vertical.get("mission_pipeline")
+        if owner not in components:
+            fail(f"unknown_owner:{owner}")
+        if pipeline not in pipelines:
+            fail(f"unknown_pipeline:{pipeline}")
+        receipts = vertical.get("required_receipts")
+        if not isinstance(receipts, list) or not receipts:
+            fail(f"missing_receipts:{vertical.get('id')}")
+        if not vertical.get("activation_gate"):
+            fail(f"missing_activation_gate:{vertical.get('id')}")
+
+    orion = verticals[-1]
+    if orion.get("live_money_permitted") is not False:
+        fail("orion_live_money_must_be_false")
+    if orion.get("external_effect_class") != "paper_only":
+        fail("orion_external_effect_class")
+
+    factory = policy.get("store_factory") or {}
+    if factory.get("independent_authority") is not False:
+        fail("store_factory_parallel_authority")
+    if factory.get("owner") != "voltedge_wix":
+        fail("store_factory_owner")
+
+    print(f"VERTICAL_LAUNCH_POLICY=PASS verticals={len(verticals)} burn_in=72h proof_window=168h")
+    print("RADAH_MEMSHALAH=PASS")
+    print("FUNNEL_CONTRACT=PASS")
+    print("STORE_FACTORY_GOVERNANCE=PASS")
+
+
+if __name__ == "__main__":
+    main()

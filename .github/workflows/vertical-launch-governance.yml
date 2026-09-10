@@ -1,0 +1,35 @@
+name: Vertical Launch Governance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'governance/vertical_launch_policy.json'
+      - 'governance/system_components.json'
+      - 'scripts/validate_vertical_launch_policy.py'
+      - '.github/workflows/vertical-launch-governance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'governance/vertical_launch_policy.json'
+      - 'governance/system_components.json'
+      - 'scripts/validate_vertical_launch_policy.py'
+      - '.github/workflows/vertical-launch-governance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-vertical-launch-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Validate governed vertical launch contract
+        run: python scripts/validate_vertical_launch_policy.py
+      - name: Compile validator
+        run: python -m py_compile scripts/validate_vertical_launch_policy.py

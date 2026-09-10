@@ -14,6 +14,8 @@ Environment=NEMOTRON_MODEL=nemotron-3-nano:4b
 Environment=NEMOTRON_LISTEN_HOST=127.0.0.1
 Environment=NEMOTRON_LISTEN_PORT=11435
 Environment=NEMOTRON_TIMEOUT_SECONDS=300
+Environment=NEMOTRON_NUM_CTX=4096
+Environment=NEMOTRON_MAX_CONCURRENCY=1
 ExecStart=/usr/bin/python3 /home/malachisingleton8/.dominion/nemotron/runtime/release/apps/nemotron-worker/nemotron_worker.py
 Restart=on-failure
 RestartSec=5

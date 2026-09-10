@@ -1,0 +1,33 @@
+# Council Node edge.
+#
+# Forwards only the endpoints that are safe to expose. The Founder mutation
+# endpoints are deliberately NOT listed: they are reached over Tailscale or
+# Cloudflare Access per work order §17, not from the public internet.
+
+{$COUNCIL_DOMAIN} {
+	encode gzip
+
+	# Public liveness only.
+	handle /health {
+		reverse_proxy council-api:8200
+	}
+
+	# Read-only status surface.
+	@readonly path /ready /api/status /api/lanes* /api/receipts*
+	handle @readonly {
+		reverse_proxy council-api:8200
+	}
+
+	# Everything else, including /api/founder/*, is refused at the edge.
+	handle {
+		respond "not exposed" 404
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}

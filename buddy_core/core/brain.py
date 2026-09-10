@@ -15,9 +15,11 @@ ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY", "")
 GEMINI_API_KEY     = os.getenv("GEMINI_API_KEY") or os.getenv("GEMNI_VERTEX_AI", "")
 OPENAI_API_KEY     = os.getenv("OPENAI_API_KEY", "")
 OLLAMA_MODEL       = os.getenv("OLLAMA_MODEL", "qwen2:1.5b")
-OLLAMA_URL         = "http://localhost:11434/api/generate"
+OLLAMA_URL         = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+VERTEX_PROJECT     = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT") or "dominion-ascendant"
+VERTEX_LOCATION    = os.getenv("VERTEX_LOCATION", "us-central1")
 
-GROQ_MODEL         = "llama-3.3-70b-versatile"
+GROQ_MODEL         = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_FAST_MODEL    = "llama-3.1-8b-instant"
 
 BUDDY_SYSTEM = """You are Buddy — Dominion's sovereign AI executor.
@@ -94,21 +96,73 @@ Default to concise answers, but use the detail needed to close the task correctl
 def has_groq():
     return bool(GROQ_API_KEY)
 
+
 def has_claude():
     return bool(ANTHROPIC_API_KEY and not ANTHROPIC_API_KEY.startswith("your_"))
+
 
 def has_gemini():
     return bool(GEMINI_API_KEY)
 
+
 def has_openai():
     return bool(OPENAI_API_KEY and not OPENAI_API_KEY.startswith("your_"))
 
-def is_ollama_running():
+
+def has_vertex():
+    """Return whether a real governed Vertex authentication path is present.
+
+    This does not claim that a specific model call will succeed; it only avoids
+    treating the mere existence of ``ask_vertex`` as provider readiness.
+    """
+    if os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip():
+        return True
+    if os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip():
+        return True
     try:
-        r = requests.get("http://localhost:11434", timeout=2)
-        return r.status_code == 200
+        import google.auth
+        credentials, project = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        return bool(credentials and (project or VERTEX_PROJECT))
     except Exception:
         return False
+
+
+def _ollama_model_names():
+    try:
+        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=3)
+        r.raise_for_status()
+        return [
+            str(item.get("name", "")).strip()
+            for item in r.json().get("models", [])
+            if str(item.get("name", "")).strip()
+        ]
+    except Exception:
+        return []
+
+
+def resolve_ollama_model():
+    """Resolve the configured local model to an actually installed model."""
+    names = _ollama_model_names()
+    if not names:
+        return OLLAMA_MODEL
+    if OLLAMA_MODEL in names:
+        return OLLAMA_MODEL
+    preferred = (
+        "nemotron-3-nano:4b",
+        "nemotron-mini:4b-instruct-q4_K_M",
+        "llama3.1:8b",
+        "qwen2:1.5b",
+    )
+    for candidate in preferred:
+        if candidate in names:
+            return candidate
+    return names[0]
+
+
+def is_ollama_running():
+    return bool(_ollama_model_names())
 
 
 # ── Model calls ──────────────────────────────────────────────
@@ -170,27 +224,44 @@ def ask_gemini_pro(prompt, system=BUDDY_SYSTEM):
     return response.text.strip()
 
 
+def ask_vertex(prompt, system=BUDDY_SYSTEM, model="gemini-2.5-flash"):
+    """Use the existing governed Vertex path with stable model identifiers."""
+    from google import genai
+    from google.genai import types
+    import tempfile
 
-def ask_vertex(prompt, system=BUDDY_SYSTEM, model='gemini-2.5-flash-preview-05-20'):
+    tmp_path = None
     try:
-        from google import genai
-        from google.genai import types
-        import tempfile, os as _os
-        sa_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON', '')
+        sa_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
         if sa_json:
-            tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+            tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
             tmp.write(sa_json)
             tmp.close()
-            _os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = tmp.name
-        client = genai.Client(vertexai=True, project='dominion-ascendant', location='us-central1')
+            tmp_path = tmp.name
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp_path
+        client = genai.Client(
+            vertexai=True,
+            project=VERTEX_PROJECT,
+            location=VERTEX_LOCATION,
+        )
         config = types.GenerateContentConfig(system_instruction=system, temperature=0.6)
         response = client.models.generate_content(model=model, contents=prompt, config=config)
-        return response.text.strip()
-    except Exception as e:
+        text = getattr(response, "text", None)
+        return text.strip() if text else None
+    except Exception:
         return None
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
 
 def ask_vertex_pro(prompt, system=BUDDY_SYSTEM):
-    return ask_vertex(prompt, system=system, model='gemini-2.5-pro-preview-06-05')
+    return ask_vertex(prompt, system=system, model="gemini-2.5-pro")
+
+
 def ask_openai(prompt, system=BUDDY_SYSTEM):
     """OpenAI — secondary fallback."""
     from openai import OpenAI
@@ -204,14 +275,30 @@ def ask_openai(prompt, system=BUDDY_SYSTEM):
 
 
 def ask_ollama(prompt):
-    """Ollama — offline fallback only."""
+    """Ollama — governed offline fallback using an installed model."""
+    model = resolve_ollama_model()
+    chat_payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": False,
+        "options": {"temperature": 0.5, "num_predict": 300},
+    }
+    try:
+        r = requests.post(f"{OLLAMA_URL}/api/chat", json=chat_payload, timeout=180)
+        r.raise_for_status()
+        content = (r.json().get("message") or {}).get("content", "")
+        if content and content.strip():
+            return content.strip()
+    except requests.HTTPError:
+        pass
+
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": model,
         "prompt": prompt,
         "stream": False,
         "options": {"temperature": 0.5, "num_predict": 300}
     }
-    r = requests.post(OLLAMA_URL, json=payload, timeout=120)
+    r = requests.post(f"{OLLAMA_URL}/api/generate", json=payload, timeout=180)
     r.raise_for_status()
     return r.json().get("response", "").strip()
 
@@ -224,7 +311,6 @@ def classify(prompt):
     - groq: everything else (80%+ of queries)
     """
     t = prompt.lower()
-    # Claude for complex reasoning only
     if any(w in t for w in [
         "architect", "design system", "plan the", "multi-step",
         "restructure", "refactor entire", "legal strategy",
@@ -238,36 +324,25 @@ def classify(prompt):
 # ── Main ask() function ──────────────────────────────────────
 
 def ask(prompt, mode=None, system=BUDDY_SYSTEM):
-    """
-    Route prompt to best available brain.
-    Priority: Groq (primary) → Claude (complex) → Gemini → Ollama (offline)
-
-    Routing:
-      groq   = standard conversation, tasks, status (80%)
-      claude = complex planning, architecture (15%)
-      ollama = offline fallback (5%)
-    """
+    """Route prompt to the best configured governed provider."""
     active_mode = (mode or "auto").lower()
 
     if active_mode == "auto":
         active_mode = classify(prompt)
 
-    # ── Groq (PRIMARY — fast, free, 70B) ─────────────────────
     if active_mode == "groq":
         if has_groq():
             try:
                 return ask_groq(prompt, system)
             except Exception as e:
-                print(f"[BRAIN] Groq failed: {e}")
-        # Fallback: Gemini → Claude → Ollama
+                print(f"[BRAIN] Groq failed: {type(e).__name__}")
         for fn in [_try_gemini, _try_claude, _try_ollama]:
             r = fn(prompt, system)
             if r:
                 return r
         return "All brains offline."
 
-    # -- Vertex AI (content/analysis)
-    if active_mode == 'vertex':
+    if active_mode == "vertex":
         r = _try_vertex(prompt, system)
         if r:
             return r
@@ -276,52 +351,55 @@ def ask(prompt, mode=None, system=BUDDY_SYSTEM):
                 return ask_groq(prompt, system)
             except Exception:
                 pass
-        return 'All brains offline.'
+        return "All brains offline."
 
-        # ── Claude (complex planning/architecture) ────────────────
     if active_mode == "claude":
         if has_claude():
             try:
                 return ask_claude(prompt, system)
             except Exception as e:
-                print(f"[BRAIN] Claude failed: {e}")
-        # Fallback: Groq → Gemini
+                print(f"[BRAIN] Claude failed: {type(e).__name__}")
         for fn in [_try_groq, _try_gemini]:
             r = fn(prompt, system)
             if r:
                 return r
         return "Claude unavailable."
 
-    # ── Ollama (offline only) ─────────────────────────────────
     if active_mode == "ollama":
         if is_ollama_running():
             try:
                 return ask_ollama(prompt)
             except Exception as e:
-                print(f"[BRAIN] Ollama failed: {e}")
+                print(f"[BRAIN] Ollama failed: {type(e).__name__}")
         return "Ollama offline."
 
-    # ── Explicit Gemini mode ──────────────────────────────────
     if active_mode in ("gemini", "gemini_pro"):
         if has_gemini():
             try:
                 fn = ask_gemini_pro if active_mode == "gemini_pro" else ask_gemini
                 return fn(prompt, system)
             except Exception as e:
-                print(f"[BRAIN] Gemini failed: {e}")
-        for fn in [_try_groq, _try_claude]:
+                print(f"[BRAIN] Gemini failed: {type(e).__name__}")
+        if has_vertex():
+            try:
+                fn = ask_vertex_pro if active_mode == "gemini_pro" else ask_vertex
+                r = fn(prompt, system)
+                if r:
+                    return r
+            except Exception:
+                pass
+        for fn in [_try_groq, _try_claude, _try_ollama]:
             r = fn(prompt, system)
             if r:
                 return r
         return "Gemini unavailable."
 
-    # ── Explicit OpenAI mode ──────────────────────────────────
     if active_mode == "openai":
         if has_openai():
             try:
                 return ask_openai(prompt, system)
             except Exception as e:
-                print(f"[BRAIN] OpenAI failed: {e}")
+                print(f"[BRAIN] OpenAI failed: {type(e).__name__}")
         return _try_groq(prompt, system) or "OpenAI unavailable."
 
     return "Unknown mode."
@@ -337,6 +415,7 @@ def _try_groq(prompt, system):
             pass
     return None
 
+
 def _try_claude(prompt, system):
     if has_claude():
         try:
@@ -345,13 +424,29 @@ def _try_claude(prompt, system):
             pass
     return None
 
+
 def _try_gemini(prompt, system):
     if has_gemini():
         try:
             return ask_gemini(prompt, system)
         except Exception:
             pass
+    if has_vertex():
+        try:
+            return ask_vertex(prompt, system)
+        except Exception:
+            pass
     return None
+
+
+def _try_vertex(prompt, system):
+    if has_vertex():
+        try:
+            return ask_vertex(prompt, system)
+        except Exception:
+            pass
+    return None
+
 
 def _try_ollama(prompt, _system=None):
     if is_ollama_running():
@@ -366,12 +461,15 @@ def _try_ollama(prompt, _system=None):
 
 def status():
     return {
-        "groq_ready":     has_groq(),
-        "groq_model":     GROQ_MODEL,
-        "claude_ready":   has_claude(),
-        "gemini_ready":   has_gemini(),
-        "openai_ready":   has_openai(),
+        "groq_ready": has_groq(),
+        "groq_model": GROQ_MODEL,
+        "claude_ready": has_claude(),
+        "gemini_api_ready": has_gemini(),
+        "vertex_auth_ready": has_vertex(),
+        "vertex_project": VERTEX_PROJECT,
+        "vertex_location": VERTEX_LOCATION,
+        "openai_ready": has_openai(),
         "ollama_running": is_ollama_running(),
-        "ollama_model":   OLLAMA_MODEL,
-        "routing":        "groq=primary, claude=complex, ollama=offline",
+        "ollama_model": resolve_ollama_model() if is_ollama_running() else OLLAMA_MODEL,
+        "routing": "governed multi-model router with sequential failover",
     }

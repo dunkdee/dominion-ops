@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "schema": "dominion-council-node-release-compliance-v1",
+  "subsystem": "council_node",
+  "governing_name": "RADAH MEMSHALAH",
+  "release_scope": "code_only_predeployment",
+  "runtime_status": "BUILT_NOT_DEPLOYED",
+  "external_execution_authorized": false,
+  "compliance_certification_claimed": false,
+  "privacy": {
+    "regulated_personal_data_authorized": false,
+    "secret_memory_write_rejected": true,
+    "sensitive_semantic_memory_rejected": true,
+    "working_memory_ttl_seconds": 3600,
+    "external_forbidden_classifications": [
+      "restricted",
+      "secret",
+      "sensitive"
+    ],
+    "external_models_enabled_by_default": false,
+    "default_bind_host": "127.0.0.1",
+    "data_minimization_required": true,
+    "privacy_review_required_before_regulated_data_processing": true,
+    "evidence_refs": [
+      "apps/council_node/app/memory/store.py",
+      "apps/council_node/app/models/router.py",
+      "apps/council_node/app/config.py",
+      "apps/council_node/tests/test_secret_redaction.py"
+    ]
+  },
+  "contracts": {
+    "external_provider_activation_authorized_in_this_release": false,
+    "provider_terms_attestation_required_before_external_model_activation": true,
+    "provider_contract_compliance_certified": false,
+    "external_models_are_opt_in": true,
+    "evidence_refs": [
+      "apps/council_node/app/config.py",
+      "apps/council_node/app/models/router.py",
+      "governance/council_node_policy.json"
+    ]
+  },
+  "regulation": {
+    "jurisdiction_assessment_required_before_regulated_data_processing": true,
+    "regulated_data_processing_authorized_in_this_release": false,
+    "gdpr_compliance_certified": false,
+    "ccpa_compliance_certified": false,
+    "release_does_not_assert_jurisdiction_specific_compliance": true
+  },
+  "activation_gates": {
+    "production_deployment_requires_separate_release": true,
+    "external_models_require_separate_governed_activation": true,
+    "regulated_data_requires_legal_privacy_review": true,
+    "provider_terms_attestation_required": true
+  },
+  "release_boundary": {
+    "may_merge_code_after_five_council_approval": true,
+    "may_deploy_production": false,
+    "may_enable_external_models": false,
+    "may_process_regulated_personal_data": false
+  }
+}

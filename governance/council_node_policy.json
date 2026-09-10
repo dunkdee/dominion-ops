@@ -1,0 +1,70 @@
+{
+  "schema": "dominion-council-node-policy-v1",
+  "governing_name": "RADAH MEMSHALAH",
+  "subsystem": "council_node",
+  "status": "BUILT_NOT_DEPLOYED",
+  "revenue_verified": false,
+  "external_execution_authorized": false,
+
+  "_binding_note": [
+    "This subsystem does not define its own constitution, capability registry,",
+    "or council policy. Rule 15 forbids a second source of truth, so the",
+    "Council Node binds to the files Dominion already governs by. The work",
+    "order named dominion_constitution.json, capability_registry.json and",
+    "council_release_policy.json; each already exists under another name and",
+    "is bound below instead of being duplicated."
+  ],
+
+  "bindings": {
+    "constitution": "governance/authority_matrix.json",
+    "council_policy": "governance/five_council_policy.json",
+    "capability_registry": "buddy_core/config/capability_registry.json",
+    "founder_contract": "governance/founder_oversight_contract.json",
+    "release_compliance": "governance/council_node_release_compliance.json"
+  },
+
+  "status_values": ["DONE", "IN_PROGRESS", "BLOCKED", "UNKNOWN", "HOLD"],
+  "blocking_statuses": ["BLOCKED", "UNKNOWN", "HOLD"],
+
+  "invariants": [
+    "no external action without an explicit allowed capability",
+    "no production claim without a receipt",
+    "unknown state remains UNKNOWN",
+    "failed state remains BLOCKED until evidence proves recovery",
+    "human Founder gates override automation",
+    "AI output is advisory unless a capability explicitly authorizes execution",
+    "no subsystem may create a second source of truth",
+    "no regulated personal data processing is authorized by the code-only predeployment release",
+    "no external model activation is authorized without a separate governed activation and provider-terms attestation"
+  ],
+
+  "universally_forbidden_capabilities": [
+    "shell.unrestricted",
+    "secret_readback",
+    "financial_transfer",
+    "credential.export",
+    "governance.modify"
+  ],
+
+  "sweep": {
+    "cadence_hours": 3,
+    "lane_stale_hours": 6,
+    "single_flight": true,
+    "permitted_actions": [
+      "read lane state",
+      "check receipt freshness",
+      "detect drift",
+      "write one sweep receipt",
+      "create recovery proposals"
+    ],
+    "prohibited_actions": [
+      "publish content",
+      "trade",
+      "send money",
+      "delete data",
+      "rotate secrets",
+      "merge code",
+      "apply a recovery proposal"
+    ]
+  }
+}

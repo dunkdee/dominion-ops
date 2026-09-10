@@ -1,0 +1,42 @@
+{
+  "schema": "dominion-lane-policy-v1",
+  "governing_name": "RADAH MEMSHALAH",
+  "note": "Lanes execute independently under one constitution. A lane may never silently alter another lane's production configuration.",
+
+  "lanes": [
+    {"lane_id": "publisher", "objective": "distribute approved content to bound accounts", "receipt_required": "provider post id plus destination proof"},
+    {"lane_id": "traffic", "objective": "produce qualified visits", "receipt_required": "analytics event plus destination proof"},
+    {"lane_id": "youtube", "objective": "publish faceless video content", "receipt_required": "published video id"},
+    {"lane_id": "storefront", "objective": "convert visits into orders", "receipt_required": "order record reconciled to a payment"},
+    {"lane_id": "seo", "objective": "earn organic search visibility", "receipt_required": "indexed url plus position sample"},
+    {"lane_id": "affiliate", "objective": "earn commission on referred conversions", "receipt_required": "network-confirmed conversion"},
+    {"lane_id": "digital_products", "objective": "sell owned digital assets", "receipt_required": "fulfilled order record"},
+    {"lane_id": "email", "objective": "operate governed lifecycle messaging", "receipt_required": "send record plus consent evidence"},
+    {"lane_id": "market_research", "objective": "produce research-only market analysis", "receipt_required": "sourced analysis artifact", "execution_mode": "research_only"},
+    {"lane_id": "analytics", "objective": "measure and evaluate experiments", "receipt_required": "evaluation record with sample size"},
+    {"lane_id": "infrastructure", "objective": "keep the estate reliable and observable", "receipt_required": "health probe result"}
+  ],
+
+  "cross_lane_rules": {
+    "learning_shared_via": "sanitized tagged memory only",
+    "production_config_mutation_across_lanes": "prohibited",
+    "founder_hold_scope": "per_lane"
+  },
+
+  "trading_boundary": {
+    "lane_id": "market_research",
+    "initial_mode": "research_backtest_paper_only",
+    "live_money_automation": false,
+    "required_before_live": [
+      "explicit Founder authorization",
+      "broker authorization",
+      "hard max position size",
+      "hard max daily loss",
+      "hard max drawdown",
+      "kill switch",
+      "independent risk council review",
+      "reconciliation receipts"
+    ],
+    "success_definition": "never lose control, bounded risk, measured edge, verified execution"
+  }
+}

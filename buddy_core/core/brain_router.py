@@ -79,17 +79,39 @@ def _compose_system(system: str | None = None) -> str:
     )
 
 
+def _vertex_available() -> bool:
+    """Return only real configured Vertex readiness, never function existence."""
+    checker = getattr(brain, "has_vertex", None)
+    if not callable(checker):
+        return False
+    try:
+        return bool(checker())
+    except Exception:
+        return False
+
+
 def _available(mode: str) -> bool:
     checks = {
         "claude": brain.has_claude,
         "groq": brain.has_groq,
-        "gemini": brain.has_gemini,
-        "gemini_pro": brain.has_gemini,
+        "gemini": lambda: brain.has_gemini() or _vertex_available(),
+        "gemini_pro": lambda: brain.has_gemini() or _vertex_available(),
         "openai": brain.has_openai,
         "ollama": brain.is_ollama_running,
     }
     fn = checks.get(mode)
-    return bool(fn and fn())
+    try:
+        return bool(fn and fn())
+    except Exception:
+        return False
+
+
+def provider_readiness() -> dict[str, bool]:
+    """Return non-secret provider readiness for observability and release gates."""
+    return {
+        mode: _available(mode)
+        for mode in ("gemini_pro", "gemini", "claude", "openai", "groq", "ollama")
+    }
 
 
 def _call(mode: str, prompt: str, system: str | None = None) -> str:
@@ -99,14 +121,39 @@ def _call(mode: str, prompt: str, system: str | None = None) -> str:
     if mode == "groq":
         return brain.ask_groq(prompt, system)
     if mode == "gemini_pro":
-        return brain.ask_gemini_pro(prompt, system)
+        if brain.has_gemini():
+            return brain.ask_gemini_pro(prompt, system)
+        if not _vertex_available():
+            raise RuntimeError("governed Vertex Gemini Pro auth unavailable")
+        vertex = brain.ask_vertex_pro(prompt, system)
+        if not vertex:
+            raise RuntimeError("governed Vertex Gemini Pro call unavailable")
+        return vertex
     if mode == "gemini":
-        return brain.ask_gemini(prompt, system)
+        if brain.has_gemini():
+            return brain.ask_gemini(prompt, system)
+        if not _vertex_available():
+            raise RuntimeError("governed Vertex Gemini auth unavailable")
+        vertex = brain.ask_vertex(prompt, system, model="gemini-2.5-flash")
+        if not vertex:
+            raise RuntimeError("governed Vertex Gemini call unavailable")
+        return vertex
     if mode == "openai":
         return brain.ask_openai(prompt, system)
     if mode == "ollama":
         return brain.ask_ollama(f"SYSTEM:\n{system}\n\nUSER:\n{prompt}")
     raise ValueError(f"unknown brain mode: {mode}")
+
+
+def _model_for_mode(mode: str) -> str:
+    if mode == "ollama":
+        resolver = getattr(brain, "resolve_ollama_model", None)
+        if callable(resolver):
+            try:
+                return str(resolver())
+            except Exception:
+                pass
+    return _MODELS[mode]
 
 
 def route_order(task_type: str, prompt: str = "") -> list[str]:
@@ -139,10 +186,18 @@ def ask_best(prompt: str, *, task_type: str = "general", system: str | None = No
                     "claude": "anthropic", "groq": "groq", "gemini": "google",
                     "gemini_pro": "google", "openai": "openai", "ollama": "local",
                 }[mode]
-                return BrainResult(text=text.strip(), provider=provider,
-                                   model=_MODELS[mode], task_type=task_type,
-                                   fallback_hops=hop)
+                return BrainResult(
+                    text=text.strip(),
+                    provider=provider,
+                    model=_model_for_mode(mode),
+                    task_type=task_type,
+                    fallback_hops=hop,
+                )
             errors.append(f"{mode}:empty")
         except Exception as exc:
             errors.append(f"{mode}:{type(exc).__name__}")
-    raise RuntimeError("all governed brains unavailable: " + ",".join(errors))
+    readiness = provider_readiness()
+    ready = ",".join(sorted(k for k, v in readiness.items() if v)) or "none"
+    raise RuntimeError(
+        "all governed brains unavailable: " + ",".join(errors) + f"; readiness={ready}"
+    )

@@ -1,0 +1,152 @@
+name: Five Council Agent Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  checks: read
+  actions: read
+
+jobs:
+  five-council:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 279
+    runs-on: ubuntu-latest
+    env:
+      REPO: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
+      PR: ${{ github.event.pull_request.number || '279' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Resolve exact PR head
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+          fetch-depth: 0
+
+      - name: Verify exact-head Founder authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker="FOUNDER_SCOPE_AUTHORIZED:$SHA"
+          gh api "repos/$REPO/issues/$PR/comments?per_page=100" > comments.json
+          comment_id=$(jq -r --arg owner "$OWNER" --arg marker "$marker" '[.[] | select(.user.login==$owner and (.body|contains($marker)))][-1].id // empty' comments.json)
+          test -n "$comment_id" || { echo "Missing exact-head Founder authorization"; exit 1; }
+          echo "FOUNDER_COMMENT_ID=$comment_id" >> "$GITHUB_ENV"
+
+      - name: Verify exact-head technical workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/actions/runs?head_sha=$SHA&event=pull_request&per_page=100" > runs.json
+          python3 - <<'PY'
+          import json,os,sys
+          required={'Ecosystem Alignment','Dominion Brain CI','Dominion Final Production Acceptance','Constitutional Lane Runtime CI','Control Plane Governance','Release Gate Rebind','Dominion Canonical Parity — GitHub + VM + Laptop','Elite Governance Gate'}
+          runs=json.load(open('runs.json')).get('workflow_runs',[]); latest={}
+          for r in sorted(runs,key=lambda x:x.get('run_number',0)):
+              if r.get('name') in required: latest[r['name']]=r
+          missing=required-set(latest)
+          bad={n:(latest[n].get('status'),latest[n].get('conclusion')) for n in required & set(latest) if latest[n].get('status')!='completed' or latest[n].get('conclusion')!='success'}
+          if missing or bad:
+              print('TECHNICAL_GATES_BLOCKED',{'missing':sorted(missing),'bad':bad}); sys.exit(1)
+          print('EXACT_HEAD_TECHNICAL_WORKFLOWS=PASS')
+          PY
+
+      - name: Build evidence and release request
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=$(gh api "repos/$REPO/pulls/$PR" --jq .base.ref)
+          git fetch origin "$BASE"
+          git diff --name-only "origin/$BASE"...HEAD > changed_files.txt
+          git diff --stat "origin/$BASE"...HEAD > diff_stat.txt
+          python3 - <<'PY'
+          import json,os,pathlib
+          runs=json.load(open('runs.json')).get('workflow_runs',[])
+          required={'Ecosystem Alignment','Dominion Brain CI','Dominion Final Production Acceptance','Constitutional Lane Runtime CI','Control Plane Governance','Release Gate Rebind','Dominion Canonical Parity — GitHub + VM + Laptop','Elite Governance Gate'}
+          latest={}
+          for r in sorted(runs,key=lambda x:x.get('run_number',0)):
+              if r.get('name') in required: latest[r['name']]=r
+          data={'pr':int(os.environ['PR']),'head_sha':os.environ['SHA'],'changed_files':pathlib.Path('changed_files.txt').read_text().splitlines(),'diff_stat':pathlib.Path('diff_stat.txt').read_text(),'checks':[{'name':n,'status':latest[n]['status'],'conclusion':latest[n].get('conclusion'),'run_id':latest[n]['id']} for n in sorted(required)],'governance_policy':'governance/five_council_policy.json','final_release_policy':'governance/final_release_policy.json','model_router':'buddy_core/core/brain_router.py'}
+          pathlib.Path('evidence.json').write_text(json.dumps(data,indent=2,sort_keys=True))
+          PY
+          python3 scripts/canonicalize_five_council_release.py prepare --pr "$PR" --repository "$REPO" --head-sha "$SHA" --founder-comment-id "$FOUNDER_COMMENT_ID" --evidence evidence.json --human-output human_authorization.json --request-output release_request.json --hash-output release_hash.txt
+
+      - name: Configure canonical Buddy runtime
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          TARGET="$VM_USER@$VM_HOST"; echo "VM_TARGET=$TARGET" >> "$GITHUB_ENV"
+          ssh -i ~/.ssh/id_ed25519 "$TARGET" 'set -euo pipefail; cd ~/dominion-ops 2>/dev/null || cd /opt/dominion-ops; execv="$(systemctl show dominion-buddy-web.service -p ExecStart --value 2>/dev/null || true)"; py="$(printf "%s\n" "$execv" | sed -n "s/.*path=\([^ ;]*\).*/\1/p" | head -1)"; for c in "$py" "$HOME/dominion_env/bin/python3" "$HOME/dominion-ops/dominion_env/bin/python3"; do [ -n "$c" ] && [ -x "$c" ] && "$c" -c "import dotenv" >/dev/null 2>&1 && { printf "%s" "$c" > /tmp/dominion-council-python.path; echo DOMINION_BUDDY_PYTHON=RESOLVED; exit 0; }; done; echo DOMINION_BUDDY_PYTHON=UNRESOLVED; exit 8'
+
+      - name: Run five independent Council agents
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p council_receipts council_raw council_prompts
+          RH=$(cat release_hash.txt); n=0
+          for seat in truth_evidence law_governance security_risk engineering_reliability business_human_impact; do
+            n=$((n+1)); p="council_prompts/$seat.txt"
+            ph=$(python3 scripts/run_five_council_agents.py prompt --seat "$seat" --head-sha "$SHA" --release-hash "$RH" --evidence evidence.json --output "$p")
+            scp -q -i ~/.ssh/id_ed25519 "$p" "$VM_TARGET:/tmp/dominion-council-$seat.txt"
+            ssh -i ~/.ssh/id_ed25519 "$VM_TARGET" "cd ~/dominion-ops 2>/dev/null || cd /opt/dominion-ops; PY=\$(cat /tmp/dominion-council-python.path); SEAT='$seat' \"\$PY\" - <<'PY'" > "council_raw/$seat.json"
+          import json,os,pathlib
+          from buddy_core.core.brain_router import ask_best
+          seat=os.environ['SEAT']; prompt=pathlib.Path('/tmp/dominion-council-'+seat+'.txt').read_text()
+          result=ask_best(prompt,task_type='deep_synthesis',system='Return JSON only. You are an independent Five Council reviewer. Do not bypass Dominion governance.',max_fallback_hops=4)
+          print(json.dumps({'message':{'content':result.text},'_dominion_provider':result.provider,'_dominion_model':result.model,'_fallback_hops':result.fallback_hops}))
+          PY
+            provider=$(jq -r '._dominion_provider // "canonical-router"' "council_raw/$seat.json")
+            model=$(jq -r '._dominion_model // "runtime-resolved"' "council_raw/$seat.json")
+            python3 scripts/run_five_council_agents.py receipt --seat "$seat" --head-sha "$SHA" --release-hash "$RH" --response "council_raw/$seat.json" --provider "$provider" --model "$model" --trace-id "${SHA:0:12}-$seat-$n" --prompt-hash "$ph" --output "council_receipts/$seat.json"
+          done
+
+      - name: Verify and finalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/run_five_council_agents.py verify --dir council_receipts --head-sha "$SHA" --release-hash "$(cat release_hash.txt)" --output five_council_decision.json
+          jq -e '.decision=="FINAL_RELEASE_APPROVED" and (.approvals|length)==5' five_council_decision.json >/dev/null
+          python3 scripts/canonicalize_five_council_release.py finalize --request release_request.json --human human_authorization.json --receipts council_receipts --output-dir canonical_release
+          jq -e '.decision=="FINAL_RELEASE_APPROVED" and .final_affirmative_gate=="five_council" and (.approvals|length)==5 and (.errors|length)==0' canonical_release/final_decision.json >/dev/null
+
+      - name: Upload immutable evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: five-council-${{ env.SHA }}
+          path: |
+            evidence.json
+            release_hash.txt
+            release_request.json
+            human_authorization.json
+            council_receipts/
+            five_council_decision.json
+            canonical_release/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Record final receipt
+        if: success()
+        shell: bash
+        run: |
+          HASH=$(jq -r .decision_hash canonical_release/final_decision.json)
+          gh pr comment "$PR" --repo "$REPO" --body "FIVE_COUNCIL_FINAL_RELEASE_APPROVED:$SHA\nCanonical decision hash: \`$HASH\`\nArtifact: \`five-council-$SHA\`"

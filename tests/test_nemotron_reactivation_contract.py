@@ -7,9 +7,12 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "governance" / "system_integrity_agent.json"
 SCOPE = ROOT / "governance" / "nemotron_reactivation_scope_20260910.json"
 GATE = ROOT / "governance" / "nemotron_reactivation_gate_20260910.json"
+EVIDENCE = ROOT / "governance" / "nemotron_release_evidence_20260910.json"
 UNIT = ROOT / "deploy" / "systemd" / "dominion-nemotron.service"
+WORKER = ROOT / "apps" / "nemotron-worker" / "nemotron_worker.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "activate-nemotron-governed.yml"
 ACTIVATE = ROOT / "scripts" / "nemotron" / "activate_nemotron.sh"
+ROLLBACK_TEST = ROOT / "tests" / "test_nemotron_rollback_fault_injection.py"
 WORK_ORDER = ROOT / "docs" / "NEMOTRON_REACTIVATION_WORK_ORDER_20260910.md"
 WATCHDOG = ROOT / ".github" / "workflows" / "watchdog.yml"
 
@@ -48,6 +51,32 @@ def test_unit_is_loopback_only_and_uses_governed_release_path() -> None:
     assert "Requires=ollama.service" in unit
     assert "/.dominion/nemotron/runtime/release/apps/nemotron-worker" in unit
     assert "NEMOTRON_MODEL=nemotron-3-nano:4b" in unit
+    assert "NEMOTRON_NUM_CTX=4096" in unit
+    assert "NEMOTRON_MAX_CONCURRENCY=1" in unit
+
+
+def test_worker_enforces_capacity_admission_control() -> None:
+    worker = WORKER.read_text(encoding="utf-8")
+    assert 'MAX_CONCURRENCY = max(1, int(os.getenv("NEMOTRON_MAX_CONCURRENCY", "1")))' in worker
+    assert 'NUM_CTX = max(1024, int(os.getenv("NEMOTRON_NUM_CTX", "4096")))' in worker
+    assert "_GENERATION_SLOTS.acquire(blocking=False)" in worker
+    assert '"type": "capacity_busy"' in worker
+    assert '"num_ctx": NUM_CTX' in worker
+
+
+def test_release_evidence_addresses_council_holds_without_false_certification() -> None:
+    evidence = json.loads(EVIDENCE.read_text(encoding="utf-8"))
+    assert evidence["truth_boundary"]["external_inference_provider_api_required"] is False
+    assert evidence["truth_boundary"]["public_ingress_authorized"] is False
+    assert evidence["license_and_terms"]["governing_terms"] == "NVIDIA Open Model License Agreement"
+    assert evidence["license_and_terms"]["contract_compliance_certification_claimed"] is False
+    capacity = evidence["capacity_plan_for_nemotron_service"]
+    assert capacity["admission_controls_in_candidate"]["max_concurrent_generations"] == 1
+    assert capacity["admission_controls_in_candidate"]["context_tokens"] == 4096
+    assert evidence["operational_rollback_test"]["test_path"] == "tests/test_nemotron_rollback_fault_injection.py"
+    assert evidence["business_case"]["new_external_provider_api_cost_authorized"] == 0
+    assert evidence["business_case"]["direct_revenue_claim"] is False
+    assert ROLLBACK_TEST.is_file()
 
 
 def test_activation_lane_is_founder_gated_and_does_not_open_ingress() -> None:

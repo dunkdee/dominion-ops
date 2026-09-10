@@ -160,6 +160,84 @@ for d in "$HOME/.dominion/system-integrity" "$HOME/.dominion/receipts" \
   fi
 done
 
+# ── is the agent malfunctioning, or is `failed` simply its verdict ─────
+# The unit is Type=oneshot with no SuccessExitStatus, and the agent returns 2
+# whenever it finds any defect. So `active=failed` is the expected rendering of
+# a DEGRADED verdict, and is not by itself evidence of a malfunction. These
+# three reads tell the two apart:
+#   ExecMainStatus  2 = ran and reported defects; 1 = raised; 226 = namespace
+#   latest.json     the agent's own verdict, with the defect list
+#   deployed copies the unit runs copies, not the repo files, so they can drift
+head2 "INTEGRITY AGENT EXIT SHAPE"
+systemctl show "$INTEG" --no-pager 2>/dev/null \
+  | grep -E '^(ExecMainStatus|ExecMainCode|Type|SuccessExitStatus|RemainAfterExit)=' \
+  | sed 's/^/  /'
+say "  interpretation: 2=defects found and reported, 1=unhandled exception, 226=namespace/permission"
+
+head2 "INTEGRITY AGENT OWN VERDICT"
+LATEST="$HOME/.dominion/system-integrity/latest.json"
+if [ -r "$LATEST" ]; then
+  say "  path=$LATEST mtime=$(stat -c %y "$LATEST" 2>/dev/null)"
+  python3 - "$LATEST" <<'PYV' 2>/dev/null | redact | sed 's/^/  /' || say "  latest.json: UNPARSEABLE"
+import json, sys
+d = json.load(open(sys.argv[1]))
+print(f"status={d.get('status')} ok={d.get('ok')} cycle={d.get('cycle')} "
+      f"checks={d.get('checks_total')} defects={d.get('defect_count')} "
+      f"deep_probe={d.get('deep_probe_executed')} observed_at={d.get('observed_at')}")
+for defect in d.get("defects") or []:
+    print(f"  defect: {defect}")
+for chk in d.get("checks") or []:
+    if isinstance(chk, dict) and chk.get("ok") is False:
+        print(f"  failing_check: {chk.get('id')} detail={chk.get('detail')}")
+for req in d.get("repair_requests") or []:
+    print(f"  repair_request: {req}")
+PYV
+else
+  say "  path=$LATEST UNREADABLE OR ABSENT"
+fi
+
+head2 "INTEGRITY AGENT DEPLOYED COPIES VERSUS REPOSITORY"
+# The unit runs ~/.local/lib/dominion/system_integrity_agent.py against
+# ~/.config/dominion/system-integrity-agent.json. Both are copies. If either
+# has drifted from the repository, the live policy is not the reviewed policy.
+DEPLOY_AGENT="$HOME/.local/lib/dominion/system_integrity_agent.py"
+DEPLOY_CONTRACT="$HOME/.config/dominion/system-integrity-agent.json"
+REPO_AGENT="$HOME/dominion-ops/scripts/system_integrity_agent.py"
+REPO_CONTRACT="$HOME/dominion-ops/governance/system_integrity_agent.json"
+for pair in "$DEPLOY_AGENT|$REPO_AGENT" "$DEPLOY_CONTRACT|$REPO_CONTRACT"; do
+  live="${pair%%|*}"; repo="${pair##*|}"
+  if [ -r "$live" ]; then
+    say "  live=$live sha256=$(sha256sum "$live" 2>/dev/null | awk '{print $1}') mtime=$(stat -c %y "$live" 2>/dev/null)"
+  else
+    say "  live=$live UNREADABLE OR ABSENT"
+  fi
+  if [ -r "$repo" ]; then
+    say "    repo=$repo sha256=$(sha256sum "$repo" 2>/dev/null | awk '{print $1}')"
+    if [ -r "$live" ]; then
+      if cmp -s "$live" "$repo"; then say "    drift=NONE"; else say "    drift=PRESENT"; fi
+    fi
+  else
+    say "    repo=$repo UNREADABLE OR ABSENT"
+  fi
+done
+
+head2 "LIVE CONTRACT GOVERNANCE FIELDS"
+# Policy, not secrets. This is the copy the agent actually enforces, which is
+# the one that matters when asking whether the rule or the runtime is stale.
+if [ -r "$DEPLOY_CONTRACT" ]; then
+  python3 - "$DEPLOY_CONTRACT" <<'PYC' 2>/dev/null | sed 's/^/  /' || say "  UNPARSEABLE"
+import json, sys
+d = json.load(open(sys.argv[1]))
+for k in ("schema", "cadence_seconds", "absent_listeners", "containment_holds",
+          "active_units"):
+    print(f"{k}={json.dumps(d.get(k))}")
+print(f"intelligence_probe.accepted_sources={json.dumps((d.get('intelligence_probe') or {}).get('accepted_sources'))}")
+print(f"command_center_truth.url={json.dumps((d.get('command_center_truth') or {}).get('url'))}")
+PYC
+else
+  say "  live contract UNREADABLE OR ABSENT — load_contract() raises and the unit exits non-zero"
+fi
+
 # ── storefront on 5090: what is actually serving ───────────────────────
 head2 "STOREFRONT UNIT DEFINITIONS"
 for u in ascendant-store.service dominion-store.service; do

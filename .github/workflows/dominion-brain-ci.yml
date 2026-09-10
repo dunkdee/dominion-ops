@@ -47,7 +47,6 @@ on:
       - 'README.md'
       - '.github/workflows/dominion-brain-ci.yml'
       - '.github/workflows/publish-dominion-brain-production.yml'
-  workflow_dispatch:
 
 permissions:
   contents: read

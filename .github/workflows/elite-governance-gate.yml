@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,40 +19,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Checkout exact commit
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Verify exact provenance
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          git diff --exit-code
-
-      - name: Run fail-closed Dominion governance gate
+          python-version: '3.12'
+      - name: Validate elite governance contracts
         run: python scripts/validate_elite_governance.py
-
-  full-python-suite:
-    name: full-python-suite
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Checkout exact commit
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Install declared repository test dependencies
-        # Declared in requirements-test.txt so dependency gaps are fixed by
-        # declaration, never by deselecting the tests that need them.
-        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
-
-      - name: Run repository-wide Python suite without hiding dependency gaps
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pytest -q

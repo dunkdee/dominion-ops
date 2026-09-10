@@ -3,6 +3,8 @@ name: Five Council Agent Gate
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
   workflow_dispatch:
 
 permissions:
@@ -14,12 +16,12 @@ permissions:
 
 jobs:
   five-council:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 279
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 279) || (github.event_name == 'issue_comment' && github.event.issue.number == 279 && contains(github.event.comment.body, 'FOUNDER_SCOPE_AUTHORIZED:'))
     runs-on: ubuntu-latest
     env:
       REPO: ${{ github.repository }}
       OWNER: ${{ github.repository_owner }}
-      PR: ${{ github.event.pull_request.number || '279' }}
+      PR: ${{ github.event.pull_request.number || github.event.issue.number || '279' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Resolve exact PR head
@@ -161,7 +163,7 @@ jobs:
             p="council_prompts/$seat.txt"
             ph=$(python3 scripts/run_five_council_agents.py prompt --seat "$seat" --head-sha "$SHA" --release-hash "$RH" --evidence evidence.json --output "$p")
             scp -q -i ~/.ssh/id_ed25519 "$p" "$VM_TARGET:/tmp/dominion-council-$seat.txt"
-            ssh -i ~/.ssh/id_ed25519 "$VM_TARGET" "set -euo pipefail; cd ~/dominion-ops 2>/dev/null || cd /opt/dominion-ops; PY=\$(cat /tmp/dominion-council-python.path); SEAT='$seat' \"\$PY\" /tmp/dominion-council-runner.py" > "council_raw/$seat.json"
+            ssh -i ~/.ssh/id_ed25519 "$VM_TARGET" "set -euo pipefail; cd ~/dominion-ops 2>/dev/null || cd /opt/dominion-ops; PY=\$(cat /tmp/dominion-council-python.path); PYTHONPATH=\$PWD SEAT='$seat' \"\$PY\" /tmp/dominion-council-runner.py" > "council_raw/$seat.json"
             test -s "council_raw/$seat.json"
             provider=$(jq -r '._dominion_provider // "canonical-router"' "council_raw/$seat.json")
             model=$(jq -r '._dominion_model // "runtime-resolved"' "council_raw/$seat.json")

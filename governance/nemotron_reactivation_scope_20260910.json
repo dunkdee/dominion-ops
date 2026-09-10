@@ -8,6 +8,8 @@
     "loopback-only bind on tcp 11435",
     "enable and start dominion-nemotron.service",
     "integrity-contract reconciliation from hold to active monitoring",
+    "bounded command-center runtime configuration of the Nemotron loopback URL and model with backup and rollback",
+    "bounded command-center container recreation solely to load the reviewed Nemotron route configuration",
     "command-center no-side-effect routing verification",
     "automatic rollback of this exact activation on failed acceptance"
   ],

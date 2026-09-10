@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'governance/vertical_launch_policy.json'
+      - 'governance/traffic_attribution_contract.json'
       - 'governance/system_components.json'
       - 'scripts/validate_vertical_launch_policy.py'
       - '.github/workflows/vertical-launch-governance.yml'
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - 'governance/vertical_launch_policy.json'
+      - 'governance/traffic_attribution_contract.json'
       - 'governance/system_components.json'
       - 'scripts/validate_vertical_launch_policy.py'
       - '.github/workflows/vertical-launch-governance.yml'
@@ -29,7 +31,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Validate governed vertical launch contract
+      - name: Validate governed vertical launch and attribution contracts
         run: python scripts/validate_vertical_launch_policy.py
       - name: Compile validator
         run: python -m py_compile scripts/validate_vertical_launch_policy.py

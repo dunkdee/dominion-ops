@@ -27,3 +27,30 @@ Reconciled against read-only foundation-vm inventory (workflow run
 - Resolved Alchemist (5050) and AuricEdge (9380) as real, managed systemd
   units declared in `buddy_core/sentinel.py` — not stale, not unowned.
 - Recorded the 8200 port conflict against the Council Node bind port.
+
+## 1.0.0 (data revision) — 2026-09-10 listener attribution
+
+Folded in the privileged attribution pass (run 34458046789,
+`MUTATIONS_PERFORMED=0`). Schema unchanged. 62 services to 64.
+
+- **TCP 11435 attributed and reclassified.** It is a second `ollama serve`
+  (pid 3192050) started by hand over SSH at 2026-09-09 21:16:51 UTC, living in
+  a user login session scope, reparented to init. It is NOT Nemotron:
+  `dominion-nemotron.service` is loaded/inactive/disabled and containment
+  held. Classification UNAUTHORIZED / ORPHANED. The policy was correct, not
+  stale — it detected this in 19 seconds.
+- **The integrity agent is healthy.** ExecMainStatus=2 with exactly one defect
+  of twenty checks, and its deployed script and contract are byte-identical to
+  the repository copies. `Type=oneshot` without `SuccessExitStatus` renders a
+  DEGRADED verdict as `failed`.
+- **Port 8200 is `dominion-3d-dashboard.service`**, up since 2026-06-07.
+  Council Node cannot use it.
+- **Port 8091 is `dominion-command-center`** running with `network_mode=host`,
+  which is why the container publishes no ports yet serves it.
+- **The 5090 storefront has no Caddy route.** `store.dominionhealing.org`
+  proxies to 5080, `dominion-store.service`. Its source tree is not a git
+  checkout, so no deployed SHA exists.
+- Added `google-ops-agent-otel` (20201) and `google-ops-agent-fluentbit`
+  (20202), correcting the seed's attribution of 20202 to movie-generator.
+- Unattributed listeners narrowed from eight to four.
+- Alchemist, AuricEdge and Caddy promoted INFERRED to VERIFIED on proven pids.

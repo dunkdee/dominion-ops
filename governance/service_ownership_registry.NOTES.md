@@ -1,18 +1,25 @@
 # Registry Evidence Notes
 
-The registry is reconciled against a single read-only inventory of
-foundation-vm: workflow `foundation-vm-inventory.yml`, run 34448533182,
-collected 2026-09-10T07:09:14Z, `MUTATIONS_PERFORMED=0`. The full capture is
-`evidence/foundation-vm/inventory-20260910.md`.
+The registry is reconciled against two read-only passes over foundation-vm,
+both ending `MUTATIONS_PERFORMED=0`:
+
+- `foundation-vm-inventory.yml`, run 34448533182, 2026-09-10T07:09:14Z —
+  `evidence/foundation-vm/inventory-20260910.md`
+- `foundation-vm-attribution.yml`, run 34458046789, 2026-09-10T08:58:25Z —
+  `evidence/foundation-vm/attribution-20260910.md`
+
+The second pass ran privileged and captured the process-to-port mapping the
+first deliberately omitted.
 
 ## How truth_state is assigned here
 
 - `VERIFIED` — read directly off the VM: systemd unit state, container state,
   and container ports published by `docker ps`.
 - `INFERRED` — the repository declares the port and the port is listening, but
-  the binding is not proven. The inventory ran `ss` **without `-p`**, so no
-  process-to-port mapping exists. Every systemd service's port is INFERRED for
-  this reason, however obvious the attribution looks.
+  no pid was captured for it. This was true of every systemd port after the
+  inventory pass; the attribution pass promoted the ports it actually proved by
+  reading the owning pid and cgroup. An INFERRED port has **not** been proven
+  and must not be quoted as fact.
 - `UNKNOWN` — no evidence attributes the asset to anything.
 - `BLOCKED` — a governance invariant is violated, or the unit is failed.
 

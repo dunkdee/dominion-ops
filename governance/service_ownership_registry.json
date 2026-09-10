@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "generated_at": "2026-09-10T07:09:14Z",
+  "generated_at": "2026-09-10T08:58:25Z",
   "source_of_truth": "reconciled",
   "services": [
     {
@@ -8,17 +8,17 @@
       "display_name": "Ascendant Store",
       "runtime_kind": "systemd",
       "runtime_location": "foundation-vm",
-      "repository_path": "ascendant_store",
+      "repository_path": null,
       "owner_agent_id": null,
       "owner_role": "Commerce Operations",
       "vertical_id": null,
       "lifecycle_state": "PRODUCTION",
-      "truth_state": "INFERRED",
+      "truth_state": "VERIFIED",
       "obsidian_home": "08 Verticals/Commerce/Services/Ascendant Store",
       "port": 5090,
       "scheduler": null,
       "dependencies": [],
-      "health_signal": "systemd unit ascendant-store.service active/running; TCP 5090 listening (0.0.0.0)",
+      "health_signal": "systemd unit ascendant-store.service active/running; TCP 5090 listening (0.0.0.0); / and /health and /success return 200",
       "rollback_reference": null,
       "evidence": [
         {
@@ -27,6 +27,13 @@
           "truth_state": "INFERRED",
           "sha256": null,
           "notes": "Unit ascendant-store.service active/running (VERIFIED). Declared as PORT_MANIFEST[5090]='ascendant-store'. Loopback probe on 5090 returned HTTP 200, so the storefront is already serving. BUT ~/.dominion/ascendant-store/runtime/release is ABSENT and ~/.dominion/ascendant-store/runtime.env is ABSENT, so the running code's deployment source is UNPROVEN and is not the governed release path. A governed deploy to this path would collide with whatever is serving now. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        },
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "ATTRIBUTED. pid 3554281, cgroup 0::/system.slice/ascendant-store.service, cmdline '/home/<vm user>/dominion_env/bin/python3 app.py', cwd /home/<vm user>/ascendant_store, bind 0.0.0.0:5090, started 2026-09-04 01:27:03 UTC, up 6 days. FragmentPath /etc/systemd/system/ascendant-store.service, EnvironmentFiles /home/<vm user>/.env.\nSOURCE IS UNGOVERNED: /home/<vm user>/ascendant_store is NOT_A_GIT_CHECKOUT with 4 files, so no deployed SHA exists. ~/.dominion/ascendant-store/runtime/release is ABSENT. The repo tree ~/dominion-ops/ascendant_store is a different tree at stale SHA 0233432.\nCREDENTIALS ARE PRESENT: the process environment carries STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET and DB_PASSWORD. Key names only were read.\nROUTES: / 200, /health 200, /success 200, /healthz 404, /products 404, /policies 404.\nNOT PUBLICLY REACHABLE: the Caddyfile carries no route to 5090 at all. store.dominionhealing.org proxies to 127.0.0.1:5080. A 200 on 5090 is not revenue."
         }
       ]
     },
@@ -40,7 +47,7 @@
       "owner_role": "Operations",
       "vertical_id": null,
       "lifecycle_state": "PRODUCTION",
-      "truth_state": "INFERRED",
+      "truth_state": "VERIFIED",
       "obsidian_home": "05 Operations/Services/AuricEdge",
       "port": 9380,
       "scheduler": null,
@@ -54,6 +61,13 @@
           "truth_state": "INFERRED",
           "sha256": null,
           "notes": "Unit auric_edge.service active/running (VERIFIED). VERDICT: REAL AND MANAGED. Unit auric_edge.service is active/running. Declared in buddy_core/sentinel.py as PORT_MANIFEST[9380]='auric-edge'. Listening on 0.0.0.0:9380 -- all interfaces, not loopback. /health returned HTTP 404, so no health contract is published. Purpose, source tree and data classification remain undocumented. The all-interface bind is an open security question: host exposure is unrestricted and only the cloud firewall limits reach. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        },
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "ATTRIBUTED, binding now proven. pid 2201712, cgroup 0::/system.slice/auric_edge.service, cmdline '/home/<vm user>/dominion_env/bin/python main.py', cwd /home/<vm user>/auric_edge, bind 0.0.0.0:9380, started 2026-08-01, up 40 days. Its environment carries AURIC_API_KEY, DATABASE_URL, DB_HOST, DB_NAME, DB_USER and DB_PASSWORD, so it is a database-backed application with its own credentials. Source tree is outside dominion-ops. /health returns 404: no health contract. The 0.0.0.0 bind remains an open exposure question."
         }
       ]
     },
@@ -175,7 +189,7 @@
       "owner_role": "Infrastructure Operations",
       "vertical_id": null,
       "lifecycle_state": "PRODUCTION",
-      "truth_state": "INFERRED",
+      "truth_state": "VERIFIED",
       "obsidian_home": "06 Infrastructure/Services/Caddy",
       "port": 443,
       "scheduler": null,
@@ -189,6 +203,13 @@
           "truth_state": "INFERRED",
           "sha256": null,
           "notes": "Unit caddy.service active/running (VERIFIED). *:80 and *:443 are listening and the admin API port 127.0.0.1:2019 is listening, which is Caddy's documented default, but the inventory ran `ss` without -p so the binding is not proven. /etc/caddy/Caddyfile serves 16 sites under dominionhealing.org, including store. and shop. Numeric upstreams: 3000, 5000, 5055, 5070, 5080 (x2), 5095, 5101 (x2), 5120, 5678, 8100, plus matcher-based routes for the Publisher Meta callback, revenue public paths, Buddy, the store API, lead capture and the vault path."
+        },
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Binding now proven: pid 2273668 holds *:443, *:80 and 127.0.0.1:2019."
         }
       ]
     },
@@ -216,6 +237,13 @@
           "truth_state": "BLOCKED",
           "sha256": null,
           "notes": "/etc/caddy/Caddyfile carries `reverse_proxy 127.0.0.1:5120`, but 5120 does not appear anywhere in the listening-port set. Public traffic reaching that route gets a gateway error. The site it serves was not captured by this inventory."
+        },
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "CONFIRMED DEAD against the full privileged listener map: 5120 appears nowhere in it. The Caddyfile references 127.0.0.1:5120 twice, one of them serving tiktok.dominionhealing.org. Traffic on those routes gets a gateway error."
         }
       ]
     },
@@ -312,10 +340,10 @@
       "lifecycle_state": "PRODUCTION",
       "truth_state": "VERIFIED",
       "obsidian_home": "05 Operations/Services/3D Dashboard",
-      "port": null,
+      "port": 8200,
       "scheduler": null,
       "dependencies": [],
-      "health_signal": "systemd unit dominion-3d-dashboard.service active/running",
+      "health_signal": "systemd unit dominion-3d-dashboard.service active/running; TCP 8200 listening (0.0.0.0)",
       "rollback_reference": null,
       "evidence": [
         {
@@ -324,6 +352,13 @@
           "truth_state": "VERIFIED",
           "sha256": null,
           "notes": "Unit dominion-3d-dashboard.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+        },
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "ATTRIBUTED, and the port binding is now PROVEN rather than inferred. pid 394, cmdline '/usr/bin/node /home/<vm user>/dominion_3d_dashboard/server.js', cwd /home/<vm user>/dominion_3d_dashboard, cgroup 0::/system.slice/dominion-3d-dashboard.service, bind 0.0.0.0:8200, started 2026-06-07 13:45:15 UTC, running continuously for 94 days.\nCOUNCIL NODE CONFLICT RESOLVED IN THIS SERVICE'S FAVOUR: deploy/council-node/docker-compose.yml sets COUNCIL_BIND_PORT 8200 and deploy.sh/verify.sh health-check 127.0.0.1:8200/health. Council Node must be assigned a different port; this is a long-standing production service and is not to be displaced."
         }
       ]
     },
@@ -337,7 +372,7 @@
       "owner_role": "Operations",
       "vertical_id": null,
       "lifecycle_state": "PRODUCTION",
-      "truth_state": "INFERRED",
+      "truth_state": "VERIFIED",
       "obsidian_home": "05 Operations/Services/Alchemist",
       "port": 5050,
       "scheduler": null,
@@ -351,6 +386,13 @@
           "truth_state": "INFERRED",
           "sha256": null,
           "notes": "Unit dominion-alchemist.service active/running (VERIFIED). VERDICT: REAL AND MANAGED. Unit dominion-alchemist.service is active/running. Declared in buddy_core/sentinel.py as PORT_MANIFEST[5050]='alchemist' and as SERVICES['alchemist-api'] with critical=True. Listening on 127.0.0.1:5050. /health returned HTTP 501, so the process is alive but publishes no health contract. Purpose, source tree and data classification remain undocumented. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        },
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "ATTRIBUTED, binding now proven. pid 2287851, cgroup 0::/system.slice/dominion-alchemist.service, cmdline '/home/<vm user>/dominion_env/bin/python alchemist_api.py', cwd /home/<vm user>/dominion/agents/health, bind 127.0.0.1:5050, started 2026-08-01, up 39 days. Source tree is outside dominion-ops. /health still returns 501: no health contract."
         }
       ]
     },
@@ -447,10 +489,10 @@
       "lifecycle_state": "PRODUCTION",
       "truth_state": "VERIFIED",
       "obsidian_home": "05 Operations/Services/Command Center",
-      "port": null,
+      "port": 8091,
       "scheduler": null,
       "dependencies": [],
-      "health_signal": "Container state and published ports (none published)",
+      "health_signal": "Container running with host networking; 127.0.0.1:8091/api/status returns 200",
       "rollback_reference": null,
       "evidence": [
         {
@@ -459,6 +501,13 @@
           "truth_state": "VERIFIED",
           "sha256": null,
           "notes": "Container running: image=dominion-ops-dominion-command-center, status=Up 4 days (healthy), ports=none published."
+        },
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "ATTRIBUTED. pid 832467 running as root, cmdline '/usr/local/bin/python3.12 /usr/local/bin/uvicorn app:app --host 127.0.0.1 --port 8091', cwd /app, parent containerd-shim-runc-v2, cgroup 0::/system.slice/docker-<container id>.scope. `docker inspect` reports network_mode=host with ports=map[], which is why the container publishes nothing yet serves 8091. Probe of /api/status returned 200.\nThis resolves the governance dependency flagged earlier: governance/system_integrity_agent.json reads command_center_truth from http://127.0.0.1:8091/api/status, and that source is healthy and correctly attributed. Caddy routes both command.dominionhealing.org and vault.dominionhealing.org here."
         }
       ]
     },
@@ -1296,6 +1345,13 @@
           "truth_state": "INFERRED",
           "sha256": null,
           "notes": "Unit dominion-store.service active/running (VERIFIED). PORT_MANIFEST[5080]='dominion-store'. Listening on 0.0.0.0:5080 and named twice as a Caddy upstream. Distinct from ascendant-store.service on 5090: two storefront services are running at once and their division of responsibility is undocumented. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        },
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "ATTRIBUTED, and this is the PUBLIC storefront. pid 804084 on 0.0.0.0:5080. ExecStart '/home/<vm user>/dominion_env/bin/python3 portal/payment_api.py', WorkingDirectory /home/<vm user>/buddy_core, FragmentPath /etc/systemd/system/dominion-store.service, active since 2026-06-22 22:56:47 UTC. Caddy routes store.dominionhealing.org to 127.0.0.1:5080. Any storefront revenue path in production runs through this service, not through ascendant-store on 5090."
         }
       ]
     },
@@ -1335,13 +1391,13 @@
       "owner_agent_id": null,
       "owner_role": "Governance Operations",
       "vertical_id": null,
-      "lifecycle_state": "SUSPENDED",
-      "truth_state": "BLOCKED",
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
       "obsidian_home": "07 Governance/Services/System Integrity Agent",
       "port": null,
       "scheduler": "dominion-system-integrity.timer",
       "dependencies": [],
-      "health_signal": "systemd unit dominion-system-integrity.service \u2014 FAILED",
+      "health_signal": "systemd unit reports failed because Type=oneshot has no SuccessExitStatus and the agent exits 2 on any defect; the agent itself is healthy",
       "rollback_reference": null,
       "evidence": [
         {
@@ -1350,6 +1406,13 @@
           "truth_state": "BLOCKED",
           "sha256": null,
           "notes": "Unit dominion-system-integrity.service is load=loaded active=FAILED sub=FAILED. This is the agent that enforces governance/system_integrity_agent.json: active unit checks, containment holds, and the absent_listeners invariant. While it is failed, none of those invariants are being enforced, and at least one (absent_listeners 11435) is currently violated. BLOCKED under RADAH MEMSHALAH: it stays BLOCKED until evidence proves recovery."
+        },
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "NOT MALFUNCTIONING. ExecMainCode=1 ExecMainStatus=2, and the agent's own latest.json reports status=DEGRADED cycle=8320 checks=20 defects=1 deep_probe=true with exactly one defect: {'id': 'hold:port:11435', 'detail': 'listener=present', 'severity': 'critical'}. Nineteen of twenty checks pass, including the deep intelligence probe. The unit is Type=oneshot with no SuccessExitStatus, so systemd renders exit 2 -- a DEGRADED verdict -- as active=failed.\nLast PASS was cycle 7852 at 2026-09-09 21:15:40 UTC; the first failure was 21:17:10, 19 seconds after the stray ollama started at 21:16:51. The agent is the alarm and it worked.\nNO DRIFT: deployed ~/.local/lib/dominion/system_integrity_agent.py sha256 ee4b558c...b75607 and deployed ~/.config/dominion/system-integrity-agent.json sha256 ee2cde34...4c9d538e are byte-identical to the repository copies. The enforced policy is the reviewed policy.\nClearing 11435 is expected to return it to PASS with no code or policy change."
         }
       ]
     },
@@ -1496,6 +1559,60 @@
       ]
     },
     {
+      "service_id": "google-ops-agent-fluentbit",
+      "display_name": "Google Cloud Ops Agent Fluent Bit",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Infrastructure Operations",
+      "vertical_id": "infrastructure",
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "06 Infrastructure/Services/Google Ops Agent Fluent Bit",
+      "port": 20202,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit active/running; TCP 20202 listening",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "ATTRIBUTED. pid 1714, process 'fluent-bit', bind 0.0.0.0:20202. Platform log agent; unit google-cloud-ops-agent-fluent-bit.service is active. The 2026-07-25 seed registry wrongly attributed 20202 to movie-generator."
+        }
+      ]
+    },
+    {
+      "service_id": "google-ops-agent-otel",
+      "display_name": "Google Cloud Ops Agent OpenTelemetry Collector",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Infrastructure Operations",
+      "vertical_id": "infrastructure",
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "06 Infrastructure/Services/Google Ops Agent OTel",
+      "port": 20201,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit active/running; TCP 20201 listening",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "ATTRIBUTED. pid 1679, process 'otelopscol', bind *:20201. Platform telemetry agent installed by Google Cloud Ops Agent; unit google-cloud-ops-agent-opentelemetry-collector.service is active."
+        }
+      ]
+    },
+    {
       "service_id": "movie-generator",
       "display_name": "Movie Generator",
       "runtime_kind": "docker",
@@ -1519,40 +1636,6 @@
           "truth_state": "VERIFIED",
           "sha256": null,
           "notes": "Container running: image=movie-generator, status=Up 2 weeks, ports=0.0.0.0:8001->8000/tcp."
-        }
-      ]
-    },
-    {
-      "service_id": "nemotron-listener-11435",
-      "display_name": "Unidentified listener on the contained Nemotron port",
-      "runtime_kind": "process",
-      "runtime_location": "foundation-vm",
-      "repository_path": null,
-      "owner_agent_id": null,
-      "owner_role": "Unassigned",
-      "vertical_id": null,
-      "lifecycle_state": "SUSPENDED",
-      "truth_state": "BLOCKED",
-      "obsidian_home": "07 Governance/Holds/Nemotron Containment",
-      "port": 11435,
-      "scheduler": null,
-      "dependencies": [],
-      "health_signal": "CONTAINMENT VIOLATED \u2014 port declared absent_listeners is listening",
-      "rollback_reference": null,
-      "evidence": [
-        {
-          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
-          "captured_at": "2026-09-10T07:09:14Z",
-          "truth_state": "BLOCKED",
-          "sha256": null,
-          "notes": "CONTAINMENT BREACH. governance/system_integrity_agent.json declares absent_listeners=[11435], and scripts/system_integrity_agent.py records hold:port:11435 as failed whenever a listener is present. The 2026-08-15 containment record accepted 'no listener on TCP 11435' as the proof that Nemotron was contained. The inventory shows 127.0.0.1:11435 IS LISTENING, while dominion-nemotron.service does not appear in the unit list at all -- so the listener is running outside the unit that was disabled, and its identity is UNKNOWN. apps/nemotron-worker/nemotron_worker.py defaults NEMOTRON_LISTEN_PORT to 11435. Not re-enabled by any recorded work order. Requires Founder decision; do not restart, stop or probe further without one."
-        },
-        {
-          "source": "repository history of governance/system_integrity_agent.json",
-          "captured_at": "2026-09-10T07:09:14Z",
-          "truth_state": "UNKNOWN",
-          "sha256": null,
-          "notes": "POLICY CONFLICT, unresolved. The same contract that declares absent_listeners [11435] and holds dominion-nemotron.service in containment_holds also lists \"nemotron\" in intelligence_probe.accepted_sources as a valid responder. Both were authored together in commit 727ef72 on 2026-08-31, after the 2026-08-15 containment record. Commit d184238 on 2026-09-01 edited accepted_sources to add buddy_operator and drop conductor, keeping nemotron, and did not revisit absent_listeners. So the contract may be half-updated rather than the runtime being wrong. Do not enforce the hold until attribution of the listener settles which is stale."
         }
       ]
     },
@@ -1611,6 +1694,47 @@
       ]
     },
     {
+      "service_id": "stray-ollama-11435",
+      "display_name": "Unmanaged second ollama instance on the contained port",
+      "runtime_kind": "process",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Unassigned",
+      "vertical_id": null,
+      "lifecycle_state": "SUSPENDED",
+      "truth_state": "BLOCKED",
+      "obsidian_home": "07 Governance/Holds/Stray Ollama 11435",
+      "port": 11435,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "UNAUTHORIZED \u2014 occupies a port governance reserves as absent",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "BLOCKED",
+          "sha256": null,
+          "notes": "CONTAINMENT BREACH. governance/system_integrity_agent.json declares absent_listeners=[11435], and scripts/system_integrity_agent.py records hold:port:11435 as failed whenever a listener is present. The 2026-08-15 containment record accepted 'no listener on TCP 11435' as the proof that Nemotron was contained. The inventory shows 127.0.0.1:11435 IS LISTENING, while dominion-nemotron.service does not appear in the unit list at all -- so the listener is running outside the unit that was disabled, and its identity is UNKNOWN. apps/nemotron-worker/nemotron_worker.py defaults NEMOTRON_LISTEN_PORT to 11435. Not re-enabled by any recorded work order. Requires Founder decision; do not restart, stop or probe further without one."
+        },
+        {
+          "source": "repository history of governance/system_integrity_agent.json",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "UNKNOWN",
+          "sha256": null,
+          "notes": "POLICY CONFLICT, unresolved. The same contract that declares absent_listeners [11435] and holds dominion-nemotron.service in containment_holds also lists \"nemotron\" in intelligence_probe.accepted_sources as a valid responder. Both were authored together in commit 727ef72 on 2026-08-31, after the 2026-08-15 containment record. Commit d184238 on 2026-09-01 edited accepted_sources to add buddy_operator and drop conductor, keeping nemotron, and did not revisit absent_listeners. So the contract may be half-updated rather than the runtime being wrong. Do not enforce the hold until attribution of the listener settles which is stale."
+        },
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "ATTRIBUTED. pid 3192050, cmdline '/usr/local/bin/ollama serve', exe /usr/local/bin/ollama sha256 c05cece87b2e85a525ccf9548d329197b938e58daa46d4fad59e8dab54e8d57d, bind 127.0.0.1:11435, started 2026-09-09 21:16:51 UTC, ppid 1. cgroup is 0::/user.slice/user-1000.slice/session-104082.scope -- a USER LOGIN SESSION scope, not a service slice -- and the environment carries SSH_CLIENT, SSH_CONNECTION and MOTD_SHOWN. Started by hand over SSH and reparented to init when the session ended.\nNOT NEMOTRON. dominion-nemotron.service is loaded/inactive/DISABLED and its unit file is still on disk; nemotron.service and nemotron-worker.service are not-found. Containment held.\nThis is a SECOND ollama: the governed one is pid 441 under ollama.service on 127.0.0.1:11434.\nCLASSIFICATION: UNAUTHORIZED / ORPHANED. Not a containment regression, not registry staleness. The policy absent_listeners=[11435] is CORRECT and was not stale -- it detected this in 19 seconds. Repair is to remove the stray process through a governed lane, not to amend policy."
+        }
+      ]
+    },
+    {
       "service_id": "syncthing",
       "display_name": "Syncthing",
       "runtime_kind": "systemd",
@@ -1661,6 +1785,13 @@
           "truth_state": "UNKNOWN",
           "sha256": null,
           "notes": "Eight TCP ports are listening on foundation-vm with no owner proven by either the repository or this inventory. Public (0.0.0.0/*): 5103, 5110, 8200, 8888, 20201, 20202. Loopback: 5056, 8091. Recorded as one entry because no evidence separates them into services; each is UNKNOWN, not absent.\nPORT CONFLICT: 8200 is already held by an unidentified process and is the exact port deploy/council-node/docker-compose.yml sets as COUNCIL_BIND_PORT and deploy/council-node/scripts/{deploy,verify}.sh health-check. A Council Node deploy to foundation-vm would collide with it.\nGOVERNANCE DEPENDENCY: 8091 is the port governance/system_integrity_agent.json probes as 'command_center' and uses for command_center_truth (http://127.0.0.1:8091/api/status, max_age_seconds 180). The dominion-command-center container publishes NO ports, so whatever serves 8091 is not proven to be that container. The integrity agent's canonical truth source is therefore unattributed."
+        },
+        {
+          "source": "foundation-vm listener attribution (read-only), workflow run 34458046789, job 102808985768",
+          "captured_at": "2026-09-10T08:58:25Z",
+          "truth_state": "UNKNOWN",
+          "sha256": null,
+          "notes": "NARROWED FROM EIGHT TO FOUR. Resolved by this run: 8200 is dominion-3d-dashboard, 8091 is the dominion-command-center container on host networking, 20201 is the Google Ops Agent OTel collector and 20202 is its Fluent Bit.\nSTILL UNATTRIBUTED, each now with a pid but no unit captured: 5056 (python3 pid 2199875, 127.0.0.1), 5103 (python pid 3208532, 0.0.0.0), 5110 (python pid 395, 0.0.0.0), 8888 (python3 pid 3779929, 0.0.0.0). UNKNOWN, not absent. A follow-up read of each pid's cgroup would resolve them."
         }
       ]
     },

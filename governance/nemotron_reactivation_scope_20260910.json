@@ -1,0 +1,27 @@
+{
+  "schema": "dominion-nemotron-reactivation-scope-v1",
+  "governance": "RADAH MEMSHALAH",
+  "founder_scope": "Reactivate Nemotron as the governed local primary reasoning worker and make it operational end to end without weakening safety controls.",
+  "authorized_at": "2026-09-10T11:30:00Z",
+  "allowed": [
+    "exact-sha nemotron worker deployment",
+    "loopback-only bind on tcp 11435",
+    "enable and start dominion-nemotron.service",
+    "integrity-contract reconciliation from hold to active monitoring",
+    "command-center no-side-effect routing verification",
+    "automatic rollback of this exact activation on failed acceptance"
+  ],
+  "not_authorized": [
+    "public ingress to tcp 11435",
+    "firewall opening",
+    "model download without separate provenance approval",
+    "credential changes",
+    "external publication",
+    "money movement",
+    "live trading",
+    "oracle activation",
+    "unrelated service mutation"
+  ],
+  "final_gate": "five_council",
+  "status": "FOUNDER_SCOPE_AUTHORIZED"
+}

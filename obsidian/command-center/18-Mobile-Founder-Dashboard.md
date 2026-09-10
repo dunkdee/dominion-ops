@@ -20,7 +20,7 @@ aliases:
   </div>
 </section>
 
-<nav class="dominion-card-grid" aria-label="Founder mobile controls">
+<nav class="dominion-card-grid" aria-label="Mobile founder controls">
   <a class="internal-link dominion-card dominion-card--featured dominion-card--active" data-href="Dominion-Command-Center/09-Revenue" href="Dominion-Command-Center/09-Revenue">
     <span class="dominion-card__top"><span class="dominion-card__index">01</span><span class="dominion-pill dominion-pill--gold dominion-pill--live">LIVE</span></span>
     <strong>Revenue</strong>

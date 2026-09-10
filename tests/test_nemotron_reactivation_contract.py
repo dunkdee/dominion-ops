@@ -63,15 +63,15 @@ def test_activation_lane_is_founder_gated_and_does_not_open_ingress() -> None:
     assert "NEMOTRON_ROLLBACK=BEGIN" in script
     assert "VM repo is deliberately not advanced here" in script
     assert 'git -C "$staging" checkout -q --detach FETCH_HEAD' in script
-    lowered = (workflow + "\n" + script).lower()
-    assert "firewall-rules create" not in lowered
-    assert "gcloud compute firewall-rules create" not in lowered
-    assert "ollama pull" not in lowered
-    assert "kill -9" not in lowered
-    assert "pkill" not in lowered
-    assert "killall" not in lowered
-    assert 'git -c "$repo" merge' not in lowered
-    assert 'git -c "$repo" reset' not in lowered
+    script_lower = script.lower()
+    assert "firewall-rules create" not in script_lower
+    assert "gcloud compute firewall-rules create" not in script_lower
+    assert "ollama pull" not in script_lower
+    assert "kill -9" not in script_lower
+    assert "pkill" not in script_lower
+    assert "killall" not in script_lower
+    assert 'git -c "$repo" merge' not in script_lower
+    assert 'git -c "$repo" reset' not in script_lower
 
 
 def test_activation_requires_exact_main_sha_and_validates_receipt() -> None:

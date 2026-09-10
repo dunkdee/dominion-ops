@@ -823,20 +823,20 @@
       "owner_role": "Infrastructure Operations",
       "vertical_id": null,
       "lifecycle_state": "PRODUCTION",
-      "truth_state": "VERIFIED",
+      "truth_state": "INFERRED",
       "obsidian_home": "06 Infrastructure/Services/MCP CLI",
-      "port": null,
+      "port": 8390,
       "scheduler": null,
       "dependencies": [],
-      "health_signal": "systemd unit dominion-mcp-cli.service active/running",
+      "health_signal": "systemd unit dominion-mcp-cli.service active/running; TCP 8390 listening (loopback)",
       "rollback_reference": null,
       "evidence": [
         {
           "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
           "captured_at": "2026-09-10T07:09:14Z",
-          "truth_state": "VERIFIED",
+          "truth_state": "INFERRED",
           "sha256": null,
-          "notes": "Unit dominion-mcp-cli.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+          "notes": "Unit dominion-mcp-cli.service active/running (VERIFIED). governance/system_integrity_agent.json declares an http_check {\"id\": \"mcp_cli\", \"url\": \"http://127.0.0.1:8390/health\"}, and 127.0.0.1:8390 is listening. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
         }
       ]
     },
@@ -1546,6 +1546,13 @@
           "truth_state": "BLOCKED",
           "sha256": null,
           "notes": "CONTAINMENT BREACH. governance/system_integrity_agent.json declares absent_listeners=[11435], and scripts/system_integrity_agent.py records hold:port:11435 as failed whenever a listener is present. The 2026-08-15 containment record accepted 'no listener on TCP 11435' as the proof that Nemotron was contained. The inventory shows 127.0.0.1:11435 IS LISTENING, while dominion-nemotron.service does not appear in the unit list at all -- so the listener is running outside the unit that was disabled, and its identity is UNKNOWN. apps/nemotron-worker/nemotron_worker.py defaults NEMOTRON_LISTEN_PORT to 11435. Not re-enabled by any recorded work order. Requires Founder decision; do not restart, stop or probe further without one."
+        },
+        {
+          "source": "repository history of governance/system_integrity_agent.json",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "UNKNOWN",
+          "sha256": null,
+          "notes": "POLICY CONFLICT, unresolved. The same contract that declares absent_listeners [11435] and holds dominion-nemotron.service in containment_holds also lists \"nemotron\" in intelligence_probe.accepted_sources as a valid responder. Both were authored together in commit 727ef72 on 2026-08-31, after the 2026-08-15 containment record. Commit d184238 on 2026-09-01 edited accepted_sources to add buddy_operator and drop conductor, keeping nemotron, and did not revisit absent_listeners. So the contract may be half-updated rather than the runtime being wrong. Do not enforce the hold until attribution of the listener settles which is stale."
         }
       ]
     },
@@ -1653,7 +1660,7 @@
           "captured_at": "2026-09-10T07:09:14Z",
           "truth_state": "UNKNOWN",
           "sha256": null,
-          "notes": "Nine TCP ports are listening on foundation-vm with no owner proven by either the repository or this inventory. Public (0.0.0.0/*): 5103, 5110, 8200, 8888, 20201, 20202. Loopback: 5056, 8091, 8390. Recorded as one entry because no evidence separates them into services; each is UNKNOWN, not absent.\nPORT CONFLICT: 8200 is already held by an unidentified process and is the exact port deploy/council-node/docker-compose.yml sets as COUNCIL_BIND_PORT and deploy/council-node/scripts/{deploy,verify}.sh health-check. A Council Node deploy to foundation-vm would collide with it.\nGOVERNANCE DEPENDENCY: 8091 is the port governance/system_integrity_agent.json probes as 'command_center' and uses for command_center_truth (http://127.0.0.1:8091/api/status, max_age_seconds 180). The dominion-command-center container publishes NO ports, so whatever serves 8091 is not proven to be that container. The integrity agent's canonical truth source is therefore unattributed."
+          "notes": "Eight TCP ports are listening on foundation-vm with no owner proven by either the repository or this inventory. Public (0.0.0.0/*): 5103, 5110, 8200, 8888, 20201, 20202. Loopback: 5056, 8091. Recorded as one entry because no evidence separates them into services; each is UNKNOWN, not absent.\nPORT CONFLICT: 8200 is already held by an unidentified process and is the exact port deploy/council-node/docker-compose.yml sets as COUNCIL_BIND_PORT and deploy/council-node/scripts/{deploy,verify}.sh health-check. A Council Node deploy to foundation-vm would collide with it.\nGOVERNANCE DEPENDENCY: 8091 is the port governance/system_integrity_agent.json probes as 'command_center' and uses for command_center_truth (http://127.0.0.1:8091/api/status, max_age_seconds 180). The dominion-command-center container publishes NO ports, so whatever serves 8091 is not proven to be that container. The integrity agent's canonical truth source is therefore unattributed."
         }
       ]
     },

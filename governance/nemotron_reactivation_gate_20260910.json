@@ -1,0 +1,21 @@
+{
+  "schema": "dominion-nemotron-reactivation-gate-v1",
+  "status": "REVIEW_REQUIRED",
+  "required_sequence": [
+    "technical_readiness_verified",
+    "human_scope_authorization_recorded",
+    "five_council_independent_final_review",
+    "merge_exact_approved_head",
+    "activate_exact_merged_main_sha",
+    "verify_runtime_receipt"
+  ],
+  "required_runtime_receipts": [
+    "loopback_listener_11435",
+    "model_available",
+    "command_center_source_nemotron",
+    "integrity_pass_zero_defects",
+    "service_active_enabled",
+    "exact_release_sha"
+  ],
+  "fail_closed": true
+}

@@ -1,0 +1,54 @@
+{
+  "schema": "voltedge-commerce-readiness-v1",
+  "observed_date": "2026-09-10",
+  "authority_model": "RADAH_MEMSHALAH",
+  "site": {
+    "name": "VoltEdge Electronics",
+    "site_id": "a790d430-a3a0-4b0e-9be6-4c874c229167",
+    "url": "https://www.voltedgegoods.com/",
+    "status": "published",
+    "plan": "premium",
+    "catalog_version": "V3"
+  },
+  "catalog": {
+    "source": "authenticated_wix_catalog_v3_query",
+    "total_products": 94,
+    "visible_products": 88,
+    "hidden_products": 6,
+    "has_more": false,
+    "status": "PASS_NONEMPTY"
+  },
+  "shipping": {
+    "source": "authenticated_wix_ecommerce_shipping_queries",
+    "delivery_profiles": 1,
+    "active_regions": 1,
+    "domestic_region": {
+      "name": "Domestic",
+      "country": "US",
+      "active": true,
+      "shipping_option_count": 1,
+      "shipping_option_title": "Free shipping"
+    },
+    "international_region": {
+      "name": "International",
+      "active": false,
+      "shipping_option_count": 1
+    },
+    "active_region_coverage_gaps": 0,
+    "status": "PASS_ACTIVE_DOMESTIC_COVERAGE"
+  },
+  "not_yet_proven": [
+    "payment_method_readiness",
+    "checkout_canary",
+    "storefront_trust_and_policy_content",
+    "mobile_conversion_quality",
+    "analytics_and_utm_attribution",
+    "test_order_and_refund_receipts"
+  ],
+  "release_status": "IN_PROGRESS",
+  "notes": [
+    "Earlier recommendation-tool output that appeared to show an empty catalog was not authoritative for Catalog V3 product inventory.",
+    "Direct Catalog V3 query is the controlling evidence for product count.",
+    "No traffic scale-up should be treated as proven until checkout, attribution, and test-order receipts exist."
+  ]
+}

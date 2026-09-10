@@ -1,0 +1,111 @@
+name: Foundation VM Inventory
+
+# READ-ONLY DISCOVERY. Authorized scope: report what is actually running on
+# foundation-vm. This workflow performs no restart, mutation, deployment,
+# package installation, or configuration change, and prints no secret value.
+#
+# It exists because the repository, governance/service_ownership_registry.json,
+# and the operating work order describe three different service pictures.
+# Reconciling them from repository assumptions would just pick a favourite;
+# only runtime evidence can settle it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type INVENTORY FOUNDATION VM"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Shared with every other foundation-VM operation so two cannot overlap.
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    if: inputs.confirm == 'INVENTORY FOUNDATION VM'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Verify the inventory script is non-mutating
+        shell: bash
+        run: |
+          set -euo pipefail
+          script=scripts/inventory/foundation_vm_inventory.sh
+          bash -n "$script"
+
+          # Refuse to run a script that has grown a mutating command. This gate
+          # is what keeps "read-only" a property rather than an intention.
+          if grep -qE 'systemctl[[:space:]]+(start|stop|restart|reload|enable|disable|mask)|apt-get[[:space:]]+(install|remove|upgrade)|dnf[[:space:]]+install|pip[[:space:]]+install|docker[[:space:]]+(run|rm|stop|restart|exec)|[[:space:]]rm[[:space:]]+-|INSERT|UPDATE|DELETE|DROP' "$script"; then
+            echo "REFUSED: inventory script contains a mutating operation"
+            exit 1
+          fi
+          echo "INVENTORY_SCRIPT_READONLY=VERIFIED"
+
+      - name: Require protected VM access
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "VM_HOST secret is missing"; exit 1; }
+          test -n "$VM_USER" || { echo "VM_USER secret is missing"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "VM_SSH_KEY secret is missing"; exit 1; }
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/inv_key"
+          chmod 600 "$HOME/.ssh/inv_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Collect inventory
+        id: collect
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          # The script is piped to a remote bash on stdin: nothing is written to
+          # the VM's filesystem, so the inventory leaves no trace behind.
+          set +e
+          ssh -i "$HOME/.ssh/inv_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' \
+            < scripts/inventory/foundation_vm_inventory.sh \
+            | tee foundation-vm-inventory.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Upload inventory evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-vm-inventory
+          path: foundation-vm-inventory.txt
+          if-no-files-found: warn
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/inv_key" "$HOME/.ssh/known_hosts"

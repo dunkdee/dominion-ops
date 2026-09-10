@@ -6,9 +6,9 @@ POLICY = Path("governance/vertical_launch_policy.json")
 SYSTEM = Path("governance/system_components.json")
 
 REQUIRED_VERTICALS = [
+    "voltedge_commerce",
     "publisher_meta",
     "content_traffic",
-    "voltedge_commerce",
     "orion_alpha",
 ]
 REQUIRED_FUNNEL_STAGES = [
@@ -92,7 +92,22 @@ def main() -> None:
         if not vertical.get("activation_gate"):
             fail(f"missing_activation_gate:{vertical.get('id')}")
 
-    orion = verticals[-1]
+    voltedge = next((row for row in verticals if row.get("id") == "voltedge_commerce"), None)
+    if not voltedge or voltedge.get("order") != 1:
+        fail("voltedge_must_launch_first")
+    required_store_receipts = {
+        "storefront_health",
+        "catalog_nonempty",
+        "store_policies_verified",
+        "checkout_path_verified",
+        "attribution_record",
+    }
+    if not required_store_receipts.issubset(set(voltedge.get("required_receipts") or [])):
+        fail("voltedge_pretraffic_receipts")
+
+    orion = next((row for row in verticals if row.get("id") == "orion_alpha"), None)
+    if not orion:
+        fail("orion_missing")
     if orion.get("live_money_permitted") is not False:
         fail("orion_live_money_must_be_false")
     if orion.get("external_effect_class") != "paper_only":
@@ -105,6 +120,7 @@ def main() -> None:
         fail("store_factory_owner")
 
     print(f"VERTICAL_LAUNCH_POLICY=PASS verticals={len(verticals)} burn_in=72h proof_window=168h")
+    print("VOLTEDGE_FIRST=PASS")
     print("RADAH_MEMSHALAH=PASS")
     print("FUNNEL_CONTRACT=PASS")
     print("STORE_FACTORY_GOVERNANCE=PASS")

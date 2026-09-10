@@ -1,0 +1,41 @@
+{
+  "schema": "dominion-nemotron-activation-incident-v1",
+  "governance": "RADAH MEMSHALAH",
+  "observed_at": "2026-09-10T14:38:29Z",
+  "workflow_run_id": 34490189218,
+  "release_sha": "149b4b06d25121bfa792ba8d34aed898f777f469",
+  "status": "ROLLED_BACK_SAFE",
+  "preflight": {
+    "model_present": true,
+    "integrity_cycle": 8546,
+    "integrity_preflight": "PASS",
+    "nemotron_health": "PASS",
+    "listener": "127.0.0.1:11435",
+    "listener_owner_verified": true,
+    "command_center_config": "PASS",
+    "command_center_base_url": "http://127.0.0.1:11435",
+    "command_center_model": "nemotron-3-nano:4b"
+  },
+  "failure": {
+    "gate": "command_center_route",
+    "expected_source": "nemotron",
+    "observed_source": "buddy_operator",
+    "command_center_primary_timeout_seconds": 60,
+    "elapsed_from_command_center_config_to_fallback_seconds_approx": 65,
+    "diagnosis": "The Command Center primary Nemotron request exhausted its historical 60-second intelligence timeout during cold-start inference, then followed the implemented fallback path to buddy_operator. The worker itself had already passed health and listener ownership checks."
+  },
+  "repair": {
+    "strategy": "Warm the exact governed Nemotron worker directly with a bounded local 300-second no-side-effect probe, transactionally set INTELLIGENCE_TIMEOUT_SECONDS=300 alongside the existing Nemotron URL/model settings, recreate only Command Center, and require source=nemotron before accepting activation.",
+    "rollback": "The complete pre-change Command Center env remains backed up and is restored with Command Center recreation on any later failure.",
+    "public_ingress_opened": false,
+    "credentials_changed": false,
+    "model_downloaded": false,
+    "unrelated_services_mutated": false
+  },
+  "rollback": {
+    "completed": true,
+    "listener_11435": "absent",
+    "ollama_11434_http": 200,
+    "command_center_http": 200
+  }
+}

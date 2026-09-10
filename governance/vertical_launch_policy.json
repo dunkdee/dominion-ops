@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "authority_model": "RADAH_MEMSHALAH",
+  "purpose": "Operate revenue verticals as specialized limbs of one governed Dominion system without creating parallel authority, memory, orchestration, or source-of-truth stacks.",
+  "source_of_truth_precedence": [
+    "github",
+    "runtime",
+    "publisher_runtime_receipts",
+    "provider_receipts",
+    "command_center",
+    "dominion_brain"
+  ],
+  "operating_loop": [
+    "signal",
+    "offer",
+    "content",
+    "conversion",
+    "receipt",
+    "refine"
+  ],
+  "launch_sequence": [
+    "authorize",
+    "activate",
+    "observe",
+    "prove",
+    "receipt",
+    "measure",
+    "refine"
+  ],
+  "windows": {
+    "burn_in_hours": 72,
+    "proof_window_hours": 168
+  },
+  "activation_rules": {
+    "new_verticals_activate_sequentially": true,
+    "proven_verticals_may_run_concurrently": true,
+    "external_effects_require_explicit_authorization": true,
+    "external_effects_require_runtime_receipt": true,
+    "missing_or_stale_evidence_fails_closed": true,
+    "source_truth_conflict_status": "HOLD",
+    "next_vertical_requires_current_vertical_launch_receipt": true
+  },
+  "funnel_contract": {
+    "required_stages": [
+      "traffic_source",
+      "content_or_ad",
+      "tracked_link",
+      "landing_or_product_page",
+      "offer",
+      "checkout_or_lead_capture",
+      "follow_up",
+      "sale_or_goal_event",
+      "receipt",
+      "attribution",
+      "refinement"
+    ],
+    "required_metrics": [
+      "impressions_or_reach",
+      "clicks",
+      "click_through_rate",
+      "landing_sessions",
+      "lead_or_add_to_cart_rate",
+      "checkout_start_rate",
+      "conversion_rate",
+      "revenue",
+      "attributed_revenue",
+      "refund_or_failure_rate"
+    ],
+    "zero_revenue_is_valid_when_truthfully_reported": true,
+    "unattributed_revenue_cannot_be_counted_as_funnel_proof": true
+  },
+  "verticals": [
+    {
+      "id": "publisher_meta",
+      "order": 1,
+      "owner": "dominion_publisher",
+      "mission_pipeline": "platform_binding",
+      "purpose": "Prove one governed authorized publication with platform receipt and attribution-ready link metadata.",
+      "external_effect_class": "public_content_publish",
+      "activation_gate": "valid_platform_binding_and_authorized_canary",
+      "required_receipts": [
+        "exact_release_sha",
+        "authorization_receipt",
+        "platform_post_id_or_url",
+        "published_at",
+        "asset_hash",
+        "audit_record"
+      ]
+    },
+    {
+      "id": "content_traffic",
+      "order": 2,
+      "owner": "content_engine",
+      "execution_boundary": "dominion_publisher",
+      "mission_pipeline": "traffic_revenue",
+      "purpose": "Generate and distribute governed content into measured funnels without bypassing the Publisher.",
+      "external_effect_class": "public_content_distribution",
+      "activation_gate": "publisher_runtime_ready_and_campaign_package_verified",
+      "required_receipts": [
+        "campaign_id",
+        "content_asset_hash",
+        "destination_url",
+        "utm_or_equivalent_attribution",
+        "publication_receipt",
+        "traffic_measurement_receipt"
+      ]
+    },
+    {
+      "id": "voltedge_commerce",
+      "order": 3,
+      "owner": "voltedge_wix",
+      "mission_pipeline": "commerce",
+      "purpose": "Convert attributed traffic through a professional storefront into verified cart, checkout, order, revenue, and refund receipts.",
+      "external_effect_class": "commerce_transaction",
+      "activation_gate": "storefront_trust_checkout_and_attribution_verified",
+      "required_receipts": [
+        "storefront_health",
+        "tracked_session",
+        "cart_or_lead_event",
+        "checkout_event",
+        "order_id_when_sale_occurs",
+        "revenue_amount_when_sale_occurs",
+        "attribution_record"
+      ]
+    },
+    {
+      "id": "orion_alpha",
+      "order": 4,
+      "owner": "orion_alpha",
+      "mission_pipeline": "paper_trading",
+      "purpose": "Run market intelligence and paper-trading performance while remaining incapable of live-money execution without a separate release.",
+      "external_effect_class": "paper_only",
+      "activation_gate": "paper_ledger_market_data_and_risk_controls_verified",
+      "live_money_permitted": false,
+      "required_receipts": [
+        "market_data_timestamp",
+        "paper_order_id",
+        "paper_fill_or_reject",
+        "paper_pnl",
+        "risk_decision",
+        "strategy_version"
+      ]
+    }
+  ],
+  "store_factory": {
+    "enabled_as_capability": true,
+    "independent_authority": false,
+    "owner": "voltedge_wix",
+    "rule": "Replicate only a verified winning store or funnel architecture; never create a parallel governance, orchestration, memory, payment truth, or analytics truth stack.",
+    "promotion_requirements": [
+      "verified_template_source",
+      "registered_store_identity",
+      "catalog_and_policy_validation",
+      "analytics_and_attribution_validation",
+      "checkout_verification",
+      "rollback_path",
+      "runtime_receipt"
+    ]
+  },
+  "closure_states": [
+    "DONE",
+    "IN_PROGRESS",
+    "BLOCKED",
+    "UNKNOWN",
+    "HOLD"
+  ]
+}

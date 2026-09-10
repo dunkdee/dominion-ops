@@ -52,36 +52,45 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json, os, subprocess, time, sys
-          required=[
-            'Ecosystem Alignment','Dominion Brain CI','Dominion Final Production Acceptance',
-            'Constitutional Lane Runtime CI','Control Plane Governance','Release Gate Rebind',
-            'Dominion Canonical Parity — GitHub + VM + Laptop','Elite Governance Gate'
+          repo=os.environ['REPO']; sha=os.environ['SHA']; branch=os.environ['PR_BRANCH']; pr=os.environ['PR']
+          specs=[
+            ('Ecosystem Alignment','ecosystem-alignment.yml',[]),
+            ('Dominion Brain CI','dominion-brain-ci.yml',[]),
+            ('Dominion Final Production Acceptance','final-production-acceptance.yml',['-f','confirm=RUN PRODUCTION ACCEPTANCE','-f',f'commit_sha={sha}']),
+            ('Constitutional Lane Runtime CI','constitutional-lane-runtime-ci.yml',[]),
+            ('Control Plane Governance','control-plane-governance.yml',[]),
+            ('Release Gate Rebind','release-gate-rebind.yml',['-f',f'pr_number={pr}']),
+            ('Dominion Canonical Parity — GitHub + VM + Laptop','sync-dominion-laptop.yml',['-f','confirm=APPLY CANONICAL PARITY','-f',f'commit_sha={sha}']),
+            ('Elite Governance Gate','elite-governance-gate.yml',[]),
           ]
-          repo=os.environ['REPO']; sha=os.environ['SHA']; branch=os.environ['PR_BRANCH']
+          required=[name for name,_,_ in specs]
           def runs():
               data=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs?head_sha={sha}&per_page=100'],text=True))
               latest={}
-              for r in sorted(data.get('workflow_runs',[]),key=lambda x:x.get('run_number',0)):
+              for r in sorted(data.get('workflow_runs',[]),key=lambda x:(x.get('created_at',''),x.get('run_attempt',0))):
                   if r.get('name') in required: latest[r['name']]=r
               return latest
           latest=runs()
-          for name in required:
+          for name,filename,args in specs:
               r=latest.get(name)
               if not r or (r.get('status')=='completed' and r.get('conclusion')!='success'):
-                  print('AUTO_DISPATCH='+name)
-                  cp=subprocess.run(['gh','workflow','run',name,'--repo',repo,'--ref',branch],text=True,capture_output=True)
+                  print(f'AUTO_DISPATCH={name} workflow={filename}')
+                  cmd=['gh','workflow','run',filename,'--repo',repo,'--ref',branch,*args]
+                  cp=subprocess.run(cmd,text=True,capture_output=True)
                   if cp.returncode:
                       print('DISPATCH_FAILED',name,cp.stderr.strip()); sys.exit(cp.returncode)
-          for _ in range(80):
+          for _ in range(120):
               latest=runs()
-              bad={n:(latest[n].get('status'),latest[n].get('conclusion')) for n in required if n in latest and latest[n].get('status')=='completed' and latest[n].get('conclusion')!='success'}
-              if bad: print('TECHNICAL_WORKFLOW_FAILURE',bad); sys.exit(1)
+              bad={n:(latest[n].get('status'),latest[n].get('conclusion'),latest[n].get('id')) for n in required if n in latest and latest[n].get('status')=='completed' and latest[n].get('conclusion')!='success'}
+              if bad:
+                  print('TECHNICAL_WORKFLOW_FAILURE',json.dumps(bad,sort_keys=True)); sys.exit(1)
               if all(n in latest and latest[n].get('head_sha')==sha and latest[n].get('status')=='completed' and latest[n].get('conclusion')=='success' for n in required):
                   print('EXACT_HEAD_TECHNICAL_WORKFLOWS=PASS'); break
               time.sleep(15)
           else:
-              print('Timed out waiting for exact-head technical workflows'); sys.exit(1)
-          with open('runs.json','w') as f: json.dump({'workflow_runs':list(latest.values())},f)
+              missing={n:(latest[n].get('status'),latest[n].get('conclusion')) if n in latest else ('missing',None) for n in required}
+              print('Timed out waiting for exact-head technical workflows',json.dumps(missing,sort_keys=True)); sys.exit(1)
+          with open('runs.json','w') as f: json.dump({'workflow_runs':[latest[n] for n in required]},f,indent=2,sort_keys=True)
           PY
 
       - name: Build evidence and release request
@@ -134,6 +143,7 @@ jobs:
           result=ask_best(prompt,task_type='deep_synthesis',system='Return JSON only. You are an independent Five Council reviewer. Do not bypass Dominion governance.',max_fallback_hops=4)
           print(json.dumps({'message':{'content':result.text},'_dominion_provider':result.provider,'_dominion_model':result.model,'_fallback_hops':result.fallback_hops}))
           PY
+            test -s "council_raw/$seat.json"
             provider=$(jq -r '._dominion_provider // "canonical-router"' "council_raw/$seat.json")
             model=$(jq -r '._dominion_model // "runtime-resolved"' "council_raw/$seat.json")
             python3 scripts/run_five_council_agents.py receipt --seat "$seat" --head-sha "$SHA" --release-hash "$RH" --response "council_raw/$seat.json" --provider "$provider" --model "$model" --trace-id "${SHA:0:12}-$seat-$n" --prompt-hash "$ph" --output "council_receipts/$seat.json"

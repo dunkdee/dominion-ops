@@ -60,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          if [ "$GITHUB_EVENT_NAME" != 'pull_request' ]; then
+          if [ "$GITHUB_EVENT_NAME" != 'pull_request' ] && [ "$GITHUB_REF" = 'refs/heads/main' ]; then
             git merge-base --is-ancestor "$GITHUB_SHA" origin/main
           fi
           python - <<'PY' >> "$GITHUB_OUTPUT"
@@ -165,8 +165,6 @@ jobs:
 
           test -d "$repo/.git" || { echo 'FINAL_ACCEPTANCE=HOLD reason=vm_repo_missing'; exit 1; }
 
-          # Parity workflow owns synchronization. This audit only waits for the exact
-          # release and never changes Git state.
           matched=0
           for _ in $(seq 1 90); do
             if [ "$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)" = "$EXPECTED_SHA" ]; then

@@ -1,0 +1,50 @@
+{
+  "schema": "dominion-model-routing-policy-v1",
+  "governing_name": "RADAH MEMSHALAH",
+  "default_tier": "local_light",
+  "escalation_rule": "escalate only when the lower tier cannot serve the task",
+
+  "tiers": [
+    {
+      "tier": 0,
+      "id": "deterministic",
+      "use_for": ["validation", "parsing", "hashing", "policy evaluation",
+                  "status computation", "receipt verification"],
+      "note": "no model is invoked at all"
+    },
+    {
+      "tier": 1,
+      "id": "local_light",
+      "use_for": ["classification", "summarization", "drafting",
+                  "basic extraction", "repetitive work"]
+    },
+    {
+      "tier": 2,
+      "id": "local_strong",
+      "use_for": ["planning", "synthesis", "coding assistance",
+                  "multi-document reasoning"]
+    },
+    {
+      "tier": 3,
+      "id": "external",
+      "use_for": ["reasoning that local models demonstrably cannot serve"],
+      "requires": ["policy allows", "secret filter passes",
+                   "data classification allows", "budget rule allows"],
+      "enabled_by_default": false
+    }
+  ],
+
+  "outbound_rules": {
+    "redaction_required": true,
+    "refuse_on_residual_secret": true,
+    "classifications_barred_from_external": ["sensitive", "secret", "restricted"],
+    "proprietary_models_run_locally": false,
+    "note": "A prompt that still matches a secret shape after redaction is refused, not sent."
+  },
+
+  "logging": {
+    "log_response_after_sanitization_only": true,
+    "trace_id_required": true,
+    "receipt_required_per_call": true
+  }
+}

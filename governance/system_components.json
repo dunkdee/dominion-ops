@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "authority_model": "RADAH_MEMSHALAH",
+  "source_of_truth_precedence": [
+    "github",
+    "runtime",
+    "publisher_runtime_receipts",
+    "provider_receipts",
+    "command_center",
+    "dominion_brain"
+  ],
+  "exclusive_roles": {
+    "governance_final_gate": "five_council",
+    "orchestration": "conductor",
+    "operator_interface": "buddy",
+    "operational_memory": "dominion_brain",
+    "operator_observability": "command_center",
+    "publishing_control_plane": "dominion_publisher",
+    "commerce_boundary": "voltedge_wix"
+  },
+  "components": [
+    {"id":"founder","role":"human_authority","authority_class":"scope_and_priority","owner":"founder","source_of_truth":"governance/final_release_policy.json","lifecycle_state":"IN_PROGRESS","scheduler_owner":null,"writes_external_state":true,"requires_receipt_for_side_effect":true},
+    {"id":"five_council","role":"governance_final_gate","authority_class":"final_affirmative_gate","owner":"five_council","source_of_truth":"governance/five_council_policy.json","lifecycle_state":"IN_PROGRESS","scheduler_owner":null,"writes_external_state":false,"requires_receipt_for_side_effect":false},
+    {"id":"conductor","role":"orchestration","authority_class":"route_bounded_work","owner":"conductor","source_of_truth":"github_and_runtime","lifecycle_state":"IN_PROGRESS","scheduler_owner":"conductor","writes_external_state":false,"requires_receipt_for_side_effect":true},
+    {"id":"buddy","role":"operator_interface","authority_class":"intent_to_governed_capability","owner":"buddy","source_of_truth":"github_and_runtime","lifecycle_state":"IN_PROGRESS","scheduler_owner":null,"writes_external_state":false,"requires_receipt_for_side_effect":true},
+    {"id":"dominion_brain","role":"operational_memory","authority_class":"verified_coordination_memory","owner":"dominion_brain","source_of_truth":"verified_evidence_sync","lifecycle_state":"IN_PROGRESS","scheduler_owner":null,"writes_external_state":false,"requires_receipt_for_side_effect":false},
+    {"id":"command_center","role":"operator_observability","authority_class":"read_and_control_surface","owner":"command_center","source_of_truth":"canonical_state_consumers","lifecycle_state":"IN_PROGRESS","scheduler_owner":null,"writes_external_state":false,"requires_receipt_for_side_effect":true},
+    {"id":"dominion_publisher","role":"publishing_control_plane","authority_class":"approved_publication_execution","owner":"dominion_publisher","source_of_truth":"publisher_runtime_and_receipts","lifecycle_state":"BLOCKED","scheduler_owner":"dominion_publisher","writes_external_state":true,"requires_receipt_for_side_effect":true},
+    {"id":"content_engine","role":"creative_generation","authority_class":"draft_and_transform","owner":"content_engine","source_of_truth":"campaign_package","lifecycle_state":"IN_PROGRESS","scheduler_owner":null,"writes_external_state":false,"requires_receipt_for_side_effect":false},
+    {"id":"voltedge_wix","role":"commerce_boundary","authority_class":"catalog_checkout_order_truth","owner":"voltedge_wix","source_of_truth":"wix_provider_receipts","lifecycle_state":"IN_PROGRESS","scheduler_owner":null,"writes_external_state":true,"requires_receipt_for_side_effect":true},
+    {"id":"n8n","role":"bounded_mission_automation","authority_class":"execute_declared_workflows","owner":"n8n","source_of_truth":"workflow_definition_and_runtime_receipt","lifecycle_state":"IN_PROGRESS","scheduler_owner":"n8n","writes_external_state":true,"requires_receipt_for_side_effect":true},
+    {"id":"specialist_agents","role":"domain_intelligence","authority_class":"evidence_and_recommendation","owner":"specialist_agents","source_of_truth":"provenance_bound_evidence","lifecycle_state":"IN_PROGRESS","scheduler_owner":null,"writes_external_state":false,"requires_receipt_for_side_effect":false},
+    {"id":"orion_alpha","role":"paper_trading","authority_class":"paper_only_market_intelligence","owner":"orion_alpha","source_of_truth":"paper_ledger_and_market_receipts","lifecycle_state":"PARKED","scheduler_owner":"orion_alpha","writes_external_state":false,"requires_receipt_for_side_effect":true}
+  ],
+  "mission_pipelines": [
+    {"id":"production_release","owner":"conductor","requires_closed_loop":true},
+    {"id":"traffic_revenue","owner":"dominion_publisher","requires_closed_loop":true},
+    {"id":"platform_binding","owner":"dominion_publisher","requires_closed_loop":true},
+    {"id":"commerce","owner":"voltedge_wix","requires_closed_loop":true},
+    {"id":"research_knowledge","owner":"specialist_agents","requires_closed_loop":true},
+    {"id":"paper_trading","owner":"orion_alpha","requires_closed_loop":true}
+  ]
+}

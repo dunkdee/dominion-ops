@@ -43,16 +43,30 @@ def hash_without(record: dict, field: str) -> str:
     return sha256_json({k: v for k, v in record.items() if k != field})
 
 
-def _enrich_release_evidence(evidence: dict) -> dict:
-    """Bind machine-readable release/compliance evidence into the reviewed packet.
+def _council_node_release(changed_files: list[str]) -> bool:
+    """Return True only when the candidate actually changes Council Node scope."""
+    prefixes = (
+        "apps/council_node/",
+        "deploy/council-node/",
+        "deploy/systemd/dominion-council",
+    )
+    exact = {
+        "governance/council_node_release_compliance.json",
+        "governance/council_node_scope.json",
+    }
+    return any(path in exact or path.startswith(prefixes) for path in changed_files)
 
-    The Council previously received only filenames/check states. For a release that
-    introduces a memory-bearing governed service, that is insufficient for the
-    Law/Governance seat. Keep the evidence truthful: attach restrictive boundaries
-    and explicit non-certifications rather than pretending jurisdictional compliance.
+
+def _enrich_release_evidence(evidence: dict) -> dict:
+    """Bind only release-relevant machine-readable compliance evidence.
+
+    Council Node compliance is deliberately restrictive and must not be injected
+    into unrelated releases. Release-specific evidence already present in the
+    evidence packet remains intact and is covered by the canonical evidence hash.
     """
     enriched = dict(evidence)
-    if COUNCIL_NODE_COMPLIANCE.is_file():
+    changed_files = [str(path) for path in evidence.get("changed_files", []) if isinstance(path, str)]
+    if _council_node_release(changed_files) and COUNCIL_NODE_COMPLIANCE.is_file():
         enriched["law_governance_evidence"] = load(COUNCIL_NODE_COMPLIANCE)
     return enriched
 
@@ -65,7 +79,7 @@ def prepare(args: argparse.Namespace) -> int:
     dump(args.evidence, evidence)
     evidence_hash = sha256_json(evidence)
 
-    scope = "merge PR #279 to main only"
+    scope = f"merge PR #{args.pr} to main only"
     approval = {
         "approval_id": f"github_pr_{args.pr}_founder_comment_{args.founder_comment_id}",
         "approver": "human_overseer",

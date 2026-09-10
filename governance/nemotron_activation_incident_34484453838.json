@@ -1,0 +1,33 @@
+{
+  "schema": "dominion-nemotron-activation-incident-v1",
+  "governance": "RADAH MEMSHALAH",
+  "observed_at": "2026-09-10T13:44:11Z",
+  "workflow_run_id": 34484453838,
+  "release_sha": "9d7b712e5e90229d773e7607da8810da4f0429ec",
+  "status": "ROLLED_BACK_SAFE",
+  "preflight": {
+    "model_present": true,
+    "integrity_preflight": "PASS",
+    "nemotron_health": "PASS",
+    "listener": "127.0.0.1:11435",
+    "listener_owner_verified": true
+  },
+  "failure": {
+    "gate": "command_center_route",
+    "expected_source": "nemotron",
+    "observed_source": "buddy_operator",
+    "reason": "The Command Center recovery-hold configuration intentionally kept NEMOTRON_BASE_URL empty, while the activation lane expected Command Center to route through Nemotron before transactionally converging that runtime configuration."
+  },
+  "rollback": {
+    "completed": true,
+    "listener_11435": "absent",
+    "ollama_11434_http": 200,
+    "command_center_http": 200
+  },
+  "remediation": {
+    "strategy": "Back up the complete Command Center env, set only the non-secret Nemotron loopback URL and reviewed model, recreate only the Command Center container to load those values, prove source=nemotron, and restore the prior env/container automatically on any later failure.",
+    "public_ingress_opened": false,
+    "credentials_changed": false,
+    "unrelated_services_mutated": false
+  }
+}

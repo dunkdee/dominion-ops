@@ -1,8 +1,6 @@
 name: Five Council Agent Gate
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
     types: [created]
   workflow_dispatch:
@@ -16,12 +14,12 @@ permissions:
 
 jobs:
   five-council:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 279) || (github.event_name == 'issue_comment' && github.event.issue.number == 279 && contains(github.event.comment.body, 'FOUNDER_SCOPE_AUTHORIZED:'))
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.number == 279 && contains(github.event.comment.body, 'FOUNDER_SCOPE_AUTHORIZED:'))
     runs-on: ubuntu-latest
     env:
       REPO: ${{ github.repository }}
       OWNER: ${{ github.repository_owner }}
-      PR: ${{ github.event.pull_request.number || github.event.issue.number || '279' }}
+      PR: ${{ github.event.issue.number || '279' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Resolve exact PR head

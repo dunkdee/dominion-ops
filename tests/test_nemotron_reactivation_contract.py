@@ -108,14 +108,23 @@ def test_activation_transactionally_converges_command_center_route() -> None:
     script = ACTIVATE.read_text(encoding="utf-8")
     allowed = set(scope["allowed"])
     assert "bounded command-center runtime configuration of the Nemotron loopback URL and model with backup and rollback" in allowed
+    assert "bounded command-center intelligence timeout reconciliation to 300 seconds for Nemotron cold-start inference with backup and rollback" in allowed
+    assert "bounded direct Nemotron warm-up probe before Command Center routing verification" in allowed
     assert "bounded command-center container recreation solely to load the reviewed Nemotron route configuration" in allowed
     assert 'CC_ENV_FILE="${COMMAND_CENTER_ENV_FILE:-$HOME/.config/dominion/command-center.env}"' in script
+    assert 'CC_INTELLIGENCE_TIMEOUT_SECONDS=300' in script
     assert 'cp -a "$CC_ENV_FILE" "$backup/command-center.env"' in script
     assert 'install -m 600 "$backup/command-center.env" "$CC_ENV_FILE"' in script
     assert "'NEMOTRON_BASE_URL': 'http://127.0.0.1:11435'" in script
     assert "'NEMOTRON_MODEL': model" in script
+    assert "'INTELLIGENCE_TIMEOUT_SECONDS': timeout_seconds" in script
+    assert 'http://127.0.0.1:11435/v1/chat/completions' in script
+    assert "NEMOTRON_COLD_START_WARMUP=PASS" in script
+    assert 'cc_route_max_time="$((CC_INTELLIGENCE_TIMEOUT_SECONDS + 30))"' in script
     assert 'docker compose --env-file "$CC_ENV_FILE"' in script
     assert "NEMOTRON_COMMAND_CENTER_CONFIG=PASS" in script
+    assert "command_center_timeout_seconds" in script
+    assert "cold_start_warmup_seconds" in script
     assert "command_center_env_sha256" in script
 
 

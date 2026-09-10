@@ -1,0 +1,141 @@
+name: Foundation VM Attribution
+
+# READ-ONLY ATTRIBUTION. Authorized scope: identify what owns a listener, and
+# why dominion-system-integrity.service failed. This workflow performs no
+# service lifecycle change, no mutation, no deployment, no package
+# installation, no firewall change and no configuration change.
+#
+# It exists because the 2026-09-10 inventory (run 34448533182) deliberately ran
+# `ss` without -p and so could not map a port to a process. Four questions were
+# left open by that gap, and each of them currently blocks work:
+#
+#   11435  a listener occupies a port governance declares must be absent, and
+#          the containment rule may itself be the stale artifact rather than
+#          the runtime being wrong. Attribution has to come before enforcement.
+#   5090   a storefront is already serving from an unproven source.
+#   8200   an unidentified process holds the Council Node bind port.
+#   8091   the integrity agent reads its canonical truth from a port no
+#          container publishes.
+#
+# Nothing here decides any of those. It only establishes what the processes
+# are, so the repair addresses the actual defect.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type ATTRIBUTE FOUNDATION VM"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Shared with every other foundation-VM operation so two cannot overlap.
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  attribute:
+    if: inputs.confirm == 'ATTRIBUTE FOUNDATION VM'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Verify the attribution script is non-mutating
+        shell: bash
+        run: |
+          set -euo pipefail
+          script=scripts/inventory/foundation_vm_attribution.sh
+          bash -n "$script"
+
+          # Refuse to run a script that has grown a mutating command. This gate
+          # is what keeps "read-only" a property rather than an intention.
+          if grep -qE 'systemctl[[:space:]]+(start|stop|restart|reload|enable|disable|mask)|apt-get[[:space:]]+(install|remove|upgrade)|dnf[[:space:]]+install|pip[[:space:]]+install|docker[[:space:]]+(run|rm|stop|restart|exec)|[[:space:]]rm[[:space:]]+-|INSERT|UPDATE|DELETE|DROP' "$script"; then
+            echo "REFUSED: attribution script contains a mutating operation"
+            exit 1
+          fi
+
+          # This script reads process environments and unit files, so it must
+          # carry a redactor and must never print a raw environ line.
+          grep -q '^redact()' "$script" || { echo "REFUSED: no redact() helper"; exit 1; }
+          if grep -qE "cat[[:space:]]+.?/proc/\\\$?[a-z]*pid.?/environ" "$script"; then
+            echo "REFUSED: script reads a process environment without reducing it to key names"
+            exit 1
+          fi
+          echo "ATTRIBUTION_SCRIPT_READONLY=VERIFIED"
+
+      - name: Require protected VM access
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "VM_HOST secret is missing"; exit 1; }
+          test -n "$VM_USER" || { echo "VM_USER secret is missing"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "VM_SSH_KEY secret is missing"; exit 1; }
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/attr_key"
+          chmod 600 "$HOME/.ssh/attr_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Collect attribution
+        id: collect
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          # Piped to a remote bash on stdin: nothing is written to the VM's
+          # filesystem, so the pass leaves no trace behind.
+          set +e
+          ssh -i "$HOME/.ssh/attr_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' \
+            < scripts/inventory/foundation_vm_attribution.sh \
+            | tee foundation-vm-attribution.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Confirm the run reported no mutations
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          if grep -q '^MUTATIONS_PERFORMED=0' foundation-vm-attribution.txt 2>/dev/null; then
+            echo "MUTATIONS_PERFORMED=0 CONFIRMED"
+          else
+            echo "WARNING: the run did not end with MUTATIONS_PERFORMED=0"
+          fi
+
+      - name: Upload attribution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-vm-attribution
+          path: foundation-vm-attribution.txt
+          if-no-files-found: warn
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/attr_key" "$HOME/.ssh/known_hosts"

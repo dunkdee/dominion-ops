@@ -6,16 +6,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "governance" / "system_integrity_agent.json"
 SCOPE = ROOT / "governance" / "nemotron_reactivation_scope_20260910.json"
+GATE = ROOT / "governance" / "nemotron_reactivation_gate_20260910.json"
 UNIT = ROOT / "deploy" / "systemd" / "dominion-nemotron.service"
 WORKFLOW = ROOT / ".github" / "workflows" / "activate-nemotron-governed.yml"
+ACTIVATE = ROOT / "scripts" / "nemotron" / "activate_nemotron.sh"
 WORK_ORDER = ROOT / "docs" / "NEMOTRON_REACTIVATION_WORK_ORDER_20260910.md"
 WATCHDOG = ROOT / ".github" / "workflows" / "watchdog.yml"
 
 
 def test_founder_scope_is_bounded_and_five_council_gated() -> None:
     scope = json.loads(SCOPE.read_text(encoding="utf-8"))
+    gate = json.loads(GATE.read_text(encoding="utf-8"))
     assert scope["status"] == "FOUNDER_SCOPE_AUTHORIZED"
     assert scope["final_gate"] == "five_council"
+    assert gate["fail_closed"] is True
     forbidden = set(scope["not_authorized"])
     assert "public ingress to tcp 11435" in forbidden
     assert "firewall opening" in forbidden
@@ -48,18 +52,34 @@ def test_unit_is_loopback_only_and_uses_governed_release_path() -> None:
 
 def test_activation_lane_is_founder_gated_and_does_not_open_ingress() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
+    script = ACTIVATE.read_text(encoding="utf-8")
     assert "ACTIVATE NEMOTRON" in workflow
     assert "foundation-vm-production" in workflow
     assert "github.actor" in workflow
     assert "github.triggering_actor" in workflow
-    assert "enable --now \"$SERVICE\"" in workflow
-    assert "NEMOTRON_COMMAND_CENTER_ROUTE=PASS" in workflow
-    assert "NEMOTRON_INTEGRITY=PASS" in workflow
-    assert "NEMOTRON_ROLLBACK=BEGIN" in workflow
-    lowered = workflow.lower()
+    assert "enable --now \"$SERVICE\"" in script
+    assert "NEMOTRON_COMMAND_CENTER_ROUTE=PASS" in script
+    assert "NEMOTRON_INTEGRITY=PASS" in script
+    assert "NEMOTRON_ROLLBACK=BEGIN" in script
+    assert "vm_repo_dirty" in script
+    assert "reset --hard \"$prior_repo_sha\"" in script
+    lowered = (workflow + "\n" + script).lower()
     assert "firewall-rules create" not in lowered
     assert "gcloud compute firewall-rules create" not in lowered
     assert "ollama pull" not in lowered
+    assert "kill -9" not in lowered
+    assert "pkill" not in lowered
+    assert "killall" not in lowered
+
+
+def test_activation_requires_exact_main_sha_and_validates_receipt() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert 'requested=$REQUESTED_SHA current_main=$current_main' in workflow
+    assert 'checkout=$checkout_sha requested=$REQUESTED_SHA' in workflow
+    assert "/home/*/.dominion/nemotron/receipts/*.json" in workflow
+    assert "d['release_sha'] == sys.argv[2]" in workflow
+    assert "d['command_center_source'] == 'nemotron'" in workflow
+    assert "d['external_ingress_opened'] is False" in workflow
 
 
 def test_runtime_observer_no_longer_treats_nemotron_as_contained() -> None:

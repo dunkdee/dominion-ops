@@ -103,6 +103,22 @@ def test_activation_lane_is_founder_gated_and_does_not_open_ingress() -> None:
     assert 'git -c "$repo" reset' not in script_lower
 
 
+def test_activation_transactionally_converges_command_center_route() -> None:
+    scope = json.loads(SCOPE.read_text(encoding="utf-8"))
+    script = ACTIVATE.read_text(encoding="utf-8")
+    allowed = set(scope["allowed"])
+    assert "bounded command-center runtime configuration of the Nemotron loopback URL and model with backup and rollback" in allowed
+    assert "bounded command-center container recreation solely to load the reviewed Nemotron route configuration" in allowed
+    assert 'CC_ENV_FILE="${COMMAND_CENTER_ENV_FILE:-$HOME/.config/dominion/command-center.env}"' in script
+    assert 'cp -a "$CC_ENV_FILE" "$backup/command-center.env"' in script
+    assert 'install -m 600 "$backup/command-center.env" "$CC_ENV_FILE"' in script
+    assert "'NEMOTRON_BASE_URL': 'http://127.0.0.1:11435'" in script
+    assert "'NEMOTRON_MODEL': model" in script
+    assert 'docker compose --env-file "$CC_ENV_FILE"' in script
+    assert "NEMOTRON_COMMAND_CENTER_CONFIG=PASS" in script
+    assert "command_center_env_sha256" in script
+
+
 def test_activation_requires_exact_main_sha_and_validates_receipt() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert 'requested=$REQUESTED_SHA current_main=$current_main' in workflow

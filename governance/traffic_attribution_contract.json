@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "authority_model": "RADAH_MEMSHALAH",
+  "purpose": "Bind every Dominion traffic asset to a measurable destination, conversion event, and revenue receipt without creating a parallel analytics source of truth.",
+  "canonical_destination_domain": "www.voltedgegoods.com",
+  "campaign_identity": {
+    "required": true,
+    "format": "dominion_<vertical>_<offer>_<yyyymmdd>_<sequence>",
+    "immutable_after_first_publish": true
+  },
+  "tracked_link": {
+    "required_query_parameters": [
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_content"
+    ],
+    "source_examples": [
+      "youtube",
+      "youtube_shorts",
+      "facebook",
+      "instagram",
+      "tiktok",
+      "email",
+      "referral"
+    ],
+    "medium_examples": [
+      "organic_social",
+      "video",
+      "paid_social",
+      "email",
+      "referral"
+    ],
+    "rules": {
+      "no_untracked_campaign_links": true,
+      "no_credentials_or_personal_data_in_query_parameters": true,
+      "utm_campaign_must_equal_campaign_id": true,
+      "utm_content_must_identify_asset_or_variant": true,
+      "destination_must_be_registered_before_publish": true
+    }
+  },
+  "receipt_chain": [
+    "campaign_id",
+    "asset_id_or_hash",
+    "platform",
+    "publication_receipt",
+    "tracked_destination_url",
+    "landing_session",
+    "cart_or_lead_event",
+    "checkout_event",
+    "order_or_goal_event",
+    "revenue_amount_when_applicable",
+    "refund_or_failure_event_when_applicable"
+  ],
+  "metrics": [
+    "impressions_or_reach",
+    "clicks",
+    "click_through_rate",
+    "landing_sessions",
+    "lead_or_add_to_cart_rate",
+    "checkout_start_rate",
+    "conversion_rate",
+    "revenue",
+    "attributed_revenue",
+    "refund_or_failure_rate"
+  ],
+  "source_of_truth": {
+    "campaign_definition": "github",
+    "traffic_observation": "wix_analytics_and_platform_receipts",
+    "commerce_receipt": "wix_provider_receipts",
+    "operator_view": "command_center",
+    "memory_projection": "dominion_brain",
+    "conflict_state": "HOLD"
+  },
+  "fail_closed": [
+    "missing_campaign_id",
+    "missing_tracked_link",
+    "missing_destination_registration",
+    "missing_publication_receipt",
+    "source_truth_conflict",
+    "claimed_revenue_without_order_or_provider_receipt"
+  ],
+  "zero_revenue_policy": "Zero revenue is a valid measured result and must never be converted into an inferred or estimated sale.",
+  "privacy": {
+    "forbid_pii_in_utm_values": true,
+    "forbid_credentials_in_urls": true,
+    "use_opaque_asset_ids_or_hashes": true
+  }
+}

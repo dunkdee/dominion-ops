@@ -61,8 +61,8 @@ def test_activation_lane_is_founder_gated_and_does_not_open_ingress() -> None:
     assert "NEMOTRON_COMMAND_CENTER_ROUTE=PASS" in script
     assert "NEMOTRON_INTEGRITY=PASS" in script
     assert "NEMOTRON_ROLLBACK=BEGIN" in script
-    assert "vm_repo_dirty" in script
-    assert "reset --hard \"$prior_repo_sha\"" in script
+    assert "canonical VM repo is deliberately not advanced" in script
+    assert 'git -C "$staging" checkout -q --detach FETCH_HEAD' in script
     lowered = (workflow + "\n" + script).lower()
     assert "firewall-rules create" not in lowered
     assert "gcloud compute firewall-rules create" not in lowered
@@ -70,6 +70,8 @@ def test_activation_lane_is_founder_gated_and_does_not_open_ingress() -> None:
     assert "kill -9" not in lowered
     assert "pkill" not in lowered
     assert "killall" not in lowered
+    assert 'git -c "$repo" merge' not in lowered
+    assert 'git -c "$repo" reset' not in lowered
 
 
 def test_activation_requires_exact_main_sha_and_validates_receipt() -> None:

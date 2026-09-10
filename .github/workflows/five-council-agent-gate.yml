@@ -75,8 +75,7 @@ jobs:
               r=latest.get(name)
               if not r or (r.get('status')=='completed' and r.get('conclusion')!='success'):
                   print(f'AUTO_DISPATCH={name} workflow={filename}')
-                  cmd=['gh','workflow','run',filename,'--repo',repo,'--ref',branch,*args]
-                  cp=subprocess.run(cmd,text=True,capture_output=True)
+                  cp=subprocess.run(['gh','workflow','run',filename,'--repo',repo,'--ref',branch,*args],text=True,capture_output=True)
                   if cp.returncode:
                       print('DISPATCH_FAILED',name,cp.stderr.strip()); sys.exit(cp.returncode)
           for _ in range(120):
@@ -121,9 +120,11 @@ jobs:
           set -euo pipefail
           test -n "$VM_HOST" && test -n "$VM_USER" && test -n "$VM_SSH_KEY"
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          TARGET="$VM_USER@$VM_HOST"; echo "VM_TARGET=$TARGET" >> "$GITHUB_ENV"
+          TARGET="$VM_USER@$VM_HOST"
+          echo "VM_TARGET=$TARGET" >> "$GITHUB_ENV"
           ssh -i ~/.ssh/id_ed25519 "$TARGET" 'set -euo pipefail; cd ~/dominion-ops 2>/dev/null || cd /opt/dominion-ops; execv="$(systemctl show dominion-buddy-web.service -p ExecStart --value 2>/dev/null || true)"; py="$(printf "%s\n" "$execv" | sed -n "s/.*path=\([^ ;]*\).*/\1/p" | head -1)"; for c in "$py" "$HOME/dominion_env/bin/python3" "$HOME/dominion-ops/dominion_env/bin/python3"; do [ -n "$c" ] && [ -x "$c" ] && "$c" -c "import dotenv" >/dev/null 2>&1 && { printf "%s" "$c" > /tmp/dominion-council-python.path; echo DOMINION_BUDDY_PYTHON=RESOLVED; exit 0; }; done; echo DOMINION_BUDDY_PYTHON=UNRESOLVED; exit 8'
 
       - name: Run five independent Council agents
@@ -131,18 +132,36 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p council_receipts council_raw council_prompts
-          RH=$(cat release_hash.txt); n=0
+          cat > /tmp/dominion-council-runner.py <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from buddy_core.core.brain_router import ask_best
+
+          seat = os.environ['SEAT']
+          prompt = Path(f'/tmp/dominion-council-{seat}.txt').read_text()
+          result = ask_best(
+              prompt,
+              task_type='deep_synthesis',
+              system='Return JSON only. You are an independent Five Council reviewer. Do not bypass Dominion governance.',
+              max_fallback_hops=4,
+          )
+          print(json.dumps({
+              'message': {'content': result.text},
+              '_dominion_provider': result.provider,
+              '_dominion_model': result.model,
+              '_fallback_hops': result.fallback_hops,
+          }))
+          PY
+          scp -q -i ~/.ssh/id_ed25519 /tmp/dominion-council-runner.py "$VM_TARGET:/tmp/dominion-council-runner.py"
+          RH=$(cat release_hash.txt)
+          n=0
           for seat in truth_evidence law_governance security_risk engineering_reliability business_human_impact; do
-            n=$((n+1)); p="council_prompts/$seat.txt"
+            n=$((n+1))
+            p="council_prompts/$seat.txt"
             ph=$(python3 scripts/run_five_council_agents.py prompt --seat "$seat" --head-sha "$SHA" --release-hash "$RH" --evidence evidence.json --output "$p")
             scp -q -i ~/.ssh/id_ed25519 "$p" "$VM_TARGET:/tmp/dominion-council-$seat.txt"
-            ssh -i ~/.ssh/id_ed25519 "$VM_TARGET" "cd ~/dominion-ops 2>/dev/null || cd /opt/dominion-ops; PY=\$(cat /tmp/dominion-council-python.path); SEAT='$seat' \"\$PY\" - <<'PY'" > "council_raw/$seat.json"
-          import json,os,pathlib
-          from buddy_core.core.brain_router import ask_best
-          seat=os.environ['SEAT']; prompt=pathlib.Path('/tmp/dominion-council-'+seat+'.txt').read_text()
-          result=ask_best(prompt,task_type='deep_synthesis',system='Return JSON only. You are an independent Five Council reviewer. Do not bypass Dominion governance.',max_fallback_hops=4)
-          print(json.dumps({'message':{'content':result.text},'_dominion_provider':result.provider,'_dominion_model':result.model,'_fallback_hops':result.fallback_hops}))
-          PY
+            ssh -i ~/.ssh/id_ed25519 "$VM_TARGET" "set -euo pipefail; cd ~/dominion-ops 2>/dev/null || cd /opt/dominion-ops; PY=\$(cat /tmp/dominion-council-python.path); SEAT='$seat' \"\$PY\" /tmp/dominion-council-runner.py" > "council_raw/$seat.json"
             test -s "council_raw/$seat.json"
             provider=$(jq -r '._dominion_provider // "canonical-router"' "council_raw/$seat.json")
             model=$(jq -r '._dominion_model // "runtime-resolved"' "council_raw/$seat.json")

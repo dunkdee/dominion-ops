@@ -10,6 +10,7 @@ UNIT=/etc/systemd/system/dominion-nemotron.service
 CC_ENV_FILE="${COMMAND_CENTER_ENV_FILE:-$HOME/.config/dominion/command-center.env}"
 CC_COMPOSE="$REPO/docker-compose.command-center.yml"
 CC_BUDDY_TOKEN_FILE="${COMMAND_CENTER_BUDDY_TOKEN_FILE:-$HOME/.dominion/command-center/buddy-web-token}"
+CC_INTELLIGENCE_TIMEOUT_SECONDS=300
 DEPLOY_SHA="${DEPLOY_SHA:-}"
 REMOTE_BUNDLE="${REMOTE_BUNDLE:-}"
 
@@ -204,21 +205,57 @@ printf '%s\n' "$listener" | grep -q "pid=$mainpid," || fail 'listener_not_owned_
 [ "$(systemctl is-enabled "$SERVICE")" = enabled ] || fail 'service_not_enabled'
 say "NEMOTRON_LISTENER=PASS pid=$mainpid bind=127.0.0.1:11435"
 
+# A cold Ollama model load can exceed the Command Center's historical 60-second
+# intelligence timeout. Prove the worker can generate directly and warm the
+# reviewed model before the Command Center routing acceptance test. This is a
+# local no-side-effect probe only; failure still rolls the whole activation back.
+warm_request="$(mktemp)"
+warm_response="$(mktemp)"
+python3 - "$warm_request" "$MODEL" <<'PY'
+import json, sys
+path, model = sys.argv[1:]
+payload = {
+    'model': model,
+    'messages': [{'role': 'user', 'content': 'SYSTEM_INTEGRITY_WARMUP. Reply READY only.'}],
+    'temperature': 0.0,
+    'stream': False,
+}
+with open(path, 'w', encoding='utf-8') as handle:
+    json.dump(payload, handle)
+PY
+warm_started="$(date +%s)"
+curl -fsS --max-time "$CC_INTELLIGENCE_TIMEOUT_SECONDS" -H 'Content-Type: application/json' --data-binary "@$warm_request" http://127.0.0.1:11435/v1/chat/completions -o "$warm_response" || { rm -f "$warm_request" "$warm_response"; fail 'nemotron_cold_start_warmup_unavailable'; }
+python3 - "$warm_response" <<'PY' || { rm -f "$warm_request" "$warm_response"; fail 'nemotron_cold_start_warmup_invalid'; }
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as handle:
+    d = json.load(handle)
+choices = d.get('choices') or []
+assert choices and isinstance(choices[0], dict)
+answer = str(((choices[0].get('message') or {}).get('content')) or '').strip()
+assert answer
+print('NEMOTRON_WARMUP_RESPONSE=PASS')
+PY
+warm_elapsed="$(( $(date +%s) - warm_started ))"
+rm -f "$warm_request" "$warm_response"
+say "NEMOTRON_COLD_START_WARMUP=PASS elapsed_seconds=$warm_elapsed timeout_seconds=$CC_INTELLIGENCE_TIMEOUT_SECONDS"
+
 # The recovery-hold baseline deliberately keeps NEMOTRON_BASE_URL empty until
-# an exact-SHA activation is authorized. Converge those two non-secret routing
-# keys transactionally now that the governed worker is healthy. The complete
-# pre-change env is already backed up and rollback recreates Command Center from
-# that backup if any later acceptance gate fails.
-python3 - "$CC_ENV_FILE" "$MODEL" <<'PY' || fail 'command_center_config_update_failed'
+# an exact-SHA activation is authorized. Converge the non-secret routing and
+# timeout keys transactionally now that the governed worker is healthy and warm.
+# The complete pre-change env is already backed up and rollback recreates Command
+# Center from that backup if any later acceptance gate fails.
+python3 - "$CC_ENV_FILE" "$MODEL" "$CC_INTELLIGENCE_TIMEOUT_SECONDS" <<'PY' || fail 'command_center_config_update_failed'
 from pathlib import Path
 import re
 import sys
 
 path = Path(sys.argv[1])
 model = sys.argv[2]
+timeout_seconds = sys.argv[3]
 updates = {
     'NEMOTRON_BASE_URL': 'http://127.0.0.1:11435',
     'NEMOTRON_MODEL': model,
+    'INTELLIGENCE_TIMEOUT_SECONDS': timeout_seconds,
 }
 lines = path.read_text(encoding='utf-8').splitlines()
 seen = set()
@@ -241,12 +278,13 @@ PY
 chmod 600 "$CC_ENV_FILE"
 recreate_command_center || fail 'command_center_reconfigure_failed'
 cc_env_sha="$(sha256sum "$CC_ENV_FILE" | awk '{print $1}')"
-say "NEMOTRON_COMMAND_CENTER_CONFIG=PASS base_url=127.0.0.1:11435 model=$MODEL env_sha256=$cc_env_sha"
+say "NEMOTRON_COMMAND_CENTER_CONFIG=PASS base_url=127.0.0.1:11435 model=$MODEL timeout_seconds=$CC_INTELLIGENCE_TIMEOUT_SECONDS env_sha256=$cc_env_sha"
 
 probe_request="$(mktemp)"
 probe_response="$(mktemp)"
 printf '%s' '{"message":"SYSTEM_INTEGRITY_HEALTH_PROBE. Return a short readiness acknowledgement. Do not perform any external action."}' > "$probe_request"
-curl -fsS --max-time 90 -H 'Content-Type: application/json' --data-binary "@$probe_request" http://127.0.0.1:8091/api/chat -o "$probe_response" || { rm -f "$probe_request" "$probe_response"; fail 'command_center_route_unavailable'; }
+cc_route_max_time="$((CC_INTELLIGENCE_TIMEOUT_SECONDS + 30))"
+curl -fsS --max-time "$cc_route_max_time" -H 'Content-Type: application/json' --data-binary "@$probe_request" http://127.0.0.1:8091/api/chat -o "$probe_response" || { rm -f "$probe_request" "$probe_response"; fail 'command_center_route_unavailable'; }
 python3 - "$probe_response" <<'PY' || { rm -f "$probe_request" "$probe_response"; fail 'command_center_did_not_route_to_nemotron'; }
 import json, sys
 with open(sys.argv[1], encoding='utf-8') as handle:
@@ -289,9 +327,9 @@ PY
 say "NEMOTRON_INTEGRITY=PASS cycle=$after_cycle"
 
 receipt="$RUNTIME/receipts/$(date -u +%Y%m%dT%H%M%SZ)-activation.json"
-python3 - "$receipt" "$DEPLOY_SHA" "$worker_live_sha" "$unit_live_sha" "$mainpid" "$before_cycle" "$after_cycle" "$vm_repo_sha" "$cc_env_sha" <<'PY'
+python3 - "$receipt" "$DEPLOY_SHA" "$worker_live_sha" "$unit_live_sha" "$mainpid" "$before_cycle" "$after_cycle" "$vm_repo_sha" "$cc_env_sha" "$CC_INTELLIGENCE_TIMEOUT_SECONDS" "$warm_elapsed" <<'PY'
 import datetime, json, sys
-path, sha, worker, unit, pid, before, after, vm_repo_sha, cc_env_sha = sys.argv[1:]
+path, sha, worker, unit, pid, before, after, vm_repo_sha, cc_env_sha, timeout_seconds, warm_elapsed = sys.argv[1:]
 data = {
     'schema': 'dominion-nemotron-activation-receipt-v1',
     'governance': 'RADAH MEMSHALAH',
@@ -306,6 +344,8 @@ data = {
     'command_center_source': 'nemotron',
     'command_center_base_url': 'http://127.0.0.1:11435',
     'command_center_model': 'nemotron-3-nano:4b',
+    'command_center_timeout_seconds': int(timeout_seconds),
+    'cold_start_warmup_seconds': int(warm_elapsed),
     'command_center_env_sha256': cc_env_sha,
     'integrity_cycle_before': int(before),
     'integrity_cycle_after': int(after),

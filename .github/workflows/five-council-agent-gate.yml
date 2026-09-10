@@ -10,7 +10,7 @@ permissions:
   pull-requests: write
   issues: read
   checks: read
-  actions: read
+  actions: write
 
 jobs:
   five-council:
@@ -27,7 +27,9 @@ jobs:
         run: |
           set -euo pipefail
           SHA=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)
+          BRANCH=$(gh api "repos/$REPO/pulls/$PR" --jq .head.ref)
           echo "SHA=$SHA" >> "$GITHUB_ENV"
+          echo "PR_BRANCH=$BRANCH" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
         with:
@@ -44,22 +46,42 @@ jobs:
           test -n "$comment_id" || { echo "Missing exact-head Founder authorization"; exit 1; }
           echo "FOUNDER_COMMENT_ID=$comment_id" >> "$GITHUB_ENV"
 
-      - name: Verify exact-head technical workflows
+      - name: Auto-dispatch and wait for exact-head technical workflows
         shell: bash
         run: |
           set -euo pipefail
-          gh api "repos/$REPO/actions/runs?head_sha=$SHA&event=pull_request&per_page=100" > runs.json
           python3 - <<'PY'
-          import json,os,sys
-          required={'Ecosystem Alignment','Dominion Brain CI','Dominion Final Production Acceptance','Constitutional Lane Runtime CI','Control Plane Governance','Release Gate Rebind','Dominion Canonical Parity — GitHub + VM + Laptop','Elite Governance Gate'}
-          runs=json.load(open('runs.json')).get('workflow_runs',[]); latest={}
-          for r in sorted(runs,key=lambda x:x.get('run_number',0)):
-              if r.get('name') in required: latest[r['name']]=r
-          missing=required-set(latest)
-          bad={n:(latest[n].get('status'),latest[n].get('conclusion')) for n in required & set(latest) if latest[n].get('status')!='completed' or latest[n].get('conclusion')!='success'}
-          if missing or bad:
-              print('TECHNICAL_GATES_BLOCKED',{'missing':sorted(missing),'bad':bad}); sys.exit(1)
-          print('EXACT_HEAD_TECHNICAL_WORKFLOWS=PASS')
+          import json, os, subprocess, time, sys
+          required=[
+            'Ecosystem Alignment','Dominion Brain CI','Dominion Final Production Acceptance',
+            'Constitutional Lane Runtime CI','Control Plane Governance','Release Gate Rebind',
+            'Dominion Canonical Parity — GitHub + VM + Laptop','Elite Governance Gate'
+          ]
+          repo=os.environ['REPO']; sha=os.environ['SHA']; branch=os.environ['PR_BRANCH']
+          def runs():
+              data=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs?head_sha={sha}&per_page=100'],text=True))
+              latest={}
+              for r in sorted(data.get('workflow_runs',[]),key=lambda x:x.get('run_number',0)):
+                  if r.get('name') in required: latest[r['name']]=r
+              return latest
+          latest=runs()
+          for name in required:
+              r=latest.get(name)
+              if not r or (r.get('status')=='completed' and r.get('conclusion')!='success'):
+                  print('AUTO_DISPATCH='+name)
+                  cp=subprocess.run(['gh','workflow','run',name,'--repo',repo,'--ref',branch],text=True,capture_output=True)
+                  if cp.returncode:
+                      print('DISPATCH_FAILED',name,cp.stderr.strip()); sys.exit(cp.returncode)
+          for _ in range(80):
+              latest=runs()
+              bad={n:(latest[n].get('status'),latest[n].get('conclusion')) for n in required if n in latest and latest[n].get('status')=='completed' and latest[n].get('conclusion')!='success'}
+              if bad: print('TECHNICAL_WORKFLOW_FAILURE',bad); sys.exit(1)
+              if all(n in latest and latest[n].get('head_sha')==sha and latest[n].get('status')=='completed' and latest[n].get('conclusion')=='success' for n in required):
+                  print('EXACT_HEAD_TECHNICAL_WORKFLOWS=PASS'); break
+              time.sleep(15)
+          else:
+              print('Timed out waiting for exact-head technical workflows'); sys.exit(1)
+          with open('runs.json','w') as f: json.dump({'workflow_runs':list(latest.values())},f)
           PY
 
       - name: Build evidence and release request
@@ -74,9 +96,7 @@ jobs:
           import json,os,pathlib
           runs=json.load(open('runs.json')).get('workflow_runs',[])
           required={'Ecosystem Alignment','Dominion Brain CI','Dominion Final Production Acceptance','Constitutional Lane Runtime CI','Control Plane Governance','Release Gate Rebind','Dominion Canonical Parity — GitHub + VM + Laptop','Elite Governance Gate'}
-          latest={}
-          for r in sorted(runs,key=lambda x:x.get('run_number',0)):
-              if r.get('name') in required: latest[r['name']]=r
+          latest={r['name']:r for r in runs if r.get('name') in required}
           data={'pr':int(os.environ['PR']),'head_sha':os.environ['SHA'],'changed_files':pathlib.Path('changed_files.txt').read_text().splitlines(),'diff_stat':pathlib.Path('diff_stat.txt').read_text(),'checks':[{'name':n,'status':latest[n]['status'],'conclusion':latest[n].get('conclusion'),'run_id':latest[n]['id']} for n in sorted(required)],'governance_policy':'governance/five_council_policy.json','final_release_policy':'governance/final_release_policy.json','model_router':'buddy_core/core/brain_router.py'}
           pathlib.Path('evidence.json').write_text(json.dumps(data,indent=2,sort_keys=True))
           PY

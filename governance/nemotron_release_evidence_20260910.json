@@ -1,0 +1,90 @@
+{
+  "schema": "dominion-nemotron-release-evidence-v1",
+  "subject": "governed local Nemotron 3 Nano 4B activation on foundation-vm",
+  "governance": "RADAH MEMSHALAH",
+  "truth_boundary": {
+    "runtime_model": "nemotron-3-nano:4b",
+    "inference_transport": "local Ollama on 127.0.0.1:11434",
+    "worker_bind": "127.0.0.1:11435",
+    "external_inference_provider_api_required": false,
+    "public_ingress_authorized": false,
+    "model_download_authorized_in_this_release": false,
+    "redistribution_authorized_in_this_release": false,
+    "derivative_model_distribution_authorized_in_this_release": false
+  },
+  "license_and_terms": {
+    "governing_terms": "NVIDIA Open Model License Agreement",
+    "nvidia_terms_url": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/",
+    "ollama_model_url": "https://ollama.com/library/nemotron-3-nano:4b",
+    "official_terms_state_models_commercially_usable": true,
+    "official_terms_state_use_constitutes_acceptance": true,
+    "use_in_this_release": "internal local inference; no model redistribution",
+    "legal_advice_claimed": false,
+    "contract_compliance_certification_claimed": false,
+    "note": "This record identifies the governing public license and bounded use. It does not invent a legal certification or authorize use outside the license."
+  },
+  "capacity_plan_for_nemotron_service": {
+    "historical_read_only_foundation_vm_observation": {
+      "cpu_count": 2,
+      "memory_kib": 8141512,
+      "gpu_runtime": "absent",
+      "source": "repository governance issue 145 Nemotron read-only runtime audit",
+      "freshness": "historical; activation preflight must revalidate live dependencies"
+    },
+    "admission_controls_in_candidate": {
+      "max_concurrent_generations": 1,
+      "context_tokens": 4096,
+      "keep_alive": "10m",
+      "request_body_max_bytes": 1000000,
+      "upstream_timeout_seconds": 300,
+      "busy_behavior": "HTTP 429 capacity_busy rather than unbounded parallel generation"
+    },
+    "activation_preflight": [
+      "11435 must be free before activation",
+      "governed Ollama 11434 must return HTTP 200",
+      "nemotron-3-nano:4b must already be installed",
+      "Command Center health must return HTTP 200",
+      "system integrity must be PASS with zero defects"
+    ],
+    "initial_operating_mode": "single-generation CPU mode with 4K context; do not increase concurrency or context without a separate measured capacity change",
+    "scale_policy": "capacity expansion requires fresh evidence, regression review, and a separate governed release"
+  },
+  "operational_rollback_test": {
+    "test_path": "tests/test_nemotron_rollback_fault_injection.py",
+    "production_function_exercised": "rollback() extracted from scripts/nemotron/activate_nemotron.sh",
+    "isolation": "temporary filesystem plus deterministic systemctl/sudo/ss/curl shims; no production path touched",
+    "required_assertions": [
+      "prior systemd unit content restored",
+      "prior system-integrity contract restored",
+      "prior release symlink restored",
+      "failed release removed",
+      "isolated staging removed",
+      "rollback begin and complete receipts emitted"
+    ],
+    "production_activation_behavior": "any failure after first mutation invokes rollback automatically"
+  },
+  "business_case": {
+    "objective": "restore a governed local reasoning worker so Command Center has a local primary/fallback intelligence route without adding a new external inference API dependency",
+    "new_external_provider_api_cost_authorized": 0,
+    "new_cloud_sku_or_vm_upgrade_authorized": false,
+    "direct_revenue_claim": false,
+    "initial_kpis": [
+      "Command Center canary returns source=nemotron and a non-empty answer",
+      "Nemotron health reports model_available=true",
+      "system integrity remains PASS with zero defects after activation",
+      "listener remains loopback-only on 127.0.0.1:11435",
+      "no external ingress is opened",
+      "generation concurrency remains capped at 1 until measured capacity supports a governed increase"
+    ],
+    "value_measurement": "record local route usage, latency, error rate, and integrity receipts before making cost-savings or revenue claims"
+  },
+  "release_boundaries": {
+    "founder_final_authority": true,
+    "five_council_final_release_required": true,
+    "oracle_activation": false,
+    "credential_mutation": false,
+    "public_publication": false,
+    "money_movement": false,
+    "live_trading": false
+  }
+}

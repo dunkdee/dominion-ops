@@ -71,13 +71,34 @@
   },
   "verticals": [
     {
-      "id": "publisher_meta",
+      "id": "voltedge_commerce",
       "order": 1,
+      "owner": "voltedge_wix",
+      "mission_pipeline": "commerce",
+      "purpose": "Establish a professional, nonempty, checkout-ready commerce destination before sending scaled traffic into it, then convert attributed traffic into verified cart, checkout, order, revenue, and refund receipts.",
+      "external_effect_class": "commerce_transaction",
+      "activation_gate": "storefront_trust_catalog_checkout_and_attribution_verified",
+      "required_receipts": [
+        "storefront_health",
+        "catalog_nonempty",
+        "store_policies_verified",
+        "checkout_path_verified",
+        "tracked_session",
+        "cart_or_lead_event",
+        "checkout_event",
+        "order_id_when_sale_occurs",
+        "revenue_amount_when_sale_occurs",
+        "attribution_record"
+      ]
+    },
+    {
+      "id": "publisher_meta",
+      "order": 2,
       "owner": "dominion_publisher",
       "mission_pipeline": "platform_binding",
-      "purpose": "Prove one governed authorized publication with platform receipt and attribution-ready link metadata.",
+      "purpose": "Prove one governed authorized publication with platform receipt and attribution-ready link metadata after the commerce destination is ready to receive traffic.",
       "external_effect_class": "public_content_publish",
-      "activation_gate": "valid_platform_binding_and_authorized_canary",
+      "activation_gate": "voltedge_launch_receipt_and_valid_platform_binding_and_authorized_canary",
       "required_receipts": [
         "exact_release_sha",
         "authorization_receipt",
@@ -89,13 +110,13 @@
     },
     {
       "id": "content_traffic",
-      "order": 2,
+      "order": 3,
       "owner": "content_engine",
       "execution_boundary": "dominion_publisher",
       "mission_pipeline": "traffic_revenue",
-      "purpose": "Generate and distribute governed content into measured funnels without bypassing the Publisher.",
+      "purpose": "Generate and distribute governed content into measured funnels without bypassing the Publisher and without sending traffic to an unproven commerce destination.",
       "external_effect_class": "public_content_distribution",
-      "activation_gate": "publisher_runtime_ready_and_campaign_package_verified",
+      "activation_gate": "voltedge_and_publisher_runtime_ready_and_campaign_package_verified",
       "required_receipts": [
         "campaign_id",
         "content_asset_hash",
@@ -103,24 +124,6 @@
         "utm_or_equivalent_attribution",
         "publication_receipt",
         "traffic_measurement_receipt"
-      ]
-    },
-    {
-      "id": "voltedge_commerce",
-      "order": 3,
-      "owner": "voltedge_wix",
-      "mission_pipeline": "commerce",
-      "purpose": "Convert attributed traffic through a professional storefront into verified cart, checkout, order, revenue, and refund receipts.",
-      "external_effect_class": "commerce_transaction",
-      "activation_gate": "storefront_trust_checkout_and_attribution_verified",
-      "required_receipts": [
-        "storefront_health",
-        "tracked_session",
-        "cart_or_lead_event",
-        "checkout_event",
-        "order_id_when_sale_occurs",
-        "revenue_amount_when_sale_occurs",
-        "attribution_record"
       ]
     },
     {

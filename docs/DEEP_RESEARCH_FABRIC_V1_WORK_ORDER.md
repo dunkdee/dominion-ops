@@ -47,9 +47,46 @@ Launch adapters should be limited to:
 - YouTube/social public discovery,
 - VibeSEO/Able SEO evidence already available to Dominion,
 - Similarweb pages/data available through the Founder's legitimate account/session,
-- Meta AI outputs supplied by the Founder or available through authorized interfaces.
+- Meta AI outputs supplied by the Founder or available through authorized interfaces,
+- approved Google research and distribution surfaces defined below.
 
 Future adapters require separate review.
+
+### C1. Google Research + Distribution Stack
+Google is a priority source because it can provide both demand evidence and free distribution surfaces. Use provider-native data when available; do not substitute guessed traffic metrics.
+
+**Google Trends — public demand signal**
+- Compare buyer-interest phrases and category movement.
+- Capture timeframe, geography, related/rising queries, and observed timestamp.
+- Treat Trends as relative interest evidence, not exact search volume.
+
+**Google Search Console — first-party site truth**
+- Founder-authorized account only.
+- Capture real impressions, clicks, CTR, average position, top queries, and top landing pages.
+- Use it to decide what existing pages to improve before creating unnecessary new pages.
+
+**Google Ads Keyword Planner — keyword economics**
+- Founder-authorized account only.
+- Use Discover New Keywords and search-volume/forecast data for commercial-intent research.
+- No campaign launch or paid spend in v1.
+- Store only sanitized keyword metrics and evidence timestamps; never billing/account secrets.
+
+**Google Merchant Center — free product distribution**
+- Founder-authorized account only.
+- Inspect product eligibility, feed/data-source status, disapprovals, shipping/returns requirements, and free-listing status.
+- Free listings are a priority distribution lane because eligible products can surface across Google properties without paid ad spend.
+- Any account mutation, feed mutation, or paid campaign activation remains separately governed.
+
+**Google Search / Shopping / Images / Lens — public placement research**
+- Observe which competitors, product types, titles, schema patterns, and content formats are visible for target buyer-intent queries.
+- No scraping designed to evade Google controls. Prefer normal search access, supported exports, and official interfaces.
+
+**YouTube — Google-owned intent/discovery source**
+- Analyze public search suggestions, competitor topics, titles, thumbnails, formats, comments/themes, and high-intent content gaps.
+- Feed validated topics into the Faceless YouTube lane.
+
+Google evidence promotion rule:
+`Trends/Keyword Planner demand + SERP/YouTube competition + Search Console first-party signal + Merchant Center eligibility -> Dominion validation -> content/product-placement action`
 
 ### D. Evidence normalizer
 Every source result becomes a bounded normalized record:
@@ -57,7 +94,7 @@ Every source result becomes a bounded normalized record:
 ```json
 {
   "mission_id": "uuid",
-  "source": "similarweb|vibeseo|web|github|youtube|meta|other",
+  "source": "similarweb|vibeseo|google_trends|google_search_console|google_keyword_planner|google_merchant_center|google_search|youtube|web|github|meta|other",
   "connector_id": "registered-id",
   "observed_at": "ISO-8601",
   "objective": "string",
@@ -82,7 +119,11 @@ Inputs:
 - current VoltEdge catalog,
 - current VibeSEO site/audit evidence,
 - Similarweb competitor/channel evidence,
-- public search demand,
+- Google Trends demand evidence,
+- Google Keyword Planner metrics where available,
+- Google Search Console first-party performance after connection,
+- Merchant Center free-listing/product eligibility evidence where available,
+- Google/Shopping/YouTube public placement evidence,
 - public competitor content and landing pages,
 - current Dominion revenue/traffic runtime state.
 
@@ -118,7 +159,7 @@ Promotion rule: top 3 only after validation; no fabricated search volume or traf
 
 ### Phase 2 — Governed connector registry
 - Add explicit connector IDs and allowlisted targets.
-- Start with read-only public web/GitHub/browser research.
+- Start with read-only public web/GitHub/Google/YouTube/browser research.
 - Reject arbitrary URL, arbitrary shell, and arbitrary path access.
 - Hash and sanitize every invocation receipt.
 
@@ -134,9 +175,10 @@ Promotion rule: top 3 only after validation; no fabricated search volume or traf
 - Preserve source URLs/refs and timestamps.
 
 ### Phase 5 — VoltEdge mission canary
-- Run one public-web/GitHub-only research mission first.
+- Run one public-web/GitHub/Google Trends/YouTube research mission first.
 - Then run one Founder-authorized Similarweb read-only mission.
 - Compare with VibeSEO evidence.
+- Add Search Console / Keyword Planner / Merchant Center evidence as each authorized account becomes available.
 - Produce ranked 10-opportunity report.
 - Promote only the top 3 after Dominion validation.
 
@@ -153,6 +195,8 @@ All must pass before production classification:
 - `DRF_PLAYWRIGHT_READ_ONLY_CANARY=PASS`
 - `DRF_RECEIPT_SANITIZATION=PASS`
 - `DRF_OBSIDIAN_BRIDGE=PASS`
+- `DRF_GOOGLE_PUBLIC_RESEARCH=PASS`
+- `DRF_GOOGLE_ACCOUNT_DATA_FOUNDER_AUTHORIZED=PASS`
 - `DRF_CROSS_SOURCE_VALIDATION=PASS`
 - `DRF_VOLTEDGE_TOP10_REPORT=PASS`
 - `DRF_TOP3_PROMOTION_PACKET=PASS`
@@ -162,7 +206,7 @@ All must pass before production classification:
 ## 7. Explicitly out of scope for v1
 
 - bypassing ChatGPT Work limits,
-- bypassing Similarweb/Meta/provider controls,
+- bypassing Similarweb/Meta/Google/provider controls,
 - automated paid ad spend,
 - autonomous purchasing or money movement,
 - live trading,

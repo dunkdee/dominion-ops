@@ -1,0 +1,224 @@
+name: Remediate Stray Ollama 11435
+
+# BOUNDED MUTATION. Authorized scope: terminate exactly one unmanaged process,
+# the second `ollama serve` occupying TCP 11435, and only while it still
+# matches the full fingerprint recorded in
+# evidence/foundation-vm/attribution-20260910.md.
+#
+# Nothing else is touched: no unit is started or stopped, no package installed,
+# no configuration or firewall changed, no data removed.
+#
+# Evidence for this lane: attribution run 34458046789 established that 11435 is
+# held by pid 3192050 running /usr/local/bin/ollama from a user login session
+# scope, started by hand over SSH on 2026-09-09 21:16:51 UTC. It is NOT
+# Nemotron -- dominion-nemotron.service is loaded/inactive/disabled and
+# containment held. The integrity agent has reported this single defect,
+# hold:port:11435, on every 89-second cycle since 21:17:10.
+#
+# The script revalidates identity from the LISTENER rather than trusting that
+# pid, because pids are recycled and a stale one would name an innocent
+# process. Five properties must agree before any signal, and a target under
+# system.slice is refused outright, so a governed service cannot be terminated
+# by this lane even if every other check somehow passed.
+#
+# Termination is SIGTERM only. A process surviving the grace period is reported
+# BLOCKED; escalating to SIGKILL is a separate, more forceful action that this
+# lane does not perform.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "verify (read-only) or remediate"
+        required: true
+        default: verify
+        type: choice
+        options:
+          - verify
+          - remediate
+      confirm:
+        description: "For remediate, type REMOVE STRAY OLLAMA 11435. Ignored for verify."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# Shared with every other foundation-VM operation so two cannot overlap.
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  remediate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Validate mode and Founder authority
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          FOUNDER_ACTOR: dunkdee
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            verify)
+              # Read-only. No authority gate beyond repository access.
+              ;;
+            remediate)
+              [ "$CONFIRM" = "REMOVE STRAY OLLAMA 11435" ] \
+                || { echo "remediate requires confirm to be exactly 'REMOVE STRAY OLLAMA 11435'"; exit 1; }
+              [ "$ACTOR" = "$FOUNDER_ACTOR" ] \
+                || { echo "remediate requires the Founder actor"; exit 1; }
+              [ "$TRIGGERING_ACTOR" = "$FOUNDER_ACTOR" ] \
+                || { echo "remediate requires the Founder triggering actor"; exit 1; }
+              ;;
+            *) echo "unknown mode: $MODE"; exit 1 ;;
+          esac
+          echo "REMEDIATION_MODE=$MODE"
+
+      - name: Verify the script can only ever touch one process
+        shell: bash
+        run: |
+          set -euo pipefail
+          script=scripts/remediation/remove_stray_ollama_11435.sh
+          bash -n "$script"
+
+          # This lane is allowed to signal a process. It is allowed nothing
+          # else, and these gates keep that a property rather than a promise.
+          if grep -qE 'systemctl[[:space:]]+(start|stop|restart|reload|enable|disable|mask)|apt-get[[:space:]]+(install|remove|upgrade)|dnf[[:space:]]+install|pip[[:space:]]+install|docker[[:space:]]+(run|rm|stop|restart|exec)|[[:space:]]rm[[:space:]]+-|iptables|ufw|INSERT|UPDATE|DELETE|DROP' "$script"; then
+            echo "REFUSED: script contains an operation outside this lane's scope"
+            exit 1
+          fi
+
+          # SIGTERM only. No forced kill anywhere in the file.
+          if grep -qE 'kill[[:space:]]+-(9|KILL|-signal[= ]?(9|KILL))|pkill|killall' "$script"; then
+            echo "REFUSED: script contains a forced kill"
+            exit 1
+          fi
+
+          # The structural safety guarantee must be present: a target under
+          # system.slice is refused, so no systemd-managed service can be hit.
+          grep -q 'system.slice\*) fail' "$script" \
+            || { echo "REFUSED: missing the system.slice refusal guard"; exit 1; }
+
+          # Identity must be revalidated against a pinned executable hash.
+          grep -q 'EXPECTED_SHA="c05cece87b2e85a525ccf9548d329197b938e58daa46d4fad59e8dab54e8d57d"' "$script" \
+            || { echo "REFUSED: executable hash is not pinned to the recorded value"; exit 1; }
+
+          echo "REMEDIATION_SCRIPT_BOUNDED=VERIFIED"
+
+      - name: Require protected VM access
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "VM_HOST secret is missing"; exit 1; }
+          test -n "$VM_USER" || { echo "VM_USER secret is missing"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "VM_SSH_KEY secret is missing"; exit 1; }
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/rem_key"
+          chmod 600 "$HOME/.ssh/rem_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Revalidate identity before any action
+        id: preflight
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          # Always a read-only pass first, whatever the mode. If identity has
+          # drifted the job stops here having done nothing.
+          set +e
+          ssh -i "$HOME/.ssh/rem_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' verify \
+            < scripts/remediation/remove_stray_ollama_11435.sh \
+            | tee preflight.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -ne 0 ]; then
+            echo "PREFLIGHT REFUSED: identity did not revalidate. No action taken."
+            exit "$rc"
+          fi
+          echo "PREFLIGHT=PASS"
+
+      - name: Terminate the stray process
+        id: act
+        if: inputs.mode == 'remediate'
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          set +e
+          ssh -i "$HOME/.ssh/rem_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' remediate \
+            < scripts/remediation/remove_stray_ollama_11435.sh \
+            | tee remediation.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Require every post-state proof to pass
+        if: inputs.mode == 'remediate'
+        shell: bash
+        run: |
+          set -uo pipefail
+          fails=0
+          for proof in proof_11435_absent proof_11434_healthy \
+                       proof_nemotron_still_contained proof_command_center_green \
+                       proof_integrity_pass; do
+            if grep -q "$proof=PASS" remediation.txt; then
+              echo "$proof=PASS"
+            else
+              echo "$proof=FAIL or MISSING"
+              fails=$((fails + 1))
+            fi
+          done
+          if [ "$fails" -ne 0 ]; then
+            echo "REMEDIATION INCOMPLETE: $fails proof(s) did not pass"
+            exit 1
+          fi
+          echo "ALL_POST_STATE_PROOFS=PASS"
+
+      - name: Upload remediation receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stray-ollama-11435-remediation
+          path: |
+            preflight.txt
+            remediation.txt
+          if-no-files-found: warn
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/rem_key" "$HOME/.ssh/known_hosts"

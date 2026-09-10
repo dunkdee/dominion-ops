@@ -1,24 +1,20 @@
 name: Deploy Buddy Runtime
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'buddy_core/**'
-      - 'apps/youtube/**'
-      - 'scripts/runtime/remediate_authorization_key_boundary.sh'
-      - 'scripts/runtime/remediate_watchmen_state_boundary.sh'
-      - 'tests/test_buddy_brain_router_v2.py'
-      - 'tests/test_buddy_canonical_governance.py'
-      - 'tests/test_buddy_standalone_runtime.py'
-      - 'tests/test_buddy_capability_health.py'
-      - 'tests/test_buddy_token_resolver.py'
-      - 'tests/test_buddy_phone_login.py'
-      - 'tests/test_buddy_self_heal_extensions.py'
-      - 'tests/test_revenue_runtime.py'
-      - 'tests/test_authorization_runtime_layout.py'
-      - 'tests/test_watchmen_runtime_layout.py'
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY BUDDY RUNTIME"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character main commit SHA approved for production"
+        required: true
+        type: string
+      decision_hash:
+        description: "Canonical Five Council final decision hash"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -33,6 +29,66 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require explicit exact-main production release
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          RELEASE_SHA: ${{ inputs.commit_sha }}
+          DECISION_HASH: ${{ inputs.decision_hash }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$CONFIRM" = "DEPLOY BUDDY RUNTIME"
+          test "${#RELEASE_SHA}" -eq 40
+          test "${#DECISION_HASH}" -eq 64
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test "$(git rev-parse origin/main)" = "$RELEASE_SHA"
+      - name: Require hash-bound Five Council external-execution release
+        env:
+          RELEASE_SHA: ${{ inputs.commit_sha }}
+          DECISION_HASH: ${{ inputs.decision_hash }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          release_sha = os.environ["RELEASE_SHA"].lower()
+          expected_input_hash = os.environ["DECISION_HASH"].lower()
+          path = Path("runtime/records/buddy_runtime_release/final_decision.json")
+          if not path.is_file():
+              raise SystemExit("Buddy production final Council decision is missing")
+          decision = json.loads(path.read_text(encoding="utf-8"))
+          supplied_hash = str(decision.get("decision_hash", "")).lower()
+          unsigned = {key: value for key, value in decision.items() if key != "decision_hash"}
+          canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+          calculated = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+          assert supplied_hash == calculated, "final decision hash mismatch"
+          assert supplied_hash == expected_input_hash, "dispatch decision hash mismatch"
+          assert decision.get("decision") == "FINAL_RELEASE_APPROVED", decision
+          assert decision.get("final_affirmative_gate") == "five_council", decision
+          assert decision.get("external_execution_authorized") is True, decision
+          assert set(decision.get("approvals", [])) == {
+              "truth_evidence",
+              "law_governance",
+              "security_risk",
+              "engineering_reliability",
+              "business_human_impact",
+          }, decision
+          assert not decision.get("vetoes"), decision
+          assert not decision.get("holds"), decision
+          assert not decision.get("missing_councils"), decision
+          assert not decision.get("errors"), decision
+          expected_scope = f"deploy_buddy_runtime_to_foundation_vm:{release_sha}"
+          assert decision.get("approved_scope") == expected_scope, decision.get("approved_scope")
+          assert decision.get("release_request_id") == f"buddy_runtime_{release_sha}_foundation_vm", decision.get("release_request_id")
+          print(f"BUDDY_PRODUCTION_RELEASE_GATE=PASS sha={release_sha} decision_hash={supplied_hash}")
+          PY
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
@@ -109,6 +165,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: foundation-vm-production
+    env:
+      RELEASE_SHA: ${{ inputs.commit_sha }}
+      DECISION_HASH: ${{ inputs.decision_hash }}
     steps:
       - name: Require protected VM access
         env:
@@ -120,6 +179,8 @@ jobs:
           test -n "$VM_HOST"
           test -n "$VM_USER"
           test -n "$VM_SSH_KEY"
+          test "${#RELEASE_SHA}" -eq 40
+          test "${#DECISION_HASH}" -eq 64
 
       - name: Configure protected SSH
         env:
@@ -141,7 +202,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
-            "RUN_SHA='$GITHUB_SHA' bash -s" <<'REMOTE'
+            "RUN_SHA='$RELEASE_SHA' DECISION_HASH='$DECISION_HASH' bash -s" <<'REMOTE'
           set -Eeuo pipefail
           repo="$HOME/dominion-ops"
           runtime="$HOME/buddy_core"
@@ -199,15 +260,25 @@ jobs:
           git pull --ff-only origin main
           test "$(git rev-parse HEAD)" = "$RUN_SHA"
 
-          # Preserve the existing authorization HMAC while relocating its
-          # canonical file outside HOME/repository/Buddy writable state. This
-          # must complete before any Buddy process is restarted.
-          bash "$repo/scripts/runtime/remediate_authorization_key_boundary.sh"
+          python3 - "$repo/runtime/records/buddy_runtime_release/final_decision.json" "$RUN_SHA" "$DECISION_HASH" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          path=Path(sys.argv[1]); release_sha=sys.argv[2].lower(); input_hash=sys.argv[3].lower()
+          decision=json.loads(path.read_text(encoding='utf-8'))
+          unsigned={k:v for k,v in decision.items() if k!='decision_hash'}
+          canonical=json.dumps(unsigned,sort_keys=True,separators=(',',':'),ensure_ascii=False)
+          actual=hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+          assert decision.get('decision_hash','').lower()==actual==input_hash
+          assert decision.get('decision')=='FINAL_RELEASE_APPROVED'
+          assert decision.get('external_execution_authorized') is True
+          assert decision.get('final_affirmative_gate')=='five_council'
+          assert decision.get('approved_scope')==f'deploy_buddy_runtime_to_foundation_vm:{release_sha}'
+          assert decision.get('release_request_id')==f'buddy_runtime_{release_sha}_foundation_vm'
+          assert not decision.get('vetoes') and not decision.get('holds') and not decision.get('missing_councils') and not decision.get('errors')
+          print('BUDDY_REMOTE_RELEASE_RECHECK=PASS')
+          PY
 
-          # Preserve Saraqael's signing key, audit log, and chain while moving
-          # their canonical state outside a production HOME that is itself a
-          # concrete Git checkout boundary. The compatibility path resolves to
-          # the machine-local target before any Buddy process is restarted.
+          bash "$repo/scripts/runtime/remediate_authorization_key_boundary.sh"
           bash "$repo/scripts/runtime/remediate_watchmen_state_boundary.sh"
 
           avail_kb="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
@@ -338,11 +409,11 @@ jobs:
           case "$web_code" in 200|401|403) ;; *) journalctl -u dominion-buddy-web.service -n 100 --no-pager || true; exit 1;; esac
 
           avail_after_kb="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
-          python3 - "$state/deployed_release.json" "$RUN_SHA" "$avail_after_kb" <<'PY'
+          python3 - "$state/deployed_release.json" "$RUN_SHA" "$avail_after_kb" "$DECISION_HASH" <<'PY'
           import hashlib,json,sys
           from datetime import datetime,timezone
           from pathlib import Path
-          out=Path(sys.argv[1]); sha=sys.argv[2]; available_kb=int(sys.argv[3])
+          out=Path(sys.argv[1]); sha=sys.argv[2]; available_kb=int(sys.argv[3]); decision_hash=sys.argv[4]
           runtime=Path.home()/'buddy_core'
           files={}
           for rel in [
@@ -356,8 +427,9 @@ jobs:
               p=runtime/rel
               files[rel]=hashlib.sha256(p.read_bytes()).hexdigest()
           payload={
-              'schema':'dominion-buddy-deployed-release-v1',
+              'schema':'dominion-buddy-deployed-release-v2',
               'release_sha':sha,
+              'final_decision_hash':decision_hash,
               'deployed_at':datetime.now(timezone.utc).isoformat(),
               'canonical_prompt':'ELITE_REASONING_PROTOCOL',
               'founder_context':True,
@@ -379,7 +451,7 @@ jobs:
 
           deployed=1
           trap - ERR
-          echo "BUDDY_RUNTIME_DEPLOY=PASS release=$RUN_SHA services=$restarted web_http=$web_code disk_available_kb=$avail_after_kb"
+          echo "BUDDY_RUNTIME_DEPLOY=PASS release=$RUN_SHA decision_hash=$DECISION_HASH services=$restarted web_http=$web_code disk_available_kb=$avail_after_kb"
           REMOTE
 
       - name: Cleanup SSH material

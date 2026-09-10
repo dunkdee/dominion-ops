@@ -1,0 +1,102 @@
+{
+  "schema": "radah-memshalah-deep-research-sources-v1",
+  "mode": "READ_ONLY_RESEARCH",
+  "default_policy": "DENY",
+  "canonical_authority": "Dominion",
+  "sources": [
+    {
+      "id": "google_trends_public",
+      "class": "PUBLIC",
+      "purpose": ["trend_signal", "related_queries", "geographic_interest"],
+      "mutation_allowed": false,
+      "credentials_allowed": false
+    },
+    {
+      "id": "google_search_console_authorized",
+      "class": "FOUNDER_AUTHORIZED_ACCOUNT",
+      "purpose": ["impressions", "clicks", "ctr", "average_position", "queries", "landing_pages"],
+      "mutation_allowed": false,
+      "credentials_allowed": false
+    },
+    {
+      "id": "google_keyword_planner_authorized",
+      "class": "FOUNDER_AUTHORIZED_ACCOUNT",
+      "purpose": ["keyword_discovery", "search_volume_estimates", "commercial_intent", "forecast_research"],
+      "mutation_allowed": false,
+      "credentials_allowed": false
+    },
+    {
+      "id": "google_merchant_center_authorized",
+      "class": "FOUNDER_AUTHORIZED_ACCOUNT",
+      "purpose": ["free_listing_status", "product_eligibility", "feed_diagnostics", "shipping_returns_readiness"],
+      "mutation_allowed": false,
+      "credentials_allowed": false
+    },
+    {
+      "id": "google_search_public",
+      "class": "PUBLIC",
+      "purpose": ["serp_observation", "competitor_visibility", "content_format", "shopping_placement"],
+      "mutation_allowed": false,
+      "credentials_allowed": false
+    },
+    {
+      "id": "youtube_public",
+      "class": "PUBLIC",
+      "purpose": ["topic_discovery", "competitor_content", "buyer_questions", "format_analysis"],
+      "mutation_allowed": false,
+      "credentials_allowed": false
+    },
+    {
+      "id": "similarweb_authorized",
+      "class": "FOUNDER_AUTHORIZED_ACCOUNT",
+      "purpose": ["competitor_traffic", "channel_mix", "referrals", "keyword_intelligence", "landing_page_intelligence"],
+      "mutation_allowed": false,
+      "credentials_allowed": false
+    },
+    {
+      "id": "vibeseo_connected",
+      "class": "CONNECTED_PROVIDER",
+      "purpose": ["site_audit", "keyword_research", "competitor_gap", "search_console_bridge"],
+      "mutation_allowed": false,
+      "credentials_allowed": false
+    },
+    {
+      "id": "github_public",
+      "class": "PUBLIC",
+      "purpose": ["tool_discovery", "open_source_research", "implementation_reference"],
+      "mutation_allowed": false,
+      "credentials_allowed": false
+    },
+    {
+      "id": "meta_founder_supplied",
+      "class": "FOUNDER_AUTHORIZED_OR_SUPPLIED",
+      "purpose": ["market_research", "content_signal", "cross_model_comparison"],
+      "mutation_allowed": false,
+      "credentials_allowed": false
+    }
+  ],
+  "prohibited": [
+    "credential_capture",
+    "captcha_bypass",
+    "subscription_bypass",
+    "rate_limit_evasion",
+    "arbitrary_shell",
+    "arbitrary_target_url",
+    "external_publish",
+    "paid_spend",
+    "price_change",
+    "customer_contact",
+    "live_trade"
+  ],
+  "receipt_requirements": [
+    "source",
+    "connector_id",
+    "observed_at",
+    "objective",
+    "query_hash",
+    "result_hash",
+    "confidence",
+    "evidence_refs",
+    "sanitized"
+  ]
+}

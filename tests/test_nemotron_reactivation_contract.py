@@ -61,7 +61,7 @@ def test_activation_lane_is_founder_gated_and_does_not_open_ingress() -> None:
     assert "NEMOTRON_COMMAND_CENTER_ROUTE=PASS" in script
     assert "NEMOTRON_INTEGRITY=PASS" in script
     assert "NEMOTRON_ROLLBACK=BEGIN" in script
-    assert "canonical VM repo is deliberately not advanced" in script
+    assert "VM repo is deliberately not advanced here" in script
     assert 'git -C "$staging" checkout -q --detach FETCH_HEAD' in script
     lowered = (workflow + "\n" + script).lower()
     assert "firewall-rules create" not in lowered

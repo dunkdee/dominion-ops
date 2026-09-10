@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 COUNCIL_NODE_COMPLIANCE = ROOT / "governance/council_node_release_compliance.json"
+MAX_REVIEW_DIFF_BYTES = 120_000
 # When this file is executed as `python3 scripts/...`, Python puts `scripts/`
 # first on sys.path. That shadows the real top-level `control_plane` package with
 # `scripts/control_plane.py`. Force the repository root to precedence so imports
@@ -43,29 +46,101 @@ def hash_without(record: dict, field: str) -> str:
     return sha256_json({k: v for k, v in record.items() if k != field})
 
 
-def _enrich_release_evidence(evidence: dict) -> dict:
-    """Bind machine-readable release/compliance evidence into the reviewed packet.
+def _council_node_release(changed_files: list[str]) -> bool:
+    """Return True only when the candidate actually changes Council Node scope."""
+    prefixes = (
+        "apps/council_node/",
+        "deploy/council-node/",
+        "deploy/systemd/dominion-council",
+    )
+    exact = {
+        "governance/council_node_release_compliance.json",
+        "governance/council_node_scope.json",
+    }
+    return any(path in exact or path.startswith(prefixes) for path in changed_files)
 
-    The Council previously received only filenames/check states. For a release that
-    introduces a memory-bearing governed service, that is insufficient for the
-    Law/Governance seat. Keep the evidence truthful: attach restrictive boundaries
-    and explicit non-certifications rather than pretending jurisdictional compliance.
+
+def _release_specific_evidence(changed_files: list[str]) -> dict[str, dict]:
+    """Load only explicit, changed release evidence records from governance/."""
+    records: dict[str, dict] = {}
+    for rel in changed_files:
+        path = Path(rel)
+        name = path.name.lower()
+        if not rel.startswith("governance/") or path.suffix.lower() != ".json":
+            continue
+        if "release_evidence" not in name and "release_compliance" not in name:
+            continue
+        candidate = ROOT / rel
+        if candidate.is_file():
+            records[rel] = load(candidate)
+    return records
+
+
+def _candidate_review_diff() -> dict:
+    """Return a bounded exact candidate diff for independent Council inspection.
+
+    Five Council decisions must not be based only on filenames and green checks.
+    The gate is intentionally fail-closed for oversized changes: large releases
+    must be split so the entire reviewed diff fits in the canonical evidence packet.
+    """
+    command = [
+        "git",
+        "diff",
+        "--no-ext-diff",
+        "--unified=20",
+        "origin/main...HEAD",
+    ]
+    completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+    if completed.returncode != 0:
+        return {
+            "available": False,
+            "base": "origin/main",
+            "reason": "git_diff_unavailable",
+        }
+    encoded = completed.stdout.encode("utf-8")
+    if len(encoded) > MAX_REVIEW_DIFF_BYTES:
+        raise SystemExit(
+            f"candidate review diff too large for complete Council review: "
+            f"{len(encoded)}>{MAX_REVIEW_DIFF_BYTES}; split the release"
+        )
+    return {
+        "available": True,
+        "base": "origin/main",
+        "bytes": len(encoded),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "content": completed.stdout,
+    }
+
+
+def _enrich_release_evidence(evidence: dict, *, include_review_diff: bool = False) -> dict:
+    """Bind only release-relevant machine-readable evidence.
+
+    Council Node compliance is deliberately restrictive and must not be injected
+    into unrelated releases. Explicit changed release evidence and, during the
+    canonical prepare path, the full bounded source diff are covered by the same
+    evidence hash seen by all five independent reviewers.
     """
     enriched = dict(evidence)
-    if COUNCIL_NODE_COMPLIANCE.is_file():
+    changed_files = [str(path) for path in evidence.get("changed_files", []) if isinstance(path, str)]
+    if _council_node_release(changed_files) and COUNCIL_NODE_COMPLIANCE.is_file():
         enriched["law_governance_evidence"] = load(COUNCIL_NODE_COMPLIANCE)
+    release_records = _release_specific_evidence(changed_files)
+    if release_records:
+        enriched["release_specific_evidence"] = release_records
+    if include_review_diff:
+        enriched["review_diff"] = _candidate_review_diff()
     return enriched
 
 
 def prepare(args: argparse.Namespace) -> int:
-    evidence = _enrich_release_evidence(load(args.evidence))
+    evidence = _enrich_release_evidence(load(args.evidence), include_review_diff=True)
     # Persist the exact evidence that will be sent to all Council reviewers. The
     # release request binds its canonical SHA-256 digest so a later evidence change
     # cannot inherit an earlier approval.
     dump(args.evidence, evidence)
     evidence_hash = sha256_json(evidence)
 
-    scope = "merge PR #279 to main only"
+    scope = f"merge PR #{args.pr} to main only"
     approval = {
         "approval_id": f"github_pr_{args.pr}_founder_comment_{args.founder_comment_id}",
         "approver": "human_overseer",
@@ -99,7 +174,7 @@ def prepare(args: argparse.Namespace) -> int:
         "technical_readiness": {
             "ready": ready,
             "failed_checks": failed,
-            "evidence_source": "exact_head_github_check_runs_plus_bound_release_evidence",
+            "evidence_source": "exact_head_github_check_runs_plus_bound_release_evidence_and_complete_diff",
         },
         "external_effects": False,
         "human_authorization_id": approval["approval_id"],

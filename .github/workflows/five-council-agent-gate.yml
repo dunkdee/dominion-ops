@@ -46,7 +46,7 @@ jobs:
           test -n "$comment_id" || { echo "Missing exact-head Founder authorization"; exit 1; }
           echo "FOUNDER_COMMENT_ID=$comment_id" >> "$GITHUB_ENV"
 
-      - name: Auto-dispatch and wait for exact-head technical workflows
+      - name: Auto-dispatch and wait for exact-head pre-merge technical workflows
         shell: bash
         run: |
           set -euo pipefail
@@ -60,7 +60,6 @@ jobs:
             ('Constitutional Lane Runtime CI','constitutional-lane-runtime-ci.yml',[]),
             ('Control Plane Governance','control-plane-governance.yml',[]),
             ('Release Gate Rebind','release-gate-rebind.yml',['-f',f'pr_number={pr}']),
-            ('Dominion Canonical Parity — GitHub + VM + Laptop','sync-dominion-laptop.yml',['-f','confirm=APPLY CANONICAL PARITY','-f',f'commit_sha={sha}']),
             ('Elite Governance Gate','elite-governance-gate.yml',[]),
           ]
           required=[name for name,_,_ in specs]
@@ -84,7 +83,7 @@ jobs:
               if bad:
                   print('TECHNICAL_WORKFLOW_FAILURE',json.dumps(bad,sort_keys=True)); sys.exit(1)
               if all(n in latest and latest[n].get('head_sha')==sha and latest[n].get('status')=='completed' and latest[n].get('conclusion')=='success' for n in required):
-                  print('EXACT_HEAD_TECHNICAL_WORKFLOWS=PASS'); break
+                  print('EXACT_HEAD_PREMERGE_WORKFLOWS=PASS'); break
               time.sleep(15)
           else:
               missing={n:(latest[n].get('status'),latest[n].get('conclusion')) if n in latest else ('missing',None) for n in required}
@@ -103,14 +102,14 @@ jobs:
           python3 - <<'PY'
           import json,os,pathlib
           runs=json.load(open('runs.json')).get('workflow_runs',[])
-          required={'Ecosystem Alignment','Dominion Brain CI','Dominion Final Production Acceptance','Constitutional Lane Runtime CI','Control Plane Governance','Release Gate Rebind','Dominion Canonical Parity — GitHub + VM + Laptop','Elite Governance Gate'}
+          required={'Ecosystem Alignment','Dominion Brain CI','Dominion Final Production Acceptance','Constitutional Lane Runtime CI','Control Plane Governance','Release Gate Rebind','Elite Governance Gate'}
           latest={r['name']:r for r in runs if r.get('name') in required}
-          data={'pr':int(os.environ['PR']),'head_sha':os.environ['SHA'],'changed_files':pathlib.Path('changed_files.txt').read_text().splitlines(),'diff_stat':pathlib.Path('diff_stat.txt').read_text(),'checks':[{'name':n,'status':latest[n]['status'],'conclusion':latest[n].get('conclusion'),'run_id':latest[n]['id']} for n in sorted(required)],'governance_policy':'governance/five_council_policy.json','final_release_policy':'governance/final_release_policy.json','model_router':'buddy_core/core/brain_router.py'}
+          data={'pr':int(os.environ['PR']),'head_sha':os.environ['SHA'],'changed_files':pathlib.Path('changed_files.txt').read_text().splitlines(),'diff_stat':pathlib.Path('diff_stat.txt').read_text(),'checks':[{'name':n,'status':latest[n]['status'],'conclusion':latest[n].get('conclusion'),'run_id':latest[n]['id']} for n in sorted(required)],'governance_policy':'governance/five_council_policy.json','final_release_policy':'governance/final_release_policy.json','model_router':'buddy_core/core/brain_router.py','execution_boundary':'isolated_exact_head_vm_staging'}
           pathlib.Path('evidence.json').write_text(json.dumps(data,indent=2,sort_keys=True))
           PY
           python3 scripts/canonicalize_five_council_release.py prepare --pr "$PR" --repository "$REPO" --head-sha "$SHA" --founder-comment-id "$FOUNDER_COMMENT_ID" --evidence evidence.json --human-output human_authorization.json --request-output release_request.json --hash-output release_hash.txt
 
-      - name: Configure canonical Buddy runtime
+      - name: Configure Buddy runtime and stage exact-head Council source
         shell: bash
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -125,7 +124,17 @@ jobs:
           ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null
           TARGET="$VM_USER@$VM_HOST"
           echo "VM_TARGET=$TARGET" >> "$GITHUB_ENV"
+
           ssh -i ~/.ssh/id_ed25519 "$TARGET" 'set -euo pipefail; cd ~/dominion-ops 2>/dev/null || cd /opt/dominion-ops; execv="$(systemctl show dominion-buddy-web.service -p ExecStart --value 2>/dev/null || true)"; py="$(printf "%s\n" "$execv" | sed -n "s/.*path=\([^ ;]*\).*/\1/p" | head -1)"; for c in "$py" "$HOME/dominion_env/bin/python3" "$HOME/dominion-ops/dominion_env/bin/python3"; do [ -n "$c" ] && [ -x "$c" ] && "$c" -c "import dotenv" >/dev/null 2>&1 && { printf "%s" "$c" > /tmp/dominion-council-python.path; echo DOMINION_BUDDY_PYTHON=RESOLVED; exit 0; }; done; echo DOMINION_BUDDY_PYTHON=UNRESOLVED; exit 8'
+
+          archive="$RUNNER_TEMP/dominion-council-src-$SHA.tar.gz"
+          remote_archive="/tmp/dominion-council-src-$SHA.tar.gz"
+          git archive --format=tar.gz -o "$archive" "$SHA"
+          scp -q -i ~/.ssh/id_ed25519 "$archive" "$TARGET:$remote_archive"
+          SRC=$(ssh -i ~/.ssh/id_ed25519 "$TARGET" "set -euo pipefail; stage=\$(mktemp -d /tmp/dominion-council-src.${SHA:0:12}.XXXXXX); tar -xzf '$remote_archive' -C \"\$stage\"; rm -f '$remote_archive'; if [ -f \"\$HOME/dominion-ops/.env\" ]; then ln -s \"\$HOME/dominion-ops/.env\" \"\$stage/.env\"; fi; printf '%s\n' '$SHA' > \"\$stage/.dominion-release-sha\"; printf '%s' \"\$stage\" > /tmp/dominion-council-src.path; printf '%s' \"\$stage\"")
+          test -n "$SRC"
+          echo "VM_COUNCIL_SRC=$SRC" >> "$GITHUB_ENV"
+          echo "ISOLATED_COUNCIL_SOURCE=PASS sha=$SHA"
 
       - name: Run five independent Council agents
         shell: bash
@@ -161,17 +170,19 @@ jobs:
             p="council_prompts/$seat.txt"
             ph=$(python3 scripts/run_five_council_agents.py prompt --seat "$seat" --head-sha "$SHA" --release-hash "$RH" --evidence evidence.json --output "$p")
             scp -q -i ~/.ssh/id_ed25519 "$p" "$VM_TARGET:/tmp/dominion-council-$seat.txt"
-            ssh -i ~/.ssh/id_ed25519 "$VM_TARGET" "set -euo pipefail; cd ~/dominion-ops 2>/dev/null || cd /opt/dominion-ops; PY=\$(cat /tmp/dominion-council-python.path); PYTHONPATH=\$PWD SEAT='$seat' \"\$PY\" /tmp/dominion-council-runner.py" > "council_raw/$seat.json"
+            ssh -i ~/.ssh/id_ed25519 "$VM_TARGET" "set -euo pipefail; test \"\$(cat '$VM_COUNCIL_SRC/.dominion-release-sha')\" = '$SHA'; cd '$VM_COUNCIL_SRC'; PY=\$(cat /tmp/dominion-council-python.path); PYTHONPATH='$VM_COUNCIL_SRC' SEAT='$seat' \"\$PY\" /tmp/dominion-council-runner.py" > "council_raw/$seat.json"
             test -s "council_raw/$seat.json"
             provider=$(jq -r '._dominion_provider // "canonical-router"' "council_raw/$seat.json")
             model=$(jq -r '._dominion_model // "runtime-resolved"' "council_raw/$seat.json")
             python3 scripts/run_five_council_agents.py receipt --seat "$seat" --head-sha "$SHA" --release-hash "$RH" --response "council_raw/$seat.json" --provider "$provider" --model "$model" --trace-id "${SHA:0:12}-$seat-$n" --prompt-hash "$ph" --output "council_receipts/$seat.json"
           done
 
-      - name: Verify and finalize
+      - name: Verify exact-head stability and finalize
         shell: bash
         run: |
           set -euo pipefail
+          LIVE_SHA=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)
+          test "$LIVE_SHA" = "$SHA" || { echo "RELEASE_GATE_STALE expected=$SHA live=$LIVE_SHA"; exit 9; }
           python3 scripts/run_five_council_agents.py verify --dir council_receipts --head-sha "$SHA" --release-hash "$(cat release_hash.txt)" --output five_council_decision.json
           jq -e '.decision=="FINAL_RELEASE_APPROVED" and (.approvals|length)==5' five_council_decision.json >/dev/null
           python3 scripts/canonicalize_five_council_release.py finalize --request release_request.json --human human_authorization.json --receipts council_receipts --output-dir canonical_release
@@ -192,6 +203,20 @@ jobs:
             canonical_release/
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Clean isolated Council staging
+        if: always()
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set +e
+          if [ -f "$HOME/.ssh/id_ed25519" ] && [ -n "$VM_HOST" ] && [ -n "$VM_USER" ]; then
+            TARGET="$VM_USER@$VM_HOST"
+            ssh -i "$HOME/.ssh/id_ed25519" "$TARGET" 'stage=$(cat /tmp/dominion-council-src.path 2>/dev/null || true); case "$stage" in /tmp/dominion-council-src.*) rm -rf "$stage" ;; esac; rm -f /tmp/dominion-council-src.path /tmp/dominion-council-python.path /tmp/dominion-council-runner.py /tmp/dominion-council-truth_evidence.txt /tmp/dominion-council-law_governance.txt /tmp/dominion-council-security_risk.txt /tmp/dominion-council-engineering_reliability.txt /tmp/dominion-council-business_human_impact.txt' || true
+          fi
+          rm -f "$HOME/.ssh/id_ed25519"
 
       - name: Record final receipt
         if: success()

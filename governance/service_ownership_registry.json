@@ -175,7 +175,7 @@
       "owner_role": "Infrastructure Operations",
       "vertical_id": null,
       "lifecycle_state": "PRODUCTION",
-      "truth_state": "VERIFIED",
+      "truth_state": "INFERRED",
       "obsidian_home": "06 Infrastructure/Services/Caddy",
       "port": 443,
       "scheduler": null,
@@ -186,9 +186,9 @@
         {
           "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
           "captured_at": "2026-09-10T07:09:14Z",
-          "truth_state": "VERIFIED",
+          "truth_state": "INFERRED",
           "sha256": null,
-          "notes": "Unit caddy.service active/running. Listening on *:80 and *:443, with the admin API on 127.0.0.1:2019. /etc/caddy/Caddyfile serves 16 sites under dominionhealing.org, including store. and shop. Upstreams named: 3000, 5000, 5055, 5070, 5080, 5095, 5101, 5120, 5678, 8100, plus matcher-based routes for the Publisher Meta callback, revenue public paths, Buddy, the store API, lead capture and the vault path."
+          "notes": "Unit caddy.service active/running (VERIFIED). *:80 and *:443 are listening and the admin API port 127.0.0.1:2019 is listening, which is Caddy's documented default, but the inventory ran `ss` without -p so the binding is not proven. /etc/caddy/Caddyfile serves 16 sites under dominionhealing.org, including store. and shop. Numeric upstreams: 3000, 5000, 5055, 5070, 5080 (x2), 5095, 5101 (x2), 5120, 5678, 8100, plus matcher-based routes for the Publisher Meta callback, revenue public paths, Buddy, the store API, lead capture and the vault path."
         }
       ]
     },
@@ -1471,7 +1471,7 @@
       "owner_role": "Infrastructure Operations",
       "vertical_id": null,
       "lifecycle_state": "PRODUCTION",
-      "truth_state": "INFERRED",
+      "truth_state": "UNKNOWN",
       "obsidian_home": "06 Infrastructure/AI/Gemini Server",
       "port": null,
       "scheduler": null,
@@ -1482,9 +1482,16 @@
         {
           "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
           "captured_at": "2026-09-10T07:09:14Z",
-          "truth_state": "INFERRED",
+          "truth_state": "VERIFIED",
           "sha256": null,
-          "notes": "Unit gemini-server.service active/running (VERIFIED). Unit active/running. buddy_core/sentinel.py SERVICES declares port 5055 critical, but PORT_MANIFEST records 5055 as reassigned to juris and comments that gemini-server was removed. The unit is nevertheless running. Port left null: the claim is contradicted by the repository and unproven on the VM. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+          "notes": "Unit gemini-server.service is active/running."
+        },
+        {
+          "source": "repository declarations in buddy_core/sentinel.py",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "UNKNOWN",
+          "sha256": null,
+          "notes": "CONTRADICTION. SERVICES['gemini-server'] declares port 5055 with critical=True, while PORT_MANIFEST records 5055 as 'juris' with the comment '5055 now juris (gemini-server removed)'. dominion-juris.service is also active. So the repository says this service was removed, the VM says it is running, and two active units claim one port. Port left null and the record failed closed to UNKNOWN: which unit holds 5055 is unproven and the service's intended status is contradictory."
         }
       ]
     },
@@ -1646,7 +1653,7 @@
           "captured_at": "2026-09-10T07:09:14Z",
           "truth_state": "UNKNOWN",
           "sha256": null,
-          "notes": "Eight TCP ports are listening on foundation-vm with no owner identified by either the repository or this inventory. Public (0.0.0.0/*): 5103, 5110, 8200, 8888, 20201, 20202. Loopback: 5056, 8390. Recorded as one entry because no evidence separates them into services; each is UNKNOWN, not absent. PORT CONFLICT: 8200 is already held by an unidentified process and is the exact port deploy/council-node/docker-compose.yml sets as COUNCIL_BIND_PORT and deploy/council-node/scripts/{deploy,verify}.sh health-check. A Council Node deploy to foundation-vm would collide with it."
+          "notes": "Nine TCP ports are listening on foundation-vm with no owner proven by either the repository or this inventory. Public (0.0.0.0/*): 5103, 5110, 8200, 8888, 20201, 20202. Loopback: 5056, 8091, 8390. Recorded as one entry because no evidence separates them into services; each is UNKNOWN, not absent.\nPORT CONFLICT: 8200 is already held by an unidentified process and is the exact port deploy/council-node/docker-compose.yml sets as COUNCIL_BIND_PORT and deploy/council-node/scripts/{deploy,verify}.sh health-check. A Council Node deploy to foundation-vm would collide with it.\nGOVERNANCE DEPENDENCY: 8091 is the port governance/system_integrity_agent.json probes as 'command_center' and uses for command_center_truth (http://127.0.0.1:8091/api/status, max_age_seconds 180). The dominion-command-center container publishes NO ports, so whatever serves 8091 is not proven to be that container. The integrity agent's canonical truth source is therefore unattributed."
         }
       ]
     },

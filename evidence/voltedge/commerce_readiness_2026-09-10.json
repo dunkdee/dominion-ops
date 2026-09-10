@@ -1,5 +1,5 @@
 {
-  "schema": "voltedge-commerce-readiness-v1",
+  "schema": "voltedge-commerce-readiness-v2",
   "observed_date": "2026-09-10",
   "authority_model": "RADAH_MEMSHALAH",
   "site": {
@@ -17,6 +17,26 @@
     "hidden_products": 6,
     "has_more": false,
     "status": "PASS_NONEMPTY"
+  },
+  "hero_product_hardening": {
+    "source": "authenticated_wix_catalog_v3_get_and_revision_safe_update",
+    "updated_count": 5,
+    "preserved": [
+      "product_id",
+      "slug",
+      "variants",
+      "pricing",
+      "inventory",
+      "media"
+    ],
+    "updated_names": [
+      "Portable TWS Bluetooth Speaker",
+      "Foldable 4K Camera Mini Drone",
+      "Emergency Solar Hand-Crank Radio & Power Bank",
+      "10,000mAh Waterproof Solar Power Bank",
+      "Kids Bluetooth Karaoke Machine with Dual Microphones"
+    ],
+    "status": "PASS"
   },
   "shipping": {
     "source": "authenticated_wix_ecommerce_shipping_queries",
@@ -37,18 +57,63 @@
     "active_region_coverage_gaps": 0,
     "status": "PASS_ACTIVE_DOMESTIC_COVERAGE"
   },
+  "checkout_canary": {
+    "source": "authenticated_wix_cart_v2",
+    "mode": "NON_CHARGING",
+    "cart_id": "ca727402-d0b3-43bf-b861-39ef4b654d07",
+    "product_id": "a85540ff-1402-4459-8f40-85d549e697c7",
+    "variant_id": "ec062888-4f5c-4820-9a8e-7fd06e0c2d99",
+    "line_item_status": "IN_STOCK",
+    "requested_quantity": 1,
+    "confirmed_quantity": 1,
+    "currency": "USD",
+    "subtotal": "71.09",
+    "calculated_total": "71.09",
+    "requires_payment": true,
+    "price_verification_token_present": true,
+    "hosted_checkout_url_generated": true,
+    "order_placed": false,
+    "payment_charged": false,
+    "violations": [
+      {
+        "scope": "DELIVERY",
+        "code": "MISSING_DELIVERY_METHOD",
+        "severity": "ERROR"
+      }
+    ],
+    "status": "PASS_TO_HOSTED_CHECKOUT_WITH_DELIVERY_SELECTION_PENDING"
+  },
+  "checkout_policies": {
+    "source": "authenticated_wix_checkout_settings",
+    "terms_and_conditions_visible": true,
+    "privacy_policy_visible": true,
+    "return_policy_visible": true,
+    "shipping_policy_visible": true,
+    "contact_policy_visible": true,
+    "digital_item_policy_visible": false,
+    "policy_agreement_checkbox_visible": true,
+    "test_mode": "DISABLED",
+    "status": "PRESENT_REVIEW_REQUIRED",
+    "review_note": "Policies are branded to VoltEdge and not placeholder text. No legal commitments were changed during this audit. Return-policy language should be reconciled with actual fulfillment/refund operations before scaling traffic."
+  },
+  "payment_readiness": {
+    "status": "UNKNOWN",
+    "reason": "Available payment-method metadata does not prove which provider is configured and fully onboarded for this site. No speculative provider mutation or terms acceptance was attempted."
+  },
   "not_yet_proven": [
-    "payment_method_readiness",
-    "checkout_canary",
-    "storefront_trust_and_policy_content",
+    "configured_and_onboarded_payment_provider",
+    "delivery_method_selected_cart_calculation_without_violations",
     "mobile_conversion_quality",
     "analytics_and_utm_attribution",
-    "test_order_and_refund_receipts"
+    "real_test_order_receipt",
+    "refund_receipt"
   ],
   "release_status": "IN_PROGRESS",
   "notes": [
     "Earlier recommendation-tool output that appeared to show an empty catalog was not authoritative for Catalog V3 product inventory.",
     "Direct Catalog V3 query is the controlling evidence for product count.",
-    "No traffic scale-up should be treated as proven until checkout, attribution, and test-order receipts exist."
+    "Catalog-to-cart-to-hosted-checkout path is proven without creating an order or charging money.",
+    "Payment-provider onboarding remains a hard gate before any real-money canary.",
+    "No traffic scale-up should be treated as proven until payment, attribution, real-order, and refund receipts exist."
   ]
 }

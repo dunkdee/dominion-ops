@@ -7,6 +7,9 @@ REPO="${HOME}/dominion-ops"
 RUNTIME="${HOME}/.dominion/nemotron"
 LIVE_CONTRACT="${HOME}/.config/dominion/system-integrity-agent.json"
 UNIT=/etc/systemd/system/dominion-nemotron.service
+CC_ENV_FILE="${COMMAND_CENTER_ENV_FILE:-$HOME/.config/dominion/command-center.env}"
+CC_COMPOSE="$REPO/docker-compose.command-center.yml"
+CC_BUDDY_TOKEN_FILE="${COMMAND_CENTER_BUDDY_TOKEN_FILE:-$HOME/.dominion/command-center/buddy-web-token}"
 DEPLOY_SHA="${DEPLOY_SHA:-}"
 REMOTE_BUNDLE="${REMOTE_BUNDLE:-}"
 
@@ -24,6 +27,23 @@ cleanup_stage() {
   staging=''
 }
 
+recreate_command_center() {
+  (
+    cd "$REPO"
+    COMMAND_CENTER_BUDDY_TOKEN_FILE="$CC_BUDDY_TOKEN_FILE" \
+      docker compose --env-file "$CC_ENV_FILE" -f "$CC_COMPOSE" \
+      up -d --no-build --force-recreate --no-deps dominion-command-center
+  ) || return 1
+
+  local code=''
+  for _ in $(seq 1 45); do
+    code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 8 http://127.0.0.1:8091/health 2>/dev/null || true)"
+    [ "$code" = 200 ] && return 0
+    sleep 2
+  done
+  return 1
+}
+
 rollback() {
   set +e
   say 'NEMOTRON_ROLLBACK=BEGIN'
@@ -34,6 +54,10 @@ rollback() {
   fi
   if [ -n "$backup" ] && [ -f "$backup/integrity-contract.json" ]; then
     install -m 600 "$backup/integrity-contract.json" "$LIVE_CONTRACT" || true
+  fi
+  if [ -n "$backup" ] && [ -f "$backup/command-center.env" ]; then
+    install -m 600 "$backup/command-center.env" "$CC_ENV_FILE" || true
+    recreate_command_center || true
   fi
   if [ -n "$prior_release" ]; then
     ln -sfn "$prior_release" "$RUNTIME/runtime/release" || true
@@ -67,6 +91,10 @@ trap on_exit EXIT
 [ -n "$REMOTE_BUNDLE" ] && [ -f "$REMOTE_BUNDLE" ] || fail 'bundle_missing'
 [ -d "$REPO/.git" ] || fail 'canonical_vm_repo_missing'
 [ -z "$(git -C "$REPO" status --porcelain)" ] || fail 'canonical_vm_repo_dirty'
+[ -f "$CC_ENV_FILE" ] || fail 'command_center_env_missing'
+[ ! -L "$CC_ENV_FILE" ] || fail 'command_center_env_symlink_refused'
+[ -f "$CC_COMPOSE" ] || fail 'command_center_compose_missing'
+[ -s "$CC_BUDDY_TOKEN_FILE" ] || fail 'command_center_buddy_secret_missing'
 vm_repo_sha="$(git -C "$REPO" rev-parse HEAD)"
 
 service_active="$(systemctl is-active "$SERVICE" 2>/dev/null || true)"
@@ -124,6 +152,8 @@ backup="$RUNTIME/backups/$(date -u +%Y%m%dT%H%M%SZ)-${DEPLOY_SHA:0:12}"
 install -d -m 700 "$backup" "$RUNTIME/releases" "$RUNTIME/runtime" "$RUNTIME/receipts" "$HOME/.config/dominion"
 if [ -f "$UNIT" ]; then sudo cp -a "$UNIT" "$backup/unit"; fi
 if [ -f "$LIVE_CONTRACT" ]; then cp -a "$LIVE_CONTRACT" "$backup/integrity-contract.json"; fi
+cp -a "$CC_ENV_FILE" "$backup/command-center.env"
+chmod 600 "$backup/command-center.env"
 prior_release="$(readlink -f "$RUNTIME/runtime/release" 2>/dev/null || true)"
 printf '%s\n' "$prior_release" > "$backup/prior-release.txt"
 printf '%s\n' "$vm_repo_sha" > "$backup/canonical-vm-repo-sha.txt"
@@ -174,6 +204,45 @@ printf '%s\n' "$listener" | grep -q "pid=$mainpid," || fail 'listener_not_owned_
 [ "$(systemctl is-enabled "$SERVICE")" = enabled ] || fail 'service_not_enabled'
 say "NEMOTRON_LISTENER=PASS pid=$mainpid bind=127.0.0.1:11435"
 
+# The recovery-hold baseline deliberately keeps NEMOTRON_BASE_URL empty until
+# an exact-SHA activation is authorized. Converge those two non-secret routing
+# keys transactionally now that the governed worker is healthy. The complete
+# pre-change env is already backed up and rollback recreates Command Center from
+# that backup if any later acceptance gate fails.
+python3 - "$CC_ENV_FILE" "$MODEL" <<'PY' || fail 'command_center_config_update_failed'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+model = sys.argv[2]
+updates = {
+    'NEMOTRON_BASE_URL': 'http://127.0.0.1:11435',
+    'NEMOTRON_MODEL': model,
+}
+lines = path.read_text(encoding='utf-8').splitlines()
+seen = set()
+out = []
+for line in lines:
+    replaced = False
+    for key, value in updates.items():
+        if re.match(rf'^\s*(?:export\s+)?{re.escape(key)}=', line):
+            out.append(f'{key}={value}')
+            seen.add(key)
+            replaced = True
+            break
+    if not replaced:
+        out.append(line)
+for key, value in updates.items():
+    if key not in seen:
+        out.append(f'{key}={value}')
+path.write_text('\n'.join(out) + '\n', encoding='utf-8')
+PY
+chmod 600 "$CC_ENV_FILE"
+recreate_command_center || fail 'command_center_reconfigure_failed'
+cc_env_sha="$(sha256sum "$CC_ENV_FILE" | awk '{print $1}')"
+say "NEMOTRON_COMMAND_CENTER_CONFIG=PASS base_url=127.0.0.1:11435 model=$MODEL env_sha256=$cc_env_sha"
+
 probe_request="$(mktemp)"
 probe_response="$(mktemp)"
 printf '%s' '{"message":"SYSTEM_INTEGRITY_HEALTH_PROBE. Return a short readiness acknowledgement. Do not perform any external action."}' > "$probe_request"
@@ -220,9 +289,9 @@ PY
 say "NEMOTRON_INTEGRITY=PASS cycle=$after_cycle"
 
 receipt="$RUNTIME/receipts/$(date -u +%Y%m%dT%H%M%SZ)-activation.json"
-python3 - "$receipt" "$DEPLOY_SHA" "$worker_live_sha" "$unit_live_sha" "$mainpid" "$before_cycle" "$after_cycle" "$vm_repo_sha" <<'PY'
+python3 - "$receipt" "$DEPLOY_SHA" "$worker_live_sha" "$unit_live_sha" "$mainpid" "$before_cycle" "$after_cycle" "$vm_repo_sha" "$cc_env_sha" <<'PY'
 import datetime, json, sys
-path, sha, worker, unit, pid, before, after, vm_repo_sha = sys.argv[1:]
+path, sha, worker, unit, pid, before, after, vm_repo_sha, cc_env_sha = sys.argv[1:]
 data = {
     'schema': 'dominion-nemotron-activation-receipt-v1',
     'governance': 'RADAH MEMSHALAH',
@@ -235,6 +304,9 @@ data = {
     'worker_sha256': worker,
     'unit_sha256': unit,
     'command_center_source': 'nemotron',
+    'command_center_base_url': 'http://127.0.0.1:11435',
+    'command_center_model': 'nemotron-3-nano:4b',
+    'command_center_env_sha256': cc_env_sha,
     'integrity_cycle_before': int(before),
     'integrity_cycle_after': int(after),
     'integrity_status': 'PASS',

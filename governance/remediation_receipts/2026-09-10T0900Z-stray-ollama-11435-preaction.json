@@ -1,0 +1,101 @@
+{
+  "schema": "radah-remediation-receipt-v1",
+  "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+  "receipt_kind": "contemporaneous_pre_action",
+  "created_at": "2026-09-10T09:00:00Z",
+  "actor": "Claude via Claude Code session",
+  "authority": {
+    "source": "explicit Founder directive: DOMINION GCP CLOSURE ORDER — PARALLEL TO VOLTEDGE WIX WORK",
+    "scope": "close the TCP 11435 integrity defect; revalidate identity before acting; least-forceful termination of the orphan only",
+    "status": "AUTHORIZED_FOR_BOUNDED_REMEDIATION",
+    "founder_dispatch_required": true
+  },
+  "defect": {
+    "id": "hold:port:11435",
+    "detail": "listener=present",
+    "severity": "critical",
+    "declared_by": "governance/system_integrity_agent.json absent_listeners",
+    "enforced_by": "scripts/system_integrity_agent.py check hold:port:11435",
+    "detected_at": "2026-09-09T21:17:10Z",
+    "reported_every": "89 seconds since detection"
+  },
+  "evidence": {
+    "attribution_run_id": "34458046789",
+    "attribution_job_id": "102808985768",
+    "attribution_artifact_id": "10144310524",
+    "attribution_artifact_sha256": "38f74549dd5629c1ff7b008f11ffaa93ef8bd3fa709034a1cafebf7f6ca5ba7d",
+    "inventory_run_id": "34448533182",
+    "evidence_document": "evidence/foundation-vm/attribution-20260910.md",
+    "observed_pid": 3192050,
+    "observed_exe": "/usr/local/bin/ollama",
+    "observed_exe_sha256": "c05cece87b2e85a525ccf9548d329197b938e58daa46d4fad59e8dab54e8d57d",
+    "observed_cmdline": "ollama serve",
+    "observed_cgroup": "0::/user.slice/user-1000.slice/session-104082.scope",
+    "observed_bind": "127.0.0.1:11435",
+    "observed_start": "2026-09-09T21:16:51Z",
+    "observed_ppid": 1
+  },
+  "classification": {
+    "verdict": "UNAUTHORIZED_ORPHANED_PROCESS",
+    "is_nemotron": false,
+    "nemotron_unit_state": "loaded/inactive/disabled",
+    "containment_regression": false,
+    "policy_stale": false,
+    "rationale": "A second ollama started by hand over SSH and reparented to init when the session closed. The governed instance is a separate process under ollama.service on 11434. The absent_listeners policy was correct and detected this in 19 seconds; it is not the stale artifact."
+  },
+  "blast_radius": {
+    "consumers_of_11435_in_repository": [
+      "apps/nemotron-worker/nemotron_worker.py (NEMOTRON_LISTEN_PORT default), whose unit dominion-nemotron.service is inactive and disabled"
+    ],
+    "governed_services_affected": "none",
+    "data_affected": "none",
+    "assessment": "The system ran without this process for weeks before 2026-09-09T21:16:51Z. No active unit consumes 11435.",
+    "residual_risk": "An unrecorded VM-side consumer configured outside the repository could exist. Mitigated by requiring the integrity agent to return PASS and the Command Center to stay green as post-state proofs."
+  },
+  "action_intent": {
+    "mechanism": ".github/workflows/remediate-stray-ollama-11435.yml",
+    "termination_signal": "SIGTERM",
+    "grace_seconds": 10,
+    "escalation_to_sigkill": "NOT AUTHORIZED BY THIS LANE",
+    "revalidation_before_action": [
+      "target discovered from the listener, never from the remembered pid",
+      "executable path equals /usr/local/bin/ollama",
+      "executable SHA-256 equals the recorded hash",
+      "command line matches 'ollama serve'",
+      "cgroup is a user session scope; a target under system.slice is refused",
+      "governed ollama on 11434 is a distinct pid under ollama.service answering HTTP 200",
+      "dominion-nemotron.service is still not active"
+    ],
+    "required_post_state_proofs": [
+      "proof_11435_absent",
+      "proof_11434_healthy",
+      "proof_nemotron_still_contained",
+      "proof_command_center_green",
+      "proof_integrity_pass"
+    ],
+    "prohibited": [
+      "acting on pid alone",
+      "terminating any systemd-managed service",
+      "forced kill",
+      "unit lifecycle changes",
+      "firewall or configuration changes",
+      "credential exposure"
+    ]
+  },
+  "rollback": {
+    "path": "The removed process is a stateless model server started manually. Recovery is to start a second instance again with OLLAMA_HOST bound to 127.0.0.1:11435. No data is destroyed and the governed instance on 11434 is untouched throughout.",
+    "reversibility": "FULL",
+    "data_loss_risk": "NONE"
+  },
+  "verification": {
+    "guard_matrix": "tests/remediation_guard_matrix.sh",
+    "guard_scenarios_passing": 9,
+    "guard_scenarios_total": 9,
+    "critical_guard_proven": "a target under system.slice is refused, so no governed unit can be terminated by this lane"
+  },
+  "truth_status": {
+    "action_performed_at_time_of_writing": false,
+    "this_receipt_claims_completion": false,
+    "founder_dispatch_outstanding": true
+  }
+}

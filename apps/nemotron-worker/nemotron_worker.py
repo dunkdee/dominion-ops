@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import ip_address, ip_network
@@ -14,6 +15,9 @@ NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "nemotron-3-nano:4b")
 LISTEN_HOST = os.getenv("NEMOTRON_LISTEN_HOST", "0.0.0.0")
 LISTEN_PORT = int(os.getenv("NEMOTRON_LISTEN_PORT", "11435"))
 UPSTREAM_TIMEOUT_SECONDS = int(os.getenv("NEMOTRON_TIMEOUT_SECONDS", "300"))
+NUM_CTX = max(1024, int(os.getenv("NEMOTRON_NUM_CTX", "4096")))
+MAX_CONCURRENCY = max(1, int(os.getenv("NEMOTRON_MAX_CONCURRENCY", "1")))
+_GENERATION_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENCY)
 
 DOMINION_CHARTER = """You are Nemotron, Dominion's primary reasoning layer and a member of one coordinated enterprise AI family.
 The Founder retains final authority. Never represent yourself or another agent as outranking the Founder.
@@ -47,7 +51,7 @@ def _available_models() -> list[str]:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "DominionNemotron/1.0"
+    server_version = "DominionNemotron/1.1"
 
     def _send(self, status: int, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -90,6 +94,8 @@ class Handler(BaseHTTPRequestHandler):
                     "model_available": available,
                     "founder_authority": "final",
                     "ecosystem": "dominion",
+                    "num_ctx": NUM_CTX,
+                    "max_concurrency": MAX_CONCURRENCY,
                 },
             )
             return
@@ -106,6 +112,17 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != "/v1/chat/completions":
             self._send(404, {"error": {"message": "not found", "type": "not_found"}})
             return
+        if not _GENERATION_SLOTS.acquire(blocking=False):
+            self._send(
+                429,
+                {
+                    "error": {
+                        "message": "Nemotron local inference capacity is busy; retry later",
+                        "type": "capacity_busy",
+                    }
+                },
+            )
+            return
         try:
             payload = self._read_json()
             messages = payload.get("messages")
@@ -119,7 +136,7 @@ class Handler(BaseHTTPRequestHandler):
                 "keep_alive": "10m",
                 "options": {
                     "temperature": float(payload.get("temperature", 0.2)),
-                    "num_ctx": 4096,
+                    "num_ctx": NUM_CTX,
                 },
             }
             result = _json_request("POST", f"{OLLAMA_BASE_URL}/api/chat", upstream)
@@ -149,6 +166,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": {"message": str(exc), "type": "invalid_request"}})
         except (error.URLError, TimeoutError) as exc:
             self._send(502, {"error": {"message": f"Nemotron upstream unavailable: {exc}", "type": "upstream"}})
+        finally:
+            _GENERATION_SLOTS.release()
 
     def log_message(self, format: str, *args: object) -> None:
         return

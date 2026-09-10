@@ -1,32 +1,574 @@
 {
   "schema_version": "1.0.0",
-  "generated_at": "2026-07-25T23:00:00Z",
-  "source_of_truth": "production-vm-audit",
+  "generated_at": "2026-09-10T07:09:14Z",
+  "source_of_truth": "reconciled",
   "services": [
     {
-      "service_id": "dominion-web",
-      "display_name": "Dominion Web",
+      "service_id": "ascendant-store",
+      "display_name": "Ascendant Store",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": "ascendant_store",
+      "owner_agent_id": null,
+      "owner_role": "Commerce Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "08 Verticals/Commerce/Services/Ascendant Store",
+      "port": 5090,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit ascendant-store.service active/running; TCP 5090 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit ascendant-store.service active/running (VERIFIED). Declared as PORT_MANIFEST[5090]='ascendant-store'. Loopback probe on 5090 returned HTTP 200, so the storefront is already serving. BUT ~/.dominion/ascendant-store/runtime/release is ABSENT and ~/.dominion/ascendant-store/runtime.env is ABSENT, so the running code's deployment source is UNPROVEN and is not the governed release path. A governed deploy to this path would collide with whatever is serving now. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "auric-edge",
+      "display_name": "AuricEdge",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/AuricEdge",
+      "port": 9380,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit auric_edge.service active/running; TCP 9380 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit auric_edge.service active/running (VERIFIED). VERDICT: REAL AND MANAGED. Unit auric_edge.service is active/running. Declared in buddy_core/sentinel.py as PORT_MANIFEST[9380]='auric-edge'. Listening on 0.0.0.0:9380 -- all interfaces, not loopback. /health returned HTTP 404, so no health contract is published. Purpose, source tree and data classification remain undocumented. The all-interface bind is an open security question: host exposure is unrestricted and only the cloud firewall limits reach. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "baby-api",
+      "display_name": "Baby API",
       "runtime_kind": "docker",
       "runtime_location": "foundation-vm",
       "repository_path": null,
       "owner_agent_id": null,
-      "owner_role": "Commerce Operations",
-      "vertical_id": "commerce",
+      "owner_role": "Operations",
+      "vertical_id": null,
       "lifecycle_state": "PRODUCTION",
       "truth_state": "VERIFIED",
-      "obsidian_home": "08 Verticals/Commerce/Services/Dominion Web",
+      "obsidian_home": "05 Operations/Services/Baby API",
+      "port": 8080,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "Container state and published ports (0.0.0.0:8080->8080/tcp)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Container running: image=dominion-ops-baby-api, status=Up 3 days (healthy), ports=0.0.0.0:8080->8080/tcp."
+        }
+      ]
+    },
+    {
+      "service_id": "baby-logger",
+      "display_name": "Baby Logger",
+      "runtime_kind": "docker",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Baby Logger",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "Container state and published ports (none published)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Container running: image=alpine:latest, status=Up 3 days, ports=none published."
+        }
+      ]
+    },
+    {
+      "service_id": "browser-agents",
+      "display_name": "Browser Agents",
+      "runtime_kind": "docker",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Browser Agents",
+      "port": 8081,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "Container state and published ports (0.0.0.0:8081->8000/tcp)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Container running: image=dominion-ops-browser-agents, status=Up 3 days (healthy), ports=0.0.0.0:8081->8000/tcp."
+        }
+      ]
+    },
+    {
+      "service_id": "buddy-bridge",
+      "display_name": "Buddy Bridge",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": "buddy_core/buddy_bridge_api.py",
+      "owner_agent_id": null,
+      "owner_role": "Buddy Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Buddy Bridge",
+      "port": 5052,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit buddy-bridge.service active/running; TCP 5052 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit buddy-bridge.service active/running (VERIFIED). Port declared in buddy_core/config/FOUNDER_OPERATING_CONTEXT.md. Loopback probe on 5052 returned HTTP 200. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "caddy",
+      "display_name": "Caddy Reverse Proxy",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Infrastructure Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "06 Infrastructure/Services/Caddy",
+      "port": 443,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "caddy.service active/running; TCP 80/443 listening",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit caddy.service active/running. Listening on *:80 and *:443, with the admin API on 127.0.0.1:2019. /etc/caddy/Caddyfile serves 16 sites under dominionhealing.org, including store. and shop. Upstreams named: 3000, 5000, 5055, 5070, 5080, 5095, 5101, 5120, 5678, 8100, plus matcher-based routes for the Publisher Meta callback, revenue public paths, Buddy, the store API, lead capture and the vault path."
+        }
+      ]
+    },
+    {
+      "service_id": "caddy-upstream-5120",
+      "display_name": "Caddy upstream 127.0.0.1:5120 with no listener",
+      "runtime_kind": "external",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Unassigned",
+      "vertical_id": null,
+      "lifecycle_state": "SUSPENDED",
+      "truth_state": "BLOCKED",
+      "obsidian_home": "07 Governance/Holds/Dead Caddy Upstream",
+      "port": 5120,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "DEAD ROUTE \u2014 Caddy forwards to a port nothing is listening on",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "BLOCKED",
+          "sha256": null,
+          "notes": "/etc/caddy/Caddyfile carries `reverse_proxy 127.0.0.1:5120`, but 5120 does not appear anywhere in the listening-port set. Public traffic reaching that route gets a gateway error. The site it serves was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "conductor-scheduler",
+      "display_name": "Conductor Scheduler",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Orchestration/Conductor Scheduler",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit conductor-scheduler.service active/running",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit conductor-scheduler.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+        }
+      ]
+    },
+    {
+      "service_id": "conductor-worker",
+      "display_name": "Conductor Worker",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Orchestration/Conductor Worker",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit conductor-worker.service active/running",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit conductor-worker.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+        }
+      ]
+    },
+    {
+      "service_id": "covenant-watchdog",
+      "display_name": "Covenant Watchdog",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Governance Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "07 Governance/Services/Covenant Watchdog",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit covenant-watchdog.service active/running",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit covenant-watchdog.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-3d-dashboard",
+      "display_name": "Dominion 3D Dashboard",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/3D Dashboard",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-3d-dashboard.service active/running",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-3d-dashboard.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-alchemist",
+      "display_name": "Alchemist",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Alchemist",
+      "port": 5050,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-alchemist.service active/running; TCP 5050 listening (loopback)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-alchemist.service active/running (VERIFIED). VERDICT: REAL AND MANAGED. Unit dominion-alchemist.service is active/running. Declared in buddy_core/sentinel.py as PORT_MANIFEST[5050]='alchemist' and as SERVICES['alchemist-api'] with critical=True. Listening on 127.0.0.1:5050. /health returned HTTP 501, so the process is alive but publishes no health contract. Purpose, source tree and data classification remain undocumented. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-alpha",
+      "display_name": "Dominion Alpha Engine",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Alpha Engine",
+      "port": 8787,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-alpha.service active/running; TCP 8787 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-alpha.service active/running (VERIFIED). config/command-center.env.example sets ALPHA_ENGINE_BASE_URL=http://127.0.0.1:8787 and governance/system_integrity_agent.json probes http://127.0.0.1:8787/health. Listening on 0.0.0.0:8787. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-backup",
+      "display_name": "Dominion Backup",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Infrastructure Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "06 Infrastructure/Services/Backup",
+      "port": null,
+      "scheduler": "dominion-backup.timer",
+      "dependencies": [],
+      "health_signal": "dominion-backup.timer active/waiting; dominion-backup.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-backup.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-backup.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-buddy-web",
+      "display_name": "Buddy Web",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Buddy Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Buddy Web",
+      "port": 5070,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-buddy-web.service active/running; TCP 5070 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-buddy-web.service active/running (VERIFIED). PORT_MANIFEST[5070]='buddy-web'. Listening on 0.0.0.0:5070. Routed by Caddy at buddy.dominionhealing.org. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-command-center",
+      "display_name": "Dominion Command Center",
+      "runtime_kind": "docker",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Governance Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Command Center",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "Container state and published ports (none published)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Container running: image=dominion-ops-dominion-command-center, status=Up 4 days (healthy), ports=none published."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-command-center-state",
+      "display_name": "Command Center State Refresh",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Governance Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Command Center State",
+      "port": null,
+      "scheduler": "dominion-command-center-state.timer",
+      "dependencies": [],
+      "health_signal": "dominion-command-center-state.timer active/waiting; dominion-command-center-state.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-command-center-state.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-command-center-state.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-command-deck",
+      "display_name": "Dominion Command Deck",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Command Deck",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-command-deck.service active/running",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-command-deck.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-conductor",
+      "display_name": "Dominion Conductor",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Orchestration/Conductor",
+      "port": 5060,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-conductor.service active/running; TCP 5060 listening (loopback)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-conductor.service active/running (VERIFIED). Declared critical in buddy_core/sentinel.py as SERVICES['conductor-api'] and PORT_MANIFEST[5060]. Loopback probe on 5060 returned HTTP 200. Two further units, conductor-scheduler.service and conductor-worker.service, are also active. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-dashboard",
+      "display_name": "Dominion Dashboard",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Dominion Dashboard",
       "port": 3000,
       "scheduler": null,
       "dependencies": [],
-      "health_signal": "HTTP health check on port 3000",
+      "health_signal": "systemd unit dominion-dashboard.service active/running; TCP 3000 listening (loopback)",
       "rollback_reference": null,
-      "evidence": [{
-        "source": "production ecosystem audit",
-        "captured_at": "2026-07-25T22:00:00Z",
-        "truth_state": "VERIFIED",
-        "sha256": null,
-        "notes": "Container and listening port observed. Repository ownership remains unresolved."
-      }]
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-dashboard.service active/running (VERIFIED). PORT_MANIFEST[3000]='dashboard'. Listening on 127.0.0.1:3000, probe returned HTTP 302, and Caddy carries a 127.0.0.1:3000 upstream. Not to be confused with the dominion-web container, which publishes 0.0.0.0:8090. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
     },
     {
       "service_id": "dominion-db",
@@ -40,18 +582,668 @@
       "lifecycle_state": "PRODUCTION",
       "truth_state": "VERIFIED",
       "obsidian_home": "06 Infrastructure/Services/Dominion Database",
+      "port": 5432,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "Container state and published ports (127.0.0.1:5432->5432/tcp)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Container running: image=postgres:15, status=Up 2 weeks, ports=127.0.0.1:5432->5432/tcp."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-email-drip",
+      "display_name": "Dominion Email Drip",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": "services/email_drip",
+      "owner_agent_id": null,
+      "owner_role": "Revenue Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Email Drip",
+      "port": 8099,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-email-drip.service active/running; TCP 8099 listening (loopback)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-email-drip.service active/running (VERIFIED). services/email_drip/email_drip.py binds DRIP_PORT, default 8099, and services/email_drip/REVIEW_SCOPE.md declares 8099. Listening on 127.0.0.1:8099. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-executor",
+      "display_name": "Dominion Executor",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Executor",
+      "port": null,
+      "scheduler": "dominion-executor.timer",
+      "dependencies": [],
+      "health_signal": "dominion-executor.timer active/waiting; dominion-executor.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-executor.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-executor.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-gatekeeper",
+      "display_name": "Dominion Gatekeeper",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": "buddy_core/gatekeeper.py",
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Gatekeeper",
+      "port": 5000,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-gatekeeper.service active/running; TCP 5000 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-gatekeeper.service active/running (VERIFIED). Declared critical in buddy_core/sentinel.py SERVICES and PORT_MANIFEST. Loopback probe on 5000 returned HTTP 200. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-growth-engine",
+      "display_name": "Dominion Growth Engine",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Revenue Operations",
+      "vertical_id": null,
+      "lifecycle_state": "REGISTERED",
+      "truth_state": "UNKNOWN",
+      "obsidian_home": "05 Operations/Services/Growth Engine",
+      "port": null,
+      "scheduler": "dominion-growth-engine.timer",
+      "dependencies": [],
+      "health_signal": "UNRESOLVED \u2014 timer registered, service unit never observed",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "UNKNOWN",
+          "sha256": null,
+          "notes": "dominion-growth-engine.timer appears in the timer list, but no dominion-growth-engine.service appears in the unit listing. Whether the service unit exists is UNKNOWN and is not assumed either way."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-guardian",
+      "display_name": "Dominion Guardian",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Governance Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "07 Governance/Services/Guardian",
       "port": null,
       "scheduler": null,
       "dependencies": [],
-      "health_signal": "Container health and database connection probe",
+      "health_signal": "systemd unit dominion-guardian.service active/running",
       "rollback_reference": null,
-      "evidence": [{
-        "source": "production ecosystem audit",
-        "captured_at": "2026-07-25T22:00:00Z",
-        "truth_state": "VERIFIED",
-        "sha256": null,
-        "notes": "Container observed. Exact repository path and downstream consumers require reconciliation."
-      }]
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-guardian.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-healthcheck",
+      "display_name": "Dominion Healthcheck",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Healthcheck",
+      "port": null,
+      "scheduler": "dominion-healthcheck.timer",
+      "dependencies": [],
+      "health_signal": "dominion-healthcheck.timer active/waiting; dominion-healthcheck.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-healthcheck.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-healthcheck.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-intel",
+      "display_name": "Dominion Intel",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Intel",
+      "port": null,
+      "scheduler": "dominion-intel.timer",
+      "dependencies": [],
+      "health_signal": "dominion-intel.timer active/waiting; dominion-intel.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-intel.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-intel.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-juris",
+      "display_name": "Dominion Juris",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Governance Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "07 Governance/Services/Juris",
+      "port": 5055,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-juris.service active/running; TCP 5055 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-juris.service active/running (VERIFIED). PORT_MANIFEST[5055]='juris', annotated in buddy_core/sentinel.py as having replaced gemini-server. CONFLICT: gemini-server.service is ALSO active/running and SERVICES['gemini-server'] also claims 5055. Two active units claim one port; which one holds it is UNPROVEN. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-mcp-cli",
+      "display_name": "Dominion MCP CLI",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Infrastructure Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "06 Infrastructure/Services/MCP CLI",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-mcp-cli.service active/running",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-mcp-cli.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-mission-runner",
+      "display_name": "Dominion Mission Runner",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Mission Runner",
+      "port": null,
+      "scheduler": "dominion-mission-runner.timer",
+      "dependencies": [],
+      "health_signal": "dominion-mission-runner.timer active/waiting; dominion-mission-runner.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-mission-runner.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-mission-runner.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-monitor",
+      "display_name": "Dominion Monitor",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Monitor",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-monitor.service active/running",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-monitor.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-n8n",
+      "display_name": "n8n Orchestration",
+      "runtime_kind": "docker",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Orchestration/n8n",
+      "port": 5678,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "Container state and published ports (0.0.0.0:5678->5678/tcp)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Container running: image=n8nio/n8n:latest, status=Up 2 weeks, ports=0.0.0.0:5678->5678/tcp."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-n8n-watchdog",
+      "display_name": "n8n Watchdog",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Orchestration/n8n Watchdog",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-n8n-watchdog.service active/running",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-n8n-watchdog.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-ops-dashboard",
+      "display_name": "Dominion Ops Dashboard",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": "buddy_core/dominion_ops_dashboard.py",
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Ops Dashboard",
+      "port": 5100,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-ops-dashboard.service active/running; TCP 5100 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-ops-dashboard.service active/running (VERIFIED). buddy_core/dominion_ops_dashboard.py binds 0.0.0.0:5100. Listening on 0.0.0.0:5100. The 2026-08-15 containment record closed raw ingress by deleting GCP rule allow-ops-dashboard; the host still binds all interfaces, so only the cloud firewall restricts reach. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-overseer",
+      "display_name": "Dominion Overseer",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Governance Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "07 Governance/Services/Overseer",
+      "port": null,
+      "scheduler": "dominion-overseer.timer",
+      "dependencies": [],
+      "health_signal": "dominion-overseer.timer active/waiting; dominion-overseer.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-overseer.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-overseer.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-paper-trade",
+      "display_name": "Dominion Paper Trade",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Trading Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "08 Verticals/Trading/Services/Paper Trade",
+      "port": null,
+      "scheduler": "dominion-paper-trade.timer",
+      "dependencies": [],
+      "health_signal": "dominion-paper-trade.timer active/waiting; dominion-paper-trade.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-paper-trade.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-paper-trade.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-proposal-queue",
+      "display_name": "Dominion Proposal Queue",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": "buddy_core/proposal_queue.py",
+      "owner_agent_id": null,
+      "owner_role": "Governance Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "07 Governance/Services/Proposal Queue",
+      "port": 5101,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-proposal-queue.service active/running; TCP 5101 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-proposal-queue.service active/running (VERIFIED). buddy_core/proposal_queue.py binds 0.0.0.0:5101. Listening on 0.0.0.0:5101 and named twice as a Caddy upstream. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-publisher",
+      "display_name": "Dominion Publisher",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": "apps/dominion_publisher",
+      "owner_agent_id": null,
+      "owner_role": "Publishing Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Dominion Publisher",
+      "port": 5112,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-publisher.service active/running; TCP 5112 listening (loopback)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-publisher.service active/running (VERIFIED). Loopback probe on 5112 returned HTTP 200. ~/.dominion/publisher/runtime/release exists (NOT_A_GIT_CHECKOUT) and ~/.dominion/publisher/runtime.env is mode 600 with 3 keys. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-radah-autopilot",
+      "display_name": "RADAH MEMSHALAH Autopilot",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Governance Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "07 Governance/Services/RADAH Autopilot",
+      "port": null,
+      "scheduler": "dominion-radah-autopilot.timer",
+      "dependencies": [],
+      "health_signal": "dominion-radah-autopilot.timer active/waiting; dominion-radah-autopilot.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-radah-autopilot.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-radah-autopilot.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-report",
+      "display_name": "Dominion Report",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Dominion Report",
+      "port": 5095,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-report.service active/running; TCP 5095 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-report.service active/running (VERIFIED). PORT_MANIFEST[5095]='dominion-report'. Listening on 0.0.0.0:5095 and routed by Caddy at report.dominionhealing.org. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-revenue-evaluator",
+      "display_name": "Dominion Revenue Evaluator",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Revenue Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Revenue Evaluator",
+      "port": null,
+      "scheduler": "dominion-revenue-evaluator.timer",
+      "dependencies": [],
+      "health_signal": "dominion-revenue-evaluator.timer active/waiting; dominion-revenue-evaluator.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-revenue-evaluator.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-revenue-evaluator.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-revenue-runtime",
+      "display_name": "Dominion Revenue Runtime",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Revenue Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Revenue Runtime",
+      "port": 8790,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-revenue-runtime.service active/running; TCP 8790 listening (loopback)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-revenue-runtime.service active/running (VERIFIED). Loopback probe on 8790 returned HTTP 200. ~/.dominion/revenue-runtime/runtime/release and runtime.env are both ABSENT, so the running code's deployment source is UNPROVEN. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-review-queue",
+      "display_name": "Dominion Review Queue",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Governance Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "07 Governance/Services/Review Queue",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-review-queue.service active/running",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-review-queue.service active/running. No port is attributed to it by the repository and none was proven on the VM."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-sentinel",
+      "display_name": "Dominion Sentinel",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": "buddy_core/sentinel.py",
+      "owner_agent_id": null,
+      "owner_role": "Governance Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "07 Governance/Services/Sentinel",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-sentinel.service active/running",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-sentinel.service active/running. No port is attributed to it by the repository and none was proven on the VM. buddy_core/sentinel.py carries PORT_MANIFEST, the repository's declared port-to-service map, and is the source of most port attributions here."
+        }
+      ]
     },
     {
       "service_id": "dominion-seo",
@@ -67,66 +1259,396 @@
       "obsidian_home": "08 Verticals/Content/Services/Dominion SEO",
       "port": null,
       "scheduler": null,
-      "dependencies": ["dominion-web"],
-      "health_signal": "Container health plus most recent successful SEO task",
+      "dependencies": [],
+      "health_signal": "Container state and published ports (none published)",
       "rollback_reference": null,
-      "evidence": [{
-        "source": "production ecosystem audit",
-        "captured_at": "2026-07-25T22:00:00Z",
-        "truth_state": "VERIFIED",
-        "sha256": null,
-        "notes": "Container observed. Ownership assignment is role-level until agent registry reconciliation."
-      }]
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Container running: image=dominion-seo:latest, status=Up 2 weeks, ports=none published."
+        }
+      ]
     },
     {
-      "service_id": "dominion-n8n",
-      "display_name": "Dominion n8n",
-      "runtime_kind": "docker",
+      "service_id": "dominion-store",
+      "display_name": "Dominion Store",
+      "runtime_kind": "systemd",
       "runtime_location": "foundation-vm",
       "repository_path": null,
       "owner_agent_id": null,
-      "owner_role": "Conductor",
-      "vertical_id": "intelligence-orchestration",
-      "lifecycle_state": "PRODUCTION",
-      "truth_state": "VERIFIED",
-      "obsidian_home": "05 Operations/Orchestration/n8n",
-      "port": 5678,
-      "scheduler": "n8n internal schedules and webhooks",
-      "dependencies": ["dominion-db"],
-      "health_signal": "HTTP health check on port 5678 and workflow execution status",
-      "rollback_reference": null,
-      "evidence": [{
-        "source": "production ecosystem audit",
-        "captured_at": "2026-07-25T22:00:00Z",
-        "truth_state": "VERIFIED",
-        "sha256": null,
-        "notes": "Container and listening port observed. Workflow-level ownership still requires inventory."
-      }]
-    },
-    {
-      "service_id": "baby-api",
-      "display_name": "Baby API",
-      "runtime_kind": "docker",
-      "runtime_location": "foundation-vm",
-      "repository_path": null,
-      "owner_agent_id": null,
-      "owner_role": "Application Operations",
+      "owner_role": "Commerce Operations",
       "vertical_id": null,
       "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "08 Verticals/Commerce/Services/Dominion Store",
+      "port": 5080,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-store.service active/running; TCP 5080 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-store.service active/running (VERIFIED). PORT_MANIFEST[5080]='dominion-store'. Listening on 0.0.0.0:5080 and named twice as a Caddy upstream. Distinct from ascendant-store.service on 5090: two storefront services are running at once and their division of responsibility is undocumented. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-surplus-dashboard",
+      "display_name": "Dominion Surplus Dashboard",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Surplus Dashboard",
+      "port": 8100,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-surplus-dashboard.service active/running; TCP 8100 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-surplus-dashboard.service active/running (VERIFIED). apps/site-fixes/fix_caddy.py routes surplus.dominionhealing.org to 127.0.0.1:8100 and the live Caddyfile carries that upstream. Listening on 0.0.0.0:8100. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-system-integrity",
+      "display_name": "Dominion System Integrity Agent",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": "scripts/system_integrity_agent.py",
+      "owner_agent_id": null,
+      "owner_role": "Governance Operations",
+      "vertical_id": null,
+      "lifecycle_state": "SUSPENDED",
+      "truth_state": "BLOCKED",
+      "obsidian_home": "07 Governance/Services/System Integrity Agent",
+      "port": null,
+      "scheduler": "dominion-system-integrity.timer",
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-system-integrity.service \u2014 FAILED",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "BLOCKED",
+          "sha256": null,
+          "notes": "Unit dominion-system-integrity.service is load=loaded active=FAILED sub=FAILED. This is the agent that enforces governance/system_integrity_agent.json: active unit checks, containment holds, and the absent_listeners invariant. While it is failed, none of those invariants are being enforced, and at least one (absent_listeners 11435) is currently violated. BLOCKED under RADAH MEMSHALAH: it stays BLOCKED until evidence proves recovery."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-trade-report",
+      "display_name": "Dominion Trade Report",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Trading Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
       "truth_state": "VERIFIED",
-      "obsidian_home": "05 Operations/Services/Baby API",
+      "obsidian_home": "08 Verticals/Trading/Services/Trade Report",
+      "port": null,
+      "scheduler": "dominion-trade-report.timer",
+      "dependencies": [],
+      "health_signal": "dominion-trade-report.timer active/waiting; dominion-trade-report.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-trade-report.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-trade-report.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-twilio-router",
+      "display_name": "Dominion Twilio Router",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "05 Operations/Services/Twilio Router",
+      "port": 5102,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit dominion-twilio-router.service active/running; TCP 5102 listening (0.0.0.0)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit dominion-twilio-router.service active/running (VERIFIED). Port declared in buddy_core/config/FOUNDER_OPERATING_CONTEXT.md. Listening on 0.0.0.0:5102. The 2026-08-15 containment record holds Twilio PAUSED and states the router 'remains reachable only locally' after GCP rule allow-twilio-router was deleted; the host binds all interfaces, so that claim rests on the cloud firewall alone. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-watchdog",
+      "display_name": "Dominion Watchdog",
+      "runtime_kind": "cron",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Operations",
+      "vertical_id": null,
+      "lifecycle_state": "LIMITED_PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "05 Operations/Services/Watchdog",
+      "port": null,
+      "scheduler": "dominion-watchdog.timer",
+      "dependencies": [],
+      "health_signal": "dominion-watchdog.timer active/waiting; dominion-watchdog.service inactive between fires",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit dominion-watchdog.service is load=loaded active=inactive sub=dead, which is the expected resting state for a timer-driven unit, and dominion-watchdog.timer is registered. Last-run outcome was not captured by this inventory."
+        }
+      ]
+    },
+    {
+      "service_id": "dominion-web",
+      "display_name": "Dominion Web",
+      "runtime_kind": "docker",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Commerce Operations",
+      "vertical_id": "commerce",
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "08 Verticals/Commerce/Services/Dominion Web",
+      "port": 8090,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "Container state and published ports (0.0.0.0:8090->80/tcp)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Container running: image=dominion-ops-dominion-web, status=Up 3 days, ports=0.0.0.0:8090->80/tcp."
+        }
+      ]
+    },
+    {
+      "service_id": "gemini-server",
+      "display_name": "Gemini Server",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Infrastructure Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "06 Infrastructure/AI/Gemini Server",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit gemini-server.service active/running; TCP None listening (n/a)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit gemini-server.service active/running (VERIFIED). Unit active/running. buddy_core/sentinel.py SERVICES declares port 5055 critical, but PORT_MANIFEST records 5055 as reassigned to juris and comments that gemini-server was removed. The unit is nevertheless running. Port left null: the claim is contradicted by the repository and unproven on the VM. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "movie-generator",
+      "display_name": "Movie Generator",
+      "runtime_kind": "docker",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Content Operations",
+      "vertical_id": "content",
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "08 Verticals/Content/Services/Movie Generator",
       "port": 8001,
       "scheduler": null,
       "dependencies": [],
-      "health_signal": "HTTP health check on port 8001",
+      "health_signal": "Container state and published ports (0.0.0.0:8001->8000/tcp)",
       "rollback_reference": null,
-      "evidence": [{
-        "source": "production ecosystem audit",
-        "captured_at": "2026-07-25T22:00:00Z",
-        "truth_state": "VERIFIED",
-        "sha256": null,
-        "notes": "Container and listening port observed. Purpose, data classification, and accountable agent remain unresolved."
-      }]
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Container running: image=movie-generator, status=Up 2 weeks, ports=0.0.0.0:8001->8000/tcp."
+        }
+      ]
+    },
+    {
+      "service_id": "nemotron-listener-11435",
+      "display_name": "Unidentified listener on the contained Nemotron port",
+      "runtime_kind": "process",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Unassigned",
+      "vertical_id": null,
+      "lifecycle_state": "SUSPENDED",
+      "truth_state": "BLOCKED",
+      "obsidian_home": "07 Governance/Holds/Nemotron Containment",
+      "port": 11435,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "CONTAINMENT VIOLATED \u2014 port declared absent_listeners is listening",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "BLOCKED",
+          "sha256": null,
+          "notes": "CONTAINMENT BREACH. governance/system_integrity_agent.json declares absent_listeners=[11435], and scripts/system_integrity_agent.py records hold:port:11435 as failed whenever a listener is present. The 2026-08-15 containment record accepted 'no listener on TCP 11435' as the proof that Nemotron was contained. The inventory shows 127.0.0.1:11435 IS LISTENING, while dominion-nemotron.service does not appear in the unit list at all -- so the listener is running outside the unit that was disabled, and its identity is UNKNOWN. apps/nemotron-worker/nemotron_worker.py defaults NEMOTRON_LISTEN_PORT to 11435. Not re-enabled by any recorded work order. Requires Founder decision; do not restart, stop or probe further without one."
+        }
+      ]
+    },
+    {
+      "service_id": "obsidian-remote",
+      "display_name": "Obsidian Remote",
+      "runtime_kind": "docker",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Infrastructure Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "06 Infrastructure/Services/Obsidian Remote",
+      "port": 8083,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "Container state and published ports (127.0.0.1:8083->3000/tcp)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Container running: image=lscr.io/linuxserver/obsidian:latest, status=Up 4 days (healthy), ports=127.0.0.1:8083->3000/tcp."
+        }
+      ]
+    },
+    {
+      "service_id": "ollama",
+      "display_name": "Ollama Model Runtime",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Infrastructure Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "INFERRED",
+      "obsidian_home": "06 Infrastructure/AI/Ollama",
+      "port": 11434,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit ollama.service active/running; TCP 11434 listening (loopback)",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "INFERRED",
+          "sha256": null,
+          "notes": "Unit ollama.service active/running (VERIFIED). PORT_MANIFEST[11434]='ollama' and buddy_core/sentinel.py SERVICES['ollama']. Listening on 127.0.0.1:11434. Port binding is declared by the repository and the port is listening, but this inventory ran `ss` without -p, so the process-to-port mapping is unproven."
+        }
+      ]
+    },
+    {
+      "service_id": "syncthing",
+      "display_name": "Syncthing",
+      "runtime_kind": "systemd",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Infrastructure Operations",
+      "vertical_id": null,
+      "lifecycle_state": "PRODUCTION",
+      "truth_state": "VERIFIED",
+      "obsidian_home": "06 Infrastructure/Services/Syncthing",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "systemd unit syncthing@<redacted>.service active/running",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Unit syncthing@<redacted>.service active/running. No port is attributed to it by the repository and none was proven on the VM. Listening on 0.0.0.0:22000 and 127.0.0.1:8384, the documented Syncthing transfer and GUI ports. The 2026-08-15 containment record holds Obsidian stores unreconciled and authorizes no synchronization or merge."
+        }
+      ]
+    },
+    {
+      "service_id": "unattributed-listeners",
+      "display_name": "Unattributed TCP Listeners",
+      "runtime_kind": "process",
+      "runtime_location": "foundation-vm",
+      "repository_path": null,
+      "owner_agent_id": null,
+      "owner_role": "Unassigned",
+      "vertical_id": null,
+      "lifecycle_state": "REGISTERED",
+      "truth_state": "UNKNOWN",
+      "obsidian_home": "07 Governance/Holds/Unattributed Listeners",
+      "port": null,
+      "scheduler": null,
+      "dependencies": [],
+      "health_signal": "None \u2014 no owner identified, and these ports were not probed",
+      "rollback_reference": null,
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "UNKNOWN",
+          "sha256": null,
+          "notes": "Eight TCP ports are listening on foundation-vm with no owner identified by either the repository or this inventory. Public (0.0.0.0/*): 5103, 5110, 8200, 8888, 20201, 20202. Loopback: 5056, 8390. Recorded as one entry because no evidence separates them into services; each is UNKNOWN, not absent. PORT CONFLICT: 8200 is already held by an unidentified process and is the exact port deploy/council-node/docker-compose.yml sets as COUNCIL_BIND_PORT and deploy/council-node/scripts/{deploy,verify}.sh health-check. A Council Node deploy to foundation-vm would collide with it."
+        }
+      ]
     },
     {
       "service_id": "wix-agent",
@@ -140,43 +1662,20 @@
       "lifecycle_state": "PRODUCTION",
       "truth_state": "VERIFIED",
       "obsidian_home": "08 Verticals/Commerce/Agents/Wix Agent",
-      "port": 8090,
-      "scheduler": null,
-      "dependencies": ["dominion-db"],
-      "health_signal": "HTTP health check on port 8090 and last successful catalog operation",
-      "rollback_reference": null,
-      "evidence": [{
-        "source": "production ecosystem audit",
-        "captured_at": "2026-07-25T22:00:00Z",
-        "truth_state": "VERIFIED",
-        "sha256": null,
-        "notes": "Container and listening port observed. Production permissions must remain human-controlled."
-      }]
-    },
-    {
-      "service_id": "movie-generator",
-      "display_name": "Movie Generator",
-      "runtime_kind": "docker",
-      "runtime_location": "foundation-vm",
-      "repository_path": null,
-      "owner_agent_id": null,
-      "owner_role": "Content Operations",
-      "vertical_id": "content",
-      "lifecycle_state": "LIMITED_PRODUCTION",
-      "truth_state": "VERIFIED",
-      "obsidian_home": "08 Verticals/Content/Services/Movie Generator",
-      "port": 20202,
+      "port": 8082,
       "scheduler": null,
       "dependencies": [],
-      "health_signal": "HTTP health check on port 20202 and last completed generation job",
+      "health_signal": "Container state and published ports (127.0.0.1:8082->8000/tcp)",
       "rollback_reference": null,
-      "evidence": [{
-        "source": "production ecosystem audit",
-        "captured_at": "2026-07-25T22:00:00Z",
-        "truth_state": "VERIFIED",
-        "sha256": null,
-        "notes": "Container and listening port observed. Limited-production state is conservative pending output and licensing verification."
-      }]
+      "evidence": [
+        {
+          "source": "foundation-vm runtime inventory (read-only), workflow run 34448533182, job 102778639794",
+          "captured_at": "2026-09-10T07:09:14Z",
+          "truth_state": "VERIFIED",
+          "sha256": null,
+          "notes": "Container running: image=dominion/wix-agent:local, status=Up 3 days (healthy), ports=127.0.0.1:8082->8000/tcp."
+        }
+      ]
     }
   ]
 }

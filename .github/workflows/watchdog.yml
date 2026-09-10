@@ -115,6 +115,8 @@ jobs:
           check_http alpha_engine 200 http://127.0.0.1:8787/health
           check_http conductor 200 http://127.0.0.1:5060/health
           check_http command_center 200 http://127.0.0.1:8091/health
+          check_active dominion-nemotron.service
+          check_http nemotron 200 http://127.0.0.1:11435/health
 
           echo '=== BUDDY RUNTIME ==='
           check_active dominion-buddy-web.service
@@ -147,18 +149,11 @@ jobs:
             fail "system_integrity=invalid_or_stale file=$integrity_state"
           fi
 
-          echo '=== CONTAINMENT ==='
-          check_held dominion-nemotron.service
+          echo '=== REMAINING CONTAINMENT ==='
           check_held dominion-email-monitor.service
           check_held dominion-affiliate.timer
           check_held dominion-scout.timer
           check_held dominion-wholesale.timer
-
-          if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq '(^|:)11435$'; then
-            fail 'CONTAINMENT_HOLD=BROKEN port=11435 listener=PRESENT'
-          else
-            pass 'CONTAINMENT_HOLD=ENFORCED port=11435 listener=ABSENT'
-          fi
 
           check_firewall_absent allow-ops-dashboard
           check_firewall_absent allow-twilio-router
@@ -205,7 +200,7 @@ jobs:
             fail "OBSIDIAN_CANONICAL=INVALID manifest=$brain_manifest"
           fi
 
-          pass 'BUDDY_LIVE_CONFORMANCE=VERIFIED services=buddy,proposal_queue,sentinel'
+          pass 'BUDDY_LIVE_CONFORMANCE=VERIFIED services=buddy,proposal_queue,sentinel,nemotron'
           echo 'EXTERNAL_ACTIONS_AUTHORIZED=founder_gated'
 
           if [ "$failures" -eq 0 ]; then

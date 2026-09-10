@@ -1,5 +1,5 @@
 {
-  "schema": "voltedge-commerce-readiness-v3",
+  "schema": "voltedge-commerce-readiness-v4",
   "observed_date": "2026-09-10",
   "authority_model": "RADAH_MEMSHALAH",
   "site": {
@@ -67,7 +67,9 @@
       "country": "US",
       "active": true,
       "shipping_option_count": 1,
-      "shipping_option_title": "Free shipping"
+      "shipping_option_title": "Free shipping",
+      "shipping_option_id": "6f3054c3-3b04-447d-a057-26d1632040ea",
+      "carrier_app_id": "45c44b27-ca7b-4891-8c0d-1747d588b835"
     },
     "international_region": {
       "name": "International",
@@ -88,20 +90,24 @@
     "confirmed_quantity": 1,
     "currency": "USD",
     "subtotal": "71.09",
+    "delivery": "0.00",
     "calculated_total": "71.09",
     "requires_payment": true,
     "price_verification_token_present": true,
     "hosted_checkout_url_generated": true,
+    "delivery_estimation": {
+      "requested_destination_country": "US",
+      "resolved_rate_code": "6f3054c3-3b04-447d-a057-26d1632040ea",
+      "resolved_carrier_app_id": "45c44b27-ca7b-4891-8c0d-1747d588b835",
+      "resolved_title": "Free shipping",
+      "resolved_price": "0.00"
+    },
+    "delivery_method_selected": true,
+    "final_violations": [],
     "order_placed": false,
+    "order_id": null,
     "payment_charged": false,
-    "violations": [
-      {
-        "scope": "DELIVERY",
-        "code": "MISSING_DELIVERY_METHOD",
-        "severity": "ERROR"
-      }
-    ],
-    "status": "PASS_TO_HOSTED_CHECKOUT_WITH_DELIVERY_SELECTION_PENDING"
+    "status": "PASS_NON_CHARGING_CART_CALCULATION"
   },
   "checkout_policies": {
     "source": "authenticated_wix_checkout_settings",
@@ -140,7 +146,6 @@
   },
   "not_yet_proven": [
     "configured_and_onboarded_payment_provider",
-    "delivery_method_selected_cart_calculation_without_violations",
     "mobile_conversion_quality",
     "analytics_and_utm_attribution_for_new_campaigns",
     "real_test_order_receipt",
@@ -151,7 +156,8 @@
     "Earlier recommendation-tool output that appeared to show an empty catalog was not authoritative for Catalog V3 product inventory.",
     "Direct Catalog V3 query is the controlling evidence for product count.",
     "Best Sellers was verified empty and hidden, then populated with five verified visible hero products and made visible.",
-    "Catalog-to-cart-to-hosted-checkout path is proven without creating an order or charging money.",
+    "The delivery method was not guessed: Wix Estimate Cart returned the exact native free-shipping rate code and carrier app ID, which were then selected and verified by a full cart recalculation.",
+    "Catalog-to-cart-to-delivery-to-hosted-checkout calculation is proven with zero final cart violations and without creating an order or charging money.",
     "The 30-completed-day Wix traffic baseline is zero sessions, zero visitors, and zero views; traffic generation is therefore a measured primary constraint once commerce gates close.",
     "Payment-provider onboarding remains a hard gate before any real-money canary.",
     "No traffic scale-up should be treated as proven until payment, attribution, real-order, and refund receipts exist."

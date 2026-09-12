@@ -57,6 +57,13 @@ export DOMINION_OLLAMA_BASE_URL UV_EXTRAS
 cp "$ENV_FILE" "$DEERFLOW_ROOT/.env"
 chmod 0600 "$DEERFLOW_ROOT/.env"
 
+FRONTEND_ENV="$DEERFLOW_ROOT/frontend/.env"
+if [ ! -f "$FRONTEND_ENV" ]; then
+  test -r "$DEERFLOW_ROOT/frontend/.env.example"
+  install -m 0600 "$DEERFLOW_ROOT/frontend/.env.example" "$FRONTEND_ENV"
+fi
+test -r "$FRONTEND_ENV"
+
 grep -Fq 'browser_navigate' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'browser_click' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'browser_type' "$DEERFLOW_ROOT/config.yaml"

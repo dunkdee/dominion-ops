@@ -1,0 +1,47 @@
+name: DeerFlow Runtime CI
+
+on:
+  pull_request:
+    paths:
+      - 'integrations/deerflow/**'
+      - 'scripts/deploy_deerflow_runtime_remote.sh'
+      - '.github/workflows/deerflow-runtime-ci.yml'
+      - '.github/workflows/deploy-deerflow-runtime.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'integrations/deerflow/**'
+      - 'scripts/deploy_deerflow_runtime_remote.sh'
+      - '.github/workflows/deerflow-runtime-ci.yml'
+      - '.github/workflows/deploy-deerflow-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Validate shell
+        run: bash -n scripts/deploy_deerflow_runtime_remote.sh
+
+      - name: Validate pinned upstream and browser contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'https://github.com/bytedance/deer-flow.git' scripts/deploy_deerflow_runtime_remote.sh
+          grep -Fq 'UPSTREAM_TAG="v2.0.0"' scripts/deploy_deerflow_runtime_remote.sh
+          grep -Fq 'browser_navigate' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'browser_snapshot' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'browser_click' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'browser_type' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'browser_get_text' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'browser_screenshot' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'allow_host_bash: false' integrations/deerflow/config.dominion.yaml
+          ! grep -Eq '(api[_-]?key|token):[[:space:]]+[A-Za-z0-9_-]{16,}' integrations/deerflow/config.dominion.yaml
+          echo 'DEERFLOW_RUNTIME_CI=PASS upstream=v2.0.0 browser=playwright host_bash=disabled'

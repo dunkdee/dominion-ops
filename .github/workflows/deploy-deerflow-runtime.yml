@@ -1,0 +1,138 @@
+name: Deploy DeerFlow Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Full main commit SHA to deploy
+        required: true
+        type: string
+      confirm:
+        description: Type DEPLOY DEERFLOW RUNTIME
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deerflow-runtime-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: ${{ inputs.confirm == 'DEPLOY DEERFLOW RUNTIME' }}
+    runs-on: ubuntu-24.04
+    outputs:
+      deploy_sha: ${{ steps.resolve.outputs.deploy_sha }}
+    steps:
+      - name: Checkout governed main
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve authorized commit
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          requested='${{ inputs.commit_sha }}'
+          [[ "$requested" =~ ^[0-9a-fA-F]{40}$ ]] || { echo 'full 40-character SHA required'; exit 1; }
+          git cat-file -e "${requested}^{commit}"
+          git merge-base --is-ancestor "$requested" origin/main
+          echo "deploy_sha=$requested" >> "$GITHUB_OUTPUT"
+
+      - name: Validate integration contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/deploy_deerflow_runtime_remote.sh
+          grep -Fq 'https://github.com/bytedance/deer-flow.git' scripts/deploy_deerflow_runtime_remote.sh
+          grep -Fq 'UPSTREAM_TAG="v2.0.0"' scripts/deploy_deerflow_runtime_remote.sh
+          grep -Fq 'browser_navigate' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'browser_click' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'browser_type' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'allow_host_bash: false' integrations/deerflow/config.dominion.yaml
+          echo 'DEERFLOW_STATIC_GATE=PASS upstream=v2.0.0 browser=playwright host_bash=disabled'
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout authorized commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ needs.validate.outputs.deploy_sha }}
+          fetch-depth: 1
+
+      - name: Require VM connection material
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Transfer DeerFlow deployment payload
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          remote_dir="/tmp/dominion-deerflow-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" "mkdir -p '$remote_dir' && chmod 700 '$remote_dir'"
+          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes \
+            scripts/deploy_deerflow_runtime_remote.sh \
+            integrations/deerflow/config.dominion.yaml \
+            "$VM_USER@$VM_HOST:$remote_dir/"
+          echo "REMOTE_DIR=$remote_dir" >> "$GITHUB_ENV"
+
+      - name: Deploy and prove health
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=2 \
+            "$VM_USER@$VM_HOST" \
+            "chmod 700 '$REMOTE_DIR/deploy_deerflow_runtime_remote.sh' && DOMINION_CONFIG_SOURCE='$REMOTE_DIR/config.dominion.yaml' '$REMOTE_DIR/deploy_deerflow_runtime_remote.sh'" \
+            | tee "$RUNNER_TEMP/deerflow-deploy.log"
+          grep -Fq 'DEERFLOW_RUNTIME_HEALTH=PASS' "$RUNNER_TEMP/deerflow-deploy.log"
+
+      - name: Cleanup temporary material
+        if: always()
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          rm -f "$HOME/.ssh/foundation_vm_key"
+          if [ -n "${REMOTE_DIR:-}" ]; then
+            ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" "rm -rf '$REMOTE_DIR'" || true
+          fi

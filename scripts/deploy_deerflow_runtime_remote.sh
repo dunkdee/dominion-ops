@@ -21,9 +21,10 @@ else
   cd "$DEERFLOW_ROOT"
   current_remote="$(git remote get-url origin)"
   test "$current_remote" = "$UPSTREAM_REPO"
+  git diff --quiet
+  git diff --cached --quiet
   git fetch --tags --force origin "$UPSTREAM_TAG"
   git checkout --detach "$UPSTREAM_TAG"
-  git reset --hard "$UPSTREAM_TAG"
 fi
 
 cd "$DEERFLOW_ROOT"

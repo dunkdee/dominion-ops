@@ -5,7 +5,7 @@ DEERFLOW_ROOT="${DEERFLOW_ROOT:-/opt/dominion/deer-flow}"
 DOMINION_CONFIG_SOURCE="${DOMINION_CONFIG_SOURCE:?DOMINION_CONFIG_SOURCE is required}"
 UPSTREAM_REPO="https://github.com/bytedance/deer-flow.git"
 UPSTREAM_TAG="v2.0.0"
-ENV_FILE="${DEERFLOW_ENV_FILE:-/etc/dominion/deerflow.env}"
+ENV_FILE="${DEERFLOW_ENV_FILE:-$HOME/.config/dominion/deerflow.env}"
 
 command -v git >/dev/null
 command -v docker >/dev/null
@@ -34,13 +34,16 @@ test "$resolved_tag" = "$UPSTREAM_TAG"
 install -m 0640 "$DOMINION_CONFIG_SOURCE" "$DEERFLOW_ROOT/config.yaml"
 
 if [ ! -f "$ENV_FILE" ]; then
-  install -d -m 0750 "$(dirname "$ENV_FILE")"
+  install -d -m 0700 "$(dirname "$ENV_FILE")"
+  umask 077
   cat > "$ENV_FILE" <<'EOF'
 DOMINION_OLLAMA_BASE_URL=http://host.docker.internal:11434
 UV_EXTRAS=browser,ollama
 EOF
-  chmod 0640 "$ENV_FILE"
+  chmod 0600 "$ENV_FILE"
 fi
+
+test -r "$ENV_FILE"
 
 set -a
 # shellcheck disable=SC1090

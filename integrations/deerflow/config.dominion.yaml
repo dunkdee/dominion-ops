@@ -19,6 +19,7 @@ tool_groups:
   - name: web
   - name: file:read
   - name: file:write
+  - name: browser
 
 tools:
   - name: web_search
@@ -34,6 +35,25 @@ tools:
   - name: write_file
     group: file:write
     use: deerflow.sandbox.tools:write_file_tool
+  - name: browser_navigate
+    group: browser
+    use: deerflow.community.browser_automation.tools:browser_navigate_tool
+    headless: true
+  - name: browser_snapshot
+    group: browser
+    use: deerflow.community.browser_automation.tools:browser_snapshot_tool
+  - name: browser_get_text
+    group: browser
+    use: deerflow.community.browser_automation.tools:browser_get_text_tool
+  - name: browser_screenshot
+    group: browser
+    use: deerflow.community.browser_automation.tools:browser_screenshot_tool
+  - name: browser_back
+    group: browser
+    use: deerflow.community.browser_automation.tools:browser_back_tool
+  - name: browser_close
+    group: browser
+    use: deerflow.community.browser_automation.tools:browser_close_tool
 
 suggestions:
   enabled: true

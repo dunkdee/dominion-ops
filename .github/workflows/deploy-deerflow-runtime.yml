@@ -132,7 +132,7 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
         run: |
-          rm -f "$HOME/.ssh/foundation_vm_key"
-          if [ -n "${REMOTE_DIR:-}" ]; then
+          if [ -n "${REMOTE_DIR:-}" ] && [ -f "$HOME/.ssh/foundation_vm_key" ]; then
             ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" "rm -rf '$REMOTE_DIR'" || true
           fi
+          rm -f "$HOME/.ssh/foundation_vm_key"

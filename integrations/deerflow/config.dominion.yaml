@@ -42,6 +42,12 @@ tools:
   - name: browser_snapshot
     group: browser
     use: deerflow.community.browser_automation.tools:browser_snapshot_tool
+  - name: browser_click
+    group: browser
+    use: deerflow.community.browser_automation.tools:browser_click_tool
+  - name: browser_type
+    group: browser
+    use: deerflow.community.browser_automation.tools:browser_type_tool
   - name: browser_get_text
     group: browser
     use: deerflow.community.browser_automation.tools:browser_get_text_tool

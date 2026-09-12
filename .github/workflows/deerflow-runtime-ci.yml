@@ -8,7 +8,9 @@ on:
       - '.github/workflows/deerflow-runtime-ci.yml'
       - '.github/workflows/deploy-deerflow-runtime.yml'
   push:
-    branches: [main]
+    branches:
+      - main
+      - feat/deerflow-governed-runtime
     paths:
       - 'integrations/deerflow/**'
       - 'scripts/deploy_deerflow_runtime_remote.sh'

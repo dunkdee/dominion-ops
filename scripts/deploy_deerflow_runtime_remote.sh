@@ -6,6 +6,14 @@ DOMINION_CONFIG_SOURCE="${DOMINION_CONFIG_SOURCE:?DOMINION_CONFIG_SOURCE is requ
 UPSTREAM_REPO="https://github.com/bytedance/deer-flow.git"
 UPSTREAM_TAG="v2.0.0"
 ENV_FILE="${DEERFLOW_ENV_FILE:-$HOME/.config/dominion/deerflow.env}"
+APT_HTTPS_PATCHED=0
+
+restore_upstream_dockerfile() {
+  if [ "$APT_HTTPS_PATCHED" -eq 1 ] && [ -d "$DEERFLOW_ROOT/.git" ]; then
+    git -C "$DEERFLOW_ROOT" checkout -- backend/Dockerfile || true
+  fi
+}
+trap restore_upstream_dockerfile EXIT
 
 command -v git >/dev/null
 command -v docker >/dev/null
@@ -63,6 +71,15 @@ if [ ! -f "$FRONTEND_ENV" ]; then
   install -m 0600 "$DEERFLOW_ROOT/frontend/.env.example" "$FRONTEND_ENV"
 fi
 test -r "$FRONTEND_ENV"
+
+UPSTREAM_DOCKERFILE="$DEERFLOW_ROOT/backend/Dockerfile"
+test -r "$UPSTREAM_DOCKERFILE"
+if grep -Fq 'http://deb.debian.org' "$UPSTREAM_DOCKERFILE"; then
+  sed -i 's|http://deb.debian.org|https://deb.debian.org|g' "$UPSTREAM_DOCKERFILE"
+  APT_HTTPS_PATCHED=1
+fi
+! grep -Fq 'http://deb.debian.org' "$UPSTREAM_DOCKERFILE"
+grep -Fq 'https://deb.debian.org' "$UPSTREAM_DOCKERFILE"
 
 grep -Fq 'browser_navigate' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'browser_click' "$DEERFLOW_ROOT/config.yaml"

@@ -7,13 +7,19 @@ UPSTREAM_REPO="https://github.com/bytedance/deer-flow.git"
 UPSTREAM_TAG="v2.0.0"
 ENV_FILE="${DEERFLOW_ENV_FILE:-$HOME/.config/dominion/deerflow.env}"
 APT_HTTPS_PATCHED=0
+OLLAMA_DEP_PATCHED=0
 
-restore_upstream_dockerfile() {
-  if [ "$APT_HTTPS_PATCHED" -eq 1 ] && [ -d "$DEERFLOW_ROOT/.git" ]; then
-    git -C "$DEERFLOW_ROOT" checkout -- backend/Dockerfile || true
+restore_upstream_files() {
+  if [ -d "$DEERFLOW_ROOT/.git" ]; then
+    if [ "$APT_HTTPS_PATCHED" -eq 1 ]; then
+      git -C "$DEERFLOW_ROOT" checkout -- backend/Dockerfile || true
+    fi
+    if [ "$OLLAMA_DEP_PATCHED" -eq 1 ]; then
+      git -C "$DEERFLOW_ROOT" checkout -- backend/pyproject.toml || true
+    fi
   fi
 }
-trap restore_upstream_dockerfile EXIT
+trap restore_upstream_files EXIT
 
 command -v git >/dev/null
 command -v docker >/dev/null
@@ -46,12 +52,19 @@ if [ ! -f "$ENV_FILE" ]; then
   umask 077
   cat > "$ENV_FILE" <<'EOF'
 DOMINION_OLLAMA_BASE_URL=http://host.docker.internal:11434
-UV_EXTRAS=browser,ollama
 EOF
   chmod 0600 "$ENV_FILE"
 fi
 
 test -r "$ENV_FILE"
+
+# Remove only the obsolete value written by the first governed DeerFlow deploy.
+# DeerFlow v2.0.0's root backend project does not define browser or ollama extras,
+# so passing this as Docker's UV_EXTRAS build arg fails before the runtime starts.
+if grep -Fqx 'UV_EXTRAS=browser,ollama' "$ENV_FILE"; then
+  sed -i '/^UV_EXTRAS=browser,ollama$/d' "$ENV_FILE"
+  chmod 0600 "$ENV_FILE"
+fi
 
 set -a
 # shellcheck disable=SC1090
@@ -59,8 +72,7 @@ set -a
 set +a
 
 : "${DOMINION_OLLAMA_BASE_URL:=http://host.docker.internal:11434}"
-: "${UV_EXTRAS:=browser,ollama}"
-export DOMINION_OLLAMA_BASE_URL UV_EXTRAS
+export DOMINION_OLLAMA_BASE_URL
 
 cp "$ENV_FILE" "$DEERFLOW_ROOT/.env"
 chmod 0600 "$DEERFLOW_ROOT/.env"
@@ -71,6 +83,16 @@ if [ ! -f "$FRONTEND_ENV" ]; then
   install -m 0600 "$DEERFLOW_ROOT/frontend/.env.example" "$FRONTEND_ENV"
 fi
 test -r "$FRONTEND_ENV"
+
+# DeerFlow v2.0.0 documents Ollama through the harness optional dependency,
+# while backend/pyproject.toml depends on plain deerflow-harness. Patch only the
+# pinned checkout for the image build, then restore it automatically on exit.
+UPSTREAM_PYPROJECT="$DEERFLOW_ROOT/backend/pyproject.toml"
+test -r "$UPSTREAM_PYPROJECT"
+grep -Fqx '    "deerflow-harness",' "$UPSTREAM_PYPROJECT"
+sed -i 's|"deerflow-harness",|"deerflow-harness[ollama]",|' "$UPSTREAM_PYPROJECT"
+OLLAMA_DEP_PATCHED=1
+grep -Fqx '    "deerflow-harness[ollama]",' "$UPSTREAM_PYPROJECT"
 
 UPSTREAM_DOCKERFILE="$DEERFLOW_ROOT/backend/Dockerfile"
 test -r "$UPSTREAM_DOCKERFILE"
@@ -85,16 +107,19 @@ fi
 grep -Fq 'DOMINION_FORCE_APT_HTTPS' "$UPSTREAM_DOCKERFILE"
 grep -Fq "s|http://deb.debian.org|https://deb.debian.org|g" "$UPSTREAM_DOCKERFILE"
 
-grep -Fq 'browser_navigate' "$DEERFLOW_ROOT/config.yaml"
-grep -Fq 'browser_click' "$DEERFLOW_ROOT/config.yaml"
-grep -Fq 'browser_type' "$DEERFLOW_ROOT/config.yaml"
+# The pinned v2.0.0 tree does not contain deerflow.community.browser_automation.
+# Keep the production contract honest: web/file tools stay enabled, browser
+# automation remains disabled until Dominion moves to a separately reviewed pin.
+grep -Fq 'web_search' "$DEERFLOW_ROOT/config.yaml"
+! grep -Fq 'browser_automation' "$DEERFLOW_ROOT/config.yaml"
+! grep -Fq 'browser_navigate' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'allow_host_bash: false' "$DEERFLOW_ROOT/config.yaml"
 
 make up
 
 for attempt in $(seq 1 30); do
   if curl --fail --silent --show-error http://127.0.0.1:2026/ >/dev/null; then
-    echo "DEERFLOW_RUNTIME_HEALTH=PASS tag=$UPSTREAM_TAG url=http://127.0.0.1:2026/"
+    echo "DEERFLOW_RUNTIME_HEALTH=PASS tag=$UPSTREAM_TAG url=http://127.0.0.1:2026/ ollama=harness-extra browser=disabled-v2.0.0"
     exit 0
   fi
   sleep 4

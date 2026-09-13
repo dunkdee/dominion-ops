@@ -43,19 +43,39 @@ jobs:
           git merge-base --is-ancestor "$requested" origin/main
           echo "deploy_sha=$requested" >> "$GITHUB_OUTPUT"
 
-      - name: Validate integration contract
+      - name: Validate governed production capability contract
         shell: bash
         run: |
           set -euo pipefail
-          bash -n scripts/deploy_deerflow_runtime_remote.sh
-          grep -Fq 'https://github.com/bytedance/deer-flow.git' scripts/deploy_deerflow_runtime_remote.sh
-          grep -Fq 'UPSTREAM_TAG="v2.0.0"' scripts/deploy_deerflow_runtime_remote.sh
-          grep -Fq 'deerflow-harness[ollama]' scripts/deploy_deerflow_runtime_remote.sh
-          grep -Fq 'web_search' integrations/deerflow/config.dominion.yaml
-          ! grep -Fq 'browser_automation' integrations/deerflow/config.dominion.yaml
-          ! grep -Fq 'browser_navigate' integrations/deerflow/config.dominion.yaml
-          grep -Fq 'allow_host_bash: false' integrations/deerflow/config.dominion.yaml
-          echo 'DEERFLOW_STATIC_GATE=PASS upstream=v2.0.0 ollama=harness-extra browser=disabled-v2.0.0 host_bash=disabled'
+          cfg='integrations/deerflow/config.dominion.yaml'
+          soul='integrations/deerflow/SOUL.dominion.md'
+          deploy='scripts/deploy_deerflow_runtime_remote.sh'
+
+          bash -n "$deploy"
+          grep -Fq 'https://github.com/bytedance/deer-flow.git' "$deploy"
+          grep -Fq 'UPSTREAM_TAG="v2.0.0"' "$deploy"
+          grep -Fq 'deerflow-harness[ollama]' "$deploy"
+          grep -Fq 'DEERFLOW_CAPABILITY_PROOF=PASS' "$deploy"
+          grep -Fq 'backend: sqlite' "$cfg"
+          grep -Fq 'run_events:' "$cfg"
+          grep -Fq 'backend: db' "$cfg"
+          grep -Fq 'memory:' "$cfg"
+          grep -Fq 'token_counting: char' "$cfg"
+          grep -Fq 'guardrails:' "$cfg"
+          grep -Fq 'fail_closed: true' "$cfg"
+          grep -Fq 'deerflow.guardrails.builtin:AllowlistProvider' "$cfg"
+          grep -Fq 'web_search' "$cfg"
+          grep -Fq 'web_fetch' "$cfg"
+          grep -Fq 'image_search' "$cfg"
+          grep -Fq 'glob_tool' "$cfg"
+          grep -Fq 'grep_tool' "$cfg"
+          grep -Fq 'str_replace_tool' "$cfg"
+          ! grep -Fq 'browser_automation' "$cfg"
+          ! grep -Fq 'browser_navigate' "$cfg"
+          grep -Fq 'allow_host_bash: false' "$cfg"
+          test -s "$soul"
+          grep -Fq 'RADAH MEMSHALAH' "$soul"
+          echo 'DEERFLOW_STATIC_GATE=PASS upstream=v2.0.0 persistence=sqlite run_events=db memory=on guardrails=fail-closed tools=9 ollama=harness-extra browser=disabled-v2.0.0 host_bash=disabled'
 
   deploy:
     needs: validate
@@ -106,10 +126,11 @@ jobs:
           scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes \
             scripts/deploy_deerflow_runtime_remote.sh \
             integrations/deerflow/config.dominion.yaml \
+            integrations/deerflow/SOUL.dominion.md \
             "$VM_USER@$VM_HOST:$remote_dir/"
           echo "REMOTE_DIR=$remote_dir" >> "$GITHUB_ENV"
 
-      - name: Deploy and prove health
+      - name: Deploy and prove health and capabilities
         shell: bash
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
@@ -122,8 +143,9 @@ jobs:
             -o ServerAliveInterval=15 \
             -o ServerAliveCountMax=2 \
             "$VM_USER@$VM_HOST" \
-            "chmod 700 '$REMOTE_DIR/deploy_deerflow_runtime_remote.sh' && DOMINION_CONFIG_SOURCE='$REMOTE_DIR/config.dominion.yaml' '$REMOTE_DIR/deploy_deerflow_runtime_remote.sh'" \
+            "chmod 700 '$REMOTE_DIR/deploy_deerflow_runtime_remote.sh' && DOMINION_CONFIG_SOURCE='$REMOTE_DIR/config.dominion.yaml' DOMINION_SOUL_SOURCE='$REMOTE_DIR/SOUL.dominion.md' '$REMOTE_DIR/deploy_deerflow_runtime_remote.sh'" \
             | tee "$RUNNER_TEMP/deerflow-deploy.log"
+          grep -Fq 'DEERFLOW_CAPABILITY_PROOF=PASS' "$RUNNER_TEMP/deerflow-deploy.log"
           grep -Fq 'DEERFLOW_RUNTIME_HEALTH=PASS' "$RUNNER_TEMP/deerflow-deploy.log"
 
       - name: Cleanup temporary material

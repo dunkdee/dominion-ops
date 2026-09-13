@@ -15,8 +15,62 @@ models:
     supports_thinking: false
     supports_vision: false
 
+# Single-node production persistence. The SQLite database lives under
+# DEER_FLOW_HOME, which is mounted persistently by the production compose file.
+database:
+  backend: sqlite
+  sqlite_dir: .deer-flow/data
+  echo_sql: false
+
+# Persist messages and execution traces instead of losing them on restart.
+run_events:
+  backend: db
+  max_trace_content: 10240
+  track_token_usage: true
+
+# DeerFlow memory stays per-user under DEER_FLOW_HOME. Character token counting
+# avoids a first-use network dependency on tiktoken BPE data.
+memory:
+  enabled: true
+  debounce_seconds: 30
+  max_facts: 200
+  fact_confidence_threshold: 0.7
+  injection_enabled: true
+  max_injection_tokens: 2000
+  token_counting: char
+
+# Keep long-running delegation available while bounding runaway work.
+subagents:
+  timeout_seconds: 1800
+  max_turns: 50
+
+skills:
+  path: /app/skills
+  container_path: /mnt/skills
+
+# Native fail-closed pre-tool authorization. Host shell remains denied even if
+# a future config accidentally exposes the bash tool.
+guardrails:
+  enabled: true
+  fail_closed: true
+  provider:
+    use: deerflow.guardrails.builtin:AllowlistProvider
+    config:
+      denied_tools:
+        - bash
+
+circuit_breaker:
+  failure_threshold: 5
+  recovery_timeout_sec: 60
+
+tool_output:
+  enabled: true
+  externalize_min_chars: 12000
+  fallback_max_chars: 30000
+
 tool_groups:
   - name: web
+  - name: image
   - name: file:read
   - name: file:write
 
@@ -24,16 +78,35 @@ tools:
   - name: web_search
     group: web
     use: deerflow.community.ddg_search.tools:web_search_tool
+    max_results: 8
+  - name: web_fetch
+    group: web
+    use: deerflow.community.jina_ai.tools:web_fetch_tool
+    timeout: 15
+  - name: image_search
+    group: image
+    use: deerflow.community.image_search.tools:image_search_tool
     max_results: 5
   - name: ls
     group: file:read
     use: deerflow.sandbox.tools:ls_tool
+  - name: glob
+    group: file:read
+    use: deerflow.sandbox.tools:glob_tool
+    max_results: 200
+  - name: grep
+    group: file:read
+    use: deerflow.sandbox.tools:grep_tool
+    max_results: 100
   - name: read_file
     group: file:read
     use: deerflow.sandbox.tools:read_file_tool
   - name: write_file
     group: file:write
     use: deerflow.sandbox.tools:write_file_tool
+  - name: str_replace
+    group: file:write
+    use: deerflow.sandbox.tools:str_replace_tool
 
 suggestions:
   enabled: true

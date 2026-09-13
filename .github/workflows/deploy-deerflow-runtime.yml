@@ -61,6 +61,9 @@ jobs:
           grep -Fq 'backend: db' "$cfg"
           grep -Fq 'memory:' "$cfg"
           grep -Fq 'token_counting: char' "$cfg"
+          grep -Fq 'skill_evolution:' "$cfg"
+          grep -Fq 'agents_api:' "$cfg"
+          grep -Fq 'channel_connections:' "$cfg"
           grep -Fq 'guardrails:' "$cfg"
           grep -Fq 'fail_closed: true' "$cfg"
           grep -Fq 'deerflow.guardrails.builtin:AllowlistProvider' "$cfg"
@@ -75,7 +78,7 @@ jobs:
           grep -Fq 'allow_host_bash: false' "$cfg"
           test -s "$soul"
           grep -Fq 'RADAH MEMSHALAH' "$soul"
-          echo 'DEERFLOW_STATIC_GATE=PASS upstream=v2.0.0 persistence=sqlite run_events=db memory=on guardrails=fail-closed tools=9 ollama=harness-extra browser=disabled-v2.0.0 host_bash=disabled'
+          echo 'DEERFLOW_STATIC_GATE=PASS upstream=v2.0.0 persistence=sqlite run_events=db memory=on guardrails=fail-closed self_modify=off channels=off tools=9 ollama=harness-extra browser=disabled-v2.0.0 host_bash=disabled'
 
   deploy:
     needs: validate

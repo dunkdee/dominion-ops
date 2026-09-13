@@ -15,8 +15,8 @@ models:
     supports_thinking: false
     supports_vision: false
 
-# Single-node production persistence. The SQLite database lives under
-# DEER_FLOW_HOME, which is mounted persistently by the production compose file.
+# Single-node production persistence. This is DeerFlow execution state, not a
+# replacement for Dominion's canonical source of truth.
 database:
   backend: sqlite
   sqlite_dir: .deer-flow/data
@@ -28,8 +28,8 @@ run_events:
   max_trace_content: 10240
   track_token_usage: true
 
-# DeerFlow memory stays per-user under DEER_FLOW_HOME. Character token counting
-# avoids a first-use network dependency on tiktoken BPE data.
+# Local execution memory remains per-user. It supports continuity but is not
+# constitutional or canonical Dominion memory.
 memory:
   enabled: true
   debounce_seconds: 30
@@ -47,6 +47,20 @@ subagents:
 skills:
   path: /app/skills
   container_path: /mnt/skills
+
+# DeerFlow may use approved skills, but may not silently rewrite its own skills
+# or expose the custom-agent prompt management API in production.
+skill_evolution:
+  enabled: false
+
+agents_api:
+  enabled: false
+
+# User-owned messaging connections stay disabled until each channel is bound
+# through a separately governed integration.
+channel_connections:
+  enabled: false
+  require_bound_identity: true
 
 # Native fail-closed pre-tool authorization. Host shell remains denied even if
 # a future config accidentally exposes the bash tool.

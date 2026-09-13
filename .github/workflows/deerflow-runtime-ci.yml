@@ -32,18 +32,17 @@ jobs:
       - name: Validate shell
         run: bash -n scripts/deploy_deerflow_runtime_remote.sh
 
-      - name: Validate pinned upstream and browser contract
+      - name: Validate pinned upstream runtime contract
         shell: bash
         run: |
           set -euo pipefail
           grep -Fq 'https://github.com/bytedance/deer-flow.git' scripts/deploy_deerflow_runtime_remote.sh
           grep -Fq 'UPSTREAM_TAG="v2.0.0"' scripts/deploy_deerflow_runtime_remote.sh
-          grep -Fq 'browser_navigate' integrations/deerflow/config.dominion.yaml
-          grep -Fq 'browser_snapshot' integrations/deerflow/config.dominion.yaml
-          grep -Fq 'browser_click' integrations/deerflow/config.dominion.yaml
-          grep -Fq 'browser_type' integrations/deerflow/config.dominion.yaml
-          grep -Fq 'browser_get_text' integrations/deerflow/config.dominion.yaml
-          grep -Fq 'browser_screenshot' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'deerflow-harness[ollama]' scripts/deploy_deerflow_runtime_remote.sh
+          ! grep -Fq 'UV_EXTRAS=browser,ollama' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'web_search' integrations/deerflow/config.dominion.yaml
+          ! grep -Fq 'browser_automation' integrations/deerflow/config.dominion.yaml
+          ! grep -Fq 'browser_navigate' integrations/deerflow/config.dominion.yaml
           grep -Fq 'allow_host_bash: false' integrations/deerflow/config.dominion.yaml
           ! grep -Eq '(api[_-]?key|token):[[:space:]]+[A-Za-z0-9_-]{16,}' integrations/deerflow/config.dominion.yaml
-          echo 'DEERFLOW_RUNTIME_CI=PASS upstream=v2.0.0 browser=playwright host_bash=disabled'
+          echo 'DEERFLOW_RUNTIME_CI=PASS upstream=v2.0.0 ollama=harness-extra browser=disabled-v2.0.0 host_bash=disabled'

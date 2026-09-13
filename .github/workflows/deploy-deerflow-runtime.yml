@@ -50,11 +50,12 @@ jobs:
           bash -n scripts/deploy_deerflow_runtime_remote.sh
           grep -Fq 'https://github.com/bytedance/deer-flow.git' scripts/deploy_deerflow_runtime_remote.sh
           grep -Fq 'UPSTREAM_TAG="v2.0.0"' scripts/deploy_deerflow_runtime_remote.sh
-          grep -Fq 'browser_navigate' integrations/deerflow/config.dominion.yaml
-          grep -Fq 'browser_click' integrations/deerflow/config.dominion.yaml
-          grep -Fq 'browser_type' integrations/deerflow/config.dominion.yaml
+          grep -Fq 'deerflow-harness[ollama]' scripts/deploy_deerflow_runtime_remote.sh
+          grep -Fq 'web_search' integrations/deerflow/config.dominion.yaml
+          ! grep -Fq 'browser_automation' integrations/deerflow/config.dominion.yaml
+          ! grep -Fq 'browser_navigate' integrations/deerflow/config.dominion.yaml
           grep -Fq 'allow_host_bash: false' integrations/deerflow/config.dominion.yaml
-          echo 'DEERFLOW_STATIC_GATE=PASS upstream=v2.0.0 browser=playwright host_bash=disabled'
+          echo 'DEERFLOW_STATIC_GATE=PASS upstream=v2.0.0 ollama=harness-extra browser=disabled-v2.0.0 host_bash=disabled'
 
   deploy:
     needs: validate

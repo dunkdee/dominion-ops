@@ -1,0 +1,32 @@
+name: DeerFlow Deploy Self Dispatch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deerflow-deploy-self-dispatch.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch governed DeerFlow deployment for this exact main SHA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$SHA"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$REPO/actions/workflows/deploy-deerflow-runtime.yml/dispatches" \
+            -d "{\"ref\":\"main\",\"inputs\":{\"commit_sha\":\"$SHA\",\"confirm\":\"DEPLOY DEERFLOW RUNTIME\"}}"
+          echo "DEERFLOW_DEPLOY_DISPATCH=PASS sha=$SHA"

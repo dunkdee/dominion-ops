@@ -3,6 +3,7 @@ set -euo pipefail
 
 DEERFLOW_ROOT="${DEERFLOW_ROOT:-/opt/dominion/deer-flow}"
 DOMINION_CONFIG_SOURCE="${DOMINION_CONFIG_SOURCE:?DOMINION_CONFIG_SOURCE is required}"
+DOMINION_SOUL_SOURCE="${DOMINION_SOUL_SOURCE:-$(dirname "$DOMINION_CONFIG_SOURCE")/SOUL.dominion.md}"
 UPSTREAM_REPO="https://github.com/bytedance/deer-flow.git"
 UPSTREAM_TAG="v2.0.0"
 ENV_FILE="${DEERFLOW_ENV_FILE:-$HOME/.config/dominion/deerflow.env}"
@@ -26,6 +27,7 @@ command -v docker >/dev/null
 docker compose version >/dev/null
 
 test -r "$DOMINION_CONFIG_SOURCE"
+test -r "$DOMINION_SOUL_SOURCE"
 
 install -d -m 0755 "$(dirname "$DEERFLOW_ROOT")"
 
@@ -46,6 +48,9 @@ resolved_tag="$(git describe --tags --exact-match HEAD)"
 test "$resolved_tag" = "$UPSTREAM_TAG"
 
 install -m 0640 "$DOMINION_CONFIG_SOURCE" "$DEERFLOW_ROOT/config.yaml"
+DEERFLOW_HOME_DIR="$DEERFLOW_ROOT/backend/.deer-flow"
+install -d -m 0700 "$DEERFLOW_HOME_DIR"
+install -m 0640 "$DOMINION_SOUL_SOURCE" "$DEERFLOW_HOME_DIR/SOUL.md"
 
 if [ ! -f "$ENV_FILE" ]; then
   install -d -m 0700 "$(dirname "$ENV_FILE")"
@@ -84,6 +89,13 @@ if [ ! -f "$FRONTEND_ENV" ]; then
 fi
 test -r "$FRONTEND_ENV"
 
+# Stable v2.0.0 includes memory, skills, subagents, persistence and guardrails.
+test -d "$DEERFLOW_ROOT/backend/packages/harness/deerflow/subagents"
+test -d "$DEERFLOW_ROOT/backend/packages/harness/deerflow/skills"
+test -r "$DEERFLOW_ROOT/backend/packages/harness/deerflow/config/memory_config.py"
+test -r "$DEERFLOW_ROOT/backend/packages/harness/deerflow/config/database_config.py"
+test -r "$DEERFLOW_ROOT/backend/packages/harness/deerflow/guardrails/builtin.py"
+
 # DeerFlow v2.0.0 documents Ollama through the harness optional dependency,
 # while backend/pyproject.toml depends on plain deerflow-harness. Patch only the
 # pinned checkout for the image build, then restore it automatically on exit.
@@ -107,25 +119,80 @@ fi
 grep -Fq 'DOMINION_FORCE_APT_HTTPS' "$UPSTREAM_DOCKERFILE"
 grep -Fq "s|http://deb.debian.org|https://deb.debian.org|g" "$UPSTREAM_DOCKERFILE"
 
-# The pinned v2.0.0 tree does not contain deerflow.community.browser_automation.
-# Keep the production contract honest: web/file tools stay enabled, browser
-# automation remains disabled until Dominion moves to a separately reviewed pin.
+# Enforce the governed production feature set before Docker build.
+grep -Fq 'backend: sqlite' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'backend: db' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'enabled: true' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'token_counting: char' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'deerflow.guardrails.builtin:AllowlistProvider' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'fail_closed: true' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'web_search' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'web_fetch' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'image_search' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'glob_tool' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'grep_tool' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'str_replace_tool' "$DEERFLOW_ROOT/config.yaml"
 ! grep -Fq 'browser_automation' "$DEERFLOW_ROOT/config.yaml"
 ! grep -Fq 'browser_navigate' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'allow_host_bash: false' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'RADAH MEMSHALAH' "$DEERFLOW_HOME_DIR/SOUL.md"
 
 make up
 
 for attempt in $(seq 1 30); do
   if curl --fail --silent --show-error http://127.0.0.1:2026/ >/dev/null; then
-    echo "DEERFLOW_RUNTIME_HEALTH=PASS tag=$UPSTREAM_TAG url=http://127.0.0.1:2026/ ollama=harness-extra browser=disabled-v2.0.0"
-    exit 0
+    break
+  fi
+  if [ "$attempt" -eq 30 ]; then
+    echo "DEERFLOW_RUNTIME_HEALTH=FAIL tag=$UPSTREAM_TAG"
+    docker compose -p deer-flow -f docker/docker-compose.yaml ps || true
+    docker compose -p deer-flow -f docker/docker-compose.yaml logs --tail=120 gateway || true
+    exit 1
   fi
   sleep 4
 done
 
-echo "DEERFLOW_RUNTIME_HEALTH=FAIL tag=$UPSTREAM_TAG"
-docker compose -p deer-flow -f docker/docker-compose.yaml ps || true
-docker compose -p deer-flow -f docker/docker-compose.yaml logs --tail=120 gateway || true
-exit 1
+# Runtime capability proof: verify the actual loaded config, persistent database,
+# Ollama package/model visibility, governed identity, tools, skills and subagents.
+docker exec -i deer-flow-gateway sh -lc 'cd /app/backend && PYTHONPATH=. uv run --no-sync python -' <<'PY'
+import json
+import urllib.request
+from pathlib import Path
+
+import langchain_ollama  # noqa: F401
+from deerflow.config import get_app_config
+
+cfg = get_app_config()
+assert cfg.database.backend == "sqlite"
+assert cfg.run_events.backend == "db"
+assert cfg.memory.enabled is True
+assert cfg.memory.injection_enabled is True
+assert cfg.memory.token_counting == "char"
+assert cfg.guardrails.enabled is True
+assert cfg.guardrails.fail_closed is True
+assert cfg.sandbox.allow_host_bash is False
+assert cfg.subagents.timeout_seconds >= 1800
+assert cfg.skills.get_skills_path().is_dir()
+assert Path("/app/backend/.deer-flow/SOUL.md").is_file()
+assert Path("/app/backend/.deer-flow/data/deerflow.db").is_file()
+required_tools = {
+    "web_search",
+    "web_fetch",
+    "image_search",
+    "ls",
+    "glob",
+    "grep",
+    "read_file",
+    "write_file",
+    "str_replace",
+}
+configured_tools = {tool.name for tool in cfg.tools}
+assert required_tools.issubset(configured_tools), sorted(required_tools - configured_tools)
+with urllib.request.urlopen("http://host.docker.internal:11434/api/tags", timeout=10) as response:
+    payload = json.load(response)
+model_names = {str(item.get("name", "")) for item in payload.get("models", [])}
+assert any(name.startswith("llama3.1:8b") for name in model_names), sorted(model_names)
+print("DEERFLOW_CAPABILITY_PROOF=PASS persistence=sqlite run_events=db memory=on guardrails=fail-closed skills=on subagents=on tools=9 ollama_model=llama3.1:8b")
+PY
+
+echo "DEERFLOW_RUNTIME_HEALTH=PASS tag=$UPSTREAM_TAG url=http://127.0.0.1:2026/ persistence=sqlite run_events=db memory=on guardrails=fail-closed ollama=harness-extra browser=disabled-v2.0.0"

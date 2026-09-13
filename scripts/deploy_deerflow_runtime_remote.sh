@@ -122,8 +122,10 @@ grep -Fq "s|http://deb.debian.org|https://deb.debian.org|g" "$UPSTREAM_DOCKERFIL
 # Enforce the governed production feature set before Docker build.
 grep -Fq 'backend: sqlite' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'backend: db' "$DEERFLOW_ROOT/config.yaml"
-grep -Fq 'enabled: true' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'token_counting: char' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'skill_evolution:' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'agents_api:' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'channel_connections:' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'deerflow.guardrails.builtin:AllowlistProvider' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'fail_closed: true' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'web_search' "$DEERFLOW_ROOT/config.yaml"
@@ -170,6 +172,10 @@ assert cfg.memory.injection_enabled is True
 assert cfg.memory.token_counting == "char"
 assert cfg.guardrails.enabled is True
 assert cfg.guardrails.fail_closed is True
+assert cfg.skill_evolution.enabled is False
+assert cfg.agents_api.enabled is False
+assert cfg.channel_connections.enabled is False
+assert cfg.channel_connections.require_bound_identity is True
 assert cfg.sandbox.allow_host_bash is False
 assert cfg.subagents.timeout_seconds >= 1800
 assert cfg.skills.get_skills_path().is_dir()
@@ -192,7 +198,7 @@ with urllib.request.urlopen("http://host.docker.internal:11434/api/tags", timeou
     payload = json.load(response)
 model_names = {str(item.get("name", "")) for item in payload.get("models", [])}
 assert any(name.startswith("llama3.1:8b") for name in model_names), sorted(model_names)
-print("DEERFLOW_CAPABILITY_PROOF=PASS persistence=sqlite run_events=db memory=on guardrails=fail-closed skills=on subagents=on tools=9 ollama_model=llama3.1:8b")
+print("DEERFLOW_CAPABILITY_PROOF=PASS persistence=sqlite run_events=db memory=on guardrails=fail-closed self_modify=off channels=off skills=on subagents=on tools=9 ollama_model=llama3.1:8b")
 PY
 
 echo "DEERFLOW_RUNTIME_HEALTH=PASS tag=$UPSTREAM_TAG url=http://127.0.0.1:2026/ persistence=sqlite run_events=db memory=on guardrails=fail-closed ollama=harness-extra browser=disabled-v2.0.0"

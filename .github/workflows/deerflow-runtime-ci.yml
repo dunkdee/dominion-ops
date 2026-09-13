@@ -32,17 +32,42 @@ jobs:
       - name: Validate shell
         run: bash -n scripts/deploy_deerflow_runtime_remote.sh
 
-      - name: Validate pinned upstream runtime contract
+      - name: Validate governed production capability contract
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'https://github.com/bytedance/deer-flow.git' scripts/deploy_deerflow_runtime_remote.sh
-          grep -Fq 'UPSTREAM_TAG="v2.0.0"' scripts/deploy_deerflow_runtime_remote.sh
-          grep -Fq 'deerflow-harness[ollama]' scripts/deploy_deerflow_runtime_remote.sh
-          ! grep -Fq 'UV_EXTRAS=browser,ollama' integrations/deerflow/config.dominion.yaml
-          grep -Fq 'web_search' integrations/deerflow/config.dominion.yaml
-          ! grep -Fq 'browser_automation' integrations/deerflow/config.dominion.yaml
-          ! grep -Fq 'browser_navigate' integrations/deerflow/config.dominion.yaml
-          grep -Fq 'allow_host_bash: false' integrations/deerflow/config.dominion.yaml
-          ! grep -Eq '(api[_-]?key|token):[[:space:]]+[A-Za-z0-9_-]{16,}' integrations/deerflow/config.dominion.yaml
-          echo 'DEERFLOW_RUNTIME_CI=PASS upstream=v2.0.0 ollama=harness-extra browser=disabled-v2.0.0 host_bash=disabled'
+          cfg='integrations/deerflow/config.dominion.yaml'
+          soul='integrations/deerflow/SOUL.dominion.md'
+          deploy='scripts/deploy_deerflow_runtime_remote.sh'
+
+          grep -Fq 'https://github.com/bytedance/deer-flow.git' "$deploy"
+          grep -Fq 'UPSTREAM_TAG="v2.0.0"' "$deploy"
+          grep -Fq 'deerflow-harness[ollama]' "$deploy"
+          grep -Fq 'DEERFLOW_CAPABILITY_PROOF=PASS' "$deploy"
+
+          grep -Fq 'database:' "$cfg"
+          grep -Fq 'backend: sqlite' "$cfg"
+          grep -Fq 'run_events:' "$cfg"
+          grep -Fq 'backend: db' "$cfg"
+          grep -Fq 'memory:' "$cfg"
+          grep -Fq 'token_counting: char' "$cfg"
+          grep -Fq 'guardrails:' "$cfg"
+          grep -Fq 'fail_closed: true' "$cfg"
+          grep -Fq 'deerflow.guardrails.builtin:AllowlistProvider' "$cfg"
+          grep -Fq 'web_search' "$cfg"
+          grep -Fq 'web_fetch' "$cfg"
+          grep -Fq 'image_search' "$cfg"
+          grep -Fq 'glob_tool' "$cfg"
+          grep -Fq 'grep_tool' "$cfg"
+          grep -Fq 'str_replace_tool' "$cfg"
+          grep -Fq 'allow_host_bash: false' "$cfg"
+          ! grep -Fq 'UV_EXTRAS=browser,ollama' "$cfg"
+          ! grep -Fq 'browser_automation' "$cfg"
+          ! grep -Fq 'browser_navigate' "$cfg"
+
+          test -s "$soul"
+          grep -Fq 'RADAH MEMSHALAH' "$soul"
+
+          ! grep -Eq '(api[_-]?key|token):[[:space:]]+[A-Za-z0-9_-]{16,}' "$cfg" "$soul"
+
+          echo 'DEERFLOW_RUNTIME_CI=PASS upstream=v2.0.0 persistence=sqlite run_events=db memory=on guardrails=fail-closed tools=9 ollama=harness-extra browser=disabled-v2.0.0 host_bash=disabled'

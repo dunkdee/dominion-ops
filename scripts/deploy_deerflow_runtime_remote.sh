@@ -74,12 +74,16 @@ test -r "$FRONTEND_ENV"
 
 UPSTREAM_DOCKERFILE="$DEERFLOW_ROOT/backend/Dockerfile"
 test -r "$UPSTREAM_DOCKERFILE"
-if grep -Fq 'http://deb.debian.org' "$UPSTREAM_DOCKERFILE"; then
-  sed -i 's|http://deb.debian.org|https://deb.debian.org|g' "$UPSTREAM_DOCKERFILE"
+BUILDER_MARKER='FROM python:3.12-slim-bookworm AS builder'
+grep -Fqx "$BUILDER_MARKER" "$UPSTREAM_DOCKERFILE"
+if ! grep -Fq 'DOMINION_FORCE_APT_HTTPS' "$UPSTREAM_DOCKERFILE"; then
+  sed -i "/^FROM python:3.12-slim-bookworm AS builder$/a\\
+# DOMINION_FORCE_APT_HTTPS\\
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list 2>/dev/null || true" "$UPSTREAM_DOCKERFILE"
   APT_HTTPS_PATCHED=1
 fi
-! grep -Fq 'http://deb.debian.org' "$UPSTREAM_DOCKERFILE"
-grep -Fq 'https://deb.debian.org' "$UPSTREAM_DOCKERFILE"
+grep -Fq 'DOMINION_FORCE_APT_HTTPS' "$UPSTREAM_DOCKERFILE"
+grep -Fq "s|http://deb.debian.org|https://deb.debian.org|g" "$UPSTREAM_DOCKERFILE"
 
 grep -Fq 'browser_navigate' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'browser_click' "$DEERFLOW_ROOT/config.yaml"

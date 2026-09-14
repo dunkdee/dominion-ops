@@ -141,15 +141,22 @@ fi
 # ══════════════════════════ INSTALL MODE ═══════════════════════════════
 
 # Rollback is defined before anything is created, so it is always available.
-rollback() {
-  say ""
-  head2 "ROLLBACK"
+# Removing this lane's own adapter. Stopping the service matters as much as
+# stopping the socket: the proxy process inherited the listening descriptor,
+# so it keeps the address bound after the socket unit is gone.
+teardown_adapter() {
   $SUDO systemctl disable --now dominion-ollama-docker.socket 2>&1 | sed 's/^/    /' || true
   $SUDO systemctl stop dominion-ollama-docker.service 2>&1 | sed 's/^/    /' || true
   # The only deletions this script may perform: the two unit files it wrote.
   $SUDO rm -f "$SOCKET_UNIT" "$SERVICE_UNIT"
   $SUDO systemctl daemon-reload 2>&1 | sed 's/^/    /' || true
   say "  adapter units removed"
+}
+
+rollback() {
+  say ""
+  head2 "ROLLBACK"
+  teardown_adapter
   if curl -fsS --max-time 10 "http://${LOOPBACK}/api/tags" >/dev/null 2>&1; then
     say "  rollback_ollama_loopback=PASS (governed Ollama healthy)"
   else
@@ -159,8 +166,25 @@ rollback() {
   $SUDO ss -ltnp 2>/dev/null | grep ":${OLLAMA_PORT}" | sed 's/^/    /' || say "    <none>"
 }
 
-[ "$ALREADY_BOUND" -eq 0 ] \
-  || die "something already listens on ${HOST_GATEWAY_IP}:${OLLAMA_PORT}; refusing to contend for it"
+if [ "$ALREADY_BOUND" -eq 1 ]; then
+  # The address is taken. Replacing it is only ever safe when the holder is
+  # this lane's own adapter, which is exactly the case where both unit files
+  # are present -- that is the one thing this script is permitted to remove.
+  # Anything else owning the address belongs to somebody else: stop.
+  if [ -f "$SOCKET_UNIT" ] && [ -f "$SERVICE_UNIT" ]; then
+    head2 "PHASE 2: REPLACE THIS LANE'S OWN PRIOR ADAPTER"
+    say "  both adapter units are present, so the listener on"
+    say "  ${HOST_GATEWAY_IP}:${OLLAMA_PORT} is this lane's own. Removing it before reinstalling."
+    teardown_adapter
+    if $SUDO ss -ltnH "sport = :${OLLAMA_PORT}" 2>/dev/null | awk '{print $4}' \
+         | grep -qx "${HOST_GATEWAY_IP}:${OLLAMA_PORT}"; then
+      die "${HOST_GATEWAY_IP}:${OLLAMA_PORT} is still held after removing this lane's adapter"
+    fi
+    say "  prior_adapter_removed=PASS (address is free)"
+  else
+    die "something other than this lane's adapter already listens on ${HOST_GATEWAY_IP}:${OLLAMA_PORT}; refusing to contend for it"
+  fi
+fi
 
 # ══ PHASE 2 — create the reversible adapter ════════════════════════════
 head2 "PHASE 2: WRITE ADAPTER UNITS"
@@ -292,16 +316,46 @@ fi
 # ══ PHASE 4 — persistence proof ════════════════════════════════════════
 head2 "PHASE 4: RESTART THE ADAPTER ONLY"
 say "  (the governed Ollama unit is left untouched)"
+# The running proxy inherited the listening descriptor from the socket unit.
+# Restarting the socket on its own leaves that process holding the address,
+# so systemd cannot re-bind: the socket unit lands inactive while the stale
+# process keeps serving. That looks healthy and is not -- nothing would
+# re-create the listener if the process exited. Release the descriptor first.
+$SUDO systemctl stop dominion-ollama-docker.service 2>&1 | sed 's/^/    /' || true
 $SUDO systemctl restart dominion-ollama-docker.socket 2>&1 | sed 's/^/    /'
 $SUDO systemctl status dominion-ollama-docker.socket --no-pager 2>&1 | head -12 | sed 's/^/    /'
-say "  socket_enabled=$(systemctl is-enabled dominion-ollama-docker.socket 2>/dev/null)"
-say "  socket_active=$(systemctl is-active dominion-ollama-docker.socket 2>/dev/null)"
+
+SOCK_ENABLED="$(systemctl is-enabled dominion-ollama-docker.socket 2>/dev/null)"
+SOCK_ACTIVE="$(systemctl is-active dominion-ollama-docker.socket 2>/dev/null)"
+say "  socket_enabled=$SOCK_ENABLED"
+say "  socket_active=$SOCK_ACTIVE"
+if [ "$SOCK_ENABLED" = "enabled" ]; then
+  say "  socket_enabled_check=PASS"
+else
+  say "  socket_enabled_check=FAIL"
+  rollback; die "the adapter socket is '$SOCK_ENABLED', so it would not return after a reboot"
+fi
+if [ "$SOCK_ACTIVE" = "active" ]; then
+  say "  socket_active_check=PASS"
+else
+  say "  socket_active_check=FAIL"
+  rollback; die "the adapter socket is '$SOCK_ACTIVE' after restart; systemd must own the listener, not a leftover process"
+fi
 
 if ! prove_paths "after restart"; then
   rollback; die "persistence proof failed after adapter restart"
 fi
 
 # ══ ollama.service must be byte-identical and never restarted ══════════
+head2 "FINAL ADAPTER STATE"
+FINAL_ACTIVE="$(systemctl is-active dominion-ollama-docker.socket 2>/dev/null)"
+say "  final_socket_active=$FINAL_ACTIVE"
+if [ "$FINAL_ACTIVE" = "active" ]; then
+  say "  adapter_owned_by_systemd=PASS"
+else
+  rollback; die "the adapter socket ended '$FINAL_ACTIVE'; the listener is not owned by systemd"
+fi
+
 head2 "GOVERNED OLLAMA UNCHANGED"
 OLLAMA_SHA_AFTER="$($SUDO sha256sum "$OLLAMA_FRAGMENT" 2>/dev/null | awk '{print $1}')"
 say "  ollama_unit_sha256_after=${OLLAMA_SHA_AFTER:-UNREADABLE}"

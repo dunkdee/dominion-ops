@@ -1,0 +1,272 @@
+name: Install Ollama Docker Bridge Adapter
+
+# BOUNDED MUTATION. Authorized scope: create two systemd units that forward
+# the Docker host-gateway IP on TCP 11434 to the existing governed Ollama at
+# 127.0.0.1:11434, and enable the socket. Nothing else.
+#
+# Driven by: DeerFlow deploy job 104183334060, where the v2.0.0 checkout,
+# both image builds and container startup all passed and only the capability
+# proof failed, on
+#   http://host.docker.internal:11434/api/tags
+#   ConnectionRefusedError: [Errno 111] Connection refused
+# ECONNREFUSED rather than a DNS failure means host.docker.internal already
+# resolves inside the gateway; there is simply no listener on that address.
+#
+# THIS IS A TRANSPORT ADAPTER, NOT A MODEL SERVICE. systemd-socket-proxyd
+# forwards bytes. It loads no model, serves no inference, and is not a
+# second model authority.
+#
+# NEVER: modify or restart ollama.service, bind 0.0.0.0, bind a public
+# interface, install any package, move Ollama into Docker, change DeerFlow,
+# or delete anything but the two adapter units this lane itself creates.
+#
+# Any post-check failure triggers automatic rollback inside the script:
+# the socket is disabled, both units are removed, systemd is reloaded, and
+# the governed Ollama is re-proved healthy on loopback.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect (read-only) or install"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - install
+      confirm:
+        description: "For install, type INSTALL OLLAMA DOCKER BRIDGE. Ignored for inspect."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Validate mode and Founder authority
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          FOUNDER_ACTOR: dunkdee
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            inspect) ;;
+            install)
+              [ "$CONFIRM" = "INSTALL OLLAMA DOCKER BRIDGE" ] \
+                || { echo "install requires confirm to be exactly 'INSTALL OLLAMA DOCKER BRIDGE'"; exit 1; }
+              [ "$ACTOR" = "$FOUNDER_ACTOR" ] \
+                || { echo "install requires the Founder actor"; exit 1; }
+              [ "$TRIGGERING_ACTOR" = "$FOUNDER_ACTOR" ] \
+                || { echo "install requires the Founder triggering actor"; exit 1; }
+              ;;
+            *) echo "unknown mode: $MODE"; exit 1 ;;
+          esac
+          echo "BRIDGE_MODE=$MODE"
+
+      - name: Verify the script cannot touch Ollama or open a public listener
+        shell: bash
+        run: |
+          set -euo pipefail
+          script=scripts/remediation/install_ollama_docker_bridge.sh
+          bash -n "$script"
+
+          # Comments state what the script must never do; only executable
+          # lines are checked, so the disclaimer cannot trip its own gate.
+          code_only="$(grep -v '^[[:space:]]*#' "$script")"
+
+          # ollama.service must never be started, stopped, restarted,
+          # reloaded, enabled, disabled, masked or edited.
+          if grep -qE 'systemctl[^|]*(start|stop|restart|reload|enable|disable|mask)[^|]*ollama\.service|ollama\.service[^|]*(start|stop|restart)' <<< "$code_only"; then
+            echo "REFUSED: script performs a lifecycle action on ollama.service"
+            exit 1
+          fi
+          if grep -qE '(tee|>|sed -i|cat[[:space:]]*>)[^|]*ollama\.service' <<< "$code_only"; then
+            echo "REFUSED: script writes to ollama.service"
+            exit 1
+          fi
+
+          # No wildcard or public bind, ever.
+          if grep -qE 'ListenStream=0\.0\.0\.0|ListenStream=\*|ListenStream=::' <<< "$code_only"; then
+            echo "REFUSED: script binds a wildcard address"
+            exit 1
+          fi
+          # The only ListenStream permitted is the discovered gateway IP.
+          if grep -E 'ListenStream=' <<< "$code_only" | grep -qv '\${HOST_GATEWAY_IP}'; then
+            echo "REFUSED: a ListenStream does not use the discovered HOST_GATEWAY_IP"
+            exit 1
+          fi
+          # That IP must be gated to RFC1918 before it is ever bound.
+          grep -q 'address_scope=PRIVATE' "$script" \
+            || { echo "REFUSED: missing the RFC1918 address-scope gate"; exit 1; }
+
+          # No package installation, no moving Ollama into Docker.
+          if grep -qE 'apt-get|apt[[:space:]]+install|dnf[[:space:]]+install|yum[[:space:]]+install|pip[[:space:]]+install|curl[^|]*\|[[:space:]]*(sh|bash)|docker[[:space:]]+run' <<< "$code_only"; then
+            echo "REFUSED: script installs software or launches a container"
+            exit 1
+          fi
+
+          # The only deletions permitted are the two adapter unit files.
+          if grep -E '\brm[[:space:]]+-' <<< "$code_only" \
+             | grep -qv 'SOCKET_UNIT" "\$SERVICE_UNIT'; then
+            echo "REFUSED: an rm targets something other than the two adapter units"
+            exit 1
+          fi
+
+          # Rollback must exist and must re-prove Ollama.
+          grep -q 'rollback()' "$script" \
+            || { echo "REFUSED: no rollback function"; exit 1; }
+          grep -q 'rollback_ollama_loopback' "$script" \
+            || { echo "REFUSED: rollback does not re-prove the governed Ollama"; exit 1; }
+
+          echo "BRIDGE_SCRIPT_BOUNDED=VERIFIED"
+
+      - name: Require protected VM access
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "VM_HOST secret is missing"; exit 1; }
+          test -n "$VM_USER" || { echo "VM_USER secret is missing"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "VM_SSH_KEY secret is missing"; exit 1; }
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/bridge_key"
+          chmod 600 "$HOME/.ssh/bridge_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Inspect (always runs first, whatever the mode)
+        id: inspect
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          set +e
+          ssh -i "$HOME/.ssh/bridge_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' inspect \
+            < scripts/remediation/install_ollama_docker_bridge.sh \
+            | tee bridge-before.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -ne 0 ]; then
+            echo "INSPECT REFUSED. Nothing was created."
+            exit "$rc"
+          fi
+          echo "INSPECT=PASS"
+
+      - name: Install (only in install mode)
+        id: act
+        if: inputs.mode == 'install'
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          set +e
+          ssh -i "$HOME/.ssh/bridge_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' install \
+            < scripts/remediation/install_ollama_docker_bridge.sh \
+            | tee bridge-after.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Require every proof, and confirm Ollama untouched
+        if: inputs.mode == 'install'
+        shell: bash
+        run: |
+          set -uo pipefail
+          fails=0
+          for gate in host_loopback_api=PASS \
+                      deerflow_gateway_api=PASS \
+                      scope_loopback_present=PASS \
+                      scope_gateway_present=PASS \
+                      scope_no_wildcard=PASS \
+                      ollama_unit_unchanged=PASS \
+                      OLLAMA_DOCKER_BRIDGE_ADAPTER=PASS; do
+            if grep -q "$gate" bridge-after.txt; then
+              echo "$gate"
+            else
+              echo "$gate -- MISSING"
+              fails=$((fails + 1))
+            fi
+          done
+
+          # Both proof rounds must be present: initial and after restart.
+          rounds="$(grep -c 'deerflow_gateway_api=PASS' bridge-after.txt)" || rounds=0
+          echo "deerflow_gateway_proof_rounds=$rounds"
+          if [ "${rounds:-0}" -lt 2 ]; then
+            echo "FAIL: expected the gateway proof to pass twice (initial and after restart)"
+            fails=$((fails + 1))
+          fi
+
+          # A rollback in the log means the run did not succeed cleanly.
+          if grep -q '== ROLLBACK ==' bridge-after.txt; then
+            echo "FAIL: a rollback was executed; the adapter is not installed"
+            fails=$((fails + 1))
+          fi
+
+          # The model must actually be visible.
+          if grep -q 'MODELS_VISIBLE=.*llama3.1:8b' bridge-after.txt; then
+            echo "llama3.1:8b visible: PASS"
+          else
+            echo "FAIL: llama3.1:8b not visible in the gateway's model list"
+            fails=$((fails + 1))
+          fi
+
+          if [ "$fails" -ne 0 ]; then
+            echo "BRIDGE ADAPTER INCOMPLETE: $fails gate(s) failed"
+            exit 1
+          fi
+          echo "ALL_BRIDGE_GATES=PASS"
+
+      - name: Upload bridge adapter evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ollama-docker-bridge
+          path: |
+            bridge-before.txt
+            bridge-after.txt
+          if-no-files-found: warn
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/bridge_key" "$HOME/.ssh/known_hosts"

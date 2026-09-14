@@ -11,7 +11,13 @@ class RevenueSnapshotWorkflowTests(unittest.TestCase):
         self.assertIn('N8N_AGENT_GATEWAY_URL is not configured', text)
         self.assertIn('N8N_AGENT_GATEWAY_URL is malformed', text)
         self.assertIn('N8N_TOOL_SECRET is not configured', text)
+        self.assertIn('REVENUE_SNAPSHOT_PROVENANCE=PASS', text)
         self.assertIn('REVENUE_SNAPSHOT_RECEIPT=PASS', text)
+        self.assertIn('authoritative purchase/revenue provenance', text)
+        self.assertIn('authoritative purchase evidence is unavailable', text)
+        self.assertIn('legacy roi_snapshot stub signature rejected', text)
+        self.assertIn('purchase_count must be a non-negative integer', text)
+        self.assertIn('revenue_cents must be a non-negative integer', text)
         self.assertNotIn('skipping snapshot', text)
         self.assertNotIn('Gateway unreachable — skipping', text)
 

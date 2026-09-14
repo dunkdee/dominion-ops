@@ -219,6 +219,9 @@ jobs:
                       scope_loopback_present=PASS \
                       scope_gateway_present=PASS \
                       scope_no_wildcard=PASS \
+                      socket_enabled_check=PASS \
+                      socket_active_check=PASS \
+                      adapter_owned_by_systemd=PASS \
                       ollama_unit_unchanged=PASS \
                       OLLAMA_DOCKER_BRIDGE_ADAPTER=PASS; do
             if grep -q "$gate" bridge-after.txt; then
@@ -234,6 +237,16 @@ jobs:
           echo "deerflow_gateway_proof_rounds=$rounds"
           if [ "${rounds:-0}" -lt 2 ]; then
             echo "FAIL: expected the gateway proof to pass twice (initial and after restart)"
+            fails=$((fails + 1))
+          fi
+
+          # A listener can exist while the socket unit is dead: the proxy
+          # inherits the descriptor and keeps serving after a failed re-bind.
+          # That state passes every connectivity check and is still broken, so
+          # the socket unit itself must be active -- see socket_active_check
+          # and adapter_owned_by_systemd above.
+          if grep -q 'socket_active=inactive\|socket_active=failed' bridge-after.txt; then
+            echo "FAIL: the adapter socket unit is not active; a stale process holds the address"
             fails=$((fails + 1))
           fi
 

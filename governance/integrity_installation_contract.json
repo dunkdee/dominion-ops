@@ -1,0 +1,26 @@
+{
+  "contract_id": "dominion_integrity_installation_v1",
+  "governance": "RADAH MEMSHALAH",
+  "objective": "Close the minimum installed and runtime-proven surfaces required for the first verified adaptive revenue loop without regression or drift.",
+  "canonical_loop": "Traffic -> Conversion -> Payment -> Receipt -> Attribution -> Learning -> Optimization -> Scale",
+  "rules": {
+    "repository_merge_is_not_runtime_proof": true,
+    "runtime_receipt_required_for_runtime_done": true,
+    "silent_skip_is_failure": true,
+    "parallel_authority_forbidden": true,
+    "rollback_required_for_consequential_change": true,
+    "completed_work_reopens_only_on_regression_evidence": true
+  },
+  "required_receipts": [
+    "DEERFLOW_CAPABILITY_PROOF=PASS",
+    "DEERFLOW_RUNTIME_HEALTH=PASS",
+    "REVENUE_SNAPSHOT_RECEIPT=PASS",
+    "voltedge_payment_provider_proof",
+    "voltedge_delivery_calculation_proof",
+    "voltedge_real_order_receipt",
+    "voltedge_refund_receipt",
+    "source_to_order_attribution_receipt",
+    "governed_traffic_canary_receipt",
+    "adaptive_learning_receipt"
+  ]
+}

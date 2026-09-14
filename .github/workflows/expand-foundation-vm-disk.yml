@@ -1,0 +1,287 @@
+name: Expand Foundation VM Disk
+
+# PRODUCTION INFRASTRUCTURE OPERATION. Authorized scope: grow the
+# foundation-vm boot persistent disk from ~50GB to 100GB, grow the one root
+# partition on it, and grow the filesystem on that partition.
+#
+# Driven by: Deploy DeerFlow Runtime run 34895204315 / job 104147419958
+# failing with "no space left on device", and disk-recovery run 34897600099
+# proving that safe allowlisted cleanup reclaims effectively nothing on this
+# VM (2.9G free / 94% used, unchanged before and after) because the disk is
+# full of things that are legitimately in use.
+#
+# gcloud runs ON the VM under its own attached service account -- the same
+# pattern every other GCP operation in this repository uses. There is no
+# GCP credential in GitHub secrets and none is introduced here.
+#
+# NEVER: mkfs, any format, any shrink, partition deletion, VM creation,
+# service migration, data deletion, or any edit to the DeerFlow deployment
+# workflow. The gate below greps the script and refuses to run it otherwise.
+#
+# Ordering is a chain of fail-closed gates. Each one must be proven before
+# the next, more consequential, step is allowed:
+#   identity -> snapshot READY -> cloud disk 100GB -> growpart -> resize fs
+#   -> capacity proven -> health matches the recorded pre-resize baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect (read-only) or expand"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - expand
+      confirm:
+        description: "For expand, type EXPAND FOUNDATION VM DISK. Ignored for inspect."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# Shared with the DeerFlow deploy and every other foundation-VM lane, so a
+# disk resize and a deployment can never overlap.
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  expand:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Validate mode and Founder authority
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          FOUNDER_ACTOR: dunkdee
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            inspect) ;;
+            expand)
+              [ "$CONFIRM" = "EXPAND FOUNDATION VM DISK" ] \
+                || { echo "expand requires confirm to be exactly 'EXPAND FOUNDATION VM DISK'"; exit 1; }
+              [ "$ACTOR" = "$FOUNDER_ACTOR" ] \
+                || { echo "expand requires the Founder actor"; exit 1; }
+              [ "$TRIGGERING_ACTOR" = "$FOUNDER_ACTOR" ] \
+                || { echo "expand requires the Founder triggering actor"; exit 1; }
+              ;;
+            *) echo "unknown mode: $MODE"; exit 1 ;;
+          esac
+          echo "DISK_EXPANSION_MODE=$MODE"
+
+      - name: Verify the script can only grow, never format or shrink
+        shell: bash
+        run: |
+          set -euo pipefail
+          script=scripts/remediation/expand_foundation_vm_disk.sh
+          bash -n "$script"
+
+          # Comments describe what the script must never do; only executable
+          # lines are checked, so the disclaimer cannot trip its own gate.
+          code_only="$(grep -v '^[[:space:]]*#' "$script")"
+
+          # Nothing that formats, erases, repartitions or destroys.
+          if grep -qEi 'mkfs|mke2fs|wipefs|sgdisk|dd[[:space:]]+if=|parted[^|]*mklabel|volume[[:space:]]+(rm|prune)|instances[[:space:]]+(create|delete)|disks[[:space:]]+delete|snapshots[[:space:]]+delete' <<< "$code_only"; then
+            echo "REFUSED: script contains a formatting, deletion or repartitioning operation"
+            exit 1
+          fi
+
+          # resize2fs with a trailing size can shrink. Only the bare,
+          # grow-to-fill-the-partition form is permitted.
+          if grep -E 'resize2fs' <<< "$code_only" | grep -qE 'resize2fs[^|)]*[0-9]+[KMGT]?[[:space:]]*$'; then
+            echo "REFUSED: resize2fs is given an explicit size, which can shrink a filesystem"
+            exit 1
+          fi
+          # xfs_growfs -D takes an explicit block count; -d means grow to max.
+          if grep -qE 'xfs_growfs[^|]*-D[[:space:]]' <<< "$code_only"; then
+            echo "REFUSED: xfs_growfs -D specifies an explicit size; only -d (grow to max) is permitted"
+            exit 1
+          fi
+
+          # The only disk resize permitted is the one to the declared
+          # target. Shell line-continuations are joined first, because the
+          # gcloud invocation wraps and --size= sits on its own line.
+          joined="$(printf '%s' "$code_only" | sed -e :a -e '/\\$/N; s/\\\n//; ta')"
+          if grep -qE '\-\-size=' <<< "$joined"; then
+            if grep -E '\-\-size=' <<< "$joined" | grep -qv 'TARGET_SIZE_GB'; then
+              echo "REFUSED: a --size= argument does not use the declared TARGET_SIZE_GB"
+              exit 1
+            fi
+          fi
+          if grep -E 'disks[[:space:]]+resize' <<< "$joined" | grep -qv 'TARGET_SIZE_GB'; then
+            echo "REFUSED: a disk resize does not use the declared TARGET_SIZE_GB"
+            exit 1
+          fi
+
+          # The snapshot gate must exist and must precede the resize.
+          snap_line="$(grep -n 'FOUNDATION_VM_PRE_RESIZE_SNAPSHOT=PASS' <<< "$code_only" | head -1 | cut -d: -f1)"
+          resize_line="$(grep -n 'disks[[:space:]]\+resize' <<< "$code_only" | head -1 | cut -d: -f1)"
+          if [ -z "$snap_line" ] || [ -z "$resize_line" ] || [ "$snap_line" -ge "$resize_line" ]; then
+            echo "REFUSED: the snapshot gate must exist and must come before the disk resize"
+            exit 1
+          fi
+          echo "  snapshot gate at line $snap_line precedes resize at line $resize_line"
+
+          echo "DISK_EXPANSION_SCRIPT_BOUNDED=VERIFIED"
+
+      - name: Require protected VM access
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "VM_HOST secret is missing"; exit 1; }
+          test -n "$VM_USER" || { echo "VM_USER secret is missing"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "VM_SSH_KEY secret is missing"; exit 1; }
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/disk_expand_key"
+          chmod 600 "$HOME/.ssh/disk_expand_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Inspect (always runs first, whatever the mode)
+        id: inspect
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          set +e
+          ssh -i "$HOME/.ssh/disk_expand_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' inspect \
+            < scripts/remediation/expand_foundation_vm_disk.sh \
+            | tee disk-before.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -ne 0 ]; then
+            echo "INSPECT REFUSED: identity or layout did not verify. Nothing was changed."
+            exit "$rc"
+          fi
+          echo "INSPECT=PASS"
+
+      - name: Expand (only in expand mode, once inspection succeeded)
+        id: act
+        if: inputs.mode == 'expand'
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          set +e
+          ssh -i "$HOME/.ssh/disk_expand_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' expand \
+            < scripts/remediation/expand_foundation_vm_disk.sh \
+            | tee disk-after.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Require every phase gate and unchanged production health
+        if: inputs.mode == 'expand'
+        shell: bash
+        run: |
+          set -uo pipefail
+          fails=0
+
+          for gate in FOUNDATION_VM_PRE_RESIZE_SNAPSHOT=PASS \
+                      FOUNDATION_VM_CLOUD_DISK_RESIZE=PASS \
+                      FOUNDATION_VM_FILESYSTEM_EXPANSION=PASS; do
+            if grep -q "$gate" disk-after.txt; then
+              echo "$gate"
+            else
+              echo "$gate -- MISSING"
+              fails=$((fails + 1))
+            fi
+          done
+
+          echo "-- recorded pre-resize baseline (run 34897600099) --"
+          grep -A20 'RECORDED PRE-RESIZE BASELINE' disk-after.txt | grep '  health ' | sort > baseline-health.txt
+          cat baseline-health.txt
+          echo "-- health after expansion --"
+          grep -A20 'PHASE 7: HEALTH AFTER' disk-after.txt | grep '  health ' | sort > after-health.txt
+          cat after-health.txt
+
+          if [ ! -s baseline-health.txt ] || [ ! -s after-health.txt ]; then
+            echo "FAIL: could not extract health evidence -- unverified, not a pass"
+            fails=$((fails + 1))
+          elif diff -u baseline-health.txt after-health.txt; then
+            echo "PASS: health matches the recorded pre-resize baseline exactly"
+          else
+            echo "FAIL: health differs from the recorded pre-resize baseline"
+            fails=$((fails + 1))
+          fi
+
+          # A service that is newly unreachable is a hard failure. The two
+          # pre-existing 404s are part of the baseline above and are matched
+          # by the diff, not treated as new breakage here.
+          if grep -qE 'health .* -> (000|NO_RESPONSE|5[0-9][0-9])' after-health.txt; then
+            echo "FAIL: a service is unreachable or erroring after expansion"
+            fails=$((fails + 1))
+          fi
+
+          # All eleven production containers must still be running.
+          running="$(grep -c '  id=.* name=.* status=Up' disk-after.txt || echo 0)"
+          echo "containers_running_after=$running"
+          if [ "$running" -lt 11 ]; then
+            echo "FAIL: expected at least 11 running containers, found $running"
+            fails=$((fails + 1))
+          fi
+
+          # The rollback asset must have survived.
+          if grep -qi 'image=.*rollback' disk-after.txt; then
+            echo "PASS: rollback asset still present"
+          else
+            echo "FAIL: rollback asset missing after expansion"
+            fails=$((fails + 1))
+          fi
+
+          if [ "$fails" -ne 0 ]; then
+            echo "STORAGE EXPANSION INCOMPLETE: $fails gate(s) failed"
+            exit 1
+          fi
+          echo "FOUNDATION_VM_PERMANENT_STORAGE_EXPANSION=PASS"
+
+      - name: Upload disk expansion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-vm-disk-expansion
+          path: |
+            disk-before.txt
+            disk-after.txt
+          if-no-files-found: warn
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/disk_expand_key" "$HOME/.ssh/known_hosts"

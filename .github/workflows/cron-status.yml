@@ -40,10 +40,33 @@ jobs:
           import json
           from pathlib import Path
 
-          path = Path("snapshot.json")
-          payload = json.loads(path.read_text(encoding="utf-8"))
+          payload = json.loads(Path("snapshot.json").read_text(encoding="utf-8"))
           if not isinstance(payload, dict):
               raise SystemExit("ERROR: roi_snapshot response is not a JSON object")
+
+          result = payload.get("result", payload)
+          if not isinstance(result, dict):
+              raise SystemExit("ERROR: roi_snapshot result is not a JSON object")
+
+          purchase_source = result.get("PURCHASE_SOURCE") or result.get("purchase_source")
+          revenue_source = result.get("REVENUE_SOURCE") or result.get("revenue_source")
+          db_available = result.get("db_available")
+
+          if not purchase_source or not revenue_source:
+              raise SystemExit("ERROR: roi_snapshot has no authoritative purchase/revenue provenance")
+          if db_available is not True:
+              raise SystemExit("ERROR: authoritative purchase evidence is unavailable")
+          if "params" in result and not ("purchase_count" in result or "revenue_cents" in result):
+              raise SystemExit("ERROR: legacy roi_snapshot stub signature rejected")
+
+          purchase_count = result.get("purchase_count")
+          revenue_cents = result.get("revenue_cents")
+          if not isinstance(purchase_count, int) or purchase_count < 0:
+              raise SystemExit("ERROR: purchase_count must be a non-negative integer")
+          if not isinstance(revenue_cents, int) or revenue_cents < 0:
+              raise SystemExit("ERROR: revenue_cents must be a non-negative integer")
+
+          print("REVENUE_SNAPSHOT_PROVENANCE=PASS")
           print("REVENUE_SNAPSHOT_RECEIPT=PASS")
           PY
 

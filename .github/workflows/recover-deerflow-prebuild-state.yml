@@ -1,0 +1,250 @@
+name: Recover DeerFlow Prebuild State
+
+# BOUNDED MUTATION. Authorized scope: restore exactly two tracked files in
+# the /opt/dominion/deer-flow checkout --
+#   backend/Dockerfile
+#   backend/pyproject.toml
+# -- and nothing else.
+#
+# Driven by: Deploy DeerFlow Runtime job 104167166389, where SSH and payload
+# transfer both passed but the deploy script exited 1 in under a second with
+# no Docker build. Line 40 of scripts/deploy_deerflow_runtime_remote.sh is
+# `git diff --quiet`; the script patches those two files during build
+# preparation and restores them from an EXIT trap, and the earlier disk-full
+# interruption killed the run before that trap completed.
+#
+# NEVER: git reset, git clean, checkout of a directory or of '.', any force
+# checkout, branch change, fetch/pull/clone, deletion of untracked files, or
+# any Docker or deployment action. The gate greps for those and refuses.
+#
+# If any tracked file outside those two paths is modified, the script stops
+# and reports rather than overwriting it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect (read-only) or repair"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - repair
+      confirm:
+        description: "For repair, type RESTORE DEERFLOW PREBUILD STATE. Ignored for inspect."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# Shared with the DeerFlow deploy and every other foundation-VM lane, so a
+# repair and a deployment can never overlap.
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Validate mode and Founder authority
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          FOUNDER_ACTOR: dunkdee
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            inspect) ;;
+            repair)
+              [ "$CONFIRM" = "RESTORE DEERFLOW PREBUILD STATE" ] \
+                || { echo "repair requires confirm to be exactly 'RESTORE DEERFLOW PREBUILD STATE'"; exit 1; }
+              [ "$ACTOR" = "$FOUNDER_ACTOR" ] \
+                || { echo "repair requires the Founder actor"; exit 1; }
+              [ "$TRIGGERING_ACTOR" = "$FOUNDER_ACTOR" ] \
+                || { echo "repair requires the Founder triggering actor"; exit 1; }
+              ;;
+            *) echo "unknown mode: $MODE"; exit 1 ;;
+          esac
+          echo "PREBUILD_RECOVERY_MODE=$MODE"
+
+      - name: Verify the script can only restore two named files
+        shell: bash
+        run: |
+          set -euo pipefail
+          script=scripts/remediation/recover_deerflow_prebuild_state.sh
+          bash -n "$script"
+
+          # Comments state what the script must never do; only executable
+          # lines are checked, so the disclaimer cannot trip its own gate.
+          code_only="$(grep -v '^[[:space:]]*#' "$script")"
+
+          # The destructive git operations the directive forbids outright.
+          if grep -qE 'git[[:space:]]+reset|git[[:space:]]+clean|checkout[[:space:]]+\.|checkout[[:space:]]+-f|checkout[[:space:]]+--force|git[[:space:]]+(fetch|pull|clone|merge|rebase)|restore[[:space:]]+\.' <<< "$code_only"; then
+            echo "REFUSED: script contains a reset, clean, force or bulk checkout"
+            exit 1
+          fi
+
+          # No deletion of anything, and no deployment or container action.
+          if grep -qE '\brm[[:space:]]+-|\bunlink\b|docker[[:space:]]+(run|rm|stop|restart|exec|compose)|deploy_deerflow' <<< "$code_only"; then
+            echo "REFUSED: script deletes files or performs a container/deployment action"
+            exit 1
+          fi
+
+          # Every checkout must be exactly `git checkout -- "$f"`, the
+          # per-file loop variable that can only ever hold one of the two
+          # pinned sanctioned paths. A literal path, a directory, a '.' or
+          # any flag other than -- is therefore refused. Matched as a
+          # substring rather than to end-of-line, because the invocation is
+          # followed by a redirect and a pipe.
+          if grep -E 'git[[:space:]]+checkout' <<< "$code_only" \
+             | grep -qvF 'git checkout -- "$f"'; then
+            echo "REFUSED: a git checkout does not target the sanctioned per-file loop variable"
+            grep -E 'git[[:space:]]+checkout' <<< "$code_only" | grep -vF 'git checkout -- "$f"'
+            exit 1
+          fi
+
+          # The two sanctioned paths must be pinned to their exact values.
+          grep -q 'SANCTIONED_1="backend/Dockerfile"' "$script" \
+            || { echo "REFUSED: sanctioned path 1 is not pinned"; exit 1; }
+          grep -q 'SANCTIONED_2="backend/pyproject.toml"' "$script" \
+            || { echo "REFUSED: sanctioned path 2 is not pinned"; exit 1; }
+
+          # The refusal on unexpected tracked changes must be present.
+          grep -q 'refusing to overwrite them' "$script" \
+            || { echo "REFUSED: missing the unexpected-tracked-change refusal"; exit 1; }
+
+          echo "PREBUILD_RECOVERY_SCRIPT_BOUNDED=VERIFIED"
+
+      - name: Require protected VM access
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "VM_HOST secret is missing"; exit 1; }
+          test -n "$VM_USER" || { echo "VM_USER secret is missing"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "VM_SSH_KEY secret is missing"; exit 1; }
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/df_key"
+          chmod 600 "$HOME/.ssh/df_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Inspect (always runs first, whatever the mode)
+        id: inspect
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          set +e
+          ssh -i "$HOME/.ssh/df_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' inspect \
+            < scripts/remediation/recover_deerflow_prebuild_state.sh \
+            | tee prebuild-before.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -ne 0 ]; then
+            echo "INSPECT REFUSED. Nothing was changed."
+            exit "$rc"
+          fi
+          echo "INSPECT=PASS"
+
+      - name: Refuse repair if unexpected tracked files are modified
+        if: inputs.mode == 'repair'
+        shell: bash
+        run: |
+          set -uo pipefail
+          # A second, independent read of the same classification, made on
+          # the runner from the inspect evidence rather than inside the
+          # script, so a bug in one cannot silently authorise the other.
+          if grep -q 'classification=UNEXPECTED_TRACKED_CHANGES' prebuild-before.txt; then
+            echo "REFUSED: tracked files outside the two sanctioned paths are modified."
+            sed -n '/classification=UNEXPECTED_TRACKED_CHANGES/,/^$/p' prebuild-before.txt
+            exit 1
+          fi
+          echo "PRE_REPAIR_CLASSIFICATION=SAFE"
+
+      - name: Repair (only in repair mode)
+        id: act
+        if: inputs.mode == 'repair'
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          set +e
+          ssh -i "$HOME/.ssh/df_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' repair \
+            < scripts/remediation/recover_deerflow_prebuild_state.sh \
+            | tee prebuild-after.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Require the clean-state proof
+        if: inputs.mode == 'repair'
+        shell: bash
+        run: |
+          set -uo pipefail
+          fails=0
+          for gate in check_no_worktree_diff=PASS \
+                      check_no_staged_diff=PASS \
+                      check_exact_tag=PASS \
+                      check_exact_origin=PASS \
+                      DEERFLOW_PREBUILD_STATE_RECOVERY=PASS; do
+            if grep -q "$gate" prebuild-after.txt; then
+              echo "$gate"
+            else
+              echo "$gate -- MISSING"
+              fails=$((fails + 1))
+            fi
+          done
+          if [ "$fails" -ne 0 ]; then
+            echo "PREBUILD RECOVERY INCOMPLETE: $fails gate(s) failed"
+            exit 1
+          fi
+          echo "ALL_PREBUILD_GATES=PASS"
+
+      - name: Upload prebuild recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deerflow-prebuild-recovery
+          path: |
+            prebuild-before.txt
+            prebuild-after.txt
+          if-no-files-found: warn
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/df_key" "$HOME/.ssh/known_hosts"

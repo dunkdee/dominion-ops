@@ -1,0 +1,48 @@
+{
+  "schema": "radah-remediation-receipt-v1",
+  "governing_name": "RADAH MEMSHALAH — רָדָה מֶמְשָׁלָה",
+  "receipt_kind": "contemporaneous_post_action",
+  "created_at": "2026-09-10T10:41:16Z",
+  "actor": "Claude via Claude Code session, dispatched by Founder (dunkdee)",
+  "authority": {
+    "source": "explicit Founder directive: DOMINION GCP CLOSURE ORDER — GATE 1 AUTHORIZED",
+    "status": "EXECUTED_UNDER_EXPLICIT_FOUNDER_AUTHORIZATION"
+  },
+  "supersedes": "governance/remediation_receipts/2026-09-10T0900Z-stray-ollama-11435-preaction.json",
+  "execution": {
+    "verify_run_id": "34467172442",
+    "verify_job_id": "102838463396",
+    "verify_conclusion": "success",
+    "verify_result": "IDENTITY_REVALIDATED=PASS target_pid=3192050 (all five identity checks matched, unchanged from attribution run 34458046789)",
+    "remediate_run_id": "34467235573",
+    "remediate_job_id": "102838564593",
+    "remediate_conclusion": "success",
+    "remediate_head_sha": "4d3d0f99c58899c36cf0b449500a48721fe62891",
+    "artifact_id": "10148060186",
+    "artifact_sha256": "3b344607ee5c40c8579017cab3c6cb735fc6b63f3890816a60a68905546aa078",
+    "signal_sent": "SIGTERM",
+    "escalation_used": false,
+    "processes_terminated": 1,
+    "target_pid": 3192050
+  },
+  "post_state_proofs": {
+    "proof_11435_absent": "PASS",
+    "proof_11434_healthy": "PASS (governed ollama, HTTP 200 on /api/version)",
+    "proof_nemotron_still_contained": "PASS (active=inactive unit_file=disabled)",
+    "proof_command_center_green": "PASS (127.0.0.1:8091/api/status HTTP 200)",
+    "proof_integrity_pass": "PASS — the integrity agent's own next scheduled cycle: cycle_after=8389 status=PASS ok=true checks=20 defects=0",
+    "all_required_present": true
+  },
+  "outcome": {
+    "defect_closed": "hold:port:11435",
+    "defect_open_duration": "2026-09-09T21:17:10Z to 2026-09-10T10:41:12Z (~13h24m)",
+    "integrity_agent_verdict_before": "cycle=8388 status=DEGRADED defects=1",
+    "integrity_agent_verdict_after": "cycle=8389 status=PASS defects=0",
+    "no_code_or_policy_change_required": true
+  },
+  "truth_status": {
+    "action_performed": true,
+    "this_receipt_claims_completion": true,
+    "completion_scope": "TCP 11435 defect only -- not a claim about any other open registry item"
+  }
+}

@@ -92,8 +92,14 @@ head2 "IMAGES NOT REFERENCED BY ANY CONTAINER (running or stopped)"
 # Compared by IMAGE ID, which is what a container actually references --
 # not by repository:tag string, which can silently under- or over-match
 # (e.g. a container started without an explicit tag, or a tag that has
-# since been reassigned to a different image).
-used_ids="$($SUDO docker ps -a --format '{{.ImageID}}' 2>/dev/null | cut -c1-12 | sort -u)"
+# since been reassigned to a different image). `docker ps` can report this
+# as a bare 12-char ID or as a full `sha256:<64-hex>` digest depending on
+# docker version and how the container was created, so the sha256: prefix
+# is stripped before truncating -- without that, every comparison silently
+# fails closed (nothing looks unused) rather than open, but it must not be
+# trusted to also fail closed on the deletion side, so the delete step
+# below carries its own independent proof.
+used_ids="$($SUDO docker ps -a --format '{{.ImageID}}' 2>/dev/null | sed 's/^sha256://' | cut -c1-12 | sort -u)"
 $SUDO docker images --format '{{.ID}} {{.Repository}}:{{.Tag}}' 2>/dev/null | while read -r id ref; do
   short_id="$(printf '%s' "$id" | cut -c1-12)"
   if printf '%s\n' "$used_ids" | grep -qxF "$short_id"; then
@@ -142,7 +148,14 @@ head2 "CLEANUP: UNUSED IMAGES NOT REFERENCED BY ANY CONTAINER"
 # a name contains "rollback". So the exact same used-id / rollback-pattern
 # logic as the inspect pass decides removal here, one image at a time, and
 # a rollback asset can never be selected no matter what else is unused.
-used_ids="$($SUDO docker ps -a --format '{{.ImageID}}' 2>/dev/null | cut -c1-12 | sort -u)"
+#
+# This local match is a pre-filter, not the safety boundary: `docker rmi`
+# below runs WITHOUT -f, so docker's own engine-side "image is being used by
+# running container" refusal is the actual backstop if this match is ever
+# wrong in the unsafe direction (calling a used image unused). The first
+# live run proved that backstop works -- five containers-in-use images were
+# attempted and every one was correctly refused by docker itself.
+used_ids="$($SUDO docker ps -a --format '{{.ImageID}}' 2>/dev/null | sed 's/^sha256://' | cut -c1-12 | sort -u)"
 $SUDO docker images --format '{{.ID}} {{.Repository}}:{{.Tag}}' 2>/dev/null | while read -r id ref; do
   short_id="$(printf '%s' "$id" | cut -c1-12)"
   if printf '%s\n' "$used_ids" | grep -qxF "$short_id"; then

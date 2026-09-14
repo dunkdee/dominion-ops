@@ -1,0 +1,12 @@
+{
+  "schema": "dominion-deerflow-runtime-release-v1",
+  "authorized_role": "founder",
+  "confirm": "DEPLOY DEERFLOW RUNTIME",
+  "approved_source_commit": "563a69879b0bca8e6f86961f4cafd540957aadee",
+  "scope": "P0 integrity installation closure",
+  "request_id": "deerflow-runtime-2026-09-13-p0",
+  "required_receipts": [
+    "DEERFLOW_CAPABILITY_PROOF=PASS",
+    "DEERFLOW_RUNTIME_HEALTH=PASS"
+  ]
+}

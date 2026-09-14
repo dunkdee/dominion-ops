@@ -111,6 +111,20 @@ jobs:
             exit 1
           fi
 
+          # An image whose name contains "rollback" must never be reachable
+          # by a removal command. docker image prune's only safety semantic
+          # is container attachment -- it does not know what a rollback
+          # asset is -- so a blanket prune -a is refused, and the explicit
+          # per-image skip must be present.
+          if grep -qE 'docker[[:space:]]+image[[:space:]]+prune[[:space:]]+-af' <<< "$code_only"; then
+            echo "REFUSED: blanket 'docker image prune -af' cannot distinguish a rollback asset from any other unused image"
+            exit 1
+          fi
+          grep -qi 'PROTECTED=rollback-asset-never-removed' <<< "$code_only" \
+            || { echo "REFUSED: rollback-asset protection marker is missing"; exit 1; }
+          grep -qi 'skipping PROTECTED rollback asset' <<< "$code_only" \
+            || { echo "REFUSED: cleanup path does not skip rollback assets"; exit 1; }
+
           echo "STORAGE_RECOVERY_SCRIPT_BOUNDED=VERIFIED"
 
       - name: Require protected VM access

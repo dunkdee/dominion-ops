@@ -89,9 +89,21 @@ head2 "DANGLING IMAGES (cleanup candidates)"
 $SUDO docker images -f dangling=true --format 'id={{.ID}} repo={{.Repository}} size={{.Size}}' 2>&1
 
 head2 "IMAGES NOT REFERENCED BY ANY CONTAINER (running or stopped)"
-in_use="$($SUDO docker ps -a --format '{{.Image}}' 2>/dev/null | sort -u)"
+# Compared by IMAGE ID, which is what a container actually references --
+# not by repository:tag string, which can silently under- or over-match
+# (e.g. a container started without an explicit tag, or a tag that has
+# since been reassigned to a different image).
+used_ids="$($SUDO docker ps -a --format '{{.ImageID}}' 2>/dev/null | cut -c1-12 | sort -u)"
 $SUDO docker images --format '{{.ID}} {{.Repository}}:{{.Tag}}' 2>/dev/null | while read -r id ref; do
-  printf '%s\n' "$in_use" | grep -qxF "$ref" || echo "unused image=$ref id=$id"
+  short_id="$(printf '%s' "$id" | cut -c1-12)"
+  if printf '%s\n' "$used_ids" | grep -qxF "$short_id"; then
+    continue
+  fi
+  if printf '%s' "$ref" | grep -qi 'rollback'; then
+    echo "unused image=$ref id=$id PROTECTED=rollback-asset-never-removed"
+  else
+    echo "unused image=$ref id=$id"
+  fi
 done
 
 head2 "DOCKER BUILD CACHE"
@@ -125,9 +137,24 @@ head2 "CLEANUP: DANGLING IMAGES"
 $SUDO docker image prune -f 2>&1 || true
 
 head2 "CLEANUP: UNUSED IMAGES NOT REFERENCED BY ANY CONTAINER"
-# -a still refuses to touch anything with a container (running OR stopped)
-# attached to it -- that is docker's own safety semantic, not ours.
-$SUDO docker image prune -af 2>&1 || true
+# Never a blanket `docker image prune -af`. That command's only safety
+# semantic is "no container references it" -- it does not know or care that
+# a name contains "rollback". So the exact same used-id / rollback-pattern
+# logic as the inspect pass decides removal here, one image at a time, and
+# a rollback asset can never be selected no matter what else is unused.
+used_ids="$($SUDO docker ps -a --format '{{.ImageID}}' 2>/dev/null | cut -c1-12 | sort -u)"
+$SUDO docker images --format '{{.ID}} {{.Repository}}:{{.Tag}}' 2>/dev/null | while read -r id ref; do
+  short_id="$(printf '%s' "$id" | cut -c1-12)"
+  if printf '%s\n' "$used_ids" | grep -qxF "$short_id"; then
+    continue
+  fi
+  if printf '%s' "$ref" | grep -qi 'rollback'; then
+    say "  skipping PROTECTED rollback asset: $ref ($id)"
+    continue
+  fi
+  say "  removing unused image: $ref ($id)"
+  $SUDO docker rmi "$id" 2>&1 || true
+done
 
 head2 "CLEANUP: STOPPED / EXITED / CREATED CONTAINERS"
 # Never running containers -- docker container prune only ever touches

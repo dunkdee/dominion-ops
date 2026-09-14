@@ -85,22 +85,28 @@ jobs:
           script=scripts/remediation/recover_disk_foundation_vm.sh
           bash -n "$script"
 
+          # Strip full-line comments first: the script documents what it
+          # NEVER does (e.g. "docker volumes") in prose, and that prose must
+          # not be mistaken for the code it is disclaiming. Only executable
+          # lines are checked below.
+          code_only="$(grep -v '^[[:space:]]*#' "$script")"
+
           # No volume, database, or persistent-state command anywhere.
-          if grep -qEi 'docker[[:space:]]+volume|--volumes|compose[[:space:]]+down|psql|pg_dump|dropdb|n8n_data|INSERT|UPDATE|DELETE FROM|DROP[[:space:]]+TABLE' "$script"; then
+          if grep -qEi 'docker[[:space:]]+volume|--volumes|compose[[:space:]]+down|psql|pg_dump|dropdb|n8n_data|INSERT|UPDATE|DELETE FROM|DROP[[:space:]]+TABLE' <<< "$code_only"; then
             echo "REFUSED: script contains a volume, database, or persistent-state operation"
             exit 1
           fi
 
           # No unbounded system-level prune -- only targeted subcommands are
           # allowed, so scope stays exactly what this receipt describes.
-          if grep -qE 'docker[[:space:]]+system[[:space:]]+prune' "$script"; then
+          if grep -qE 'docker[[:space:]]+system[[:space:]]+prune' <<< "$code_only"; then
             echo "REFUSED: unbounded 'docker system prune' is not permitted; use targeted prune subcommands"
             exit 1
           fi
 
           # rm -rf must only ever target /tmp or known deploy-scratch prefixes
           # under /home, never a bare / or an unqualified variable expansion.
-          if grep -E 'rm[[:space:]]+-rf' "$script" | grep -qvE '/tmp|dominion_meta_binding_|deerflow_deploy_|"\$d"'; then
+          if grep -E 'rm[[:space:]]+-rf' <<< "$code_only" | grep -qvE '/tmp|dominion_meta_binding_|deerflow_deploy_|"\$d"'; then
             echo "REFUSED: an rm -rf does not target a recognised scratch-directory pattern"
             exit 1
           fi

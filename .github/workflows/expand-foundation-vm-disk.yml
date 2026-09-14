@@ -71,7 +71,10 @@ jobs:
         run: |
           set -euo pipefail
           case "$MODE" in
-            inspect) ;;
+            # Both read-only. verify re-proves a completed expansion without
+            # taking a snapshot or touching the disk, so it needs no gate
+            # beyond repository access, same as inspect.
+            inspect|verify) ;;
             expand)
               [ "$CONFIRM" = "EXPAND FOUNDATION VM DISK" ] \
                 || { echo "expand requires confirm to be exactly 'EXPAND FOUNDATION VM DISK'"; exit 1; }

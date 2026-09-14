@@ -1,0 +1,18 @@
+{
+  "policy_id": "revenue_snapshot_integrity_v1",
+  "governance": "RADAH MEMSHALAH",
+  "purpose": "Prevent false-green revenue measurement and require a verifiable snapshot receipt before revenue-learning automation treats a measurement cycle as successful.",
+  "requirements": {
+    "gateway_required": true,
+    "gateway_must_be_http_or_https": true,
+    "tool_secret_required": true,
+    "gateway_failure_is_blocking": true,
+    "response_must_be_json_object": true,
+    "success_receipt": "REVENUE_SNAPSHOT_RECEIPT=PASS"
+  },
+  "anti_drift": {
+    "no_parallel_analytics_authority": true,
+    "no_silent_skip": true,
+    "no_success_without_measurement": true
+  }
+}

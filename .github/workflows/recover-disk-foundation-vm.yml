@@ -1,0 +1,224 @@
+name: Recover Disk Foundation VM
+
+# BOUNDED MUTATION. Authorized scope: reclaim disk headroom on foundation-vm
+# so the existing DeerFlow production deployment (deploy-deerflow-runtime.yml)
+# can complete its Docker image build. Triggered by run 34895204315 / job
+# 104147419958 failing with "no space left on device" while copying the
+# backend into the final image.
+#
+# Never touches: docker volumes, databases, n8n state, any running container,
+# current production config, secrets, persistent application state, rollback
+# assets, active Dominion service data. The workflow greps the script to
+# prove none of that is present before it ever runs.
+#
+# inspect mode is read-only and ungated beyond repository access. cleanup
+# mode performs only allowlisted deletions (build cache, dangling/unused
+# images, stopped containers, stale scratch dirs, oversized rotated logs) and
+# requires the Founder actor plus an exact confirm string. It always runs a
+# read-only inspect pass first, whatever the mode, so the before-state is
+# captured even if cleanup is refused.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect (read-only) or cleanup"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - cleanup
+      confirm:
+        description: "For cleanup, type RECOVER FOUNDATION VM DISK. Ignored for inspect."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# Shared with every other foundation-VM operation, DeerFlow deploy included,
+# so two VM-side operations can never overlap.
+concurrency:
+  group: foundation-vm-production
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Validate mode and Founder authority
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          FOUNDER_ACTOR: dunkdee
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            inspect) ;;
+            cleanup)
+              [ "$CONFIRM" = "RECOVER FOUNDATION VM DISK" ] \
+                || { echo "cleanup requires confirm to be exactly 'RECOVER FOUNDATION VM DISK'"; exit 1; }
+              [ "$ACTOR" = "$FOUNDER_ACTOR" ] \
+                || { echo "cleanup requires the Founder actor"; exit 1; }
+              [ "$TRIGGERING_ACTOR" = "$FOUNDER_ACTOR" ] \
+                || { echo "cleanup requires the Founder triggering actor"; exit 1; }
+              ;;
+            *) echo "unknown mode: $MODE"; exit 1 ;;
+          esac
+          echo "RECOVERY_MODE=$MODE"
+
+      - name: Verify the script cannot touch volumes, databases, or data
+        shell: bash
+        run: |
+          set -euo pipefail
+          script=scripts/remediation/recover_disk_foundation_vm.sh
+          bash -n "$script"
+
+          # No volume, database, or persistent-state command anywhere.
+          if grep -qEi 'docker[[:space:]]+volume|--volumes|compose[[:space:]]+down|psql|pg_dump|dropdb|n8n_data|INSERT|UPDATE|DELETE FROM|DROP[[:space:]]+TABLE' "$script"; then
+            echo "REFUSED: script contains a volume, database, or persistent-state operation"
+            exit 1
+          fi
+
+          # No unbounded system-level prune -- only targeted subcommands are
+          # allowed, so scope stays exactly what this receipt describes.
+          if grep -qE 'docker[[:space:]]+system[[:space:]]+prune' "$script"; then
+            echo "REFUSED: unbounded 'docker system prune' is not permitted; use targeted prune subcommands"
+            exit 1
+          fi
+
+          # rm -rf must only ever target /tmp or known deploy-scratch prefixes
+          # under /home, never a bare / or an unqualified variable expansion.
+          if grep -E 'rm[[:space:]]+-rf' "$script" | grep -qvE '/tmp|dominion_meta_binding_|deerflow_deploy_|"\$d"'; then
+            echo "REFUSED: an rm -rf does not target a recognised scratch-directory pattern"
+            exit 1
+          fi
+
+          echo "STORAGE_RECOVERY_SCRIPT_BOUNDED=VERIFIED"
+
+      - name: Require protected VM access
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "VM_HOST secret is missing"; exit 1; }
+          test -n "$VM_USER" || { echo "VM_USER secret is missing"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "VM_SSH_KEY secret is missing"; exit 1; }
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/disk_key"
+          chmod 600 "$HOME/.ssh/disk_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Inspect (always runs first, whatever the mode)
+        id: inspect
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          set +e
+          ssh -i "$HOME/.ssh/disk_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' inspect \
+            < scripts/remediation/recover_disk_foundation_vm.sh \
+            | tee before-state.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Cleanup (only in cleanup mode, once inspection succeeded)
+        id: cleanup
+        if: inputs.mode == 'cleanup'
+        shell: bash
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          set +e
+          ssh -i "$HOME/.ssh/disk_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' cleanup \
+            < scripts/remediation/recover_disk_foundation_vm.sh \
+            | tee after-state.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Require production health unchanged
+        if: inputs.mode == 'cleanup'
+        shell: bash
+        run: |
+          set -uo pipefail
+          fails=0
+
+          echo "-- baseline health (captured before any deletion, from before-state.txt) --"
+          grep -A20 'PRODUCTION HEALTH VERIFICATION (BASELINE)' before-state.txt | grep '  health ' | sort > baseline-health.txt
+          cat baseline-health.txt
+
+          echo "-- health after cleanup --"
+          grep -A20 'PRODUCTION HEALTH VERIFICATION (AFTER)' after-state.txt | grep '  health ' | sort > after-health.txt
+          cat after-health.txt
+
+          if [ ! -s baseline-health.txt ] || [ ! -s after-health.txt ]; then
+            echo "FAIL: could not extract health lines from evidence -- treating as unverified, not as pass"
+            fails=$((fails + 1))
+          elif diff -u baseline-health.txt after-health.txt; then
+            echo "PASS: health after cleanup is identical to baseline"
+          else
+            echo "FAIL: health after cleanup differs from baseline (see diff above)"
+            fails=$((fails + 1))
+          fi
+
+          # Any service answering 000/NO_RESPONSE/5xx after cleanup is a hard
+          # failure even if it happened to match a (broken) baseline.
+          if grep -qE 'health .* -> (000|NO_RESPONSE|5[0-9][0-9])' after-health.txt; then
+            echo "FAIL: at least one production health check is unhealthy after cleanup"
+            fails=$((fails + 1))
+          fi
+
+          if [ "$fails" -ne 0 ]; then
+            echo "STORAGE RECOVERY INCOMPLETE: health regressed or unverifiable"
+            exit 1
+          fi
+          echo "PRODUCTION_HEALTH_UNCHANGED=PASS"
+
+      - name: Upload disk recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-vm-disk-recovery
+          path: |
+            before-state.txt
+            after-state.txt
+          if-no-files-found: warn
+
+      - name: Remove SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/disk_key" "$HOME/.ssh/known_hosts"

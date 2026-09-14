@@ -27,12 +27,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "inspect (read-only) or expand"
+        description: "inspect (read-only), verify (read-only re-proof), or expand"
         required: true
         default: inspect
         type: choice
         options:
           - inspect
+          - verify
           - expand
       confirm:
         description: "For expand, type EXPAND FOUNDATION VM DISK. Ignored for inspect."
@@ -186,20 +187,21 @@ jobs:
           fi
           echo "INSPECT=PASS"
 
-      - name: Expand (only in expand mode, once inspection succeeded)
+      - name: Expand or verify (once inspection succeeded)
         id: act
-        if: inputs.mode == 'expand'
+        if: inputs.mode == 'expand' || inputs.mode == 'verify'
         shell: bash
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
+          RUN_MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
           set +e
           ssh -i "$HOME/.ssh/disk_expand_key" \
             -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             -o IdentitiesOnly=yes \
-            "$VM_USER@$VM_HOST" 'bash -s' expand \
+            "$VM_USER@$VM_HOST" 'bash -s' "$RUN_MODE" \
             < scripts/remediation/expand_foundation_vm_disk.sh \
             | tee disk-after.txt
           rc=${PIPESTATUS[0]}
@@ -208,15 +210,20 @@ jobs:
           exit "$rc"
 
       - name: Require every phase gate and unchanged production health
-        if: inputs.mode == 'expand'
+        if: inputs.mode == 'expand' || inputs.mode == 'verify'
         shell: bash
         run: |
           set -uo pipefail
           fails=0
 
-          for gate in FOUNDATION_VM_PRE_RESIZE_SNAPSHOT=PASS \
-                      FOUNDATION_VM_CLOUD_DISK_RESIZE=PASS \
-                      FOUNDATION_VM_FILESYSTEM_EXPANSION=PASS; do
+          if [ "${{ inputs.mode }}" = "expand" ]; then
+            gates="FOUNDATION_VM_PRE_RESIZE_SNAPSHOT=PASS FOUNDATION_VM_CLOUD_DISK_RESIZE=PASS FOUNDATION_VM_FILESYSTEM_EXPANSION=PASS"
+          else
+            # verify re-proves capacity and health only; it takes no snapshot
+            # and issues no resize, so those two gates do not apply.
+            gates="FOUNDATION_VM_FILESYSTEM_EXPANSION=PASS"
+          fi
+          for gate in $gates; do
             if grep -q "$gate" disk-after.txt; then
               echo "$gate"
             else
@@ -226,10 +233,10 @@ jobs:
           done
 
           echo "-- recorded pre-resize baseline (run 34897600099) --"
-          grep -A20 'RECORDED PRE-RESIZE BASELINE' disk-after.txt | grep '  health ' | sort > baseline-health.txt
+          sed -n '/RECORDED PRE-RESIZE BASELINE/,/^$/p' disk-after.txt | grep '  health ' | sort > baseline-health.txt
           cat baseline-health.txt
           echo "-- health after expansion --"
-          grep -A20 'PHASE 7: HEALTH AFTER' disk-after.txt | grep '  health ' | sort > after-health.txt
+          sed -n '/PHASE 7: HEALTH AFTER/,/^== /p' disk-after.txt | grep '  health ' | sort > after-health.txt
           cat after-health.txt
 
           if [ ! -s baseline-health.txt ] || [ ! -s after-health.txt ]; then
@@ -251,7 +258,8 @@ jobs:
           fi
 
           # All eleven production containers must still be running.
-          running="$(grep -c '  id=.* name=.* status=Up' disk-after.txt || echo 0)"
+          running="$(grep -cE '(^|[[:space:]])id=[0-9a-f]+ name=.* status=Up' disk-after.txt)" || running=0
+          running="${running:-0}"
           echo "containers_running_after=$running"
           if [ "$running" -lt 11 ]; then
             echo "FAIL: expected at least 11 running containers, found $running"

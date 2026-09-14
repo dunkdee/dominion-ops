@@ -198,6 +198,66 @@ fi
 head2 "PHASE 4: HEALTH BASELINE (this run)"
 health_check
 
+assert_capacity() {
+AFTER_SIZE="$(df -h --output=size / 2>/dev/null | tail -1 | tr -d ' ')"
+AFTER_AVAIL="$(df -h --output=avail / 2>/dev/null | tail -1 | tr -d ' ')"
+AFTER_PCT="$(df -h --output=pcent / 2>/dev/null | tail -1 | tr -d ' %')"
+AVAIL_GB="$(df -BG --output=avail / 2>/dev/null | tail -1 | tr -d ' G')"
+say ""
+say "  root_fs_size_before=$BEFORE_SIZE  root_fs_size_after=$AFTER_SIZE"
+say "  root_fs_avail_before=$BEFORE_AVAIL  root_fs_avail_after=$AFTER_AVAIL"
+say "  root_fs_used_pct_before=${BEFORE_PCT}%  root_fs_used_pct_after=${AFTER_PCT}%"
+say "  root_fs_avail_gb_after=$AVAIL_GB"
+
+case "$AVAIL_GB" in ''|*[!0-9]*) die "could not read available GB after expansion" ;; esac
+[ "$AVAIL_GB" -gt "$REQUIRED_FREE_GB" ] \
+  || die "only ${AVAIL_GB}GB free after expansion; required more than ${REQUIRED_FREE_GB}GB of healthy reserve"
+case "$AFTER_PCT" in ''|*[!0-9]*) die "could not read used percentage after expansion" ;; esac
+[ "$AFTER_PCT" -lt 94 ] || die "root still at ${AFTER_PCT}% used; expansion did not relieve pressure"
+say "  FOUNDATION_VM_FILESYSTEM_EXPANSION=PASS"
+}
+
+phase7_verification() {
+head2 "PHASE 7: CONTAINER RUNTIME"
+$SUDO docker ps --format '  id={{.ID}} name={{.Names}} image={{.Image}} status={{.Status}}' 2>&1
+say ""
+say "  -- docker system df --"
+$SUDO docker system df 2>&1 | sed 's/^/    /'
+
+head2 "PHASE 7: DOCKER VOLUMES (must all still exist)"
+$SUDO docker volume ls --format '  volume={{.Name}}' 2>&1
+
+head2 "PHASE 7: ROLLBACK ASSETS (must still exist)"
+$SUDO docker images --format '  image={{.Repository}}:{{.Tag}} id={{.ID}}' 2>/dev/null | grep -i rollback \
+  || say "  WARNING: no rollback-tagged image found"
+
+head2 "PHASE 7: HEALTH AFTER"
+health_check
+
+head2 "PHASE 7: KERNEL ERRORS"
+$SUDO dmesg --level=err,crit,alert,emerg 2>/dev/null | tail -100 | sed 's/^/    /' \
+  || say "  dmesg unavailable"
+
+head2 "PHASE 7: RECORDED PRE-RESIZE BASELINE (run 34897600099)"
+baseline_health
+}
+
+if [ "$MODE" = "verify" ]; then
+  # Read-only re-proof of an expansion that already completed. Everything
+  # read above is the CURRENT state, so it is the post-state here. No
+  # snapshot is taken and the disk is not touched again.
+  head2 "PHASE 6: CAPACITY (current state, read-only verification)"
+  df -hT / 2>&1 | sed 's/^/    /'
+  lsblk -o NAME,SIZE,FSTYPE,TYPE,MOUNTPOINTS 2>&1 | sed 's/^/    /'
+  assert_capacity
+  phase7_verification
+  say ""
+  say "RESULT=VERIFIED_READ_ONLY"
+  say "ACTION_TAKEN=NONE (verify mode)"
+  say "FOUNDATION_VM_DISK_EXPANSION_END"
+  exit 0
+fi
+
 if [ "$MODE" != "expand" ]; then
   say ""
   say "RESULT=INSPECTED_NOT_EXPANDED"
@@ -314,46 +374,10 @@ head2 "PHASE 6: CAPACITY AFTER"
 df -hT / 2>&1 | sed 's/^/    /'
 lsblk -o NAME,SIZE,FSTYPE,TYPE,MOUNTPOINTS 2>&1 | sed 's/^/    /'
 
-AFTER_SIZE="$(df -h --output=size / 2>/dev/null | tail -1 | tr -d ' ')"
-AFTER_AVAIL="$(df -h --output=avail / 2>/dev/null | tail -1 | tr -d ' ')"
-AFTER_PCT="$(df -h --output=pcent / 2>/dev/null | tail -1 | tr -d ' %')"
-AVAIL_GB="$(df -BG --output=avail / 2>/dev/null | tail -1 | tr -d ' G')"
-say ""
-say "  root_fs_size_before=$BEFORE_SIZE  root_fs_size_after=$AFTER_SIZE"
-say "  root_fs_avail_before=$BEFORE_AVAIL  root_fs_avail_after=$AFTER_AVAIL"
-say "  root_fs_used_pct_before=${BEFORE_PCT}%  root_fs_used_pct_after=${AFTER_PCT}%"
-say "  root_fs_avail_gb_after=$AVAIL_GB"
-
-case "$AVAIL_GB" in ''|*[!0-9]*) die "could not read available GB after expansion" ;; esac
-[ "$AVAIL_GB" -gt "$REQUIRED_FREE_GB" ] \
-  || die "only ${AVAIL_GB}GB free after expansion; required more than ${REQUIRED_FREE_GB}GB of healthy reserve"
-case "$AFTER_PCT" in ''|*[!0-9]*) die "could not read used percentage after expansion" ;; esac
-[ "$AFTER_PCT" -lt 94 ] || die "root still at ${AFTER_PCT}% used; expansion did not relieve pressure"
-say "  FOUNDATION_VM_FILESYSTEM_EXPANSION=PASS"
+assert_capacity
 
 # ══ PHASE 7 — production health verification ═══════════════════════════
-head2 "PHASE 7: CONTAINER RUNTIME"
-$SUDO docker ps --format '  id={{.ID}} name={{.Names}} image={{.Image}} status={{.Status}}' 2>&1
-say ""
-say "  -- docker system df --"
-$SUDO docker system df 2>&1 | sed 's/^/    /'
-
-head2 "PHASE 7: DOCKER VOLUMES (must all still exist)"
-$SUDO docker volume ls --format '  volume={{.Name}}' 2>&1
-
-head2 "PHASE 7: ROLLBACK ASSETS (must still exist)"
-$SUDO docker images --format '  image={{.Repository}}:{{.Tag}} id={{.ID}}' 2>/dev/null | grep -i rollback \
-  || say "  WARNING: no rollback-tagged image found"
-
-head2 "PHASE 7: HEALTH AFTER"
-health_check
-
-head2 "PHASE 7: KERNEL ERRORS"
-$SUDO dmesg --level=err,crit,alert,emerg 2>/dev/null | tail -100 | sed 's/^/    /' \
-  || say "  dmesg unavailable"
-
-head2 "PHASE 7: RECORDED PRE-RESIZE BASELINE (run 34897600099)"
-baseline_health
+phase7_verification
 
 say ""
 say "FOUNDATION_VM_DISK_EXPANSION_END"

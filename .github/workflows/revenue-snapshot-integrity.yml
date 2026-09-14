@@ -37,4 +37,4 @@ jobs:
       - name: Validate installation closure contract
         run: python scripts/validate_integrity_installation_contract.py
       - name: Run regression test
-        run: python -m pytest -q tests/test_revenue_snapshot_workflow.py
+        run: python -m unittest -v tests.test_revenue_snapshot_workflow

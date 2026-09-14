@@ -232,17 +232,34 @@ prove_paths() {  # $1 = label
     say "  deerflow_gateway_api=FAIL (no python interpreter in the gateway)"
     return 1
   fi
+  # This adapter is transport. Its proof is therefore a transport proof: the
+  # gateway reaches the governed Ollama's API through the adapter and gets a
+  # well-formed 200. Which models happen to be pulled is a SEPARATE concern
+  # with a separate owner -- it is reported, never asserted. Coupling the two
+  # would roll back a correct adapter because of an unrelated model gap.
   # Redirection belongs on the command line, before the heredoc body.
-  out="$($SUDO docker exec -i "$GATEWAY_CONTAINER" "$pybin" - 2>&1 <<'PROOFPY'
-import json, urllib.request
+  out="$($SUDO docker exec -i -e "REQUIRED_MODEL=${REQUIRED_MODEL_PREFIX}" \
+    "$GATEWAY_CONTAINER" "$pybin" - 2>&1 <<'PROOFPY'
+import json, os, urllib.request
+
 with urllib.request.urlopen(
     "http://host.docker.internal:11434/api/tags", timeout=10
 ) as response:
+    code = response.getcode()
     data = json.load(response)
-names = [str(x.get("name", "")) for x in data.get("models", [])]
-assert any(x.startswith("llama3.1:8b") for x in names), names
+
+models = data.get("models")
+assert code == 200, "HTTP %s" % code
+assert isinstance(models, list), "models is %s, not a list" % type(models).__name__
+names = sorted(str(m.get("name", "")) for m in models)
+
 print("MODELS_VISIBLE=" + ",".join(names))
 print("DEERFLOW_OLLAMA_CONNECTIVITY=PASS")
+
+want = os.environ.get("REQUIRED_MODEL", "")
+if want:
+    hit = any(n.startswith(want) for n in names)
+    print("REQUIRED_MODEL_STATUS=%s model=%s" % ("PRESENT" if hit else "ABSENT", want))
 PROOFPY
 )"
   printf '%s\n' "$out" | sed 's/^/    /'

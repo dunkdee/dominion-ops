@@ -10,22 +10,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Smoke test gateway
+      - name: Revenue snapshot integrity gate
         env:
           GATEWAY: ${{ secrets.N8N_AGENT_GATEWAY_URL }}
           N8N_TOOL_SECRET: ${{ secrets.N8N_TOOL_SECRET }}
         run: |
+          set -euo pipefail
+
           if [ -z "${GATEWAY:-}" ]; then
-            echo "N8N_AGENT_GATEWAY_URL not set — skipping snapshot"
-            exit 0
+            echo "ERROR: N8N_AGENT_GATEWAY_URL is not configured"
+            exit 1
           fi
-          if [[ ! "$GATEWAY" =~ ^https?:// ]]; then
-            echo "GATEWAY is not a valid URL — skipping snapshot"
-            exit 0
+          if [[ ! "$GATEWAY" =~ ^https?://[^[:space:]]+$ ]]; then
+            echo "ERROR: N8N_AGENT_GATEWAY_URL is malformed"
+            exit 1
           fi
-          curl --fail --show-error --location --max-time 10 -X POST "${GATEWAY}" \
+          if [ -z "${N8N_TOOL_SECRET:-}" ]; then
+            echo "ERROR: N8N_TOOL_SECRET is not configured"
+            exit 1
+          fi
+
+          curl --fail --show-error --location --max-time 10 -X POST "$GATEWAY" \
             -H "X-AGENT-KEY: ${N8N_TOOL_SECRET}" \
             -H "Content-Type: application/json" \
             -d '{"tool":"roi_snapshot","args":{"since":"7d","metrics":["revenue","orders"]}}' \
-            > snapshot.json || { echo "Gateway unreachable — skipping"; exit 0; }
-          echo "Snapshot result:" && cat snapshot.json
+            > snapshot.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("snapshot.json")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          if not isinstance(payload, dict):
+              raise SystemExit("ERROR: roi_snapshot response is not a JSON object")
+          print("REVENUE_SNAPSHOT_RECEIPT=PASS")
+          PY
+
+          echo "Snapshot result:"
+          cat snapshot.json

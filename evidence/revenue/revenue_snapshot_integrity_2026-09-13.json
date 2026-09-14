@@ -1,0 +1,19 @@
+{
+  "evidence_type": "pre_merge_integrity_repair",
+  "date": "2026-09-13",
+  "governance": "RADAH MEMSHALAH",
+  "source_run": 34789544132,
+  "finding": "Empire Status Snapshot concluded success after the configured gateway was rejected as malformed, so no revenue/orders snapshot was produced.",
+  "risk": "false-green measurement breaks the prove-measure-learn loop",
+  "repair_branch": "fix/revenue-snapshot-fail-closed",
+  "repair_effect": [
+    "missing gateway fails",
+    "malformed gateway fails",
+    "missing tool secret fails",
+    "unreachable gateway fails",
+    "non-JSON-object response fails",
+    "success requires REVENUE_SNAPSHOT_RECEIPT=PASS"
+  ],
+  "claims_completion": false,
+  "next_gate": "exact-head CI then merge, followed by a scheduled or manual runtime snapshot with REVENUE_SNAPSHOT_RECEIPT=PASS"
+}

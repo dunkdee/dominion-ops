@@ -5,6 +5,7 @@ on:
     paths:
       - 'integrations/deerflow/**'
       - 'scripts/deploy_deerflow_runtime_remote.sh'
+      - 'runtime/releases/deerflow-runtime.json'
       - '.github/workflows/deerflow-runtime-ci.yml'
       - '.github/workflows/deploy-deerflow-runtime.yml'
   push:
@@ -14,6 +15,7 @@ on:
     paths:
       - 'integrations/deerflow/**'
       - 'scripts/deploy_deerflow_runtime_remote.sh'
+      - 'runtime/releases/deerflow-runtime.json'
       - '.github/workflows/deerflow-runtime-ci.yml'
       - '.github/workflows/deploy-deerflow-runtime.yml'
   workflow_dispatch:
@@ -28,6 +30,8 @@ jobs:
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
 
       - name: Validate shell
         run: bash -n scripts/deploy_deerflow_runtime_remote.sh
@@ -70,7 +74,44 @@ jobs:
 
           test -s "$soul"
           grep -Fq 'RADAH MEMSHALAH' "$soul"
-
           ! grep -Eq '(api[_-]?key|token):[[:space:]]+[A-Za-z0-9_-]{16,}' "$cfg" "$soul"
 
           echo 'DEERFLOW_RUNTIME_CI=PASS upstream=v2.0.0 persistence=sqlite run_events=db memory=on guardrails=fail-closed self_modify=off channels=off tools=9 ollama=harness-extra browser=disabled-v2.0.0 host_bash=disabled'
+
+      - name: Validate governed release descriptor
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,re,subprocess
+          from pathlib import Path
+          d=json.loads(Path('runtime/releases/deerflow-runtime.json').read_text(encoding='utf-8'))
+          assert d.get('schema') == 'dominion-deerflow-runtime-release-v1'
+          assert d.get('authorized_role') == 'founder'
+          assert d.get('confirm') == 'DEPLOY DEERFLOW RUNTIME'
+          assert d.get('scope') == 'P0 integrity installation closure'
+          sha=str(d.get('approved_source_commit','')).strip().lower()
+          assert re.fullmatch(r'[0-9a-f]{40}', sha)
+          assert d.get('required_receipts') == ['DEERFLOW_CAPABILITY_PROOF=PASS','DEERFLOW_RUNTIME_HEALTH=PASS']
+          subprocess.run(['git','cat-file','-e',f'{sha}^{{commit}}'],check=True)
+          for path in (
+              'integrations/deerflow/config.dominion.yaml',
+              'integrations/deerflow/SOUL.dominion.md',
+              'scripts/deploy_deerflow_runtime_remote.sh',
+          ):
+              subprocess.run(['git','diff','--quiet',sha,'HEAD','--',path],check=True)
+          print(f'DEERFLOW_RELEASE_DESCRIPTOR_CI=PASS sha={sha}')
+          PY
+
+      - name: Validate release trigger preserves manual fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          wf='.github/workflows/deploy-deerflow-runtime.yml'
+          grep -Fq 'workflow_dispatch:' "$wf"
+          grep -Fq "runtime/releases/deerflow-runtime.json" "$wf"
+          grep -Fq "authorized_role') == 'founder'" "$wf"
+          grep -Fq 'DEERFLOW_RELEASE_DESCRIPTOR=PASS' "$wf"
+          grep -Fq 'DEERFLOW_CAPABILITY_PROOF=PASS' "$wf"
+          grep -Fq 'DEERFLOW_RUNTIME_HEALTH=PASS' "$wf"
+          echo 'DEERFLOW_RELEASE_TRIGGER_CI=PASS'

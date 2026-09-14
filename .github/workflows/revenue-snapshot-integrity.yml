@@ -1,0 +1,32 @@
+name: Revenue Snapshot Integrity
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/cron-status.yml'
+      - '.github/workflows/revenue-snapshot-integrity.yml'
+      - 'governance/revenue_snapshot_integrity_policy.json'
+      - 'scripts/validate_revenue_snapshot_integrity.py'
+      - 'tests/test_revenue_snapshot_workflow.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cron-status.yml'
+      - '.github/workflows/revenue-snapshot-integrity.yml'
+      - 'governance/revenue_snapshot_integrity_policy.json'
+      - 'scripts/validate_revenue_snapshot_integrity.py'
+      - 'tests/test_revenue_snapshot_workflow.py'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate integrity contract
+        run: python scripts/validate_revenue_snapshot_integrity.py
+      - name: Run regression test
+        run: python -m pytest -q tests/test_revenue_snapshot_workflow.py

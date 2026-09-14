@@ -11,6 +11,10 @@ on:
         description: Type DEPLOY DEERFLOW RUNTIME
         required: true
         type: string
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/releases/deerflow-runtime.json'
 
 permissions:
   contents: read
@@ -21,7 +25,6 @@ concurrency:
 
 jobs:
   validate:
-    if: ${{ inputs.confirm == 'DEPLOY DEERFLOW RUNTIME' }}
     runs-on: ubuntu-24.04
     outputs:
       deploy_sha: ${{ steps.resolve.outputs.deploy_sha }}
@@ -35,18 +38,60 @@ jobs:
       - name: Resolve authorized commit
         id: resolve
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_SHA: ${{ inputs.commit_sha }}
+          MANUAL_CONFIRM: ${{ inputs.confirm }}
         run: |
           set -euo pipefail
-          requested='${{ inputs.commit_sha }}'
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            [ "$MANUAL_CONFIRM" = 'DEPLOY DEERFLOW RUNTIME' ] || { echo 'manual confirmation rejected'; exit 1; }
+            requested="$MANUAL_SHA"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            python - <<'PY' > "$RUNNER_TEMP/deerflow-release.env"
+          import json,re
+          from pathlib import Path
+          p=Path('runtime/releases/deerflow-runtime.json')
+          d=json.loads(p.read_text(encoding='utf-8'))
+          assert d.get('schema') == 'dominion-deerflow-runtime-release-v1'
+          assert d.get('authorized_role') == 'founder'
+          assert d.get('confirm') == 'DEPLOY DEERFLOW RUNTIME'
+          sha=str(d.get('approved_source_commit','')).strip().lower()
+          assert re.fullmatch(r'[0-9a-f]{40}', sha)
+          assert d.get('scope') == 'P0 integrity installation closure'
+          receipts=d.get('required_receipts')
+          assert receipts == ['DEERFLOW_CAPABILITY_PROOF=PASS','DEERFLOW_RUNTIME_HEALTH=PASS']
+          print(f'REQUESTED_SHA={sha}')
+          print('DEERFLOW_RELEASE_DESCRIPTOR=PASS')
+          PY
+            cat "$RUNNER_TEMP/deerflow-release.env"
+            . "$RUNNER_TEMP/deerflow-release.env"
+            requested="$REQUESTED_SHA"
+          else
+            echo "unsupported event: $EVENT_NAME"
+            exit 1
+          fi
+
           [[ "$requested" =~ ^[0-9a-fA-F]{40}$ ]] || { echo 'full 40-character SHA required'; exit 1; }
           git cat-file -e "${requested}^{commit}"
           git merge-base --is-ancestor "$requested" origin/main
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            git diff --quiet "$requested" origin/main -- \
+              integrations/deerflow/config.dominion.yaml \
+              integrations/deerflow/SOUL.dominion.md \
+              scripts/deploy_deerflow_runtime_remote.sh \
+              || { echo 'DeerFlow production payload changed after approved source commit'; exit 1; }
+          fi
+
           echo "deploy_sha=$requested" >> "$GITHUB_OUTPUT"
+          echo "DEERFLOW_RELEASE_RESOLUTION=PASS sha=$requested event=$EVENT_NAME"
 
       - name: Validate governed production capability contract
         shell: bash
         run: |
           set -euo pipefail
+          git checkout --detach '${{ steps.resolve.outputs.deploy_sha }}'
           cfg='integrations/deerflow/config.dominion.yaml'
           soul='integrations/deerflow/SOUL.dominion.md'
           deploy='scripts/deploy_deerflow_runtime_remote.sh'

@@ -1,0 +1,81 @@
+name: Dominion Video Studio Neural Readiness Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/video-studio/scripts/vm-neural-readiness-audit.sh"
+      - ".github/workflows/video-studio-neural-readiness.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dominion-video-studio-neural-readiness-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    if: >-
+      github.actor == 'dunkdee' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'agent/video-studio-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out immutable candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Validate audit script
+        run: bash -n apps/video-studio/scripts/vm-neural-readiness-audit.sh
+
+      - name: Configure verified SSH access
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_vm
+          chmod 600 ~/.ssh/id_vm
+          ssh-keyscan -T 15 -H "$VM_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Copy and run read-only VM audit
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            apps/video-studio/scripts/vm-neural-readiness-audit.sh \
+            "$VM_USER@$VM_HOST:/tmp/vm-neural-readiness-audit.sh"
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            'chmod 700 /tmp/vm-neural-readiness-audit.sh && /tmp/vm-neural-readiness-audit.sh /tmp/neural-worker-readiness-report.txt'
+          scp -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST:/tmp/neural-worker-readiness-report.txt" \
+            /tmp/neural-worker-readiness-report.txt
+          ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            'rm -f /tmp/vm-neural-readiness-audit.sh /tmp/neural-worker-readiness-report.txt'
+
+      - name: Upload private readiness evidence
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+        with:
+          name: video-studio-neural-readiness-${{ github.event.pull_request.head.sha }}
+          path: /tmp/neural-worker-readiness-report.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish summary
+        run: |
+          cat /tmp/neural-worker-readiness-report.txt >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "Read-only hardware audit only. No worker installation, paid GPU use, media processing, or public exposure occurred." >> "$GITHUB_STEP_SUMMARY"

@@ -8,6 +8,7 @@ on:
       - 'tests/test_buddy_web_research.py'
       - 'tests/test_buddy_autonomous_learning.py'
       - 'tests/test_buddy_brain_router_v2.py'
+      - 'tests/test_buddy_state_integrity.py'
       - '.github/workflows/buddy-operator-v2-check.yml'
   workflow_dispatch:
 
@@ -32,6 +33,7 @@ jobs:
           python -m py_compile \
             buddy_core/core/web_research.py \
             buddy_core/core/learning_engine.py \
+            buddy_core/core/state_backup.py \
             buddy_core/core/autonomous_learning.py \
             buddy_core/core/brain_router.py \
             buddy_core/core/operator.py \
@@ -46,7 +48,8 @@ jobs:
             tests/test_buddy_operator_v2.py \
             tests/test_buddy_web_research.py \
             tests/test_buddy_autonomous_learning.py \
-            tests/test_buddy_brain_router_v2.py
+            tests/test_buddy_brain_router_v2.py \
+            tests/test_buddy_state_integrity.py
       - name: Run existing Buddy authority tests
         env:
           PYTHONPATH: .:buddy_core

@@ -1,0 +1,44 @@
+name: Commercial Release Closure Ledger CI
+
+on:
+  pull_request:
+    paths:
+      - "governance/commercial_release_1_0/**"
+      - "scripts/validate_commercial_release_ledger.py"
+      - "tests/test_commercial_release_ledger.py"
+      - ".github/workflows/commercial-release-closure-ledger-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "governance/commercial_release_1_0/**"
+      - "scripts/validate_commercial_release_ledger.py"
+      - "tests/test_commercial_release_ledger.py"
+      - ".github/workflows/commercial-release-closure-ledger-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  closure-ledger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install canonical test dependencies
+        run: python -m pip install -r requirements-test.txt
+      - name: Validate current closure ledger
+        run: python scripts/validate_commercial_release_ledger.py
+      - name: Run closure ledger regression tests
+        run: python -m pytest -q tests/test_commercial_release_ledger.py
+      - name: Prove final release gate remains fail-closed until all lanes certify
+        shell: bash
+        run: |
+          set -euo pipefail
+          if python scripts/validate_commercial_release_ledger.py --require-release-certified; then
+            echo "FINAL_RELEASE_CERTIFICATION=PASS"
+          else
+            echo "FINAL_RELEASE_CERTIFICATION=NOT_YET_CERTIFIED"
+          fi

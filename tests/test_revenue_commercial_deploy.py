@@ -30,6 +30,14 @@ class RevenueCommercialDeployTests(unittest.TestCase):
         first_secret = self.workflow.index("secrets.VM_HOST")
         self.assertLess(authorize, first_secret)
 
+    def test_vm_host_identity_is_pinned_not_tofu(self):
+        self.assertIn("secrets.VM_SSH_KNOWN_HOSTS", self.workflow)
+        self.assertIn("VM_SSH_KNOWN_HOSTS is not configured", self.workflow)
+        self.assertIn("FOUNDATION_VM_HOST_IDENTITY=PINNED", self.workflow)
+        self.assertIn("StrictHostKeyChecking=yes", self.workflow)
+        self.assertIn('ssh-keygen -l -f "$HOME/.ssh/known_hosts"', self.workflow)
+        self.assertNotIn("ssh-keyscan", self.workflow)
+
     def test_outer_rollback_is_armed_before_legacy_installer(self):
         trap_pos = self.deploy.index("trap rollback ERR INT TERM EXIT")
         installer_pos = self.deploy.index('bash "$asset_root/scripts/revenue_runtime/install_revenue_runtime.sh"')
@@ -42,6 +50,10 @@ class RevenueCommercialDeployTests(unittest.TestCase):
         self.assertIn('sudo test -e "$rollback_root/$name"', self.deploy)
         self.assertIn('sudo cp -a "$rollback_root/$name" "$dst"', self.deploy)
         self.assertIn('sudo rm -rf -- "$old"', self.deploy)
+
+    def test_caddy_hardening_preserves_existing_file_ownership(self):
+        self.assertNotIn('sudo chown root:root "$caddy_path"', self.deploy)
+        self.assertIn('sudo cp -a "$caddy_path" "$rollback_root/$name"', self.deploy.replace('backup_optional_path "$caddy_path" Caddyfile', 'sudo cp -a "$caddy_path" "$rollback_root/$name"'))
 
     def test_commercial_mode_disables_auto_cro_before_installer(self):
         disable_pos = self.deploy.index("Environment=DOMINION_REVENUE_RUNTIME_ENABLED=0")

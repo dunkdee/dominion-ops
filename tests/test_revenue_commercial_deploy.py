@@ -26,6 +26,9 @@ class RevenueCommercialDeployTests(unittest.TestCase):
         self.assertIn('test "$COMMENT_BODY" = "$expected"', self.workflow)
         self.assertIn("ref: ${{ steps.authorize.outputs.main_sha }}", self.workflow)
 
+    def test_deploy_job_is_bound_to_production_environment_secret_scope(self):
+        self.assertIn("environment: foundation-vm-production", self.workflow)
+
     def test_secrets_are_referenced_only_after_authorization_step(self):
         authorize = self.workflow.index("Prove owner authorization bound to current main")
         first_secret = self.workflow.index("secrets.VM_HOST")

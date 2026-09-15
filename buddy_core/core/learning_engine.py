@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,11 +18,49 @@ _STATE = Path(os.getenv("BUDDY_STATE_DIR", str(Path.home() / ".dominion" / "budd
 LESSONS = _STATE / "lessons.jsonl"
 MISSIONS = _STATE / "missions.jsonl"
 AUDIT = _STATE / "audit.jsonl"
-_lock = threading.Lock()
+_lock = threading.RLock()
+_LOCK_NAME = ".state.lock"
 
 
-def _ensure():
-    _STATE.mkdir(parents=True, exist_ok=True)
+def _ensure(state_dir: Path | None = None):
+    (state_dir or _STATE).mkdir(parents=True, exist_ok=True)
+
+
+@contextmanager
+def state_lock(state_dir: Path | str | None = None):
+    """Serialize Buddy state access across threads and processes on one machine."""
+    directory = Path(state_dir) if state_dir is not None else _STATE
+    _ensure(directory)
+    lock_path = directory / _LOCK_NAME
+    with _lock:
+        with lock_path.open("a+b") as handle:
+            if os.name == "nt":
+                import msvcrt
+
+                handle.seek(0, os.SEEK_END)
+                if handle.tell() == 0:
+                    handle.write(b"\0")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+                try:
+                    yield
+                finally:
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def default_state_dir() -> Path:
+    return _STATE
 
 
 def _safe(value):
@@ -50,7 +89,7 @@ def _append(path: Path, record: dict):
     raw = json.dumps(clean, ensure_ascii=False, sort_keys=True)
     clean["record_hash"] = hashlib.sha256(raw.encode("utf-8")).hexdigest()
     line = json.dumps(clean, ensure_ascii=False) + "\n"
-    with _lock:
+    with state_lock():
         with path.open("a", encoding="utf-8") as handle:
             handle.write(line)
             handle.flush()
@@ -101,7 +140,8 @@ def recent_lessons(topic: str | None = None, limit: int = 20) -> list[dict]:
     rows = []
     needle = (topic or "").lower().strip()
     try:
-        lines = LESSONS.read_text(encoding="utf-8").splitlines()
+        with state_lock():
+            lines = LESSONS.read_text(encoding="utf-8").splitlines()
     except OSError:
         return []
     for line in reversed(lines):

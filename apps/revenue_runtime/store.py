@@ -191,15 +191,21 @@ class RevenueStore:
                         (exp_id, variant, event_type),
                     ).fetchone()
                     return int(row["n"])
-                revenue = db.execute(
+                gross_revenue = int(db.execute(
                     "SELECT COALESCE(SUM(revenue_cents),0) n FROM events WHERE experiment_id=? AND variant=? AND event_type='purchase'",
                     (exp_id, variant),
-                ).fetchone()["n"]
+                ).fetchone()["n"])
+                refund_cents = int(db.execute(
+                    "SELECT COALESCE(SUM(revenue_cents),0) n FROM events WHERE experiment_id=? AND variant=? AND event_type='refund'",
+                    (exp_id, variant),
+                ).fetchone()["n"])
                 result[variant] = {
                     "visitors": distinct("impression"),
                     "clicks": distinct("click"),
                     "conversions": distinct(success_event),
-                    "revenue_cents": int(revenue),
+                    "gross_revenue_cents": gross_revenue,
+                    "refund_cents": refund_cents,
+                    "revenue_cents": max(0, gross_revenue - refund_cents),
                 }
         return result
 
@@ -236,6 +242,18 @@ class RevenueStore:
                 VALUES (?,?,?,?,?,?,?)""",
                 (order_id, exp_id, status, reason, visitor_id, int(revenue_cents), utc_now()),
             )
+
+    def attributed_reconciliations_for_order(self, order_id: str) -> list[dict[str, Any]]:
+        """Return prior attributed order links without exposing buyer PII."""
+        with self._connect() as db:
+            rows = db.execute(
+                """SELECT order_id,experiment_id,status,reason,visitor_id,revenue_cents,reconciled_at
+                   FROM order_reconciliation
+                   WHERE order_id=? AND status='attributed' AND visitor_id IS NOT NULL
+                   ORDER BY reconciled_at ASC""",
+                (order_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def mark_decision(self, exp_id: str, status: str, winner: str | None) -> None:
         with self._connect() as db:

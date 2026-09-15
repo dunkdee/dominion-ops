@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from apps.revenue_runtime.core import deterministic_variant, evaluate_treatment
-from apps.revenue_runtime.evaluator import reconcile_paid_orders
+from apps.revenue_runtime.evaluator import reconcile_paid_orders, reconcile_refunds
 from apps.revenue_runtime.store import RevenueStore
 from apps.revenue_runtime import wix_adapter
 
@@ -18,6 +18,7 @@ POLICY_PATH = ROOT / "governance" / "revenue_execution_policy.json"
 INSTALLER = ROOT / "scripts" / "revenue_runtime" / "install_revenue_runtime.sh"
 KILL = ROOT / "scripts" / "revenue_runtime" / "disable_revenue_runtime.sh"
 SERVICE = ROOT / "apps" / "revenue_runtime" / "service.py"
+EVALUATOR = ROOT / "apps" / "revenue_runtime" / "evaluator.py"
 
 
 class FakeResponse:
@@ -99,6 +100,7 @@ class RevenueExecutionRuntimeTests(unittest.TestCase):
             with patch("apps.revenue_runtime.evaluator.wix_adapter.search_recent_paid_orders", return_value=orders):
                 receipts = reconcile_paid_orders(store, self.policy)
             self.assertEqual(receipts[0]["status"], "attributed")
+            self.assertEqual(receipts[0]["receipt"], "SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT=PASS")
             self.assertEqual(store.metrics("e1")["control"]["revenue_cents"], 2999)
             self.assertEqual(store.metrics("e1")["control"]["conversions"], 1)
 
@@ -118,6 +120,67 @@ class RevenueExecutionRuntimeTests(unittest.TestCase):
             self.assertEqual(receipts[0]["reason"], "AMBIGUOUS_CANDIDATES")
             self.assertEqual(store.metrics("e1")["control"]["conversions"], 0)
             self.assertEqual(store.metrics("e1")["treatment"]["conversions"], 0)
+
+    def test_attributed_refund_is_idempotent_and_reduces_net_revenue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = RevenueStore(Path(tmp) / "r.db")
+            store.create_experiment(self.payload())
+            store.activate("e1")
+            order_time = datetime.now(timezone.utc)
+            click_time = (order_time - timedelta(minutes=5)).isoformat()
+            variant = deterministic_variant("e1", "v1", 50)
+            store.record_event(event_id="clk", experiment_id="e1", visitor_id="v1", variant=variant, event_type="click", occurred_at=click_time)
+            orders = [{"id":"o1","created_date":order_time.isoformat(),"items":[{"product_id":"p1","revenue_cents":2999}]}]
+            with patch("apps.revenue_runtime.evaluator.wix_adapter.search_recent_paid_orders", return_value=orders):
+                purchase_receipts = reconcile_paid_orders(store, self.policy)
+            self.assertEqual(purchase_receipts[0]["status"], "attributed")
+
+            refunded_orders = [{"id":"o1","payment_status":"FULLY_REFUNDED","items":[{"product_id":"p1","revenue_cents":2999}]}]
+            succeeded = [{
+                "refund_id":"r1",
+                "payment_id":"pay1",
+                "refund_cents":2999,
+                "created_date":datetime.now(timezone.utc).isoformat(),
+                "external_refund":False,
+            }]
+            with patch("apps.revenue_runtime.evaluator.wix_adapter.search_recent_refunded_orders", return_value=refunded_orders), patch("apps.revenue_runtime.evaluator.wix_adapter.get_succeeded_refunds", return_value=succeeded):
+                first = reconcile_refunds(store)
+                second = reconcile_refunds(store)
+            self.assertEqual(first[0]["status"], "refund_attributed")
+            self.assertEqual(first[0]["receipt"], "ORDER_REFUND_ATTRIBUTION_RECEIPT=PASS")
+            self.assertEqual(second, [])
+            metrics = store.metrics("e1")[variant]
+            self.assertEqual(metrics["gross_revenue_cents"], 2999)
+            self.assertEqual(metrics["refund_cents"], 2999)
+            self.assertEqual(metrics["revenue_cents"], 0)
+
+    def test_refund_reader_accepts_only_provider_succeeded_transactions(self):
+        payload = {
+            "orderTransactions": {
+                "orderId": "o1",
+                "buyerInfo": {"email": "private@example.com"},
+                "refunds": [
+                    {
+                        "id": "r1",
+                        "createdDate": "2026-09-15T05:45:47Z",
+                        "transactions": [
+                            {"paymentId":"p1","refundStatus":"SUCCEEDED","amount":{"amount":"1.00"},"externalRefund":False},
+                            {"paymentId":"p2","refundStatus":"SCHEDULED","amount":{"amount":"2.00"},"externalRefund":False},
+                        ],
+                    }
+                ],
+            }
+        }
+        with patch("apps.revenue_runtime.wix_adapter._request", return_value=FakeResponse(payload)):
+            refunds = wix_adapter.get_succeeded_refunds("o1")
+        self.assertEqual(refunds, [{
+            "refund_id":"r1",
+            "payment_id":"p1",
+            "refund_cents":100,
+            "created_date":"2026-09-15T05:45:47Z",
+            "external_refund":False,
+        }])
+        self.assertNotIn("private@example.com", json.dumps(refunds))
 
     def test_wix_update_uses_current_revision_and_verifies_advance(self):
         before = {"id":"p1","revision":"10","plainDescription":"<p>old</p>"}
@@ -142,6 +205,18 @@ class RevenueExecutionRuntimeTests(unittest.TestCase):
         self.assertNotIn("buyerInfo", orders[0])
         self.assertNotIn("email", json.dumps(orders[0]))
 
+    def test_refunded_order_reader_preserves_catalog_identity_without_pii(self):
+        payload = {"orders":[{
+            "id":"o1","createdDate":"2026-09-15T00:00:00Z","paymentStatus":"FULLY_REFUNDED",
+            "buyerInfo":{"email":"private@example.com"},
+            "lineItems":[{"quantity":1,"catalogReference":{"appId":wix_adapter.STORES_APP_ID,"catalogItemId":"p1"},"totalPriceAfterTax":{"amount":"1.00"}}]
+        }]}
+        with patch("apps.revenue_runtime.wix_adapter._request", return_value=FakeResponse(payload)):
+            orders = wix_adapter.search_recent_refunded_orders()
+        self.assertEqual(orders[0]["payment_status"], "FULLY_REFUNDED")
+        self.assertEqual(orders[0]["items"][0]["product_id"], "p1")
+        self.assertNotIn("private@example.com", json.dumps(orders))
+
     def test_governance_forbids_price_spend_and_destructive_automation(self):
         actions = self.policy["automatic_external_actions"]
         self.assertTrue(actions["cro_reversible"])
@@ -161,6 +236,7 @@ class RevenueExecutionRuntimeTests(unittest.TestCase):
         source = SERVICE.read_text(encoding="utf-8")
         installer = INSTALLER.read_text(encoding="utf-8")
         kill = KILL.read_text(encoding="utf-8")
+        evaluator = EVALUATOR.read_text(encoding="utf-8")
         self.assertIn('/r/{experiment_id}', source)
         self.assertIn('/revenue/events', source)
         self.assertIn('_require_auth(request)', source)
@@ -170,6 +246,8 @@ class RevenueExecutionRuntimeTests(unittest.TestCase):
         self.assertNotIn('sudo "$buddy_python" - "$caddy_path"', installer)
         self.assertIn('OnUnitActiveSec=10min', installer)
         self.assertIn('DOMINION_REVENUE_RUNTIME=DISABLED', kill)
+        self.assertIn('SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT=PASS', evaluator)
+        self.assertIn('ORDER_REFUND_ATTRIBUTION_RECEIPT=PASS', evaluator)
 
 
 if __name__ == "__main__":

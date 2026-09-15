@@ -7,6 +7,7 @@ from typing import Any
 
 BASE = "https://www.wixapis.com/stores/v3"
 ORDERS_URL = "https://www.wixapis.com/ecom/v1/orders/search"
+ORDER_TRANSACTIONS_URL = "https://www.wixapis.com/ecom/v1/payments/orders"
 TIMEOUT = 30.0
 STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e"
 
@@ -108,8 +109,8 @@ def _money_to_cents(value: Any) -> int:
     return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-def search_recent_paid_orders(limit: int = 100) -> list[dict[str, Any]]:
-    """Return only non-PII fields required for deterministic revenue reconciliation."""
+def _search_recent_orders(limit: int = 100) -> list[dict[str, Any]]:
+    """Return only non-PII order fields required for deterministic reconciliation."""
     if limit < 1 or limit > 100:
         raise WixActuatorError("order limit must be 1..100")
     body = {
@@ -121,8 +122,6 @@ def search_recent_paid_orders(limit: int = 100) -> list[dict[str, Any]]:
     data = _request("POST", ORDERS_URL, json=body).json()
     orders: list[dict[str, Any]] = []
     for order in data.get("orders", []):
-        if order.get("paymentStatus") != "PAID":
-            continue
         items = []
         for item in order.get("lineItems", []):
             ref = item.get("catalogReference") or {}
@@ -141,3 +140,50 @@ def search_recent_paid_orders(limit: int = 100) -> list[dict[str, Any]]:
             "items": items,
         })
     return orders
+
+
+def search_recent_paid_orders(limit: int = 100) -> list[dict[str, Any]]:
+    return [order for order in _search_recent_orders(limit) if order.get("payment_status") == "PAID"]
+
+
+def search_recent_refunded_orders(limit: int = 100) -> list[dict[str, Any]]:
+    """Return orders whose Wix payment lifecycle contains a partial or full refund."""
+    return [
+        order
+        for order in _search_recent_orders(limit)
+        if order.get("payment_status") in {"PARTIALLY_REFUNDED", "FULLY_REFUNDED"}
+    ]
+
+
+def get_succeeded_refunds(order_id: str) -> list[dict[str, Any]]:
+    """Return provider-confirmed refund transactions only, stripped of buyer PII.
+
+    Wix order transaction records are authoritative for refund completion. Pending,
+    scheduled, failed, or reversed refund transactions are deliberately excluded.
+    """
+    if not order_id:
+        raise WixActuatorError("order id is required")
+    data = _request("GET", f"{ORDER_TRANSACTIONS_URL}/{order_id}").json()
+    refunds: list[dict[str, Any]] = []
+    order_transactions = data.get("orderTransactions") or {}
+    for refund in order_transactions.get("refunds", []):
+        refund_id = str(refund.get("id") or "")
+        created_date = str(refund.get("createdDate") or "")
+        if not refund_id:
+            continue
+        for transaction in refund.get("transactions", []):
+            if transaction.get("refundStatus") != "SUCCEEDED":
+                continue
+            payment_id = str(transaction.get("paymentId") or "")
+            amount = transaction.get("amount") or {}
+            refund_cents = _money_to_cents(amount.get("amount"))
+            if not payment_id or refund_cents <= 0:
+                continue
+            refunds.append({
+                "refund_id": refund_id,
+                "payment_id": payment_id,
+                "refund_cents": refund_cents,
+                "created_date": created_date,
+                "external_refund": bool(transaction.get("externalRefund", False)),
+            })
+    return refunds

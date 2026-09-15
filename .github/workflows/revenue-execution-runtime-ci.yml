@@ -7,7 +7,9 @@ on:
       - 'governance/revenue_execution_policy.json'
       - 'scripts/revenue_runtime/**'
       - 'tests/test_revenue_execution_runtime.py'
+      - 'tests/test_revenue_commercial_deploy.py'
       - '.github/workflows/revenue-execution-runtime-ci.yml'
+      - '.github/workflows/revenue-runtime-commercial-deploy.yml'
   push:
     branches: [main]
     paths:
@@ -15,7 +17,9 @@ on:
       - 'governance/revenue_execution_policy.json'
       - 'scripts/revenue_runtime/**'
       - 'tests/test_revenue_execution_runtime.py'
+      - 'tests/test_revenue_commercial_deploy.py'
       - '.github/workflows/revenue-execution-runtime-ci.yml'
+      - '.github/workflows/revenue-runtime-commercial-deploy.yml'
 
 permissions:
   contents: read
@@ -36,9 +40,12 @@ jobs:
           python -m compileall -q apps/revenue_runtime
           bash -n scripts/revenue_runtime/install_revenue_runtime.sh
           bash -n scripts/revenue_runtime/disable_revenue_runtime.sh
+          bash -n scripts/revenue_runtime/deploy_commercial_release_v1.sh
           python -m json.tool governance/revenue_execution_policy.json >/dev/null
       - name: Revenue execution contract tests
         run: python -m unittest tests.test_revenue_execution_runtime -v
+      - name: Commercial deployment contract tests
+        run: python -m unittest tests.test_revenue_commercial_deploy -v
       - name: Preserve original simulation boundary tests
         run: python -m unittest tests.test_revenue_runtime -v
       - name: Static authority assertions
@@ -50,4 +57,6 @@ jobs:
           grep -Fq 'require_current_revision' governance/revenue_execution_policy.json
           grep -Fq 'AMBIGUOUS_CANDIDATES' apps/revenue_runtime/evaluator.py
           grep -Fq 'DOMINION_REVENUE_RUNTIME=DISABLED' scripts/revenue_runtime/disable_revenue_runtime.sh
+          grep -Fq 'DEPLOY_REVENUE_COMMERCIAL_RUNTIME:' .github/workflows/revenue-runtime-commercial-deploy.yml
+          grep -Fq 'REVENUE_COMMERCIAL_RUNTIME_DEPLOY=PASS' scripts/revenue_runtime/deploy_commercial_release_v1.sh
           echo 'DOMINION_REVENUE_EXECUTION_CI=PASS'

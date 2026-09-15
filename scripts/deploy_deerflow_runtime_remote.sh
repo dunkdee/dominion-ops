@@ -134,6 +134,8 @@ grep -Fq 'image_search' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'glob_tool' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'grep_tool' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'str_replace_tool' "$DEERFLOW_ROOT/config.yaml"
+grep -Fq 'model: nemotron-3-nano:4b' "$DEERFLOW_ROOT/config.yaml"
+! grep -Fq 'model: llama3.1:8b' "$DEERFLOW_ROOT/config.yaml"
 ! grep -Fq 'browser_automation' "$DEERFLOW_ROOT/config.yaml"
 ! grep -Fq 'browser_navigate' "$DEERFLOW_ROOT/config.yaml"
 grep -Fq 'allow_host_bash: false' "$DEERFLOW_ROOT/config.yaml"
@@ -155,14 +157,17 @@ for attempt in $(seq 1 30); do
 done
 
 # Runtime capability proof: verify the actual loaded config, persistent database,
-# Ollama package/model visibility, governed identity, tools, skills and subagents.
+# governed model inventory plus real inference, identity, tools, skills and subagents.
 docker exec -i deer-flow-gateway sh -lc 'cd /app/backend && PYTHONPATH=. uv run --no-sync python -' <<'PY'
 import json
 import urllib.request
 from pathlib import Path
 
-import langchain_ollama  # noqa: F401
+from langchain_ollama import ChatOllama
 from deerflow.config import get_app_config
+
+REQUIRED_MODEL = "nemotron-3-nano:4b"
+OLLAMA_BASE_URL = "http://host.docker.internal:11434"
 
 cfg = get_app_config()
 assert cfg.database.backend == "sqlite"
@@ -194,11 +199,36 @@ required_tools = {
 }
 configured_tools = {tool.name for tool in cfg.tools}
 assert required_tools.issubset(configured_tools), sorted(required_tools - configured_tools)
-with urllib.request.urlopen("http://host.docker.internal:11434/api/tags", timeout=10) as response:
+models_by_name = {model.name: model for model in cfg.models}
+assert "dominion-ollama" in models_by_name, sorted(models_by_name)
+model_cfg = models_by_name["dominion-ollama"]
+assert model_cfg.use == "langchain_ollama:ChatOllama", model_cfg.use
+assert model_cfg.model == REQUIRED_MODEL, model_cfg.model
+with urllib.request.urlopen(f"{OLLAMA_BASE_URL}/api/tags", timeout=10) as response:
     payload = json.load(response)
 model_names = {str(item.get("name", "")) for item in payload.get("models", [])}
-assert any(name.startswith("llama3.1:8b") for name in model_names), sorted(model_names)
-print("DEERFLOW_CAPABILITY_PROOF=PASS persistence=sqlite run_events=db memory=on guardrails=fail-closed self_modify=off channels=off skills=on subagents=on tools=9 ollama_model=llama3.1:8b")
+assert any(name.startswith(REQUIRED_MODEL) for name in model_names), sorted(model_names)
+probe = ChatOllama(
+    model=REQUIRED_MODEL,
+    base_url=OLLAMA_BASE_URL,
+    temperature=0,
+    num_predict=16,
+).invoke("Reply briefly with READY.")
+content = getattr(probe, "content", "")
+if isinstance(content, list):
+    response_text = " ".join(
+        str(block.get("text", block)) if isinstance(block, dict) else str(block)
+        for block in content
+    )
+else:
+    response_text = str(content or "")
+metadata = getattr(probe, "response_metadata", {}) or {}
+assert response_text.strip() or metadata, "Ollama inference returned neither content nor metadata"
+reported_model = str(metadata.get("model_name") or metadata.get("model") or "")
+if reported_model:
+    assert reported_model.startswith(REQUIRED_MODEL), reported_model
+print(f"DEERFLOW_INFERENCE_PROOF=PASS model={REQUIRED_MODEL} response_chars={len(response_text.strip())}")
+print("DEERFLOW_CAPABILITY_PROOF=PASS persistence=sqlite run_events=db memory=on guardrails=fail-closed self_modify=off channels=off skills=on subagents=on tools=9 ollama_model=nemotron-3-nano:4b inference=pass")
 PY
 
-echo "DEERFLOW_RUNTIME_HEALTH=PASS tag=$UPSTREAM_TAG url=http://127.0.0.1:2026/ persistence=sqlite run_events=db memory=on guardrails=fail-closed ollama=harness-extra browser=disabled-v2.0.0"
+echo "DEERFLOW_RUNTIME_HEALTH=PASS tag=$UPSTREAM_TAG url=http://127.0.0.1:2026/ persistence=sqlite run_events=db memory=on guardrails=fail-closed ollama=harness-extra model=nemotron-3-nano:4b inference=pass browser=disabled-v2.0.0"

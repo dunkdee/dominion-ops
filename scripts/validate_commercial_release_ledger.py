@@ -6,7 +6,11 @@ The ledger is a claim registry, not a self-certifying authority. This validator:
 - rejects CLOSED as a state vocabulary shortcut;
 - requires evidence for advanced release stages;
 - derives STALE effective state when runtime evidence expires;
-- can enforce the final release condition across all twelve lane records.
+- checks final lane claims but cannot authenticate external certification evidence.
+
+Final certification is unavailable until an independent evidence verifier is
+integrated. Ledger fields, receipt URLs and claimed approvals are untrusted
+inputs; structural validation cannot promote them into release authority.
 
 Standard library only so the gate can run anywhere Python 3 is available.
 """
@@ -382,6 +386,14 @@ def validate_ledger(ledger: Any, *, now: datetime, require_release_certified: bo
     ]
 
     if require_release_certified:
+        # This program has no trusted evidence resolver or release-authority
+        # verifier. Fail closed even when every supplied claim looks complete.
+        # Do not replace this with a ledger flag, an environment override, or
+        # a receipt-presence check: all are builder-controlled assertions.
+        errors.append(
+            "independent release certification evidence verification is not implemented; "
+            "ledger validation cannot certify a commercial release"
+        )
         lane_records: dict[int, dict[str, Any]] = {}
         for component in effective["components"]:
             if not isinstance(component, dict):
@@ -412,7 +424,7 @@ def main() -> int:
     parser.add_argument(
         "--require-release-certified",
         action="store_true",
-        help="fail unless all twelve lane records are COMMERCIAL_OPERATIONAL_CERTIFIED",
+        help="check final lane claims; fails closed until independent evidence verification is implemented",
     )
     args = parser.parse_args()
 

@@ -199,7 +199,7 @@
           "expires_at": null
         },
         {
-          "receipt_id": "revenue-commercial-deploy-run-34993554500",
+          "receipt_id": "lane07-revenue-commercial-deploy-run-34993554500",
           "kind": "production_runtime_receipt",
           "reference": "Commercial deploy run 34993554500 proved pinned Foundation VM identity, exact Revenue Runtime manifest, auto-CRO disabled, generic public event ingestion disabled, negative control auth, public router, evaluator timer, DB integrity, rollback reference and REVENUE_COMMERCIAL_RUNTIME_DEPLOY=PASS for source a2fdc5eb628df8eace2186a13450e62c43076524",
           "verified_at": "2026-09-15T16:13:13+00:00",

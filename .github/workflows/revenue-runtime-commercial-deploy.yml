@@ -12,7 +12,8 @@ jobs:
     if: >-
       github.event.issue.number == 305 &&
       github.event.comment.user.login == github.repository_owner &&
-      github.event.comment.author_association == 'OWNER'
+      github.event.comment.author_association == 'OWNER' &&
+      startsWith(github.event.comment.body, 'DEPLOY_REVENUE_COMMERCIAL_RUNTIME:')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -95,8 +96,12 @@ jobs:
           chmod 600 "$HOME/.ssh/foundation_vm_key"
           printf '%s\n' "$VM_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
+          grep -Eq '^foundation-vm[[:space:]]+(ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa)[[:space:]]+' "$HOME/.ssh/known_hosts" || {
+            echo 'ERROR: VM_SSH_KNOWN_HOSTS must contain a foundation-vm host-key alias entry'
+            exit 1
+          }
           ssh-keygen -l -f "$HOME/.ssh/known_hosts" >/dev/null
-          echo 'FOUNDATION_VM_HOST_IDENTITY=PINNED'
+          echo 'FOUNDATION_VM_HOST_IDENTITY=PINNED alias=foundation-vm'
 
       - name: Transfer exact authorized assets
         env:
@@ -105,7 +110,8 @@ jobs:
         run: |
           set -euo pipefail
           scp -i "$HOME/.ssh/foundation_vm_key" \
-            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes \
             "$RUNNER_TEMP/revenue-commercial-assets.tgz" \
             "$VM_USER@$VM_HOST:/tmp/revenue-commercial-$GITHUB_RUN_ID.tgz"
 
@@ -117,7 +123,8 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/foundation_vm_key" \
-            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes \
             "$VM_USER@$VM_HOST" \
             "set -euo pipefail
              root=/tmp/revenue-commercial-$GITHUB_RUN_ID

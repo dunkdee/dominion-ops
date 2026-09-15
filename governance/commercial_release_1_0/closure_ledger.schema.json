@@ -8,7 +8,7 @@
     "release_id",
     "release_objective",
     "generated_at",
-    "evidence_ttl_hours",
+    "default_runtime_evidence_ttl_hours",
     "allowed_progression",
     "components"
   ],
@@ -16,7 +16,7 @@
     "release_id": {"const": "DOMINION-COMMERCIAL-RELEASE-1.0"},
     "release_objective": {"type": "string", "minLength": 1},
     "generated_at": {"type": "string", "format": "date-time"},
-    "evidence_ttl_hours": {"type": "integer", "minimum": 1},
+    "default_runtime_evidence_ttl_hours": {"type": "integer", "minimum": 1},
     "allowed_progression": {
       "const": [
         "BUILT",
@@ -53,12 +53,13 @@
     "evidenceReceipt": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["receipt_id", "kind", "reference", "verified_at"],
+      "required": ["receipt_id", "kind", "reference", "verified_at", "freshness"],
       "properties": {
         "receipt_id": {"type": "string", "minLength": 1},
         "kind": {"type": "string", "minLength": 1},
         "reference": {"type": "string", "minLength": 1},
         "verified_at": {"type": "string", "format": "date-time"},
+        "freshness": {"enum": ["IMMUTABLE", "EXPIRING"]},
         "expires_at": {"type": ["string", "null"], "format": "date-time"}
       }
     },

@@ -1,7 +1,7 @@
 {
   "release_id": "DOMINION-COMMERCIAL-RELEASE-1.0",
   "release_objective": "A governed, secure, recoverable ecosystem capable of attracting a customer, converting that customer, receiving money, delivering the product or service, reconciling the money, attributing the sale, learning from the result, and repeating the cycle without manual rescue or governance drift.",
-  "generated_at": "2026-09-15T12:27:56+00:00",
+  "generated_at": "2026-09-15T17:23:30+00:00",
   "default_runtime_evidence_ttl_hours": 24,
   "allowed_progression": [
     "BUILT",
@@ -89,7 +89,7 @@
       "deployed_sha_or_digest": null,
       "last_verified_at": null,
       "evidence_receipts": [],
-      "current_blocker": "Repository main remains without enforced branch protection under the current private-repository plan; release-wide external exposure and authorization-negative certification are incomplete; older VM workflows still require migration away from runtime ssh-keyscan after the Foundation VM trust anchor is enrolled.",
+      "current_blocker": "Repository main remains without enforced branch protection under the current private-repository plan; release-wide external exposure and authorization-negative certification are incomplete; the Foundation VM trust anchor is now enrolled, but older VM workflows still require migration away from runtime ssh-keyscan.",
       "rollback_reference": null
     },
     {
@@ -171,16 +171,16 @@
       "purpose": "Provider-neutral order ledger, Wix and Stripe adapters, refunds, fees, gross and net revenue reconciliation.",
       "location": "dominion-db, Revenue Runtime and provider adapters",
       "engineering_state": "TESTED",
-      "deployment_state": "UNVERIFIED",
-      "runtime_state": "UNVERIFIED",
+      "deployment_state": "DEPLOYED",
+      "runtime_state": "VERIFIED",
       "customer_state": "NOT_APPLICABLE",
       "commercial_state": "BLOCKED",
       "security_state": "UNVERIFIED",
       "recovery_state": "UNVERIFIED",
       "release_stage": "BLOCKED",
       "dependencies": ["release.lane01.truth-governance", "release.lane06.voltedge-commerce", "runtime.revenue-snapshot", "deploy.revenue-commercial-runtime"],
-      "deployed_sha_or_digest": null,
-      "last_verified_at": "2026-09-15T07:05:33+00:00",
+      "deployed_sha_or_digest": "a2fdc5eb628df8eace2186a13450e62c43076524",
+      "last_verified_at": "2026-09-15T17:23:30+00:00",
       "evidence_receipts": [
         {
           "receipt_id": "gate-b-runtime-run-34939914069",
@@ -197,10 +197,26 @@
           "verified_at": "2026-09-15T07:16:04+00:00",
           "freshness": "IMMUTABLE",
           "expires_at": null
+        },
+        {
+          "receipt_id": "revenue-commercial-deploy-run-34993554500",
+          "kind": "production_runtime_receipt",
+          "reference": "Commercial deploy run 34993554500 proved pinned Foundation VM identity, exact Revenue Runtime manifest, auto-CRO disabled, generic public event ingestion disabled, negative control auth, public router, evaluator timer, DB integrity, rollback reference and REVENUE_COMMERCIAL_RUNTIME_DEPLOY=PASS for source a2fdc5eb628df8eace2186a13450e62c43076524",
+          "verified_at": "2026-09-15T16:13:13+00:00",
+          "freshness": "EXPIRING",
+          "expires_at": "2026-09-16T16:13:13+00:00"
+        },
+        {
+          "receipt_id": "gate-b-non-regression-run-35000955983",
+          "kind": "production_runtime_receipt",
+          "reference": "Empire Status Snapshot run 35000955983 re-proved owner/exact-main authorization, pinned Foundation VM identity, dominion-db.orders provenance, db_available=true and REVENUE_SNAPSHOT_RECEIPT=PASS purchase_count=0 revenue_cents=0 on main 05438210b89a4a76b4f232149f4b9b052607f230",
+          "verified_at": "2026-09-15T17:23:30+00:00",
+          "freshness": "EXPIRING",
+          "expires_at": "2026-09-16T17:23:30+00:00"
         }
       ],
-      "current_blocker": "Gate B is closed and PR #331 is merged, but the Revenue Runtime commercial deployment is blocked until the verified Foundation VM host public key is enrolled in VM_SSH_KNOWN_HOSTS; full provider-neutral catalog purchase/refund/fee/net-revenue reconciliation remains unproven at runtime.",
-      "rollback_reference": "Revenue Runtime commercial deploy wrapper retains a persistent pre-deploy rollback package after successful deployment"
+      "current_blocker": "Revenue Runtime is deployed and Gate B is re-proven after deployment, but the normal Catalog V3 purchase/refund/fee/gross/net-revenue path has not yet been proven end-to-end at runtime.",
+      "rollback_reference": "/home/<vm-user>/.dominion/revenue-runtime/release-rollbacks/34993554500"
     },
     {
       "component_id": "release.lane08.attribution-analytics",
@@ -209,7 +225,7 @@
       "purpose": "Exact campaign and visitor identity survives checkout, order, refund and net revenue reconciliation.",
       "location": "Dominion Revenue Runtime and VoltEdge",
       "engineering_state": "TESTED",
-      "deployment_state": "UNVERIFIED",
+      "deployment_state": "DEPLOYED",
       "runtime_state": "UNVERIFIED",
       "customer_state": "UNVERIFIED",
       "commercial_state": "BLOCKED",
@@ -217,8 +233,8 @@
       "recovery_state": "UNVERIFIED",
       "release_stage": "BLOCKED",
       "dependencies": ["release.lane06.voltedge-commerce", "release.lane07.financial-truth", "deploy.revenue-commercial-runtime"],
-      "deployed_sha_or_digest": null,
-      "last_verified_at": "2026-09-15T07:16:04+00:00",
+      "deployed_sha_or_digest": "a2fdc5eb628df8eace2186a13450e62c43076524",
+      "last_verified_at": "2026-09-15T16:13:13+00:00",
       "evidence_receipts": [
         {
           "receipt_id": "attribution-refund-code-pr331",
@@ -227,10 +243,18 @@
           "verified_at": "2026-09-15T07:16:04+00:00",
           "freshness": "IMMUTABLE",
           "expires_at": null
+        },
+        {
+          "receipt_id": "attribution-runtime-deploy-34993554500",
+          "kind": "production_runtime_receipt",
+          "reference": "Commercial deploy run 34993554500 proved exact Revenue Runtime asset parity and source SHA a2fdc5eb628df8eace2186a13450e62c43076524 on Foundation VM; attribution behavior itself remains unproven until the normal Catalog V3 canary",
+          "verified_at": "2026-09-15T16:13:13+00:00",
+          "freshness": "EXPIRING",
+          "expires_at": "2026-09-16T16:13:13+00:00"
         }
       ],
-      "current_blocker": "The implementation is merged but not yet proven on the commercial Foundation VM runtime; the historical Pay Link canary had attributionSource=UNSPECIFIED, so exact signed source to normal catalog order to refund to net revenue remains open.",
-      "rollback_reference": null
+      "current_blocker": "The attribution/refund implementation is now deployed on the commercial Foundation VM runtime, but exact signed source to normal Catalog V3 order to refund to net revenue remains unproven; the historical Pay Link canary had attributionSource=UNSPECIFIED.",
+      "rollback_reference": "/home/<vm-user>/.dominion/revenue-runtime/release-rollbacks/34993554500"
     },
     {
       "component_id": "release.lane09.traffic-publishing",
@@ -387,12 +411,12 @@
       "runtime_state": "VERIFIED",
       "customer_state": "NOT_APPLICABLE",
       "commercial_state": "NOT_APPLICABLE",
-      "security_state": "UNVERIFIED",
+      "security_state": "VERIFIED",
       "recovery_state": "UNVERIFIED",
       "release_stage": "RUNTIME_VERIFIED",
       "dependencies": ["release.lane02.infrastructure", "release.lane07.financial-truth"],
-      "deployed_sha_or_digest": "8f525dd9fd69f3149ff74bd132dd3fbd11bd01c2",
-      "last_verified_at": "2026-09-15T07:05:33+00:00",
+      "deployed_sha_or_digest": "05438210b89a4a76b4f232149f4b9b052607f230",
+      "last_verified_at": "2026-09-15T17:23:30+00:00",
       "evidence_receipts": [
         {
           "receipt_id": "revenue-snapshot-run-34939914069",
@@ -401,9 +425,17 @@
           "verified_at": "2026-09-15T07:05:33+00:00",
           "freshness": "EXPIRING",
           "expires_at": "2026-09-16T07:05:33+00:00"
+        },
+        {
+          "receipt_id": "revenue-snapshot-run-35000955983",
+          "kind": "production_runtime_receipt",
+          "reference": "Empire Status Snapshot run 35000955983 / job 104488926082 produced exact-main authorization PASS, FOUNDATION_VM_HOST_IDENTITY=PINNED, canonical dominion-db.orders provenance PASS, db_available=true and receipt PASS purchase_count=0 revenue_cents=0",
+          "verified_at": "2026-09-15T17:23:30+00:00",
+          "freshness": "EXPIRING",
+          "expires_at": "2026-09-16T17:23:30+00:00"
         }
       ],
-      "current_blocker": "Gate B itself is closed; full financial-truth lane remains dependent on runtime deployment of the refund/attribution/net-revenue path and catalog-path reconciliation.",
+      "current_blocker": "Gate B itself is closed and has passed non-regression after Revenue Runtime deployment; the full financial-truth lane still requires normal Catalog V3 purchase/refund/fee/net-revenue reconciliation.",
       "rollback_reference": "revert the revenue snapshot workflow to the last exact-head approved revision; read-only measurement does not mutate dominion-db"
     },
     {
@@ -413,16 +445,16 @@
       "purpose": "Refund reconciliation, idempotency, source attribution and net-revenue accounting repair without a second analytics authority.",
       "location": "PR #331 and current main lineage",
       "engineering_state": "TESTED",
-      "deployment_state": "UNVERIFIED",
+      "deployment_state": "DEPLOYED",
       "runtime_state": "UNVERIFIED",
       "customer_state": "NOT_APPLICABLE",
       "commercial_state": "UNVERIFIED",
       "security_state": "UNVERIFIED",
       "recovery_state": "UNVERIFIED",
-      "release_stage": "TESTED",
+      "release_stage": "DEPLOYED",
       "dependencies": ["release.lane07.financial-truth", "release.lane08.attribution-analytics"],
-      "deployed_sha_or_digest": "96b5db8a843ccf186bdbf0bb0baac07eb09f73ee",
-      "last_verified_at": "2026-09-15T07:16:04+00:00",
+      "deployed_sha_or_digest": "a2fdc5eb628df8eace2186a13450e62c43076524",
+      "last_verified_at": "2026-09-15T16:13:13+00:00",
       "evidence_receipts": [
         {
           "receipt_id": "pr331-attribution-refund-merge",
@@ -431,10 +463,18 @@
           "verified_at": "2026-09-15T07:16:04+00:00",
           "freshness": "IMMUTABLE",
           "expires_at": null
+        },
+        {
+          "receipt_id": "pr331-runtime-deployment-34993554500",
+          "kind": "production_runtime_receipt",
+          "reference": "Commercial deploy run 34993554500 proved exact asset parity and REVENUE_RUNTIME_SOURCE_SHA=PASS sha=a2fdc5eb628df8eace2186a13450e62c43076524, placing the PR #331 lineage on Foundation VM; business semantics remain unproven until the Catalog V3 canary",
+          "verified_at": "2026-09-15T16:13:13+00:00",
+          "freshness": "EXPIRING",
+          "expires_at": "2026-09-16T16:13:13+00:00"
         }
       ],
-      "current_blocker": "Merged code is not runtime closure; Foundation VM commercial runtime deployment and signed Catalog V3 attribution/refund/net-revenue receipts remain required.",
-      "rollback_reference": "revert PR #331 main-lineage changes before deployment if a regression is found"
+      "current_blocker": "The PR #331 lineage is deployed, but exact functional Catalog V3 source-to-order attribution, successful provider refund reconciliation, fee accounting and net-revenue receipts remain required.",
+      "rollback_reference": "/home/<vm-user>/.dominion/revenue-runtime/release-rollbacks/34993554500"
     },
     {
       "component_id": "deploy.revenue-commercial-runtime",
@@ -443,16 +483,16 @@
       "purpose": "Fail-closed governed deployment of the Commercial Release 1.0 Revenue Runtime onto Foundation VM.",
       "location": ".github/workflows/revenue-runtime-commercial-deploy.yml and Foundation VM",
       "engineering_state": "TESTED",
-      "deployment_state": "BLOCKED",
-      "runtime_state": "BLOCKED",
+      "deployment_state": "DEPLOYED",
+      "runtime_state": "VERIFIED",
       "customer_state": "NOT_APPLICABLE",
       "commercial_state": "BLOCKED",
       "security_state": "VERIFIED",
       "recovery_state": "UNVERIFIED",
-      "release_stage": "BLOCKED",
+      "release_stage": "RUNTIME_VERIFIED",
       "dependencies": ["release.lane02.infrastructure", "release.lane03.security", "code.revenue-refund-attribution-pr331"],
-      "deployed_sha_or_digest": null,
-      "last_verified_at": "2026-09-15T12:25:16+00:00",
+      "deployed_sha_or_digest": "a2fdc5eb628df8eace2186a13450e62c43076524",
+      "last_verified_at": "2026-09-15T16:13:13+00:00",
       "evidence_receipts": [
         {
           "receipt_id": "revenue-deploy-pr334-security-boundary",
@@ -469,10 +509,26 @@
           "verified_at": "2026-09-15T12:25:16+00:00",
           "freshness": "IMMUTABLE",
           "expires_at": null
+        },
+        {
+          "receipt_id": "revenue-deploy-pr336-environment-scope",
+          "kind": "immutable_exact_head_merge_receipt",
+          "reference": "PR #336 bound the production deploy job to foundation-vm-production after run 34992691448 proved the environment-secret scope mismatch; exact-head CI and Five Council passed before merge",
+          "verified_at": "2026-09-15T16:11:52+00:00",
+          "freshness": "IMMUTABLE",
+          "expires_at": null
+        },
+        {
+          "receipt_id": "revenue-commercial-deploy-run-34993554500",
+          "kind": "production_runtime_receipt",
+          "reference": "Commercial deploy run 34993554500 proved FOUNDATION_VM_HOST_IDENTITY=PINNED, REVENUE_PUBLIC_EVENT_INGESTION=DISABLED, REVENUE_RUNTIME_MANIFEST=PASS, REVENUE_AUTO_CRO=DISABLED, REVENUE_CONTROL_NEGATIVE_AUTH=PASS, REVENUE_PUBLIC_ROUTER=PASS, REVENUE_EVALUATOR_TIMER=PASS, REVENUE_DB_INTEGRITY=PASS, REVENUE_ROLLBACK_REFERENCE=PASS, REVENUE_RUNTIME_SOURCE_SHA=PASS and REVENUE_COMMERCIAL_RUNTIME_DEPLOY=PASS",
+          "verified_at": "2026-09-15T16:13:13+00:00",
+          "freshness": "EXPIRING",
+          "expires_at": "2026-09-16T16:13:13+00:00"
         }
       ],
-      "current_blocker": "Verified Foundation VM host public key must be independently obtained and enrolled in GitHub Actions secret VM_SSH_KNOWN_HOSTS as `foundation-vm <keytype> <public-key>`; do not bypass with ssh-keyscan.",
-      "rollback_reference": "commercial deploy wrapper is fail-closed before SSH until trust enrollment; after a successful deploy it retains a persistent pre-deploy rollback package"
+      "current_blocker": "The Revenue Runtime deployment itself is runtime-verified. Advancement beyond RUNTIME_VERIFIED still requires a deliberate recovery drill plus the downstream normal Catalog V3 commercial reconciliation and attribution proof.",
+      "rollback_reference": "/home/<vm-user>/.dominion/revenue-runtime/release-rollbacks/34993554500"
     }
   ]
 }

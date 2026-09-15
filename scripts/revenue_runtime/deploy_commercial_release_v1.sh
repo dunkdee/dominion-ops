@@ -161,7 +161,6 @@ else:
         raise SystemExit('revenue public matcher is not unique')
 p.write_text(text, encoding='utf-8')
 PY
-sudo chown root:root "$caddy_path"
 sudo caddy validate --config "$caddy_path" >/dev/null
 sudo systemctl reload caddy
 ! sudo grep -Eq '@dominion_revenue_public[[:space:]]+path[^\n]*\/revenue\/events' "$caddy_path"
@@ -190,7 +189,6 @@ if n != 1:
     raise SystemExit('revenue public matcher is not unique after install')
 p.write_text(text, encoding='utf-8')
 PY
-sudo chown root:root "$caddy_path"
 sudo caddy validate --config "$caddy_path" >/dev/null
 sudo systemctl reload caddy
 ! sudo grep -Eq '@dominion_revenue_public[[:space:]]+path[^\n]*\/revenue\/events' "$caddy_path"

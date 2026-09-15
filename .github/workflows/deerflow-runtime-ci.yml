@@ -43,8 +43,13 @@ jobs:
           grep -Fq 'https://github.com/bytedance/deer-flow.git' "$deploy"
           grep -Fq 'UPSTREAM_TAG="v2.0.0"' "$deploy"
           grep -Fq 'deerflow-harness[ollama]' "$deploy"
+          grep -Fq 'DEERFLOW_INFERENCE_PROOF=PASS' "$deploy"
           grep -Fq 'DEERFLOW_CAPABILITY_PROOF=PASS' "$deploy"
+          grep -Fq 'from langchain_ollama import ChatOllama' "$deploy"
+          ! grep -Eq 'ollama[[:space:]]+pull|/api/pull' "$deploy"
 
+          grep -Fq 'model: nemotron-3-nano:4b' "$cfg"
+          ! grep -Fq 'model: llama3.1:8b' "$cfg"
           grep -Fq 'database:' "$cfg"
           grep -Fq 'backend: sqlite' "$cfg"
           grep -Fq 'run_events:' "$cfg"
@@ -73,4 +78,4 @@ jobs:
 
           ! grep -Eq '(api[_-]?key|token):[[:space:]]+[A-Za-z0-9_-]{16,}' "$cfg" "$soul"
 
-          echo 'DEERFLOW_RUNTIME_CI=PASS upstream=v2.0.0 persistence=sqlite run_events=db memory=on guardrails=fail-closed self_modify=off channels=off tools=9 ollama=harness-extra browser=disabled-v2.0.0 host_bash=disabled'
+          echo 'DEERFLOW_RUNTIME_CI=PASS upstream=v2.0.0 model=nemotron-3-nano:4b inference=required persistence=sqlite run_events=db memory=on guardrails=fail-closed self_modify=off channels=off tools=9 ollama=harness-extra browser=disabled-v2.0.0 host_bash=disabled'

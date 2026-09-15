@@ -1,0 +1,40 @@
+{
+  "slug": "example-title",
+  "title": "Example Title",
+  "subtitle": "Specific Reader Benefit",
+  "author": "Dewayne Singleton",
+  "demand_evidence": {
+    "comparables": [
+      {"title": "Named comparable", "observed_bsr": 12345, "source_url": "https://source.example/comparable", "observed_at": "2026-08-15"}
+    ]
+  },
+  "differentiation": "One specific sentence explaining the reader benefit this title offers beyond its documented comparables.",
+  "content_integrity": {"status": "VERIFIED", "evidence": "State the deterministic whole-book verification performed."},
+  "policy_clearance": {
+    "title_collision": "CLEARED",
+    "rights_and_originality": "CLEARED",
+    "public_domain_or_scraped": "CLEARED",
+    "medical_legal_income_claims": "CLEARED",
+    "claude_5_4": "CLEARED"
+  },
+  "ai_disclosure": {"determination": "AI_GENERATED", "rationale": "State exactly why this determination is correct."},
+  "interior_spec": {"trim": "8.5 x 11 in", "page_count": 100, "ink": "black", "paper": "white", "bleed": false},
+  "assets": {
+    "interior_pdf": "assets/interior.pdf",
+    "full_wrap_cover": "assets/full_wrap_cover.pdf",
+    "front_cover": "assets/front_cover.jpg"
+  },
+  "listing": {
+    "description_html": "<p>Paste KDP-accepted HTML here.</p>",
+    "keywords": ["slot one", "slot two", "slot three", "slot four", "slot five", "slot six", "slot seven"],
+    "categories": ["Category path one", "Category path two", "Category path three"]
+  },
+  "commercials": {
+    "marketplace": "Amazon.com",
+    "print_list_price": "9.99",
+    "printing_cost": "2.50",
+    "royalty_rate": "0.60",
+    "printing_cost_evidence": "KDP calculator capture or current official cost evidence"
+  },
+  "kdp_select_recommendation": {"recommendation": "REVIEW_REQUIRED", "reason": "State the title-specific reasoning."}
+}

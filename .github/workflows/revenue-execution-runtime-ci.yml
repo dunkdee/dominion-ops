@@ -29,8 +29,8 @@ jobs:
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
           python-version: '3.12'
-      - name: Install runtime test dependencies
-        run: python -m pip install --disable-pip-version-check 'httpx>=0.28.1' 'fastapi>=0.116' 'pydantic>=2.0' 'uvicorn>=0.30' 'requests>=2.32,<3'
+      - name: Install canonical repository test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
       - name: Syntax and shell validation
         run: |
           python -m compileall -q apps/revenue_runtime

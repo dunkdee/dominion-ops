@@ -4,6 +4,7 @@ name: Buddy Phone Access Verification
 #   * the three public hosts still answer
 #   * Buddy's sign-in screen is reachable from a phone browser
 #   * BUDDY_WEB_TOKEN resolves to exactly one value across every source
+#   * Proposal Queue state-changing routes reject unauthorized callers
 #   * the Obsidian Command Center is still connected
 # No VM mutation of any kind.
 
@@ -209,6 +210,43 @@ jobs:
           test "$bad" = '401'
           rm -f /tmp/jar.txt /tmp/login.json /tmp/gate.html /tmp/dash.html
           unset token
+
+          echo '=== PROPOSAL QUEUE MUTATION AUTH (NONEXISTENT-ID PROBE ONLY) ==='
+          systemctl is-active --quiet dominion-proposal-queue.service
+          PROPOSAL="$BUDDY_DIR/proposal_queue.py"
+          test -f "$PROPOSAL"
+          grep -q 'PROPOSAL_OPERATOR_KEY' "$PROPOSAL"
+          grep -q '_require_operator_auth' "$PROPOSAL"
+
+          proposal_pid="$(systemctl show -p MainPID --value dominion-proposal-queue.service 2>/dev/null || true)"
+          echo "PROPOSAL_QUEUE_MAIN_PID=${proposal_pid:-0}"
+          test -n "${proposal_pid:-}" && test "$proposal_pid" != '0'
+          sudo -n test -r "/proc/$proposal_pid/environ"
+          proposal_key="$(sudo -n tr '\0' '\n' < "/proc/$proposal_pid/environ" | sed -n 's/^PROPOSAL_OPERATOR_KEY=//p' | head -1)"
+          test -n "$proposal_key"
+          echo 'PROPOSAL_OPERATOR_KEY_RUNTIME=CONFIGURED'
+
+          probe_name='__dominion_auth_probe_never_exists_20260915_7f6ea318__.json'
+          test ! -e "$BUDDY_DIR/ready_to_submit/$probe_name"
+          proposal_url="http://127.0.0.1:5101/api/proposals/$probe_name/mark-submitted"
+
+          proposal_unauth="$(curl -sS -o /tmp/proposal_unauth.json -w '%{http_code}' --max-time 10 -X POST "$proposal_url" || true)"
+          echo "PROPOSAL_UNAUTH_MUTATION=$proposal_unauth"
+          test "$proposal_unauth" = '401'
+
+          proposal_bad="$(curl -sS -o /tmp/proposal_bad.json -w '%{http_code}' --max-time 10 -X POST \
+            -H 'Authorization: Bearer definitely-not-the-operator-key' "$proposal_url" || true)"
+          echo "PROPOSAL_BAD_KEY_MUTATION=$proposal_bad"
+          test "$proposal_bad" = '401'
+
+          proposal_auth="$(curl -sS -o /tmp/proposal_auth.json -w '%{http_code}' --max-time 10 -X POST \
+            -H "Authorization: Bearer $proposal_key" "$proposal_url" || true)"
+          echo "PROPOSAL_VALID_KEY_NONEXISTENT_ID=$proposal_auth"
+          test "$proposal_auth" = '404'
+          test ! -e "$BUDDY_DIR/ready_to_submit/$probe_name"
+          rm -f /tmp/proposal_unauth.json /tmp/proposal_bad.json /tmp/proposal_auth.json
+          unset proposal_key
+          echo 'PROPOSAL_MUTATION_AUTH_ACCEPTANCE=PASS'
 
           echo '=== OBSIDIAN COMMAND CENTER ==='
           obsidian_state="$(docker inspect obsidian-remote --format '{{.State.Status}}' 2>/dev/null || true)"

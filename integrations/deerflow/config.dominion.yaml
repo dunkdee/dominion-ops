@@ -1,4 +1,4 @@
-config_version: 14
+config_version: 15
 log_level: info
 
 token_usage:
@@ -8,7 +8,7 @@ models:
   - name: dominion-ollama
     display_name: Dominion Local Ollama
     use: langchain_ollama:ChatOllama
-    model: llama3.1:8b
+    model: nemotron-3-nano:4b
     base_url: $DOMINION_OLLAMA_BASE_URL
     num_predict: 8192
     temperature: 0.2

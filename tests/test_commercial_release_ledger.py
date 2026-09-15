@@ -84,3 +84,71 @@ def test_duplicate_receipt_ids_are_rejected_globally():
     now = validator.parse_dt("2026-09-15T06:30:00+00:00")
     errors, _ = validator.validate_ledger(ledger, now=now, require_release_certified=False)
     assert any("duplicate global receipt_id" in error for error in errors)
+
+
+def synthetic_certification_claims(*, applicable):
+    """Adversarial input only: these receipts are deliberately not real evidence."""
+    components = []
+    for lane in range(1, 13):
+        component = {field: "CERTIFIED" if applicable else "NOT_APPLICABLE"
+                     for field in validator.STATE_FIELDS}
+        component.update(
+            component_id=f"release.lane{lane:02}.synthetic",
+            lane_id=lane, owner="synthetic builder", purpose="negative control",
+            location="offline test", release_stage="COMMERCIAL_OPERATIONAL_CERTIFIED",
+            dependencies=[], deployed_sha_or_digest="a" * 40 if applicable else None,
+            last_verified_at="2026-09-15T06:00:00+00:00",
+            evidence_receipts=[{
+                "receipt_id": f"fabricated-{lane}",
+                "kind": "production_runtime_receipt",
+                "reference": "https://example.invalid/unverified-proof",
+                "verified_at": "2026-09-15T06:00:00+00:00",
+                "freshness": "EXPIRING" if applicable else "IMMUTABLE",
+                "expires_at": "2026-09-16T06:00:00+00:00" if applicable else None,
+            }], current_blocker=None, rollback_reference="unverified rollback claim",
+        )
+        components.append(component)
+    return dict(
+        release_id="DOMINION-COMMERCIAL-RELEASE-1.0",
+        release_objective="synthetic negative control",
+        generated_at="2026-09-15T06:00:00+00:00",
+        default_runtime_evidence_ttl_hours=24,
+        allowed_progression=validator.PROGRESSION, components=components,
+    )
+
+
+def test_blanket_not_applicable_cannot_certify_release():
+    ledger = synthetic_certification_claims(applicable=False)
+    errors, _ = validator.validate_ledger(
+        ledger, now=validator.parse_dt("2026-09-15T06:30:00Z"),
+        require_release_certified=True,
+    )
+    assert any("independent release certification evidence verification" in e for e in errors)
+
+
+def test_plausible_but_unauthenticated_receipts_cannot_certify_release():
+    ledger = synthetic_certification_claims(applicable=True)
+    now = validator.parse_dt("2026-09-15T06:30:00Z")
+    structural_errors, _ = validator.validate_ledger(
+        ledger, now=now, require_release_certified=False,
+    )
+    assert structural_errors == []  # Shape is valid; authenticity is unproven.
+    errors, _ = validator.validate_ledger(ledger, now=now, require_release_certified=True)
+    assert any("independent release certification evidence verification" in e for e in errors)
+
+
+def test_final_certification_cli_returns_failure_for_fabricated_claims(tmp_path):
+    import subprocess
+    import sys
+
+    path = tmp_path / "synthetic-ledger.json"
+    path.write_text(json.dumps(synthetic_certification_claims(applicable=True)))
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--ledger", str(path),
+         "--as-of", "2026-09-15T06:30:00Z", "--require-release-certified"],
+        text=True, capture_output=True,
+    )
+    assert result.returncode == 1
+    assert "CLOSURE_LEDGER_VALIDATION=FAIL" in result.stdout
+    assert "release_certified=true" not in result.stdout
+

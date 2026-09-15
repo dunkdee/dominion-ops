@@ -48,11 +48,12 @@ printf '%s\n' "$timer_active_before" > "$rollback_root/timer.active.before"
 printf '%s\n' "$timer_enabled_before" > "$rollback_root/timer.enabled.before"
 printf '%s\n' "$EXPECTED_SOURCE_SHA" > "$rollback_root/target-source-sha"
 
+# Preserve original ownership/mode exactly. Root-owned /etc assets remain root-owned
+# inside the rollback package so `cp -a` restores the same security boundary.
 backup_optional_path() {
   local src="$1" name="$2"
   if sudo test -e "$src"; then
     sudo cp -a "$src" "$rollback_root/$name"
-    sudo chown -R "$(id -u):$(id -g)" "$rollback_root/$name"
   else
     : > "$rollback_root/$name.ABSENT"
   fi
@@ -87,7 +88,7 @@ fi
 restore_optional_path() {
   local dst="$1" name="$2"
   sudo rm -rf "$dst"
-  if [ -e "$rollback_root/$name" ]; then
+  if sudo test -e "$rollback_root/$name"; then
     sudo cp -a "$rollback_root/$name" "$dst"
   fi
 }
@@ -132,7 +133,39 @@ sudo install -d -m 755 "$service_dropin" "$eval_dropin"
 printf '%s\n' '[Service]' 'Environment=DOMINION_REVENUE_RUNTIME_ENABLED=0' | sudo tee "$service_dropin/90-commercial-release.conf" >/dev/null
 printf '%s\n' '[Service]' 'Environment=DOMINION_REVENUE_RUNTIME_ENABLED=0' | sudo tee "$eval_dropin/90-commercial-release.conf" >/dev/null
 sudo chmod 644 "$service_dropin/90-commercial-release.conf" "$eval_dropin/90-commercial-release.conf"
+sudo chown root:root "$service_dropin/90-commercial-release.conf" "$eval_dropin/90-commercial-release.conf"
 sudo systemctl daemon-reload
+
+# Remove generic public event ingestion BEFORE the legacy installer executes.
+# If the revenue matcher does not exist yet, create only the signed /r surface so
+# the legacy installer sees the marker and cannot add /revenue/events transiently.
+sudo python3 - "$caddy_path" <<'PY'
+from pathlib import Path
+import re, sys
+p = Path(sys.argv[1])
+text = p.read_text(encoding='utf-8')
+marker = 'dominionhealing.org, www.dominionhealing.org {'
+safe_block = '\n\t@dominion_revenue_public path /r /r/*\n\treverse_proxy @dominion_revenue_public 127.0.0.1:8790\n'
+if '@dominion_revenue_public' not in text:
+    if text.count(marker) != 1:
+        raise SystemExit('dominion origin marker is not unique')
+    text = text.replace(marker, marker + safe_block, 1)
+else:
+    text, n = re.subn(
+        r'(?m)^(\s*@dominion_revenue_public\s+path\s+)([^\n]*)$',
+        lambda m: m.group(1) + '/r /r/*',
+        text,
+        count=1,
+    )
+    if n != 1:
+        raise SystemExit('revenue public matcher is not unique')
+p.write_text(text, encoding='utf-8')
+PY
+sudo chown root:root "$caddy_path"
+sudo caddy validate --config "$caddy_path" >/dev/null
+sudo systemctl reload caddy
+! sudo grep -Eq '@dominion_revenue_public[[:space:]]+path[^\n]*\/revenue\/events' "$caddy_path"
+echo 'REVENUE_PUBLIC_EVENT_INGRESS_PREHARDENED=PASS'
 
 ASSET_ROOT="$asset_root" RUN_ID="commercial-$RUN_ID" bash "$asset_root/scripts/revenue_runtime/install_revenue_runtime.sh"
 
@@ -141,15 +174,23 @@ ASSET_ROOT="$asset_root" RUN_ID="commercial-$RUN_ID" bash "$asset_root/scripts/r
 sudo systemctl daemon-reload
 sudo systemctl restart "$service_name"
 
-# Commercial release does not expose generic server-event ingestion. Wix reconciliation is server-side.
+# Reassert the commercial ingress boundary after the legacy installer.
 sudo python3 - "$caddy_path" <<'PY'
 from pathlib import Path
-import sys
+import re, sys
 p = Path(sys.argv[1])
 text = p.read_text(encoding='utf-8')
-text = text.replace('@dominion_revenue_public path /r /r/* /revenue/events', '@dominion_revenue_public path /r /r/*')
+text, n = re.subn(
+    r'(?m)^(\s*@dominion_revenue_public\s+path\s+)([^\n]*)$',
+    lambda m: m.group(1) + '/r /r/*',
+    text,
+    count=1,
+)
+if n != 1:
+    raise SystemExit('revenue public matcher is not unique after install')
 p.write_text(text, encoding='utf-8')
 PY
+sudo chown root:root "$caddy_path"
 sudo caddy validate --config "$caddy_path" >/dev/null
 sudo systemctl reload caddy
 ! sudo grep -Eq '@dominion_revenue_public[[:space:]]+path[^\n]*\/revenue\/events' "$caddy_path"
@@ -220,7 +261,7 @@ EOF
 chmod 600 "$rollback_root/DEPLOYMENT_RECEIPT"
 
 # Keep rollback evidence after success; prune only older completed rollback packages beyond the newest three.
-find "$state_root/release-rollbacks" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR>3 {sub(/^[^ ]+ /, ""); print}' | while IFS= read -r old; do rm -rf -- "$old"; done
+find "$state_root/release-rollbacks" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR>3 {sub(/^[^ ]+ /, ""); print}' | while IFS= read -r old; do sudo rm -rf -- "$old"; done
 
 success=1
 trap - ERR INT TERM EXIT

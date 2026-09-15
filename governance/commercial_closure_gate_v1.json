@@ -1,0 +1,48 @@
+{
+  "policy_id": "commercial_closure_gate_v1",
+  "governance": "RADAH MEMSHALAH",
+  "status": "active",
+  "rule": "No commercial-ready claim without machine-verifiable evidence for every required gate.",
+  "states": ["VERIFIED_PASS", "BLOCKED", "RETIRED"],
+  "required_gates": [
+    "infrastructure",
+    "security",
+    "backup_restore",
+    "buddy_execution",
+    "storefront",
+    "payments",
+    "order_receipt",
+    "refund_receipt",
+    "attribution",
+    "traffic",
+    "observability",
+    "customer_policies",
+    "revenue_receipt",
+    "rollback_recovery"
+  ],
+  "anti_drift": {
+    "new_orchestrator_while_canonical_work_open": false,
+    "parallel_memory_authority": false,
+    "parallel_analytics_authority": false,
+    "self_report_counts_as_completion": false,
+    "silent_failure_allowed": false,
+    "open_dependency_can_be_done": false,
+    "production_change_without_rollback": false,
+    "production_change_without_runtime_verification": false
+  },
+  "closure_sequence": [
+    "inventory_truth",
+    "infrastructure_repair",
+    "buddy_production_readiness",
+    "first_verified_revenue_loop",
+    "controlled_scale"
+  ],
+  "mistake_protocol": [
+    "acknowledge",
+    "isolate",
+    "correct",
+    "retest",
+    "record_evidence",
+    "reopen_gate_until_pass"
+  ]
+}

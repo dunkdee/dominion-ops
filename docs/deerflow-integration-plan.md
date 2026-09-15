@@ -14,7 +14,8 @@ The pinned v2.0.0 tree does not contain `deerflow.community.browser_automation`.
 
 The Dominion profile enables the stable v2.0.0 capabilities that are appropriate for a single-node governed production coordinator:
 
-- local Ollama through the native `langchain_ollama:ChatOllama` provider using `llama3.1:8b`
+- local Ollama through the native `langchain_ollama:ChatOllama` provider using the already-governed `nemotron-3-nano:4b` model
+- no deployment-time model pull; model inventory is a prerequisite and a missing governed model fails closed
 - persistent single-node SQLite execution state under the mounted `DEER_FLOW_HOME`
 - database-backed run events so messages and execution traces survive restart
 - per-user DeerFlow memory for execution continuity, explicitly non-canonical relative to Dominion truth
@@ -36,9 +37,10 @@ The stable v2.0.0 pin supplies persistent runs, memory, subagents, skills, and l
 
 ## Required production proof
 
-A deployment is not accepted merely because containers start. The deployment workflow must record both:
+A deployment is not accepted merely because containers start or because Ollama's model-list endpoint responds. The deployment workflow must record all three:
 
-- `DEERFLOW_CAPABILITY_PROOF=PASS` proving the loaded production configuration, persistent database, memory, guardrails, skills, subagents, approved tool set, governed identity, and local Ollama model
+- `DEERFLOW_INFERENCE_PROOF=PASS model=nemotron-3-nano:4b` proving the gateway performed a real `ChatOllama` inference against the configured governed model through the bounded Docker bridge
+- `DEERFLOW_CAPABILITY_PROOF=PASS` proving the loaded production configuration, persistent database, memory, guardrails, skills, subagents, approved tool set, governed identity, configured model, and model inventory
 - `DEERFLOW_RUNTIME_HEALTH=PASS` proving the Foundation VM runtime is reachable after startup
 
 Runtime proof still does not close the full Dominion acceptance contract. Before DeerFlow is classified as fully closed, Dominion must additionally prove mission persistence/recovery, bounded initiative, governance denial behavior, rollback/stop behavior, existing-service regression safety, end-to-end receipt lineage, and one real bounded long-running synchronization mission.

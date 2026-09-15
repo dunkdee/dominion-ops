@@ -36,25 +36,36 @@ class RevenueSnapshotWorkflowTests(unittest.TestCase):
         self.assertNotIn('skipping snapshot', text)
         self.assertNotIn('Gateway unreachable — skipping', text)
 
-    def test_owner_authorized_manual_runtime_trigger_is_exact_and_not_push_driven(self):
+    def test_owner_authorized_runtime_trigger_is_fail_closed_and_not_push_driven(self):
         text = WORKFLOW.read_text(encoding='utf-8')
 
         # The rejected PR #327 proved that a push-triggered production-secret
-        # workflow is unacceptable while main is unprotected. This trigger is
-        # instead bound to an explicit comment from the repository owner on the
-        # canonical revenue sprint issue and to the exact default-branch SHA at
-        # event time.
+        # workflow is unacceptable while main is unprotected. Issue-comment
+        # execution may reach the runner only for the canonical revenue issue
+        # and repository owner; the first step then binds authorization to the
+        # current main SHA before any SSH secret is referenced.
         self.assertIn('issue_comment:', text)
         self.assertIn('types: [created]', text)
         self.assertNotIn('\n  push:', text)
         self.assertIn("github.event.issue.number == 305", text)
         self.assertIn("github.event.comment.user.login == github.repository_owner", text)
         self.assertIn("github.event.comment.author_association == 'OWNER'", text)
-        self.assertIn(
+        self.assertNotIn(
             "github.event.comment.body == format('RUN_REVENUE_SNAPSHOT:{0}', github.sha)",
             text,
         )
+
+        # Exact-SHA authorization is performed as the first executable step so
+        # a mismatch is observable and fail-closed before the later secret steps.
+        self.assertIn('Prove owner-authorized execution boundary', text)
+        self.assertIn('$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main', text)
+        self.assertIn('expected="RUN_REVENUE_SNAPSHOT:$main_sha"', text)
+        self.assertIn('test "$COMMENT_BODY" = "$expected"', text)
         self.assertIn('REVENUE_SNAPSHOT_AUTHORIZATION=PASS', text)
+
+        auth_index = text.index('Prove owner-authorized execution boundary')
+        secret_index = text.index('Require Foundation VM connection material')
+        self.assertLess(auth_index, secret_index)
 
 
 if __name__ == '__main__':

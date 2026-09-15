@@ -17,17 +17,40 @@ jobs:
       (
         github.event.issue.number == 305 &&
         github.event.comment.user.login == github.repository_owner &&
-        github.event.comment.author_association == 'OWNER' &&
-        github.event.comment.body == format('RUN_REVENUE_SNAPSHOT:{0}', github.sha)
+        github.event.comment.author_association == 'OWNER'
       )
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Prove owner-authorized execution boundary
         if: github.event_name == 'issue_comment'
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          echo "REVENUE_SNAPSHOT_AUTHORIZATION=PASS actor=${{ github.actor }} issue=${{ github.event.issue.number }} sha=${{ github.sha }}"
+          test "$ISSUE_NUMBER" = "305" || { echo "ERROR: revenue snapshot authorization must originate from issue 305"; exit 1; }
+          test "$COMMENT_USER" = "$REPOSITORY_OWNER" || { echo "ERROR: revenue snapshot authorization actor is not repository owner"; exit 1; }
+          test "$AUTHOR_ASSOCIATION" = "OWNER" || { echo "ERROR: revenue snapshot authorization lacks OWNER association"; exit 1; }
+
+          main_sha="$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | jq -r '.sha')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "ERROR: unable to resolve current main SHA"; exit 1; }
+
+          expected="RUN_REVENUE_SNAPSHOT:$main_sha"
+          test "$COMMENT_BODY" = "$expected" || {
+            echo "ERROR: revenue snapshot authorization is not bound to current main"
+            echo "expected_token=$expected"
+            exit 1
+          }
+
+          echo "REVENUE_SNAPSHOT_AUTHORIZATION=PASS actor=$COMMENT_USER issue=$ISSUE_NUMBER main_sha=$main_sha"
 
       - name: Require Foundation VM connection material
         env:

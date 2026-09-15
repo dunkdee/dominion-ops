@@ -4,15 +4,31 @@ on:
   schedule:
     - cron: "17 */3 * * *"
   workflow_dispatch:
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
 
 jobs:
   snapshot:
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (
+        github.event.issue.number == 305 &&
+        github.event.comment.user.login == github.repository_owner &&
+        github.event.comment.author_association == 'OWNER' &&
+        github.event.comment.body == format('RUN_REVENUE_SNAPSHOT:{0}', github.sha)
+      )
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - name: Prove owner-authorized execution boundary
+        if: github.event_name == 'issue_comment'
+        run: |
+          set -euo pipefail
+          echo "REVENUE_SNAPSHOT_AUTHORIZATION=PASS actor=${{ github.actor }} issue=${{ github.event.issue.number }} sha=${{ github.sha }}"
+
       - name: Require Foundation VM connection material
         env:
           VM_HOST: ${{ secrets.VM_HOST }}

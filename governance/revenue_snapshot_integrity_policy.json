@@ -1,18 +1,26 @@
 {
-  "policy_id": "revenue_snapshot_integrity_v1",
+  "policy_id": "revenue_snapshot_integrity_v2",
   "governance": "RADAH MEMSHALAH",
-  "purpose": "Prevent false-green revenue measurement and require a verifiable snapshot receipt before revenue-learning automation treats a measurement cycle as successful.",
+  "purpose": "Prevent false-green revenue measurement and require authoritative dominion-db purchase/revenue evidence plus verifiable receipts before revenue-learning automation treats a measurement cycle as successful.",
   "requirements": {
-    "gateway_required": true,
-    "gateway_must_be_http_or_https": true,
-    "tool_secret_required": true,
-    "gateway_failure_is_blocking": true,
+    "canonical_purchase_source": "dominion-db.orders",
+    "canonical_revenue_source": "orders.amount_cents",
+    "foundation_vm_connection_required": true,
+    "database_query_failure_is_blocking": true,
     "response_must_be_json_object": true,
-    "success_receipt": "REVENUE_SNAPSHOT_RECEIPT=PASS"
+    "success_provenance_receipt": "REVENUE_SNAPSHOT_PROVENANCE=PASS",
+    "success_measurement_receipt": "REVENUE_SNAPSHOT_RECEIPT=PASS",
+    "scheduled_cadence_hours": 3
   },
   "anti_drift": {
     "no_parallel_analytics_authority": true,
     "no_silent_skip": true,
-    "no_success_without_measurement": true
+    "no_success_without_measurement": true,
+    "no_n8n_roi_stub_as_authority": true
+  },
+  "cost_control": {
+    "hosted_runner_cadence_reduced_from_minutes": 30,
+    "hosted_runner_cadence_hours": 3,
+    "duplicate_manual_reruns_forbidden": true
   }
 }

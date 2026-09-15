@@ -52,8 +52,8 @@ class RevenueCommercialDeployTests(unittest.TestCase):
         self.assertIn('sudo rm -rf -- "$old"', self.deploy)
 
     def test_caddy_hardening_preserves_existing_file_ownership(self):
+        self.assertIn('backup_optional_path "$caddy_path" Caddyfile', self.deploy)
         self.assertNotIn('sudo chown root:root "$caddy_path"', self.deploy)
-        self.assertIn('sudo cp -a "$caddy_path" "$rollback_root/$name"', self.deploy.replace('backup_optional_path "$caddy_path" Caddyfile', 'sudo cp -a "$caddy_path" "$rollback_root/$name"'))
 
     def test_commercial_mode_disables_auto_cro_before_installer(self):
         disable_pos = self.deploy.index("Environment=DOMINION_REVENUE_RUNTIME_ENABLED=0")

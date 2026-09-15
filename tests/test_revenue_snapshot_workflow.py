@@ -36,6 +36,26 @@ class RevenueSnapshotWorkflowTests(unittest.TestCase):
         self.assertNotIn('skipping snapshot', text)
         self.assertNotIn('Gateway unreachable — skipping', text)
 
+    def test_owner_authorized_manual_runtime_trigger_is_exact_and_not_push_driven(self):
+        text = WORKFLOW.read_text(encoding='utf-8')
+
+        # The rejected PR #327 proved that a push-triggered production-secret
+        # workflow is unacceptable while main is unprotected. This trigger is
+        # instead bound to an explicit comment from the repository owner on the
+        # canonical revenue sprint issue and to the exact default-branch SHA at
+        # event time.
+        self.assertIn('issue_comment:', text)
+        self.assertIn('types: [created]', text)
+        self.assertNotIn('\n  push:', text)
+        self.assertIn("github.event.issue.number == 305", text)
+        self.assertIn("github.event.comment.user.login == github.repository_owner", text)
+        self.assertIn("github.event.comment.author_association == 'OWNER'", text)
+        self.assertIn(
+            "github.event.comment.body == format('RUN_REVENUE_SNAPSHOT:{0}', github.sha)",
+            text,
+        )
+        self.assertIn('REVENUE_SNAPSHOT_AUTHORIZATION=PASS', text)
+
 
 if __name__ == '__main__':
     unittest.main()

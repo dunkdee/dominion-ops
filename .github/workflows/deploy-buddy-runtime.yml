@@ -15,9 +15,11 @@ on:
       - 'tests/test_buddy_token_resolver.py'
       - 'tests/test_buddy_phone_login.py'
       - 'tests/test_buddy_self_heal_extensions.py'
+      - 'tests/test_buddy_state_integrity.py'
       - 'tests/test_revenue_runtime.py'
       - 'tests/test_authorization_runtime_layout.py'
       - 'tests/test_watchmen_runtime_layout.py'
+      - '.github/workflows/deploy-buddy-runtime.yml'
   workflow_dispatch:
 
 permissions:
@@ -52,6 +54,7 @@ jobs:
             buddy_core/core/message_delivery.py \
             buddy_core/core/operator_extensions.py \
             buddy_core/core/learning_engine.py \
+            buddy_core/core/state_backup.py \
             buddy_core/core/autonomous_learning.py \
             buddy_core/core/revenue_runtime.py \
             buddy_core/core/capability_health.py \
@@ -79,6 +82,7 @@ jobs:
             tests/test_buddy_autonomous_learning.py
             tests/test_buddy_token_resolver.py
             tests/test_buddy_phone_login.py
+            tests/test_buddy_state_integrity.py
             tests/test_revenue_runtime.py
           )
           if [ -f tests/test_authorization_runtime_layout.py ]; then
@@ -245,6 +249,7 @@ jobs:
             "$runtime/core/message_delivery.py" \
             "$runtime/core/operator_extensions.py" \
             "$runtime/core/learning_engine.py" \
+            "$runtime/core/state_backup.py" \
             "$runtime/core/autonomous_learning.py" \
             "$runtime/core/revenue_runtime.py" \
             "$runtime/core/capability_health.py" \
@@ -274,6 +279,16 @@ jobs:
             exit 1
           fi
           echo 'BUDDY_RUNTIME_SOURCE_INTEGRITY=PASS'
+
+          state_probe_hash="$(BUDDY_STATE_DIR="$state" PYTHONPATH="$runtime" "$HOME/dominion_env/bin/python3" - "$RUN_SHA" <<'PY'
+          import sys
+          from core.learning_engine import audit
+          row = audit('durable_state_restart_probe', {'release_sha': sys.argv[1]})
+          print(row['record_hash'])
+          PY
+          )"
+          test "${#state_probe_hash}" -eq 64
+          echo "BUDDY_STATE_PRE_RESTART_WRITE=PASS record_sha256=$state_probe_hash"
 
           restarted=0
           for s in $services; do
@@ -337,6 +352,57 @@ jobs:
           done
           case "$web_code" in 200|401|403) ;; *) journalctl -u dominion-buddy-web.service -n 100 --no-pager || true; exit 1;; esac
 
+          state_backups="$state/state-backups"
+          state_archive="$state_backups/$stamp-$RUN_SHA.zip"
+          install -d -m 700 "$state_backups"
+          BUDDY_STATE_DIR="$state" PYTHONPATH="$runtime" "$HOME/dominion_env/bin/python3" - \
+            "$state_archive" "$RUN_SHA" "$state_probe_hash" <<'PY'
+          import json
+          import sys
+          import tempfile
+          from pathlib import Path
+          from core.state_backup import create_backup, restore_backup_isolated, verify_backup
+
+          archive = Path(sys.argv[1])
+          release_sha = sys.argv[2]
+          expected_record_hash = sys.argv[3]
+          created = create_backup(archive)
+          verified = verify_backup(archive)
+          assert created['archive_sha256']
+          assert created['total_records'] == verified['total_records']
+          assert verified['files']['audit.jsonl']['present'] is True
+          assert verified['files']['audit.jsonl']['records'] >= 1
+
+          with tempfile.TemporaryDirectory(prefix='buddy-live-state-restore-') as tmp:
+              target = Path(tmp)
+              restored = restore_backup_isolated(archive, target)
+              assert restored['total_records'] == verified['total_records']
+              assert restored['files'] == verified['files']
+              rows = [
+                  json.loads(line)
+                  for line in (target / 'audit.jsonl').read_text(encoding='utf-8').splitlines()
+                  if line.strip()
+              ]
+              matches = [
+                  row for row in rows
+                  if row.get('record_hash') == expected_record_hash
+                  and row.get('event') == 'durable_state_restart_probe'
+                  and isinstance(row.get('data'), dict)
+                  and row['data'].get('release_sha') == release_sha
+              ]
+              assert matches, 'pre-restart durable-state receipt missing after isolated restore'
+
+          print(
+              'BUDDY_STATE_BACKUP_RESTORE_ACCEPTANCE=PASS '
+              f"records={verified['total_records']} "
+              f"audit_records={verified['files']['audit.jsonl']['records']} "
+              f"archive_sha256={created['archive_sha256']} "
+              f"restart_record_sha256={expected_record_hash}"
+          )
+          PY
+          chmod 600 "$state_archive"
+          find "$state_backups" -maxdepth 1 -type f -name '*.zip' -mtime +7 -delete 2>/dev/null || true
+
           avail_after_kb="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
           python3 - "$state/deployed_release.json" "$RUN_SHA" "$avail_after_kb" <<'PY'
           import hashlib,json,sys
@@ -348,7 +414,7 @@ jobs:
           for rel in [
               'core/__init__.py','core/authorization.py','core/brain.py','core/brain_router.py',
               'core/capability_health.py','core/message_delivery.py','core/operator.py',
-              'core/operator_extensions.py','core/mcp_client.py','core/self_heal.py',
+              'core/operator_extensions.py','core/mcp_client.py','core/self_heal.py','core/state_backup.py',
               'watchmen/saraqael.py',
               'config/FOUNDER_OPERATING_CONTEXT.md','config/BUDDY_CONSTITUTION.md',
               'config/standing_authorizations.json','config/capability_extensions.json'
@@ -368,6 +434,7 @@ jobs:
               'self_heal_runtime_connected':True,
               'mcp_operator_connected':True,
               'mcp_health':True,
+              'durable_state_recovery_proof':True,
               'disk_available_kb':available_kb,
               'files_sha256':files,
           }

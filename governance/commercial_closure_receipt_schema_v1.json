@@ -1,0 +1,20 @@
+{
+  "schema_id": "commercial_closure_receipt_v1",
+  "required_fields": [
+    "gate",
+    "status",
+    "evidence_type",
+    "evidence_reference",
+    "verified_at",
+    "source_sha_or_runtime_identity",
+    "rollback_or_recovery",
+    "open_dependencies"
+  ],
+  "allowed_status": ["VERIFIED_PASS", "BLOCKED", "RETIRED"],
+  "rules": {
+    "verified_pass_requires_evidence": true,
+    "verified_pass_requires_zero_open_dependencies": true,
+    "blocked_requires_recovery_path": true,
+    "retired_requires_dependency_check": true
+  }
+}

@@ -16,6 +16,7 @@ jobs:
       startsWith(github.event.comment.body, 'DEPLOY_REVENUE_COMMERCIAL_RUNTIME:')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    environment: foundation-vm-production
     steps:
       - name: Prove owner authorization bound to current main
         id: authorize

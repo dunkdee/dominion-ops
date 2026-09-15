@@ -5,8 +5,10 @@ name: Buddy Phone Access Verification
 #   * Buddy's sign-in screen is reachable from a phone browser
 #   * BUDDY_WEB_TOKEN resolves to exactly one value across every source
 #   * Proposal Queue state-changing routes reject unauthorized callers
+#   * governed internal multi-capability execution works without external effects
+#   * controlled model-router fallback reports truthful provider provenance
 #   * the Obsidian Command Center is still connected
-# No VM mutation of any kind.
+# No durable production-state mutation of any kind.
 
 on:
   workflow_dispatch:
@@ -248,6 +250,125 @@ jobs:
           unset proposal_key
           echo 'PROPOSAL_MUTATION_AUTH_ACCEPTANCE=PASS'
 
+          echo '=== MULTI-CAPABILITY RUNTIME + CONTROLLED FALLBACK (NO PROVIDER CALLS) ==='
+          "$HOME/dominion_env/bin/python3" - "$BUDDY_DIR" <<'PY'
+          import hashlib
+          import json
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          runtime = Path(sys.argv[1]).resolve()
+          sys.path.insert(0, str(runtime))
+
+          import core.operator as operator_module
+          import core.brain_router as router
+          from core.operator import BuddyOperator
+
+          # Keep durable Buddy state untouched. These overrides exist only in this
+          # one probe process; the capability executors remain deployed runtime code.
+          operator_module.record_mission = lambda record: record
+          operator_module.audit = lambda event, data: {"event": event}
+
+          with tempfile.TemporaryDirectory(prefix="buddy-runtime-accept-") as state:
+              op = BuddyOperator(state_dir=Path(state))
+              required = ("system.status", "revenue.feedback")
+              for capability in required:
+                  cap = op.capabilities.get(capability)
+                  if not cap:
+                      raise SystemExit(f"missing registered capability: {capability}")
+                  if cap.get("classification") != "read" or cap.get("auth_required"):
+                      raise SystemExit(f"capability is not read-only: {capability}")
+
+              plan = {
+                  "mission_id": "mission_runtime_acceptance",
+                  "objective": "Read current governed internal health and revenue feedback only",
+                  "kind": "runtime_acceptance",
+                  "evidence_policy": None,
+                  "created_at": "2026-09-15T00:00:00+00:00",
+                  "conversation_context": "",
+                  "steps": [
+                      {
+                          "capability": "system.status",
+                          "instruction": "Read current loopback-only governed system health.",
+                      },
+                      {
+                          "capability": "revenue.feedback",
+                          "instruction": "Read current governed revenue feedback without external action.",
+                      },
+                  ],
+                  "completion_rule": "Read-only acceptance probe.",
+              }
+              result = op.execute(plan, session_id="runtime-acceptance")
+              if result.get("status") != "COMPLETE":
+                  raise SystemExit(f"multi-capability mission status={result.get('status')}")
+              receipts = result.get("receipts") or []
+              observed = [row.get("capability") for row in receipts]
+              if observed != list(required):
+                  raise SystemExit(f"unexpected capability sequence: {observed}")
+              for row in receipts:
+                  if row.get("status") != "VERIFIED":
+                      raise SystemExit(
+                          f"capability {row.get('capability')} status={row.get('status')}"
+                      )
+                  if not row.get("evidence"):
+                      raise SystemExit(
+                          f"capability {row.get('capability')} missing evidence"
+                      )
+              receipt_blob = json.dumps(
+                  result,
+                  sort_keys=True,
+                  ensure_ascii=True,
+                  default=str,
+                  separators=(",", ":"),
+              ).encode("utf-8")
+              receipt_hash = hashlib.sha256(receipt_blob).hexdigest()
+              print(
+                  "BUDDY_MULTI_CAPABILITY_ACCEPTANCE=PASS "
+                  "capabilities=system.status,revenue.feedback "
+                  f"receipt_sha256={receipt_hash}"
+              )
+
+          calls = []
+
+          def controlled_available(mode):
+              return mode in {"claude", "openai"}
+
+          def controlled_call(mode, prompt, system=None):
+              calls.append(mode)
+              if mode == "claude":
+                  raise RuntimeError("synthetic_primary_failure")
+              if mode == "openai":
+                  return "CONTROLLED_FALLBACK_OK"
+              raise RuntimeError("unexpected_provider_call")
+
+          # Controlled in-memory failure only. No provider/model API is contacted.
+          router._available = controlled_available
+          router._call = controlled_call
+          fallback = router.ask_best(
+              "Controlled no-network fallback acceptance probe",
+              task_type="coding",
+              max_fallback_hops=2,
+          )
+          if calls != ["claude", "openai"]:
+              raise SystemExit(f"unexpected fallback call sequence: {calls}")
+          if fallback.provider != "openai":
+              raise SystemExit(f"unexpected fallback provider: {fallback.provider}")
+          if fallback.fallback_hops != 1:
+              raise SystemExit(f"unexpected fallback hops: {fallback.fallback_hops}")
+          if fallback.text != "CONTROLLED_FALLBACK_OK":
+              raise SystemExit("fallback result text mismatch")
+          print(
+              "BUDDY_CONTROLLED_FALLBACK_ACCEPTANCE=PASS "
+              "primary=anthropic failure=synthetic_primary_failure "
+              f"fallback_provider={fallback.provider} fallback_hops={fallback.fallback_hops}"
+          )
+          print(
+              "BUDDY_CAPABILITY_RUNTIME_ACCEPTANCE=PASS "
+              "no_provider_api_calls=true durable_state_mutations=0"
+          )
+          PY
+
           echo '=== OBSIDIAN COMMAND CENTER ==='
           obsidian_state="$(docker inspect obsidian-remote --format '{{.State.Status}}' 2>/dev/null || true)"
           obsidian_health="$(docker inspect obsidian-remote --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 2>/dev/null || true)"
@@ -270,7 +391,7 @@ jobs:
           PY
 
           echo 'BUDDY_RUNTIME_ACCEPTANCE=PASS'
-          echo '=== READ-ONLY VERIFICATION COMPLETE: NO VM MUTATIONS PERFORMED ==='
+          echo '=== READ-ONLY VERIFICATION COMPLETE: NO DURABLE VM MUTATIONS PERFORMED ==='
           REMOTE
 
       - name: Cleanup SSH material

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+from datetime import timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,9 +20,14 @@ def load_ledger():
     return json.loads(LEDGER.read_text(encoding="utf-8"))
 
 
-def test_seed_ledger_is_structurally_valid_but_not_release_certified():
+def ledger_now(ledger):
+    """Evaluate evolving ledger truth just after its own generation time."""
+    return validator.parse_dt(ledger["generated_at"]) + timedelta(minutes=1)
+
+
+def test_current_ledger_is_structurally_valid_but_not_release_certified():
     ledger = load_ledger()
-    now = validator.parse_dt("2026-09-15T06:30:00+00:00")
+    now = ledger_now(ledger)
     errors, _ = validator.validate_ledger(ledger, now=now, require_release_certified=False)
     assert errors == []
 
@@ -47,8 +53,7 @@ def test_closed_shortcut_is_rejected():
     ledger = load_ledger()
     ledger = copy.deepcopy(ledger)
     ledger["components"][0]["release_stage"] = "CLOSED"
-    now = validator.parse_dt("2026-09-15T06:30:00+00:00")
-    errors, _ = validator.validate_ledger(ledger, now=now, require_release_certified=False)
+    errors, _ = validator.validate_ledger(ledger, now=ledger_now(ledger), require_release_certified=False)
     assert any("CLOSED is forbidden" in error for error in errors)
 
 
@@ -71,8 +76,7 @@ def test_certified_component_requires_no_blocker_and_fresh_runtime_evidence():
             "rollback_reference": "rollback://example",
         }
     )
-    now = validator.parse_dt("2026-09-15T06:30:00+00:00")
-    errors, _ = validator.validate_ledger(ledger, now=now, require_release_certified=False)
+    errors, _ = validator.validate_ledger(ledger, now=ledger_now(ledger), require_release_certified=False)
     assert any("certified component cannot have current_blocker" in error for error in errors)
 
 
@@ -81,6 +85,15 @@ def test_duplicate_receipt_ids_are_rejected_globally():
     ledger = copy.deepcopy(ledger)
     receipt = copy.deepcopy(ledger["components"][0]["evidence_receipts"][0])
     ledger["components"][1]["evidence_receipts"].append(receipt)
-    now = validator.parse_dt("2026-09-15T06:30:00+00:00")
-    errors, _ = validator.validate_ledger(ledger, now=now, require_release_certified=False)
+    errors, _ = validator.validate_ledger(ledger, now=ledger_now(ledger), require_release_certified=False)
     assert any("duplicate global receipt_id" in error for error in errors)
+
+
+def test_future_dated_evidence_is_rejected():
+    ledger = load_ledger()
+    ledger = copy.deepcopy(ledger)
+    now = ledger_now(ledger)
+    receipt = ledger["components"][0]["evidence_receipts"][0]
+    receipt["verified_at"] = (now + timedelta(hours=1)).isoformat()
+    errors, _ = validator.validate_ledger(ledger, now=now, require_release_certified=False)
+    assert any("verified_at is in the future" in error for error in errors)

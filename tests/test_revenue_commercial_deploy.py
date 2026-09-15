@@ -20,6 +20,7 @@ class RevenueCommercialDeployTests(unittest.TestCase):
         self.assertIn("github.event.issue.number == 305", self.workflow)
         self.assertIn("github.event.comment.user.login == github.repository_owner", self.workflow)
         self.assertIn("github.event.comment.author_association == 'OWNER'", self.workflow)
+        self.assertIn("startsWith(github.event.comment.body, 'DEPLOY_REVENUE_COMMERCIAL_RUNTIME:')", self.workflow)
         self.assertIn("$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main", self.workflow)
         self.assertIn('expected="DEPLOY_REVENUE_COMMERCIAL_RUNTIME:$main_sha"', self.workflow)
         self.assertIn('test "$COMMENT_BODY" = "$expected"', self.workflow)
@@ -33,8 +34,10 @@ class RevenueCommercialDeployTests(unittest.TestCase):
     def test_vm_host_identity_is_pinned_not_tofu(self):
         self.assertIn("secrets.VM_SSH_KNOWN_HOSTS", self.workflow)
         self.assertIn("VM_SSH_KNOWN_HOSTS is not configured", self.workflow)
-        self.assertIn("FOUNDATION_VM_HOST_IDENTITY=PINNED", self.workflow)
+        self.assertIn("FOUNDATION_VM_HOST_IDENTITY=PINNED alias=foundation-vm", self.workflow)
+        self.assertIn("HostKeyAlias=foundation-vm", self.workflow)
         self.assertIn("StrictHostKeyChecking=yes", self.workflow)
+        self.assertIn("foundation-vm host-key alias entry", self.workflow)
         self.assertIn('ssh-keygen -l -f "$HOME/.ssh/known_hosts"', self.workflow)
         self.assertNotIn("ssh-keyscan", self.workflow)
 

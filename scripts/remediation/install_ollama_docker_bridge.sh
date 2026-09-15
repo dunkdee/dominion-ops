@@ -198,11 +198,13 @@ restore_prior_state() {
       $SUDO systemctl start dominion-ollama-docker.socket >/dev/null 2>&1 || return 1
     fi
     if [ "$PREV_SERVICE_ACTIVE" = "active" ] && [ "$PREV_SOCKET_ACTIVE" = "active" ]; then
-      $SUDO docker exec "$GATEWAY_CONTAINER" sh -lc \
-        'python3 - <<"PY" 2>/dev/null || python - <<"PY"
-import urllib.request
-urllib.request.urlopen("http://host.docker.internal:11434/api/tags", timeout=5).read(1)
-PY' >/dev/null 2>&1 || true
+      prior_pybin="$($SUDO docker exec "$GATEWAY_CONTAINER" sh -lc \
+        'command -v python3 || command -v python' 2>/dev/null | head -1 | tr -d '\r')"
+      if [ -n "$prior_pybin" ]; then
+        $SUDO docker exec "$GATEWAY_CONTAINER" "$prior_pybin" -c \
+          'import urllib.request; urllib.request.urlopen("http://host.docker.internal:11434/api/tags", timeout=5).read(1)' \
+          >/dev/null 2>&1 || true
+      fi
     fi
     say "  prior_adapter_restore=PASS"
   else
@@ -232,6 +234,7 @@ on_exit() {
   rc="$1"
   if [ "$MUTATION_ARMED" -eq 1 ] && [ "$MUTATION_COMMITTED" -eq 0 ]; then
     say "  interruption_or_failure_detected=YES rc=$rc"
+    [ "$rc" -ne 0 ] || rc=3
     rollback
   fi
   return "$rc"

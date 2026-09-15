@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from .core import evaluate_treatment
+from .core import deterministic_variant, evaluate_treatment
 from .store import RevenueStore
 from . import wix_adapter
 
@@ -58,7 +58,7 @@ def reconcile_paid_orders(store: RevenueStore, policy: dict[str, Any]) -> list[d
             visitor_id = candidate["visitor_id"]
             variant = candidate["variant"]
             event_id = f"wix-order:{order_id}:{exp['id']}"
-            store.record_event(
+            inserted = store.record_event(
                 event_id=event_id,
                 experiment_id=exp["id"],
                 visitor_id=visitor_id,
@@ -82,7 +82,68 @@ def reconcile_paid_orders(store: RevenueStore, policy: dict[str, Any]) -> list[d
                 "status": "attributed",
                 "variant": variant,
                 "revenue_cents": revenue_cents,
+                "event_inserted": inserted,
+                "receipt": "SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT=PASS",
             })
+    return receipts
+
+
+def reconcile_refunds(store: RevenueStore) -> list[dict[str, Any]]:
+    """Attach provider-confirmed Wix refunds to previously attributed purchases.
+
+    A refund can never create attribution. It is accepted only when a prior
+    fail-closed order reconciliation already linked the order to one experiment
+    and visitor. Event IDs include Wix refund/payment identities, so repeated
+    evaluator cycles are idempotent.
+    """
+    receipts: list[dict[str, Any]] = []
+    for order in wix_adapter.search_recent_refunded_orders(limit=100):
+        order_id = str(order.get("id") or "")
+        if not order_id:
+            continue
+        reconciliations = store.attributed_reconciliations_for_order(order_id)
+        if not reconciliations:
+            continue
+        refunds = wix_adapter.get_succeeded_refunds(order_id)
+        for link in reconciliations:
+            exp_id = str(link["experiment_id"])
+            visitor_id = str(link.get("visitor_id") or "")
+            if not visitor_id:
+                continue
+            exp = store.get_experiment(exp_id)
+            variant = deterministic_variant(exp_id, visitor_id, int(exp["treatment_pct"]))
+            for refund in refunds:
+                refund_id = str(refund["refund_id"])
+                payment_id = str(refund["payment_id"])
+                refund_cents = int(refund["refund_cents"])
+                event_id = f"wix-refund:{refund_id}:{payment_id}:{exp_id}"
+                inserted = store.record_event(
+                    event_id=event_id,
+                    experiment_id=exp_id,
+                    visitor_id=visitor_id,
+                    variant=variant,
+                    event_type="refund",
+                    revenue_cents=refund_cents,
+                    metadata={
+                        "source": "wix_refund",
+                        "order_id": order_id,
+                        "refund_id": refund_id,
+                        "payment_id": payment_id,
+                        "external_refund": bool(refund.get("external_refund", False)),
+                    },
+                    occurred_at=str(refund.get("created_date") or "") or None,
+                )
+                if not inserted:
+                    continue
+                receipts.append({
+                    "order_id": order_id,
+                    "experiment_id": exp_id,
+                    "refund_id": refund_id,
+                    "status": "refund_attributed",
+                    "variant": variant,
+                    "refund_cents": refund_cents,
+                    "receipt": "ORDER_REFUND_ATTRIBUTION_RECEIPT=PASS",
+                })
     return receipts
 
 
@@ -142,8 +203,13 @@ def run_cycle(db_path: str | Path) -> dict[str, Any]:
     policy = load_policy()
     store = RevenueStore(db_path)
     reconciled = reconcile_paid_orders(store, policy)
+    refunds_reconciled = reconcile_refunds(store)
     evaluated = [evaluate_one(store, exp["id"], policy) for exp in store.list_experiments("active")]
-    return {"reconciled": reconciled, "evaluated": evaluated}
+    return {
+        "reconciled": reconciled,
+        "refunds_reconciled": refunds_reconciled,
+        "evaluated": evaluated,
+    }
 
 
 def main() -> int:
@@ -154,6 +220,19 @@ def main() -> int:
         print(json.dumps({"DOMINION_REVENUE_CYCLE": "FAIL", "error": type(exc).__name__}, sort_keys=True))
         return 2
     print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+    for item in receipt["reconciled"]:
+        if item.get("status") == "attributed":
+            print(
+                "SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT=PASS "
+                f"order_id={item['order_id']} experiment_id={item['experiment_id']} "
+                f"variant={item['variant']} revenue_cents={item['revenue_cents']}"
+            )
+    for item in receipt["refunds_reconciled"]:
+        print(
+            "ORDER_REFUND_ATTRIBUTION_RECEIPT=PASS "
+            f"order_id={item['order_id']} experiment_id={item['experiment_id']} "
+            f"refund_id={item['refund_id']} refund_cents={item['refund_cents']}"
+        )
     print("DOMINION_REVENUE_CYCLE=PASS")
     return 0
 

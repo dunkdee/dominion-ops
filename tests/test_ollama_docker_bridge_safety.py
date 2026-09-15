@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import subprocess
 
 
@@ -11,10 +12,13 @@ def test_bridge_script_bash_syntax():
 
 def test_bridge_cannot_start_governed_ollama_by_dependency():
     text = SCRIPT.read_text(encoding="utf-8")
-    marker = "Description=Dominion Docker-to-loopback Ollama proxy"
-    assert marker in text
-    service_block = text.split(marker, 1)[1].split("\nUNIT", 1)[0]
-    service_lines = {line.strip() for line in service_block.splitlines()}
+    match = re.search(
+        r'if ! \$SUDO tee "\$SERVICE_UNIT" >/dev/null <<UNIT\n(?P<unit>.*?)\nUNIT\nthen',
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, "generated SERVICE_UNIT heredoc was not found"
+    service_lines = {line.strip() for line in match.group("unit").splitlines()}
     assert "Requisite=ollama.service" in service_lines
     assert "Requires=ollama.service" not in service_lines
     assert "adapter_dependency_fail_closed=PASS" in text

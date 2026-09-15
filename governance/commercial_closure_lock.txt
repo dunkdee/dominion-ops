@@ -1,0 +1,3 @@
+COMMERCIAL_CLOSURE_SEQUENCE_LOCKED
+inventory_truth -> infrastructure_repair -> buddy_production_readiness -> first_verified_revenue_loop -> controlled_scale
+No stage may be skipped by self-report or inference.

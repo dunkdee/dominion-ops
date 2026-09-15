@@ -36,6 +36,10 @@ class RevenueSnapshotWorkflowTests(unittest.TestCase):
         self.assertNotIn('skipping snapshot', text)
         self.assertNotIn('Gateway unreachable — skipping', text)
 
+    def test_snapshot_job_is_bound_to_production_environment_secret_scope(self):
+        text = WORKFLOW.read_text(encoding='utf-8')
+        self.assertIn('environment: foundation-vm-production', text)
+
     def test_owner_authorized_runtime_trigger_is_fail_closed_and_not_push_driven(self):
         text = WORKFLOW.read_text(encoding='utf-8')
 

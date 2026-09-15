@@ -36,6 +36,13 @@ class RevenueCommercialDeployTests(unittest.TestCase):
         self.assertLess(trap_pos, installer_pos)
         self.assertIn("REVENUE_COMMERCIAL_ROLLBACK=COMPLETE", self.deploy)
 
+    def test_rollback_backups_preserve_original_ownership(self):
+        self.assertIn('sudo cp -a "$src" "$rollback_root/$name"', self.deploy)
+        self.assertNotIn('sudo chown -R "$(id -u):$(id -g)" "$rollback_root/$name"', self.deploy)
+        self.assertIn('sudo test -e "$rollback_root/$name"', self.deploy)
+        self.assertIn('sudo cp -a "$rollback_root/$name" "$dst"', self.deploy)
+        self.assertIn('sudo rm -rf -- "$old"', self.deploy)
+
     def test_commercial_mode_disables_auto_cro_before_installer(self):
         disable_pos = self.deploy.index("Environment=DOMINION_REVENUE_RUNTIME_ENABLED=0")
         installer_pos = self.deploy.index('bash "$asset_root/scripts/revenue_runtime/install_revenue_runtime.sh"')
@@ -43,6 +50,13 @@ class RevenueCommercialDeployTests(unittest.TestCase):
         self.assertIn("REVENUE_AUTO_CRO=DISABLED", self.deploy)
         self.assertIn("execution_enabled", self.deploy)
         self.assertIn("is False", self.deploy)
+
+    def test_public_event_ingress_is_removed_before_legacy_installer(self):
+        preharden_pos = self.deploy.index("REVENUE_PUBLIC_EVENT_INGRESS_PREHARDENED=PASS")
+        installer_pos = self.deploy.index('bash "$asset_root/scripts/revenue_runtime/install_revenue_runtime.sh"')
+        self.assertLess(preharden_pos, installer_pos)
+        self.assertIn("safe_block", self.deploy)
+        self.assertIn("@dominion_revenue_public path /r /r/*", self.deploy)
 
     def test_deployment_restarts_service_and_proves_exact_asset_parity(self):
         self.assertIn('sudo systemctl restart "$service_name"', self.deploy)

@@ -22,6 +22,7 @@ jobs:
       )
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    environment: foundation-vm-production
     steps:
       - name: Prove owner-authorized execution boundary
         if: github.event_name == 'issue_comment'

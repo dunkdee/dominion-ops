@@ -1,0 +1,22 @@
+{
+  "policy": "commercial_closure_gate_v1",
+  "state_version": 1,
+  "commercial_ready": false,
+  "gates": {
+    "inventory_truth": {"status": "BLOCKED", "reason": "canonical inventory #81 not yet reconciled to current runtime evidence"},
+    "infrastructure": {"status": "BLOCKED", "reason": "Ollama/DeerFlow bridge safety repair pending PR CI and runtime proof"},
+    "security": {"status": "BLOCKED", "reason": "Buddy and privileged execution security gates remain open under #101"},
+    "backup_restore": {"status": "BLOCKED", "reason": "current restore proof not yet reconciled for full commercial closure"},
+    "buddy_execution": {"status": "BLOCKED", "reason": "Buddy production readiness #101 remains open"},
+    "storefront": {"status": "BLOCKED", "reason": "commercial checkout proof is incomplete"},
+    "payments": {"status": "BLOCKED", "reason": "live payment readiness and transaction receipt remain open under #305"},
+    "order_receipt": {"status": "BLOCKED", "reason": "authorized real-order canary not yet evidenced"},
+    "refund_receipt": {"status": "BLOCKED", "reason": "governed refund canary not yet evidenced"},
+    "attribution": {"status": "BLOCKED", "reason": "source-to-order attribution receipt remains open under #305"},
+    "traffic": {"status": "BLOCKED", "reason": "controlled traffic scale waits on verified revenue loop"},
+    "observability": {"status": "BLOCKED", "reason": "commercial closure observability has not yet been reconciled end to end"},
+    "customer_policies": {"status": "BLOCKED", "reason": "customer-facing commercial policy closure not yet re-verified"},
+    "revenue_receipt": {"status": "BLOCKED", "reason": "canonical revenue measurement needs current runtime receipt"},
+    "rollback_recovery": {"status": "BLOCKED", "reason": "bridge and full commercial lane rollback proofs are not yet closed"}
+  }
+}

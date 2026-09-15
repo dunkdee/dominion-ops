@@ -66,16 +66,18 @@ jobs:
           probe https://shop.dominionhealing.org/ '200' SHOP_SITE
           probe https://buddy.dominionhealing.org/buddy '401' BUDDY_GATED
 
-          # The gate must answer with something a phone can log in with.
+          # The unauthenticated 401 response must still carry the phone login UI.
           curl -sS --max-time 25 https://buddy.dominionhealing.org/buddy -o /tmp/buddy_gate.html || true
           if grep -q '/buddy/api/login' /tmp/buddy_gate.html; then
             echo 'BUDDY_PHONE_LOGIN_SCREEN=SERVED'
           else
-            echo 'BUDDY_PHONE_LOGIN_SCREEN=NOT_DEPLOYED (release not yet on main)'
+            fail=1
+            echo '::error::BUDDY_PHONE_LOGIN_SCREEN=NOT_SERVED'
           fi
 
           probe https://buddy.dominionhealing.org/buddy/login '200 401 404' BUDDY_LOGIN_ROUTE
           test "$fail" -eq 0
+          echo 'BUDDY_PUBLIC_PATH_ACCEPTANCE=PASS'
 
   runtime:
     name: VM read-only truth
@@ -112,30 +114,35 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/id_vm -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$VM_USER@$VM_HOST" 'bash -se' <<'REMOTE'
-          set -u
+          set -euo pipefail
           BUDDY_DIR="$HOME/buddy_core"
 
           echo '=== BUDDY WEB SERVICE ==='
-          systemctl is-active dominion-buddy-web.service || true
+          systemctl is-active --quiet dominion-buddy-web.service
+          echo 'BUDDY_WEB_SERVICE=ACTIVE'
 
           echo '=== TOKEN RESOLUTION (NAMES AND BOOLEANS ONLY) ==='
-          if [ -f "$BUDDY_DIR/core/token_resolver.py" ]; then
-            "$HOME/dominion_env/bin/python3" - "$BUDDY_DIR" <<'PY' || echo 'TOKEN_RESOLVER_PROBE=ERROR'
+          test -f "$BUDDY_DIR/core/token_resolver.py" || {
+            echo 'TOKEN_RESOLVER_DEPLOYED=NO'
+            exit 30
+          }
+          "$HOME/dominion_env/bin/python3" - "$BUDDY_DIR" <<'PY'
           import json, sys
           from pathlib import Path
           runtime = Path(sys.argv[1])
           sys.path.insert(0, str(runtime))
           from core.token_resolver import resolve_buddy_web_token
           report = resolve_buddy_web_token(home=runtime.parent).report()
-          print('TOKEN_REPORT=' + json.dumps(report, sort_keys=True))
-          print('TOKEN_CONFLICT_RESOLVED=' + ('NO' if report['conflict'] or report['duplicate_sources'] else 'YES'))
+          safe = {k: v for k, v in report.items() if k != 'token'}
+          print('TOKEN_REPORT=' + json.dumps(safe, sort_keys=True))
+          if not report.get('configured'):
+              raise SystemExit('BUDDY_WEB_TOKEN is not configured')
+          if report.get('conflict'):
+              raise SystemExit('BUDDY_WEB_TOKEN source conflict detected')
+          if report.get('duplicate_sources'):
+              raise SystemExit('duplicate BUDDY_WEB_TOKEN sources detected')
+          print('TOKEN_CONFLICT_RESOLVED=YES')
           PY
-          else
-            echo 'TOKEN_RESOLVER_DEPLOYED=NO (release not yet on main)'
-            for f in "$BUDDY_DIR/.env" "$HOME/conductor/.env" "$HOME/.env"; do
-              [ -f "$f" ] && echo "$(basename "$(dirname "$f")")/$(basename "$f") BUDDY_WEB_TOKEN assignments=$(grep -c '^[[:space:]]*\(export[[:space:]]\+\)\?BUDDY_WEB_TOKEN=' "$f" || true)"
-            done
-          fi
 
           echo '=== SUDO / SYSTEMD ENVIRONMENT DIAGNOSTIC (READ ONLY, NO SECRET VALUES) ==='
           sudo -n true 2>/dev/null && echo 'SUDO_NOPASSWD=YES' || echo 'SUDO_NOPASSWD=NO'
@@ -148,25 +155,24 @@ jobs:
           fi
           buddy_pid="$(systemctl show -p MainPID --value dominion-buddy-web.service 2>/dev/null || true)"
           echo "BUDDY_WEB_MAIN_PID=${buddy_pid:-0}"
-          if [ -n "${buddy_pid:-}" ] && [ "${buddy_pid}" != '0' ]; then
-            if sudo -n test -r "/proc/$buddy_pid/environ" 2>/dev/null; then
-              echo 'PROC_ENVIRON_READABLE=YES'
-              if sudo -n tr '\0' '\n' < "/proc/$buddy_pid/environ" 2>/dev/null | grep -q '^BUDDY_WEB_TOKEN='; then
-                echo 'BUDDY_WEB_TOKEN_IN_PROC_ENVIRON=YES'
-              else
-                echo 'BUDDY_WEB_TOKEN_IN_PROC_ENVIRON=NO (loaded at runtime via dotenv, not exec-time env)'
-              fi
+          test -n "${buddy_pid:-}" && test "$buddy_pid" != '0'
+          if sudo -n test -r "/proc/$buddy_pid/environ" 2>/dev/null; then
+            echo 'PROC_ENVIRON_READABLE=YES'
+            if sudo -n tr '\0' '\n' < "/proc/$buddy_pid/environ" 2>/dev/null | grep -q '^BUDDY_WEB_TOKEN='; then
+              echo 'BUDDY_WEB_TOKEN_IN_PROC_ENVIRON=YES'
             else
-              echo 'PROC_ENVIRON_READABLE=NO (sudo denied or requires a password non-interactively)'
+              echo 'BUDDY_WEB_TOKEN_IN_PROC_ENVIRON=NO (loaded at runtime via dotenv, not exec-time env)'
             fi
+          else
+            echo 'PROC_ENVIRON_READABLE=NO (diagnostic only; resolver remains authoritative)'
           fi
 
           echo '=== PHONE LOGIN LIVE PROBE (LOOPBACK, READ ONLY) ==='
-          if grep -q 'DOMINION_BUDDY_PHONE_AUTH_V1' "$BUDDY_DIR/buddy_web.py" 2>/dev/null; then
-            # The token is loaded at runtime via python-dotenv, which never
-            # shows up in /proc/pid/environ (exec-time snapshot only) — use
-            # the deployed resolver instead, same source of truth the app uses.
-            token="$("$HOME/dominion_env/bin/python3" - "$BUDDY_DIR" <<'PY'
+          grep -q 'DOMINION_BUDDY_PHONE_AUTH_V1' "$BUDDY_DIR/buddy_web.py" || {
+            echo 'PHONE_LOGIN_DEPLOYED=NO'
+            exit 31
+          }
+          token="$("$HOME/dominion_env/bin/python3" - "$BUDDY_DIR" <<'PY'
           import sys
           from pathlib import Path
           runtime = Path(sys.argv[1])
@@ -175,38 +181,57 @@ jobs:
           sys.stdout.write(resolve_buddy_web_token(home=runtime.parent).token)
           PY
           )"
-            gate="$(curl -sS -o /tmp/gate.html -w '%{http_code}' --max-time 10 http://127.0.0.1:5070/buddy || true)"
-            echo "UNAUTH_GATE=$gate"
-            grep -q '/buddy/api/login' /tmp/gate.html && echo 'LOGIN_SCREEN_SERVED=YES' || echo 'LOGIN_SCREEN_SERVED=NO'
-            login="$(curl -sS -c /tmp/jar.txt -o /tmp/login.json -w '%{http_code}' --max-time 10 \
-              -H 'Content-Type: application/json' \
-              -d "{\"passcode\":\"$token\"}" http://127.0.0.1:5070/buddy/api/login || true)"
-            echo "LOGIN_EXCHANGE=$login"
-            grep -q 'buddy_session' /tmp/jar.txt && echo 'SESSION_COOKIE_ISSUED=YES' || echo 'SESSION_COOKIE_ISSUED=NO'
-            dash="$(curl -sS -b /tmp/jar.txt -o /tmp/dash.html -w '%{http_code}' --max-time 10 http://127.0.0.1:5070/buddy || true)"
-            echo "DASHBOARD_WITH_SESSION=$dash"
-            grep -q 'id="messages"' /tmp/dash.html && echo 'EXISTING_DASHBOARD_OPENED=YES' || echo 'EXISTING_DASHBOARD_OPENED=NO'
-            bad="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -H 'Content-Type: application/json' \
-              -d '{"passcode":"definitely-not-the-passcode"}' http://127.0.0.1:5070/buddy/api/login || true)"
-            echo "WRONG_PASSCODE_REJECTED=$bad"
-            rm -f /tmp/jar.txt /tmp/login.json /tmp/gate.html /tmp/dash.html
-            unset token
-          else
-            echo 'PHONE_LOGIN_DEPLOYED=NO (release not yet on main)'
-            curl -sS -o /dev/null -w 'UNAUTH_GATE=%{http_code}\n' --max-time 10 http://127.0.0.1:5070/buddy || true
-          fi
+          test -n "$token"
+
+          gate="$(curl -sS -o /tmp/gate.html -w '%{http_code}' --max-time 10 http://127.0.0.1:5070/buddy || true)"
+          echo "UNAUTH_GATE=$gate"
+          test "$gate" = '401'
+          grep -q '/buddy/api/login' /tmp/gate.html
+          echo 'LOGIN_SCREEN_SERVED=YES'
+
+          login="$(curl -sS -c /tmp/jar.txt -o /tmp/login.json -w '%{http_code}' --max-time 10 \
+            -H 'Content-Type: application/json' \
+            -d "{\"passcode\":\"$token\"}" http://127.0.0.1:5070/buddy/api/login || true)"
+          echo "LOGIN_EXCHANGE=$login"
+          test "$login" = '200'
+          grep -q 'buddy_session' /tmp/jar.txt
+          echo 'SESSION_COOKIE_ISSUED=YES'
+
+          dash="$(curl -sS -b /tmp/jar.txt -o /tmp/dash.html -w '%{http_code}' --max-time 10 http://127.0.0.1:5070/buddy || true)"
+          echo "DASHBOARD_WITH_SESSION=$dash"
+          test "$dash" = '200'
+          grep -q 'id="messages"' /tmp/dash.html
+          echo 'EXISTING_DASHBOARD_OPENED=YES'
+
+          bad="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -H 'Content-Type: application/json' \
+            -d '{"passcode":"definitely-not-the-passcode"}' http://127.0.0.1:5070/buddy/api/login || true)"
+          echo "WRONG_PASSCODE_REJECTED=$bad"
+          test "$bad" = '401'
+          rm -f /tmp/jar.txt /tmp/login.json /tmp/gate.html /tmp/dash.html
+          unset token
 
           echo '=== OBSIDIAN COMMAND CENTER ==='
-          docker inspect obsidian-remote --format 'obsidian-remote={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 2>/dev/null || echo 'obsidian-remote=ABSENT'
-          docker inspect dominion-command-center --format 'dominion-command-center={{.State.Status}}' 2>/dev/null || echo 'dominion-command-center=ABSENT'
-          curl -sS -o /tmp/cc.json -w 'COMMAND_CENTER_HEALTH=%{http_code}\n' --max-time 10 http://127.0.0.1:8091/health || true
-          python3 - <<'PY' 2>/dev/null || true
+          obsidian_state="$(docker inspect obsidian-remote --format '{{.State.Status}}' 2>/dev/null || true)"
+          obsidian_health="$(docker inspect obsidian-remote --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 2>/dev/null || true)"
+          command_center_state="$(docker inspect dominion-command-center --format '{{.State.Status}}' 2>/dev/null || true)"
+          echo "obsidian-remote=$obsidian_state health=$obsidian_health"
+          echo "dominion-command-center=$command_center_state"
+          test "$obsidian_state" = 'running'
+          test "$obsidian_health" = 'healthy'
+          test "$command_center_state" = 'running'
+
+          cc_code="$(curl -sS -o /tmp/cc.json -w '%{http_code}' --max-time 10 http://127.0.0.1:8091/health || true)"
+          echo "COMMAND_CENTER_HEALTH=$cc_code"
+          test "$cc_code" = '200'
+          python3 - <<'PY'
           import json
           s = json.load(open('/tmp/cc.json'))
+          if s.get('status') != 'ok':
+              raise SystemExit('Command Center status is not ok')
           print('COMMAND_CENTER_STATUS=' + json.dumps({k: s.get(k) for k in ('status', 'truth', 'systems') if k in s}, sort_keys=True)[:600])
           PY
-          systemctl is-active dominion-command-center-state.service 2>/dev/null || true
 
+          echo 'BUDDY_RUNTIME_ACCEPTANCE=PASS'
           echo '=== READ-ONLY VERIFICATION COMPLETE: NO VM MUTATIONS PERFORMED ==='
           REMOTE
 

@@ -143,3 +143,155 @@ jobs:
       - name: Cleanup temporary SSH material
         if: always()
         run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"
+
+  publisher_snapshot:
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.number == 305 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.author_association == 'OWNER' &&
+      startsWith(github.event.comment.body, 'RUN_PUBLISHER_SNAPSHOT:')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: foundation-vm-production
+    concurrency:
+      group: foundation-vm-production
+      cancel-in-progress: false
+    steps:
+      - name: Prove owner-authorized Publisher snapshot boundary
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$ISSUE_NUMBER" = "305" || { echo "ERROR: Publisher snapshot authorization must originate from issue 305"; exit 1; }
+          test "$COMMENT_USER" = "$REPOSITORY_OWNER" || { echo "ERROR: Publisher snapshot actor is not repository owner"; exit 1; }
+          test "$AUTHOR_ASSOCIATION" = "OWNER" || { echo "ERROR: Publisher snapshot lacks OWNER association"; exit 1; }
+
+          main_sha="$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | jq -r '.sha')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "ERROR: unable to resolve current main SHA"; exit 1; }
+          expected="RUN_PUBLISHER_SNAPSHOT:$main_sha"
+          test "$COMMENT_BODY" = "$expected" || {
+            echo "ERROR: Publisher snapshot authorization is not bound to current main"
+            echo "expected_token=$expected"
+            exit 1
+          }
+          echo "PUBLISHER_SNAPSHOT_AUTHORIZATION=PASS actor=$COMMENT_USER issue=$ISSUE_NUMBER main_sha=$main_sha"
+
+      - name: Require Foundation VM connection material
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "ERROR: VM_HOST is not configured"; exit 1; }
+          test -n "$VM_USER" || { echo "ERROR: VM_USER is not configured"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "ERROR: VM_SSH_KEY is not configured"; exit 1; }
+          test -n "$VM_SSH_KNOWN_HOSTS" || { echo "ERROR: VM_SSH_KNOWN_HOSTS is not configured"; exit 1; }
+
+      - name: Prepare pinned SSH trust
+        env:
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          printf '%s\n' "$VM_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          grep -Eq '^foundation-vm[[:space:]]+(ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa)[[:space:]]+' "$HOME/.ssh/known_hosts" || {
+            echo "ERROR: VM_SSH_KNOWN_HOSTS must contain a foundation-vm host-key alias entry"
+            exit 1
+          }
+          ssh-keygen -l -f "$HOME/.ssh/known_hosts" >/dev/null
+          echo "FOUNDATION_VM_HOST_IDENTITY=PINNED alias=foundation-vm"
+
+      - name: Read live Publisher health and Meta binding state
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          receipt="$(ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=20 \
+            -o IdentitiesOnly=yes \
+            -o HostKeyAlias=foundation-vm \
+            -o StrictHostKeyChecking=yes \
+            "$VM_USER@$VM_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          service_state="$(systemctl is-active dominion-publisher.service 2>/dev/null || true)"
+          service_enabled="$(systemctl is-enabled dominion-publisher.service 2>/dev/null || true)"
+          test "$service_state" = "active" || { echo "ERROR: dominion-publisher.service is not active" >&2; exit 20; }
+          test "$service_enabled" = "enabled" || { echo "ERROR: dominion-publisher.service is not enabled" >&2; exit 21; }
+          health="$(curl -fsS --max-time 10 http://127.0.0.1:5112/health)"
+          python3 - "$health" "$service_state" "$service_enabled" <<'PY'
+          import json
+          import sys
+
+          h = json.loads(sys.argv[1])
+          assert h.get("status") == "ok"
+          assert h.get("service") == "dominion-publisher"
+          assert h.get("operator_gate_configured") is True
+          counts = h.get("meta_bound_counts")
+          assert isinstance(counts, dict)
+          facebook = counts.get("facebook")
+          instagram = counts.get("instagram")
+          assert isinstance(facebook, int) and facebook >= 0
+          assert isinstance(instagram, int) and instagram >= 0
+          app_configured = h.get("meta_app_configured") is True
+          token_configured = h.get("meta_token_configured") is True
+          if not app_configured:
+              phase = "AWAITING_META_APP_CONFIGURATION"
+          elif not token_configured:
+              phase = "AWAITING_META_ACCOUNT_BINDING"
+          else:
+              phase = "META_ACCOUNT_BOUND"
+          receipt = {
+              "service_active": sys.argv[2] == "active",
+              "service_enabled": sys.argv[3] == "enabled",
+              "health_status": h["status"],
+              "operator_gate_configured": True,
+              "meta_app_configured": app_configured,
+              "meta_token_configured": token_configured,
+              "facebook_bound_count": facebook,
+              "instagram_bound_count": instagram,
+              "phase": phase,
+          }
+          print(json.dumps(receipt, sort_keys=True))
+          PY
+          REMOTE
+          )"
+
+          python3 - "$receipt" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          receipt = json.loads(sys.argv[1])
+          Path("publisher-snapshot.json").write_text(json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8")
+          print(
+              "PUBLISHER_SNAPSHOT_RECEIPT=PASS "
+              f"phase={receipt['phase']} "
+              f"meta_app={str(receipt['meta_app_configured']).lower()} "
+              f"meta_bound={str(receipt['meta_token_configured']).lower()} "
+              f"facebook={receipt['facebook_bound_count']} "
+              f"instagram={receipt['instagram_bound_count']} "
+              f"service_active={str(receipt['service_active']).lower()}"
+          )
+          PY
+          cat publisher-snapshot.json
+
+      - name: Cleanup temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

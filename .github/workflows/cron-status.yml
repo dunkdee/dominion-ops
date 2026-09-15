@@ -1,74 +1,94 @@
 name: Empire Status Snapshot
 
 on:
-  schedule: [{ cron: "*/30 * * * *" }]
+  schedule:
+    - cron: "17 */3 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   snapshot:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Revenue snapshot integrity gate
+      - name: Require Foundation VM connection material
         env:
-          GATEWAY: ${{ secrets.N8N_AGENT_GATEWAY_URL }}
-          N8N_TOOL_SECRET: ${{ secrets.N8N_TOOL_SECRET }}
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "ERROR: VM_HOST is not configured"; exit 1; }
+          test -n "$VM_USER" || { echo "ERROR: VM_USER is not configured"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "ERROR: VM_SSH_KEY is not configured"; exit 1; }
+
+      - name: Prepare SSH
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Read canonical purchase and revenue evidence
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
         run: |
           set -euo pipefail
 
-          if [ -z "${GATEWAY:-}" ]; then
-            echo "ERROR: N8N_AGENT_GATEWAY_URL is not configured"
-            exit 1
-          fi
-          if [[ ! "$GATEWAY" =~ ^https?://[^[:space:]]+$ ]]; then
-            echo "ERROR: N8N_AGENT_GATEWAY_URL is malformed"
-            exit 1
-          fi
-          if [ -z "${N8N_TOOL_SECRET:-}" ]; then
-            echo "ERROR: N8N_TOOL_SECRET is not configured"
-            exit 1
-          fi
+          row="$(ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=20 \
+            -o IdentitiesOnly=yes \
+            "$VM_USER@$VM_HOST" \
+            'set -euo pipefail
+             sudo docker inspect dominion-db >/dev/null
+             sudo docker exec dominion-db psql \
+               -v ON_ERROR_STOP=1 \
+               -U dominion \
+               -d dominion \
+               -At \
+               -F "|" \
+               -c "SELECT COUNT(*)::bigint, COALESCE(SUM(amount_cents), 0)::bigint FROM orders WHERE amount_cents IS NOT NULL AND amount_cents > 0;"')"
 
-          curl --fail --show-error --location --max-time 10 -X POST "$GATEWAY" \
-            -H "X-AGENT-KEY: ${N8N_TOOL_SECRET}" \
-            -H "Content-Type: application/json" \
-            -d '{"tool":"roi_snapshot","args":{"since":"7d","metrics":["revenue","orders"]}}' \
-            > snapshot.json
+          IFS='|' read -r purchase_count revenue_cents extra <<< "$row"
+          test -z "${extra:-}" || { echo "ERROR: canonical revenue query returned an unexpected shape"; exit 1; }
+          [[ "$purchase_count" =~ ^[0-9]+$ ]] || { echo "ERROR: purchase_count must be a non-negative integer"; exit 1; }
+          [[ "$revenue_cents" =~ ^[0-9]+$ ]] || { echo "ERROR: revenue_cents must be a non-negative integer"; exit 1; }
 
-          python - <<'PY'
+          python3 - "$purchase_count" "$revenue_cents" <<'PY'
           import json
+          import sys
           from pathlib import Path
 
-          payload = json.loads(Path("snapshot.json").read_text(encoding="utf-8"))
-          if not isinstance(payload, dict):
-              raise SystemExit("ERROR: roi_snapshot response is not a JSON object")
-
-          result = payload.get("result", payload)
-          if not isinstance(result, dict):
-              raise SystemExit("ERROR: roi_snapshot result is not a JSON object")
-
-          purchase_source = result.get("PURCHASE_SOURCE") or result.get("purchase_source")
-          revenue_source = result.get("REVENUE_SOURCE") or result.get("revenue_source")
-          db_available = result.get("db_available")
-
-          if not purchase_source or not revenue_source:
-              raise SystemExit("ERROR: roi_snapshot has no authoritative purchase/revenue provenance")
-          if db_available is not True:
-              raise SystemExit("ERROR: authoritative purchase evidence is unavailable")
-          if "params" in result and not ("purchase_count" in result or "revenue_cents" in result):
-              raise SystemExit("ERROR: legacy roi_snapshot stub signature rejected")
-
-          purchase_count = result.get("purchase_count")
-          revenue_cents = result.get("revenue_cents")
-          if not isinstance(purchase_count, int) or purchase_count < 0:
+          purchase_count = int(sys.argv[1])
+          revenue_cents = int(sys.argv[2])
+          payload = {
+              "PURCHASE_SOURCE": "orders table — dominion-db",
+              "REVENUE_SOURCE": "orders.amount_cents",
+              "db_available": True,
+              "purchase_count": purchase_count,
+              "revenue_cents": revenue_cents,
+          }
+          if purchase_count < 0:
               raise SystemExit("ERROR: purchase_count must be a non-negative integer")
-          if not isinstance(revenue_cents, int) or revenue_cents < 0:
+          if revenue_cents < 0:
               raise SystemExit("ERROR: revenue_cents must be a non-negative integer")
-
-          print("REVENUE_SNAPSHOT_PROVENANCE=PASS")
-          print("REVENUE_SNAPSHOT_RECEIPT=PASS")
+          Path("snapshot.json").write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+          print("REVENUE_SNAPSHOT_PROVENANCE=PASS purchase_source=dominion-db.orders revenue_source=orders.amount_cents")
+          print(f"REVENUE_SNAPSHOT_RECEIPT=PASS purchase_count={purchase_count} revenue_cents={revenue_cents}")
           PY
 
           echo "Snapshot result:"
           cat snapshot.json
+
+      - name: Cleanup temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key"

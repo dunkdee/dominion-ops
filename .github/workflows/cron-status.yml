@@ -17,7 +17,8 @@ jobs:
       (
         github.event.issue.number == 305 &&
         github.event.comment.user.login == github.repository_owner &&
-        github.event.comment.author_association == 'OWNER'
+        github.event.comment.author_association == 'OWNER' &&
+        startsWith(github.event.comment.body, 'RUN_REVENUE_SNAPSHOT:')
       )
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -57,23 +58,31 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           test -n "$VM_HOST" || { echo "ERROR: VM_HOST is not configured"; exit 1; }
           test -n "$VM_USER" || { echo "ERROR: VM_USER is not configured"; exit 1; }
           test -n "$VM_SSH_KEY" || { echo "ERROR: VM_SSH_KEY is not configured"; exit 1; }
+          test -n "$VM_SSH_KNOWN_HOSTS" || { echo "ERROR: VM_SSH_KNOWN_HOSTS is not configured"; exit 1; }
 
-      - name: Prepare SSH
+      - name: Prepare pinned SSH trust
         env:
-          VM_HOST: ${{ secrets.VM_HOST }}
           VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           install -m 700 -d "$HOME/.ssh"
           printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
           chmod 600 "$HOME/.ssh/foundation_vm_key"
-          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          printf '%s\n' "$VM_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
+          grep -Eq '^foundation-vm[[:space:]]+(ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa)[[:space:]]+' "$HOME/.ssh/known_hosts" || {
+            echo "ERROR: VM_SSH_KNOWN_HOSTS must contain a foundation-vm host-key alias entry"
+            exit 1
+          }
+          ssh-keygen -l -f "$HOME/.ssh/known_hosts" >/dev/null
+          echo "FOUNDATION_VM_HOST_IDENTITY=PINNED alias=foundation-vm"
 
       - name: Read canonical purchase and revenue evidence
         env:
@@ -86,6 +95,8 @@ jobs:
             -o BatchMode=yes \
             -o ConnectTimeout=20 \
             -o IdentitiesOnly=yes \
+            -o HostKeyAlias=foundation-vm \
+            -o StrictHostKeyChecking=yes \
             "$VM_USER@$VM_HOST" \
             'set -euo pipefail
              sudo docker inspect dominion-db >/dev/null
@@ -130,4 +141,4 @@ jobs:
 
       - name: Cleanup temporary SSH material
         if: always()
-        run: rm -f "$HOME/.ssh/foundation_vm_key"
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

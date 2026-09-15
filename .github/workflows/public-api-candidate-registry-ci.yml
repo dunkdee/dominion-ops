@@ -1,0 +1,33 @@
+name: Public API Candidate Registry CI
+
+on:
+  push:
+    paths:
+      - "governance/public_api_candidate_registry.json"
+      - "scripts/validate_public_api_candidate_registry.py"
+      - "tests/test_public_api_candidate_registry.py"
+      - ".github/workflows/public-api-candidate-registry-ci.yml"
+  pull_request:
+    paths:
+      - "governance/public_api_candidate_registry.json"
+      - "scripts/validate_public_api_candidate_registry.py"
+      - "tests/test_public_api_candidate_registry.py"
+      - ".github/workflows/public-api-candidate-registry-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Validate registry contract
+        run: python3 scripts/validate_public_api_candidate_registry.py
+
+      - name: Run fail-closed registry tests
+        run: python3 -m unittest tests.test_public_api_candidate_registry -v

@@ -1,0 +1,167 @@
+name: Meta Page Bind — Explicit Approval
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  bind:
+    if: >-
+      github.event.issue.number == 305 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.author_association == 'OWNER' &&
+      startsWith(github.event.comment.body, 'BIND_META_PAGE:')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: foundation-vm-production
+    concurrency:
+      group: foundation-vm-production
+      cancel-in-progress: false
+    steps:
+      - name: Prove exact owner authorization and selected Page
+        id: auth
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$ISSUE_NUMBER" = "305" || { echo "ERROR: Meta Page bind must originate from issue 305"; exit 1; }
+          test "$COMMENT_USER" = "$REPOSITORY_OWNER" || { echo "ERROR: Meta Page bind actor is not repository owner"; exit 1; }
+          test "$AUTHOR_ASSOCIATION" = "OWNER" || { echo "ERROR: Meta Page bind lacks OWNER association"; exit 1; }
+          main_sha="$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | jq -r '.sha')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "ERROR: unable to resolve current main SHA"; exit 1; }
+
+          parsed="$(python3 - "$COMMENT_BODY" "$main_sha" <<'PY'
+          import re
+          import sys
+
+          body, main_sha = sys.argv[1:]
+          match = re.fullmatch(r"BIND_META_PAGE:([0-9a-f]{40}):([0-9]{5,30}):BIND META PAGE", body)
+          if not match:
+              raise SystemExit("ERROR: bind authorization format is invalid")
+          sha, page_id = match.groups()
+          if sha != main_sha:
+              raise SystemExit("ERROR: bind authorization is not bound to current main")
+          print(page_id)
+          PY
+          )"
+          test -n "$parsed" || { echo "ERROR: page id is empty"; exit 1; }
+          echo "page_id=$parsed" >> "$GITHUB_OUTPUT"
+          echo "META_PAGE_BIND_AUTHORIZATION=PASS actor=$COMMENT_USER issue=$ISSUE_NUMBER main_sha=$main_sha page_id=$parsed"
+
+      - name: Checkout exact source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Require Foundation VM connection material
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST" || { echo "ERROR: VM_HOST is not configured"; exit 1; }
+          test -n "$VM_USER" || { echo "ERROR: VM_USER is not configured"; exit 1; }
+          test -n "$VM_SSH_KEY" || { echo "ERROR: VM_SSH_KEY is not configured"; exit 1; }
+          test -n "$VM_SSH_KNOWN_HOSTS" || { echo "ERROR: VM_SSH_KNOWN_HOSTS is not configured"; exit 1; }
+
+      - name: Prepare pinned SSH trust
+        env:
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          printf '%s\n' "$VM_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          grep -Eq '^foundation-vm[[:space:]]+(ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa)[[:space:]]+' "$HOME/.ssh/known_hosts" || {
+            echo "ERROR: VM_SSH_KNOWN_HOSTS must contain a foundation-vm host-key alias entry"
+            exit 1
+          }
+          ssh-keygen -l -f "$HOME/.ssh/known_hosts" >/dev/null
+          echo "FOUNDATION_VM_HOST_IDENTITY=PINNED alias=foundation-vm"
+
+      - name: Bind exactly the approved Meta Page and verify safe account state
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          PAGE_ID: ${{ steps.auth.outputs.page_id }}
+          APPROVED_BY: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          [[ "$PAGE_ID" =~ ^[0-9]{5,30}$ ]] || { echo "ERROR: invalid Page ID"; exit 1; }
+          [[ "$APPROVED_BY" =~ ^[A-Za-z0-9-]{1,39}$ ]] || { echo "ERROR: invalid approver identity"; exit 1; }
+          remote_dir="/tmp/dominion_meta_bind_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          remote_script="$remote_dir/meta_control.sh"
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes \
+            "$VM_USER@$VM_HOST" "install -d -m 700 '$remote_dir'"
+          scp -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes \
+            scripts/dominion_publisher/meta_control.sh \
+            "$VM_USER@$VM_HOST:$remote_script"
+
+          bind_output="$(ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes \
+            "$VM_USER@$VM_HOST" \
+            "chmod 700 '$remote_script' && bash '$remote_script' bind '$PAGE_ID' '$APPROVED_BY'")"
+          accounts_output="$(ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes \
+            "$VM_USER@$VM_HOST" \
+            "bash '$remote_script' accounts")"
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes \
+            "$VM_USER@$VM_HOST" "rm -rf -- '$remote_dir'" || true
+
+          python3 - "$bind_output" "$accounts_output" "$PAGE_ID" "$APPROVED_BY" <<'PY'
+          import json
+          import sys
+
+          bind = json.loads(sys.argv[1])
+          accounts = json.loads(sys.argv[2])
+          page_id = sys.argv[3]
+          approved_by = sys.argv[4]
+          if bind.get("status") != "BOUND":
+              raise SystemExit("ERROR: Meta bind did not return BOUND")
+          binding = bind.get("binding") or {}
+          facebook = binding.get("facebook") or {}
+          if str(facebook.get("account_id")) != page_id:
+              raise SystemExit("ERROR: bound Facebook Page does not match approved Page")
+          if binding.get("approved_by") != approved_by:
+              raise SystemExit("ERROR: binding approver does not match owner actor")
+          fb_accounts = accounts.get("bound_accounts", {}).get("facebook", [])
+          if not any(str(item.get("account_id")) == page_id for item in fb_accounts):
+              raise SystemExit("ERROR: approved Page missing from safe bound-account snapshot")
+          print(
+              "META_PAGE_BIND_RECEIPT=PASS "
+              f"page_id={page_id} "
+              f"page_name={facebook.get('label','')} "
+              f"instagram_bound={str(binding.get('instagram') is not None).lower()} "
+              f"approved_by={approved_by}"
+          )
+          print(json.dumps({"binding": binding, "accounts": accounts}, sort_keys=True))
+          PY
+
+      - name: Cleanup temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

@@ -11,6 +11,8 @@ on:
         description: "Exact 40-character main commit SHA"
         required: true
         type: string
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -22,14 +24,59 @@ concurrency:
 jobs:
   deploy:
     if: >-
-      github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/main' &&
-      inputs.confirm == 'DEPLOY DOMINION PUBLISHER' &&
-      inputs.commit_sha == github.sha
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main' &&
+        inputs.confirm == 'DEPLOY DOMINION PUBLISHER' &&
+        inputs.commit_sha == github.sha
+      ) ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.number == 305 &&
+        github.event.comment.user.login == github.repository_owner &&
+        github.event.comment.author_association == 'OWNER' &&
+        startsWith(github.event.comment.body, 'DEPLOY_PUBLISHER:')
+      )
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: foundation-vm-production
     steps:
+      - name: Prove exact deploy authorization
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          INPUT_CONFIRM: ${{ inputs.confirm }}
+          INPUT_COMMIT_SHA: ${{ inputs.commit_sha }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          main_sha="$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | jq -r '.sha')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'ERROR: unable to resolve current main SHA'; exit 1; }
+          test "$GITHUB_SHA" = "$main_sha" || { echo 'ERROR: workflow source is not current main'; exit 1; }
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            test "$GITHUB_REF" = "refs/heads/main" || { echo 'ERROR: manual deploy must run from main'; exit 1; }
+            test "$INPUT_CONFIRM" = "DEPLOY DOMINION PUBLISHER" || { echo 'ERROR: manual deploy confirmation mismatch'; exit 1; }
+            test "$INPUT_COMMIT_SHA" = "$main_sha" || { echo 'ERROR: manual deploy SHA is not current main'; exit 1; }
+            actor="$GITHUB_ACTOR"
+          else
+            test "$ISSUE_NUMBER" = "305" || { echo 'ERROR: owner deploy command must originate from issue 305'; exit 1; }
+            test "$COMMENT_USER" = "$REPOSITORY_OWNER" || { echo 'ERROR: deploy actor is not repository owner'; exit 1; }
+            test "$AUTHOR_ASSOCIATION" = "OWNER" || { echo 'ERROR: deploy command lacks OWNER association'; exit 1; }
+            expected="DEPLOY_PUBLISHER:$main_sha:DEPLOY DOMINION PUBLISHER"
+            test "$COMMENT_BODY" = "$expected" || { echo 'ERROR: deploy command is not bound to current main'; exit 1; }
+            actor="$COMMENT_USER"
+          fi
+          echo "DOMINION_PUBLISHER_DEPLOY_AUTHORIZATION=PASS actor=$actor main_sha=$main_sha"
+
       - name: Checkout exact release
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
@@ -56,7 +103,8 @@ jobs:
             apps/dominion_publisher/adapters/meta.py
           python -m pytest \
             tests/test_dominion_publisher.py \
-            tests/test_dominion_publisher_meta_binding.py -q
+            tests/test_dominion_publisher_meta_binding.py \
+            tests/test_meta_provider_diagnostics.py -q
           test -s apps/dominion_publisher/requirements.txt
           echo 'DOMINION_PUBLISHER_RELEASE=PASS'
 
@@ -65,12 +113,14 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
         shell: bash
         run: |
           set -euo pipefail
           test -n "$VM_HOST"
           test -n "$VM_USER"
           test -n "$VM_SSH_KEY"
+          test -n "$VM_SSH_KNOWN_HOSTS"
 
       - name: Stage publisher release
         id: stage
@@ -78,18 +128,24 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
         shell: bash
         run: |
           set -euo pipefail
           install -m 700 -d "$HOME/.ssh"
           printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
           chmod 600 "$HOME/.ssh/foundation_vm_key"
-          ssh-keyscan -T 15 -H "$VM_HOST" > "$HOME/.ssh/known_hosts"
+          printf '%s\n' "$VM_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
+          grep -Eq '^foundation-vm[[:space:]]+(ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa)[[:space:]]+' "$HOME/.ssh/known_hosts"
+          ssh-keygen -l -f "$HOME/.ssh/known_hosts" >/dev/null
           bundle="$RUNNER_TEMP/dominion-publisher-${GITHUB_RUN_ID}.tgz"
           remote_bundle="/tmp/dominion-publisher-${GITHUB_RUN_ID}.tgz"
           tar -czf "$bundle" apps/dominion_publisher scripts/dominion_publisher
-          scp -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
+          scp -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+            -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes \
+            "$bundle" "$VM_USER@$VM_HOST:$remote_bundle"
           echo "remote_bundle=$remote_bundle" >> "$GITHUB_OUTPUT"
 
       - name: Deploy loopback-only publisher service and callback route
@@ -100,7 +156,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$VM_USER@$VM_HOST" \
+          ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
+            -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes \
+            "$VM_USER@$VM_HOST" \
             "REMOTE_BUNDLE='$REMOTE_BUNDLE' RUN_SHA='$GITHUB_SHA' bash -s" <<'REMOTE'
           set -Eeuo pipefail
           temp_root="$(mktemp -d)"
@@ -147,6 +207,9 @@ jobs:
         run: |
           set +e
           if [ -f "$HOME/.ssh/foundation_vm_key" ]; then
-            ssh -i "$HOME/.ssh/foundation_vm_key" -o BatchMode=yes -o IdentitiesOnly=yes "$VM_USER@$VM_HOST" "rm -f '$REMOTE_BUNDLE'" >/dev/null 2>&1 || true
+            ssh -i "$HOME/.ssh/foundation_vm_key" \
+              -o BatchMode=yes -o IdentitiesOnly=yes \
+              -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes \
+              "$VM_USER@$VM_HOST" "rm -f '$REMOTE_BUNDLE'" >/dev/null 2>&1 || true
           fi
           rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts" "$RUNNER_TEMP"/dominion-publisher-*.tgz

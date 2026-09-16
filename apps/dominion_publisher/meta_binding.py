@@ -143,13 +143,15 @@ class MetaBindingManager:
     def _exchange_code(self, code: str) -> str:
         app = self._app()
         base = f"https://graph.facebook.com/{app['graph_version']}"
-        response = self.session.post(
+        # Meta's documented Facebook Login manual flow exchanges the returned
+        # authorization code with an HTTP GET to /oauth/access_token. Keep the
+        # request shape exact: client_id, redirect_uri, client_secret and code.
+        response = self.session.get(
             f"{base}/oauth/access_token",
-            data={
-                "grant_type": "authorization_code",
+            params={
                 "client_id": app["app_id"],
-                "client_secret": app["app_secret"],
                 "redirect_uri": app["redirect_uri"],
+                "client_secret": app["app_secret"],
                 "code": code,
             },
             timeout=self.timeout_seconds,

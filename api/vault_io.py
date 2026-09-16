@@ -8,6 +8,7 @@ LANES = {
     "inbox":    "00-inbox",
     "research": "10-research",
     "deals":    "20-deals",
+    "beta":     "25-beta-leads",
     "surplus":  "30-surplus-cases",
     "manual":   "40-manual",
     "meta":     "90-meta",

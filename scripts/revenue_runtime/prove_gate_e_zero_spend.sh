@@ -32,10 +32,13 @@ python3 - "$work/health.json" <<'PY'
 import json,sys
 obj=json.load(open(sys.argv[1], encoding='utf-8'))
 assert obj.get('status') == 'ok', obj
-assert obj.get('execution_enabled') is True, obj
+# Commercial Release 1.0 intentionally keeps automatic CRO disabled. This
+# proof exercises only an owner-authorized, temporary manual experiment and
+# must not turn the production kill switch on.
+assert obj.get('execution_enabled') is False, obj
 assert obj.get('automatic_price_changes') is False, obj
 assert obj.get('automatic_paid_spend') is False, obj
-print('REVENUE_RUNTIME_HEALTH_PROOF=PASS execution_enabled=true price_automation=false paid_spend=false')
+print('REVENUE_RUNTIME_HEALTH_PROOF=PASS execution_enabled=false auto_cro=false price_automation=false paid_spend=false')
 PY
 
 operator_token="$(python3 - "$env_file" <<'PY'
@@ -169,6 +172,6 @@ for variant in ('control','treatment'):
 print(f'GATE_E_ROLLBACK_PROOF=PASS experiment_id={exp} final_state=paused net_revenue_cents=0')
 PY
 
-echo "GATE_E_ZERO_SPEND_RUNTIME_PROOF=PASS experiment_id=$exp_id product_id=$PRODUCT_ID spend_cents=0 purchase_events=0 refund_events=0 external_redirect_followed=false"
+echo "GATE_E_ZERO_SPEND_RUNTIME_PROOF=PASS experiment_id=$exp_id product_id=$PRODUCT_ID spend_cents=0 purchase_events=0 refund_events=0 external_redirect_followed=false auto_cro_enabled=false"
 trap - EXIT INT TERM
 rm -rf "$work"

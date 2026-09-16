@@ -117,20 +117,19 @@ def test_callback_discovers_and_binds_page_and_instagram_without_exposing_token(
             "tasks": ["ANALYZE", "CREATE_CONTENT", "MODERATE"],
         }
     ]
-    assert session.post_calls == [
-        {
-            "url": "https://graph.facebook.com/v25.0/oauth/access_token",
-            "data": {
-                "grant_type": "authorization_code",
-                "client_id": "123456789",
-                "client_secret": "meta-super-secret",
-                "redirect_uri": "https://dominionhealing.org/oauth/meta/callback",
-                "code": "oauth-code",
-            },
-            "timeout": 30,
-        }
-    ]
-    assert "code_verifier" not in session.post_calls[0]["data"]
+    assert session.calls[0] == {
+        "url": "https://graph.facebook.com/v25.0/oauth/access_token",
+        "params": {
+            "client_id": "123456789",
+            "redirect_uri": "https://dominionhealing.org/oauth/meta/callback",
+            "client_secret": "meta-super-secret",
+            "code": "oauth-code",
+        },
+        "timeout": 30,
+    }
+    assert "grant_type" not in session.calls[0]["params"]
+    assert "code_verifier" not in session.calls[0]["params"]
+    assert session.post_calls == []
     assert "page-secret-token" not in repr(candidates)
     binding = vault.bind_page(page_id="fb-page-1", approved_by="founder")
     assert binding["facebook"]["account_id"] == "fb-page-1"

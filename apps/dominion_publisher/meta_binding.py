@@ -133,6 +133,9 @@ class MetaBindingManager:
         config_id = str(app.get("config_id", "")).strip()
         if config_id:
             params["config_id"] = config_id
+            # Login for Business defaults can return a token-shaped response.
+            # Explicitly force the configuration flow to return an exchangeable code.
+            params["override_default_response_type"] = "true"
         else:
             params["scope"] = ",".join(META_SCOPES)
         return f"https://www.facebook.com/{app['graph_version']}/dialog/oauth?{urlencode(params)}"
@@ -143,6 +146,7 @@ class MetaBindingManager:
         response = self.session.post(
             f"{base}/oauth/access_token",
             data={
+                "grant_type": "authorization_code",
                 "client_id": app["app_id"],
                 "client_secret": app["app_secret"],
                 "redirect_uri": app["redirect_uri"],

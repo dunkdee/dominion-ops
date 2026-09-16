@@ -8,8 +8,10 @@ on:
       - 'scripts/revenue_runtime/**'
       - 'tests/test_revenue_execution_runtime.py'
       - 'tests/test_revenue_commercial_deploy.py'
+      - 'tests/test_revenue_gate_e_zero_spend.py'
       - '.github/workflows/revenue-execution-runtime-ci.yml'
       - '.github/workflows/revenue-runtime-commercial-deploy.yml'
+      - '.github/workflows/revenue-gate-e-zero-spend-proof.yml'
   push:
     branches: [main]
     paths:
@@ -18,8 +20,10 @@ on:
       - 'scripts/revenue_runtime/**'
       - 'tests/test_revenue_execution_runtime.py'
       - 'tests/test_revenue_commercial_deploy.py'
+      - 'tests/test_revenue_gate_e_zero_spend.py'
       - '.github/workflows/revenue-execution-runtime-ci.yml'
       - '.github/workflows/revenue-runtime-commercial-deploy.yml'
+      - '.github/workflows/revenue-gate-e-zero-spend-proof.yml'
 
 permissions:
   contents: read
@@ -41,11 +45,14 @@ jobs:
           bash -n scripts/revenue_runtime/install_revenue_runtime.sh
           bash -n scripts/revenue_runtime/disable_revenue_runtime.sh
           bash -n scripts/revenue_runtime/deploy_commercial_release_v1.sh
+          bash -n scripts/revenue_runtime/prove_gate_e_zero_spend.sh
           python -m json.tool governance/revenue_execution_policy.json >/dev/null
       - name: Revenue execution contract tests
         run: python -m unittest tests.test_revenue_execution_runtime -v
       - name: Commercial deployment contract tests
         run: python -m unittest tests.test_revenue_commercial_deploy -v
+      - name: Gate E zero-spend proof contract tests
+        run: python -m unittest tests.test_revenue_gate_e_zero_spend -v
       - name: Preserve original simulation boundary tests
         run: python -m unittest tests.test_revenue_runtime -v
       - name: Static authority assertions
@@ -59,4 +66,6 @@ jobs:
           grep -Fq 'DOMINION_REVENUE_RUNTIME=DISABLED' scripts/revenue_runtime/disable_revenue_runtime.sh
           grep -Fq 'DEPLOY_REVENUE_COMMERCIAL_RUNTIME:' .github/workflows/revenue-runtime-commercial-deploy.yml
           grep -Fq 'REVENUE_COMMERCIAL_RUNTIME_DEPLOY=PASS' scripts/revenue_runtime/deploy_commercial_release_v1.sh
+          grep -Fq 'RUN_GATE_E_ZERO_SPEND:' .github/workflows/revenue-gate-e-zero-spend-proof.yml
+          grep -Fq 'GATE_E_ZERO_SPEND_RUNTIME_PROOF=PASS' scripts/revenue_runtime/prove_gate_e_zero_spend.sh
           echo 'DOMINION_REVENUE_EXECUTION_CI=PASS'

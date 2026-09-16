@@ -18,6 +18,13 @@ class GateEZeroSpendProofTests(unittest.TestCase):
         self.assertIn('StrictHostKeyChecking=yes', text)
         self.assertIn('issues: write', text)
 
+    def test_proof_preserves_commercial_fail_closed_mode(self):
+        text = SCRIPT.read_text(encoding='utf-8')
+        self.assertIn("obj.get('execution_enabled') is False", text)
+        self.assertIn('auto_cro=false', text)
+        self.assertIn('auto_cro_enabled=false', text)
+        self.assertNotIn("obj.get('execution_enabled') is True", text)
+
     def test_proof_forbids_spend_and_external_redirect_follow(self):
         text = SCRIPT.read_text(encoding='utf-8')
         self.assertIn("'treatment_pct': 0", text)

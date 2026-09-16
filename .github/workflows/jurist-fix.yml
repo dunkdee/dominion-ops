@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Repair Jurist service and fast-forward baby-api source
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         env:
           EXPECTED_SHA: ${{ github.sha }}
         with:

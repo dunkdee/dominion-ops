@@ -105,7 +105,7 @@ jobs:
           echo "agent_count=$agent_count" >> "$GITHUB_OUTPUT"
           echo "GITHUB_BRAIN_DIGEST=$digest"
           echo "GITHUB_AGENT_COUNT=$agent_count"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dominion-canonical-brain-${{ github.run_id }}
           path: ${{ runner.temp }}/canonical-brain/Dominion-Brain

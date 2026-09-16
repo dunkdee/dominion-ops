@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dominion Creator — Private Beta</title>
+  <meta name="description" content="A governed content agent for solo creators and small businesses. Plan, create, queue, track, and recover your content workflow from your phone.">
+  <meta name="robots" content="index,follow">
+  <link rel="canonical" href="https://dominionhealing.org/creator-beta.html">
+  <style>
+    :root{--ink:#0b0c0f;--panel:#12141a;--line:#2a2d36;--paper:#f4efe5;--muted:#aaa79f;--gold:#c9a44d;--gold2:#e0c06b;--good:#9fd2a7}
+    *{box-sizing:border-box} html{scroll-behavior:smooth} body{margin:0;background:var(--ink);color:var(--paper);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.55}
+    a{color:inherit} .shell{width:min(1120px,calc(100% - 40px));margin:auto}.nav{height:72px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+    .brand{font-size:14px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.status{font-size:12px;color:var(--gold2);letter-spacing:.08em;text-transform:uppercase}
+    .hero{padding:84px 0 62px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:72px;align-items:end}
+    .eyebrow{color:var(--gold2);font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin:0 0 18px}
+    h1{font-family:Georgia,'Times New Roman',serif;font-weight:500;font-size:clamp(48px,7vw,86px);line-height:.98;letter-spacing:-.04em;margin:0;max-width:900px}
+    .lead{font-size:clamp(18px,2vw,22px);color:#c5c2ba;max-width:700px;margin:28px 0 0}.hero-note{border-left:2px solid var(--gold);padding-left:22px;color:#c5c2ba}.hero-note strong{display:block;color:var(--paper);font-size:28px;margin-bottom:6px}
+    .cta{display:inline-flex;align-items:center;justify-content:center;background:var(--gold2);color:#111;padding:14px 20px;font-weight:850;text-decoration:none;margin-top:28px;min-height:50px}.cta:hover{background:#edd180}.cta:focus{outline:3px solid white;outline-offset:3px}
+    .proof{border-top:1px solid var(--line);border-bottom:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr)}.proof div{padding:22px 18px;border-right:1px solid var(--line)}.proof div:last-child{border-right:0}.proof b{display:block;font-size:14px}.proof span{color:var(--muted);font-size:13px}
+    section{padding:72px 0}.section-head{display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-bottom:42px}.section-head h2{font-family:Georgia,serif;font-size:clamp(36px,5vw,58px);font-weight:500;line-height:1.04;margin:0}.section-head p{color:#bbb8b0;margin:8px 0 0;max-width:620px}
+    .steps{counter-reset:step;border-top:1px solid var(--line)}.step{counter-increment:step;display:grid;grid-template-columns:72px minmax(0,1fr) minmax(260px,.75fr);gap:20px;padding:26px 0;border-bottom:1px solid var(--line);align-items:start}.step:before{content:'0' counter(step);color:var(--gold2);font-weight:800}.step h3{margin:0;font-size:21px}.step p{margin:0;color:var(--muted)}
+    .callout{background:var(--paper);color:#131417;padding:42px}.callout h2{font-family:Georgia,serif;font-size:clamp(34px,5vw,52px);font-weight:500;margin:0 0 12px;line-height:1}.callout p{max-width:760px;color:#4d4b47}.callout strong{color:#000}
+    .form-wrap{display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.25fr);gap:64px;align-items:start}.form-copy h2{font-family:Georgia,serif;font-size:clamp(38px,5vw,58px);font-weight:500;line-height:1;margin:0 0 18px}.form-copy p{color:var(--muted)}.form-copy ul{padding-left:18px;color:#c8c5be}.form-copy li{margin:8px 0}
+    form{display:grid;grid-template-columns:1fr 1fr;gap:18px;background:var(--panel);padding:28px;border:1px solid var(--line)}.field{display:flex;flex-direction:column;gap:7px}.full{grid-column:1/-1}label{font-size:13px;font-weight:750;color:#dedbd3}input,select{width:100%;min-height:48px;background:#0d0f13;border:1px solid #393d48;color:var(--paper);padding:11px 12px;font:inherit;border-radius:0}input:focus,select:focus{outline:2px solid var(--gold2);outline-offset:1px}input[type=checkbox]{width:18px;min-height:18px;accent-color:var(--gold2)}.check{display:flex;gap:11px;align-items:flex-start;color:#bbb8b0;font-size:13px}.hidden{position:absolute;left:-10000px}.submit{grid-column:1/-1;min-height:52px;border:0;background:var(--gold2);color:#111;font-weight:900;font-size:16px;cursor:pointer}.submit:disabled{opacity:.55;cursor:wait}.result{grid-column:1/-1;min-height:24px;font-size:14px}.result.ok{color:var(--good)}.result.err{color:#f2a6a6}
+    footer{border-top:1px solid var(--line);padding:28px 0 44px;color:var(--muted);font-size:13px}.foot{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+    @media(max-width:780px){.hero,.section-head,.form-wrap{grid-template-columns:1fr;gap:34px}.hero{padding-top:56px}.proof{grid-template-columns:1fr 1fr}.proof div:nth-child(2){border-right:0}.step{grid-template-columns:46px 1fr}.step p{grid-column:2}.shell{width:min(100% - 28px,1120px)}form{grid-template-columns:1fr}.field,.full{grid-column:1}.callout{padding:28px}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav class="nav" aria-label="Primary"><div class="brand">Dominion Creator</div><div class="status">Private Beta · 5 founding testers</div></nav>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Built for creators who run the business from their phone</p>
+        <h1>Stop babysitting every post.</h1>
+        <p class="lead">A governed content agent that helps you plan, create, queue, track, and recover your content workflow—while you stay in control.</p>
+        <a class="cta" href="#apply">Apply for one of 5 beta spots</a>
+      </div>
+      <div class="hero-note"><strong>Beginner friendly.</strong>No prompt engineering. No ten-tab setup. Tell the agent what you do, approve the plan, and see exactly what happened.</div>
+    </header>
+    <div class="proof" aria-label="Product principles">
+      <div><b>Phone first</b><span>Built around an on-the-go workflow.</span></div>
+      <div><b>Human governed</b><span>You approve consequential actions.</span></div>
+      <div><b>Health monitored</b><span>Failures are detected and surfaced.</span></div>
+      <div><b>Receipted</b><span>Know what ran, what failed, and what completed.</span></div>
+    </div>
+
+    <section>
+      <div class="section-head"><h2>One workflow. Less busywork.</h2><p>Dominion Creator is being built for solo creators and small businesses that already know content matters but lose hours to planning, switching tools, posting, and checking whether everything worked.</p></div>
+      <div class="steps">
+        <div class="step"><h3>Tell it about the business</h3><p>Begin with plain-language questions about your offer, audience, voice, and channels.</p></div>
+        <div class="step"><h3>Approve the content plan</h3><p>Buddy orchestrates the workflow, but governance stays visible. You know what is proposed before consequential actions run.</p></div>
+        <div class="step"><h3>Run and monitor</h3><p>The system creates and queues approved work, records state, and uses the health layer to detect broken steps instead of silently pretending they worked.</p></div>
+        <div class="step"><h3>See proof and improve</h3><p>Receipts and performance signals feed the next cycle so the workflow can improve without silently changing its boundaries.</p></div>
+      </div>
+    </section>
+
+    <section><div class="callout"><h2>The beta is deliberately small.</h2><p>We are taking <strong>five active creators or small-business operators</strong>, watching the full first-outcome loop, repairing friction, and proving the experience before opening the doors wider. Private-beta testers are not charged. Planned commercial launch target: a 3-day trial followed by $29.99/month, subject to final release validation.</p></div></section>
+
+    <section id="apply">
+      <div class="form-wrap">
+        <div class="form-copy"><p class="eyebrow">Founding beta cohort</p><h2>Do you actually need this?</h2><p>We want people who are already trying to publish consistently—not random signups.</p><ul><li>You create content for yourself, a brand, or clients.</li><li>You actively use YouTube, TikTok, Instagram, or Facebook.</li><li>Time, consistency, publishing, or growth is a current problem.</li><li>You can test the workflow from your phone and report anything confusing.</li></ul></div>
+        <form id="betaForm" novalidate>
+          <div class="field"><label for="name">Name</label><input id="name" name="name" autocomplete="name" maxlength="80" required></div>
+          <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required></div>
+          <div class="field"><label for="creator_type">You are a…</label><select id="creator_type" name="creator_type" required><option value="">Choose one</option><option value="solo_creator">Solo creator</option><option value="small_business">Small-business owner</option><option value="freelancer">Freelancer / social media operator</option><option value="other">Other</option></select></div>
+          <div class="field"><label for="primary_platform">Main platform</label><select id="primary_platform" name="primary_platform" required><option value="">Choose one</option><option value="youtube">YouTube</option><option value="tiktok">TikTok</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="multiple">Multiple platforms</option><option value="other">Other</option></select></div>
+          <div class="field"><label for="weekly_posts">Posts per week now</label><input id="weekly_posts" name="weekly_posts" type="number" min="0" max="100" inputmode="numeric" value="2" required></div>
+          <div class="field"><label for="biggest_pain">Biggest problem</label><select id="biggest_pain" name="biggest_pain" required><option value="">Choose one</option><option value="time">Not enough time</option><option value="consistency">Staying consistent</option><option value="ideas">Knowing what to create</option><option value="publishing">Posting across platforms</option><option value="analytics">Understanding results</option><option value="growth">Growing the audience</option><option value="other">Other</option></select></div>
+          <div class="field full"><label for="tried_last_7_days">Have you tried to solve this in the last 7 days?</label><select id="tried_last_7_days" name="tried_last_7_days" required><option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option></select></div>
+          <div class="hidden" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+          <label class="check full"><input id="consent" name="consent" type="checkbox" required><span>I agree to be contacted about this private beta and understand my application information will be used only for beta selection, product testing, and support.</span></label>
+          <button class="submit" type="submit">Apply for the private beta</button>
+          <div id="result" class="result full" role="status" aria-live="polite"></div>
+        </form>
+      </div>
+    </section>
+    <footer><div class="foot"><span>© Dominion Healing. Dominion Creator private beta.</span><span>Governed under RADAH MEMSHALAH · No guaranteed growth or income claims.</span></div></footer>
+  </div>
+  <script>
+    const form = document.getElementById('betaForm');
+    const result = document.getElementById('result');
+    const button = form.querySelector('button[type="submit"]');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      result.className = 'result full';
+      result.textContent = '';
+      if (!form.reportValidity()) return;
+      button.disabled = true;
+      button.textContent = 'Submitting…';
+      const fields = new FormData(form);
+      const params = new URLSearchParams(location.search);
+      const payload = {
+        name: fields.get('name'), email: fields.get('email'),
+        creator_type: fields.get('creator_type'), primary_platform: fields.get('primary_platform'),
+        weekly_posts: Number(fields.get('weekly_posts')), biggest_pain: fields.get('biggest_pain'),
+        tried_last_7_days: fields.get('tried_last_7_days') === 'yes', consent: fields.get('consent') === 'on',
+        website: fields.get('website') || '', source: params.get('utm_source') || 'creator-beta'
+      };
+      try {
+        const response = await fetch('https://api.dominionhealing.org/beta/apply', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.accepted) throw new Error(body.error || 'Submission failed');
+        result.className = 'result full ok';
+        result.textContent = `Application received. Receipt: ${body.application_id || 'received'}. Keep this ID.`;
+        form.reset();
+      } catch (error) {
+        result.className = 'result full err';
+        result.textContent = 'We could not record the application right now. Please try again shortly.';
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Apply for the private beta';
+      }
+    });
+  </script>
+</body>
+</html>

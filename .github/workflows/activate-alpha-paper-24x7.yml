@@ -28,7 +28,7 @@ jobs:
       inputs.commit_sha == github.sha
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.commit_sha }}
           fetch-depth: 1
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment: foundation-vm-production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.commit_sha }}
       - name: Require VM access

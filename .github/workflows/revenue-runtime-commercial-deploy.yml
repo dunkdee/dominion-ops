@@ -47,7 +47,7 @@ jobs:
           echo "REVENUE_COMMERCIAL_DEPLOY_AUTHORIZATION=PASS actor=$COMMENT_USER issue=$ISSUE_NUMBER main_sha=$main_sha"
 
       - name: Checkout exact authorized main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.authorize.outputs.main_sha }}
           persist-credentials: false

@@ -39,7 +39,7 @@ jobs:
       deploy_sha: ${{ steps.resolve.outputs.deploy_sha }}
     steps:
       - name: Checkout exact candidate
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'main' }}
           fetch-depth: 0
@@ -120,7 +120,7 @@ jobs:
     environment: foundation-vm-production
     steps:
       - name: Checkout exact governed main
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.deploy_sha }}
           fetch-depth: 0

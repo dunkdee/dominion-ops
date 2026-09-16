@@ -83,7 +83,7 @@ jobs:
           test -n "$VM_SSH_KEY"
 
       - name: Checkout exact trace source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1

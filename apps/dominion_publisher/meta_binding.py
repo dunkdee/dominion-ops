@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
@@ -71,6 +72,9 @@ class MetaBindingManager:
                         value = error.get(field)
                         if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
                             details.append(f"{field}={value}")
+                    fbtrace_id = str(error.get("fbtrace_id", "")).strip()
+                    if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", fbtrace_id):
+                        details.append(f"fbtrace_id={fbtrace_id}")
             suffix = f" ({', '.join(details)})" if details else ""
             raise RuntimeError(
                 f"Meta {operation} failed with HTTP {response.status_code}{suffix}"
@@ -112,7 +116,7 @@ class MetaBindingManager:
         """Build the consent URL for whichever login product the app uses.
 
         Facebook Login for Business draws its permissions from a saved
-        configuration and rejects a scope list outright -- an app configured
+        configuration and rejects a classic scope list outright -- an app configured
         that way answers a classic scope request with "this app needs at least
         one supported permission", however many permissions are enabled on it.
         So a stored config_id selects that flow, and its absence keeps the
@@ -136,9 +140,9 @@ class MetaBindingManager:
     def _exchange_code(self, code: str) -> str:
         app = self._app()
         base = f"https://graph.facebook.com/{app['graph_version']}"
-        response = self.session.get(
+        response = self.session.post(
             f"{base}/oauth/access_token",
-            params={
+            data={
                 "client_id": app["app_id"],
                 "client_secret": app["app_secret"],
                 "redirect_uri": app["redirect_uri"],

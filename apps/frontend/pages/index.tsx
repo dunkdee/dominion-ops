@@ -1,25 +1,7 @@
+import Head from "next/head";
 import Link from "next/link";
-
-export default function Home() {
-  return (
-    <main style={{padding:"3rem",maxWidth:900,margin:"0 auto",fontFamily:"ui-sans-serif"}}>
-      <h1 style={{fontSize:"2.25rem", marginBottom:"0.5rem"}}>Dominion’s Ark</h1>
-      <p style={{opacity:0.8}}>Elite multi-agent AI automation — orchestrated by Jarvis.</p>
-
-      <section style={{marginTop:"2rem"}}>
-        <h2>Status</h2>
-        <ul>
-          <li>API: <a href="/api/healthz">/api/healthz</a> (proxied)</li>
-          <li>Control Panel (soon): <Link href="https://app.dominionhealing.org">app.dominionhealing.org</Link></li>
-          <li>API Direct: <Link href="https://api.dominionhealing.org/healthz">api.dominionhealing.org/healthz</Link></li>
-        </ul>
-      </section>
-
-      <section style={{marginTop:"2rem"}}>
-        <h2>Content Creator</h2>
-        <p>No more blank screen. Hook this to Jarvis flows next.</p>
-        <Link href="/creator">Open Creator</Link>
-      </section>
-    </main>
-  );
-}
+import type { GetServerSideProps } from "next";
+import { useEffect, useState } from "react";
+import { hasValidSession } from "../lib/session";
+export default function Home(){const[status,setStatus]=useState<any>(null);const[error,setError]=useState("");useEffect(()=>{fetch("/api/publisher/status").then(async r=>{if(!r.ok)throw new Error((await r.json()).detail||"Status unavailable");return r.json();}).then(setStatus).catch(e=>setError(e.message));},[]);async function logout(){await fetch("/api/session/logout",{method:"POST"});window.location.href="/login";}const h=status?.health,a=status?.accounts;const rows=[...(a?.bound_accounts?.facebook||[]).map((x:any)=>({...x,platform:"Facebook"})),...(a?.bound_accounts?.instagram||[]).map((x:any)=>({...x,platform:"Instagram"}))];return <><Head><title>Dominion Control</title><meta name="robots" content="noindex,nofollow" /></Head><div className="appShell"><header className="topbar"><div className="brand"><span className="brandMark small">D</span><div><strong>Dominion Control</strong><span>Operator Console</span></div></div><button className="button ghost" onClick={logout}>Sign out</button></header><main className="content"><section className="hero"><div><p className="overline">CONTROL PLANE</p><h1>One surface. Closed loops.</h1><p>Operate the existing Dominion Publisher without exposing provider credentials to the browser.</p></div><Link className="button primary" href="/publisher">Open Publisher</Link></section>{error&&<div className="alert danger">{error}</div>}<section className="metricGrid"><article className="metric"><span>Publisher service</span><strong>{h?.status==="ok"?"ONLINE":status?"DEGRADED":"CHECKING"}</strong><small>{h?.service||"dominion-publisher"}</small></article><article className="metric"><span>Meta app</span><strong>{h?.meta_app_configured?"CONFIGURED":status?"NOT READY":"CHECKING"}</strong><small>OAuth configuration</small></article><article className="metric"><span>Facebook bindings</span><strong>{h?.meta_bound_counts?.facebook??"—"}</strong><small>Approved accounts</small></article><article className="metric"><span>Instagram bindings</span><strong>{h?.meta_bound_counts?.instagram??"—"}</strong><small>Approved accounts</small></article></section><section className="panel split"><div><p className="overline">GOVERNANCE</p><h2>Live Meta publishing is held closed.</h2><p className="muted">Authorization, explicit account binding, job queueing and receipt verification are enabled. Public posting is not exposed while repository governance remains RESTRICTED_HOLD.</p></div><span className="status hold">RESTRICTED_HOLD</span></section><section className="panel"><div className="sectionHead"><div><p className="overline">BOUND ACCOUNTS</p><h2>Publisher identity</h2></div><Link href="/publisher" className="textLink">Manage →</Link></div><div className="accountList">{rows.map((item:any)=><div className="accountRow" key={`${item.platform}-${item.account_id}`}><div><strong>{item.label||item.account_id}</strong><span>{item.platform} · {item.account_id}</span></div><span className="status ok">BOUND</span></div>)}{status&&!rows.length&&<div className="empty">No approved Meta accounts are bound yet.</div>}</div></section></main></div></>}
+export const getServerSideProps:GetServerSideProps=async({req})=>hasValidSession(req)?{props:{}}:{redirect:{destination:"/login",permanent:false}};

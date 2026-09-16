@@ -5,10 +5,12 @@ on:
     branches: ["feat/dominion-control-app"]
     paths:
       - "apps/frontend/**"
+      - "apps/dominion_publisher/service.py"
       - ".github/workflows/frontend-control-app-ci.yml"
   pull_request:
     paths:
       - "apps/frontend/**"
+      - "apps/dominion_publisher/service.py"
       - ".github/workflows/frontend-control-app-ci.yml"
 
 permissions:
@@ -74,6 +76,9 @@ jobs:
           test ! -e apps/frontend/pages/api/publisher/jobs/publish.ts
           ! grep -R --line-number -E 'NEXT_PUBLIC_.*(TOKEN|SECRET|KEY)' apps/frontend --exclude-dir=node_modules --exclude=package-lock.json
           grep -R --line-number 'RESTRICTED_HOLD' apps/frontend/pages apps/frontend/lib
+          python -m py_compile apps/dominion_publisher/service.py
+          grep -F 'DOMINION_FRONTEND_PUBLIC_URL' apps/dominion_publisher/service.py
+          grep -F 'Explicit approval is still required.' apps/dominion_publisher/service.py
       - name: Container build
         if: steps.lock.outputs.generated != 'true'
         run: docker build --pull -t dominion-control:${GITHUB_SHA} apps/frontend

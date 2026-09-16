@@ -121,6 +121,7 @@ def test_callback_discovers_and_binds_page_and_instagram_without_exposing_token(
         {
             "url": "https://graph.facebook.com/v25.0/oauth/access_token",
             "data": {
+                "grant_type": "authorization_code",
                 "client_id": "123456789",
                 "client_secret": "meta-super-secret",
                 "redirect_uri": "https://dominionhealing.org/oauth/meta/callback",

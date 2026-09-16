@@ -24,9 +24,14 @@ class FakeGetSession:
     def __init__(self, responses: list[FakeResponse]) -> None:
         self.responses = list(responses)
         self.calls: list[dict] = []
+        self.post_calls: list[dict] = []
 
     def get(self, url: str, params: dict, timeout: int) -> FakeResponse:
         self.calls.append({"url": url, "params": params, "timeout": timeout})
+        return self.responses.pop(0)
+
+    def post(self, url: str, data: dict, timeout: int) -> FakeResponse:
+        self.post_calls.append({"url": url, "data": data, "timeout": timeout})
         return self.responses.pop(0)
 
 
@@ -112,6 +117,19 @@ def test_callback_discovers_and_binds_page_and_instagram_without_exposing_token(
             "tasks": ["ANALYZE", "CREATE_CONTENT", "MODERATE"],
         }
     ]
+    assert session.post_calls == [
+        {
+            "url": "https://graph.facebook.com/v25.0/oauth/access_token",
+            "data": {
+                "client_id": "123456789",
+                "client_secret": "meta-super-secret",
+                "redirect_uri": "https://dominionhealing.org/oauth/meta/callback",
+                "code": "oauth-code",
+            },
+            "timeout": 30,
+        }
+    ]
+    assert "code_verifier" not in session.post_calls[0]["data"]
     assert "page-secret-token" not in repr(candidates)
     binding = vault.bind_page(page_id="fb-page-1", approved_by="founder")
     assert binding["facebook"]["account_id"] == "fb-page-1"

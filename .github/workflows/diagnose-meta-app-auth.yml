@@ -2,6 +2,8 @@ name: Diagnose Meta App Auth
 
 on:
   workflow_dispatch:
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -12,10 +14,44 @@ concurrency:
 
 jobs:
   diagnose:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.number == 305 &&
+       github.event.comment.user.login == github.repository_owner &&
+       github.event.comment.author_association == 'OWNER')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: foundation-vm-production
     steps:
+      - name: Prove owner-authorized diagnostic boundary
+        if: github.event_name == 'issue_comment'
+        shell: bash
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$ISSUE_NUMBER" = "305" || { echo "ERROR: Meta app auth diagnostic must originate from issue 305"; exit 1; }
+          test "$COMMENT_USER" = "$REPOSITORY_OWNER" || { echo "ERROR: actor is not repository owner"; exit 1; }
+          test "$AUTHOR_ASSOCIATION" = "OWNER" || { echo "ERROR: diagnostic lacks OWNER association"; exit 1; }
+          main_sha="$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "ERROR: unable to resolve current main SHA"; exit 1; }
+          expected="RUN_META_APP_AUTH:$main_sha"
+          test "$COMMENT_BODY" = "$expected" || {
+            echo "ERROR: diagnostic authorization is not bound to current main"
+            echo "expected_token=$expected"
+            exit 1
+          }
+          echo "META_APP_AUTH_DIAGNOSTIC_AUTHORIZATION=PASS actor=$COMMENT_USER issue=$ISSUE_NUMBER main_sha=$main_sha"
+
       - name: Require protected VM access
         shell: bash
         env:
@@ -65,7 +101,6 @@ jobs:
           set +a
           "$venv/bin/python" - <<'PY'
           import os
-          import sys
           import requests
           from apps.dominion_publisher.vault import CredentialVault
 

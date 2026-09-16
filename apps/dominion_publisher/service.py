@@ -68,6 +68,10 @@ DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 # writer) can never fall back to different directories.
 VAULT_ROOT = vault_root()
 OPERATOR_TOKEN = os.getenv("DOMINION_PUBLISHER_OPERATOR_TOKEN", "").strip()
+FRONTEND_PUBLIC_URL = (
+    os.getenv("DOMINION_FRONTEND_PUBLIC_URL", "https://app.dominionhealing.org").strip().rstrip("/")
+    or "https://app.dominionhealing.org"
+)
 
 store = PublisherStore(DB_PATH)
 vault = CredentialVault(VAULT_ROOT)
@@ -181,10 +185,12 @@ def complete_meta_binding(
         + "</li>"
         for item in candidates
     )
+    return_url = html.escape(f"{FRONTEND_PUBLIC_URL}/publisher?meta=authorized", quote=True)
     return HTMLResponse(
         "<h1>Dominion Publisher authorization received</h1>"
-        "<p>No account has been bound or published yet. Return to Dominion to approve one Page.</p>"
+        "<p>No account has been bound or published yet. Explicit approval is still required.</p>"
         f"<ul>{rows}</ul>"
+        f'<p><a href="{return_url}">Return to Dominion Control to review and approve one Page</a></p>'
     )
 
 

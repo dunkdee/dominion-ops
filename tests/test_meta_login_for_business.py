@@ -60,6 +60,11 @@ class BusinessLoginTests(unittest.TestCase):
         """The regression itself: scope and config_id must never travel together."""
         self.assertNotIn("scope", _params(self.url(config_id=CONFIG_ID)))
 
+    def test_business_flow_forces_exchangeable_code_response(self):
+        params = _params(self.url(config_id=CONFIG_ID))
+        self.assertEqual(params["response_type"], "code")
+        self.assertEqual(params["override_default_response_type"], "true")
+
     def test_state_and_redirect_still_travel_on_the_business_flow(self):
         params = _params(self.url(config_id=CONFIG_ID))
         self.assertEqual(params["redirect_uri"], REDIRECT_URI)
@@ -72,6 +77,7 @@ class BusinessLoginTests(unittest.TestCase):
             with self.subTest(config_id=repr(value)):
                 params = _params(self.url(config_id=value))
                 self.assertNotIn("config_id", params)
+                self.assertNotIn("override_default_response_type", params)
                 self.assertEqual(params["scope"], ",".join(META_SCOPES))
 
 
@@ -82,6 +88,7 @@ class ClassicLoginUnchangedTests(unittest.TestCase):
         url = MetaBindingManager(_StubVault()).authorization_url()
         params = _params(url)
         self.assertNotIn("config_id", params)
+        self.assertNotIn("override_default_response_type", params)
         self.assertEqual(params["scope"], ",".join(META_SCOPES))
 
     def test_dialog_endpoint_is_unchanged_on_both_flows(self):

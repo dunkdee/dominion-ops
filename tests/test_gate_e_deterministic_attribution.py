@@ -19,6 +19,7 @@ from apps.revenue_runtime import wix_adapter
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = ROOT / "apps" / "revenue_runtime" / "service.py"
+WIX_BRIDGE = ROOT / "integrations" / "wix" / "voltedge" / "revenue-attribution-bridge.js"
 
 
 class FakeResponse:
@@ -47,16 +48,23 @@ class GateEDeterministicAttributionTests(unittest.TestCase):
             "treatment": {"headline": "B", "body_text": "B", "cta_text": "Shop", "wix_value": "B"},
         }
 
-    def test_bridge_token_is_one_time_hashed_and_experiment_bound(self):
+    def test_bridge_token_is_one_time_hashed_experiment_bound_and_four_hour_bounded(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "r.db"
             bridge = AttributionBridgeStore(db_path)
+            before = datetime.now(timezone.utc)
             token = bridge.issue_token(experiment_id="e1", visitor_id="v1", variant="control")
             with sqlite3.connect(db_path) as db:
-                row = db.execute("SELECT token_hash,used_at FROM attribution_bridge_tokens").fetchone()
+                row = db.execute(
+                    "SELECT token_hash,issued_at,expires_at,used_at FROM attribution_bridge_tokens"
+                ).fetchone()
             self.assertEqual(row[0], hashlib.sha256(token.encode()).hexdigest())
             self.assertNotEqual(row[0], token)
-            self.assertIsNone(row[1])
+            self.assertIsNone(row[3])
+            issued = datetime.fromisoformat(row[1])
+            expires = datetime.fromisoformat(row[2])
+            self.assertGreaterEqual(issued, before)
+            self.assertEqual(expires - issued, timedelta(minutes=240))
 
             flow_id = str(uuid.uuid4())
             with self.assertRaisesRegex(ValueError, "experiment mismatch"):
@@ -186,6 +194,16 @@ class GateEDeterministicAttributionTests(unittest.TestCase):
         self.assertIn("expected_experiment_id=experiment_id", source)
         self.assertIn("_variant_guard(payload.control)", source)
         self.assertIn("_variant_guard(payload.treatment)", source)
+
+    def test_wix_bridge_retries_on_native_cart_change_without_mutating_commerce(self):
+        source = WIX_BRIDGE.read_text(encoding="utf-8")
+        self.assertIn('import { ecom } from "@wix/site-ecom"', source)
+        self.assertIn("ecom.onCartChange", source)
+        self.assertIn("currentCartV2.getCurrentCart", source)
+        self.assertIn("purchaseFlowId", source)
+        self.assertNotIn("updateCurrentCart", source)
+        self.assertNotIn("addLineItemsToCurrentCart", source)
+        self.assertNotIn("placeOrder", source)
 
 
 if __name__ == "__main__":

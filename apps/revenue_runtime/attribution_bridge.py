@@ -76,7 +76,7 @@ class AttributionBridgeStore:
         experiment_id: str,
         visitor_id: str,
         variant: str,
-        ttl_minutes: int = 60,
+        ttl_minutes: int = 240,
     ) -> str:
         if variant not in {"control", "treatment"}:
             raise ValueError("invalid variant")
@@ -87,6 +87,12 @@ class AttributionBridgeStore:
         issued = _utc_now()
         expires = issued + timedelta(minutes=ttl_minutes)
         with self._connect() as db:
+            # Clicks can outnumber purchases by orders of magnitude. Keep the token
+            # table bounded without deleting durable purchase-flow attribution links.
+            db.execute(
+                "DELETE FROM attribution_bridge_tokens WHERE expires_at < ?",
+                (_iso(issued),),
+            )
             db.execute(
                 """INSERT INTO attribution_bridge_tokens
                 (token_hash,experiment_id,visitor_id,variant,issued_at,expires_at,used_at)

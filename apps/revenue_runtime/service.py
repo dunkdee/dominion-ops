@@ -218,15 +218,8 @@ def click(experiment_id: str, vid: str, variant: str, sig: str):
         event_type="click",
         metadata={"source": "revenue_router"},
     )
-    bridge_token = BRIDGE.issue_token(
-        experiment_id=experiment_id,
-        visitor_id=vid,
-        variant=variant,
-    )
-    return RedirectResponse(
-        _tracked_target(exp["target_url"], experiment_id, variant, bridge_token),
-        status_code=302,
-    )
+    bridge_token = BRIDGE.issue_token(experiment_id=experiment_id, visitor_id=vid, variant=variant)
+    return RedirectResponse(_tracked_target(exp["target_url"], experiment_id, variant, bridge_token), status_code=302)
 
 
 @app.post("/r/{experiment_id}/bridge")
@@ -240,11 +233,7 @@ def wix_flow_bridge(experiment_id: str, payload: WixFlowBridge):
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return {
-        "status": "accepted",
-        "experiment_id": experiment_id,
-        "bound": result["bound"],
-    }
+    return {"status": "accepted", "experiment_id": experiment_id, "bound": result["bound"]}
 
 
 @app.post("/revenue/events")
@@ -282,6 +271,7 @@ def create_experiment(payload: ExperimentCreate, request: Request):
         raise HTTPException(status_code=422, detail="Automatic promotion requires purchase evidence")
     _target_guard(payload.target_url)
     _variant_guard(payload.control)
+    _variant_guard(payload.treatment)
     try:
         created = STORE.create_experiment(payload.model_dump())
     except Exception as exc:

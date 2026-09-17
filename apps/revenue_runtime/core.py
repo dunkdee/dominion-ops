@@ -14,8 +14,12 @@ def deterministic_variant(experiment_id: str, visitor_id: str, treatment_pct: in
     """Stable 0-9999 bucket assignment; no mutable assignment service required."""
     if not experiment_id or not visitor_id:
         raise RevenueRuntimeError("experiment_id and visitor_id are required")
-    if treatment_pct < 1 or treatment_pct > 99:
-        raise RevenueRuntimeError("treatment_pct must be between 1 and 99")
+    if treatment_pct < 0 or treatment_pct > 100:
+        raise RevenueRuntimeError("treatment_pct must be between 0 and 100")
+    if treatment_pct == 0:
+        return "control"
+    if treatment_pct == 100:
+        return "treatment"
     digest = hashlib.sha256(f"{experiment_id}:{visitor_id}".encode("utf-8")).digest()
     bucket = int.from_bytes(digest[:8], "big") % 10_000
     return "treatment" if bucket < treatment_pct * 100 else "control"

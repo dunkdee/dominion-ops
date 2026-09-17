@@ -22,6 +22,9 @@ jobs:
     defaults:
       run:
         working-directory: android-client
+    env:
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@v5
@@ -34,13 +37,16 @@ jobs:
 
       - name: Verify hosted Android SDK
         run: |
-          command -v sdkmanager
-          sdkmanager --version
-          test -n "$ANDROID_HOME"
-          echo "ANDROID_HOME=$ANDROID_HOME"
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" --version
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
       - name: Install API 36 SDK
-        run: sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+        run: |
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
 
       - name: Set up Gradle 8.13
         uses: gradle/actions/setup-gradle@v4

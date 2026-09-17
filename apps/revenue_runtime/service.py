@@ -11,9 +11,11 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
+from .attribution_bridge import AttributionBridgeStore
 from .core import deterministic_variant
 from .evaluator import load_policy, run_cycle
 from .store import RevenueStore
@@ -23,10 +25,12 @@ from . import wix_adapter
 POLICY = load_policy()
 DB_PATH = Path(os.getenv("DOMINION_REVENUE_DB", str(Path.home() / ".dominion/revenue-runtime/revenue.db"))).expanduser()
 STORE = RevenueStore(DB_PATH)
+BRIDGE = AttributionBridgeStore(DB_PATH)
 OPERATOR_TOKEN = os.getenv("WIX_AGENT_OPERATOR_TOKEN", "")
 COOKIE_NAME = POLICY["traffic"]["cookie_name"]
 COOKIE_MAX_AGE = int(POLICY["traffic"]["cookie_days"]) * 86400
 VID_RE = re.compile(r"^[a-f0-9]{32}$")
+VOLT_EDGE_ORIGINS = ["https://www.voltedgegoods.com", "https://voltedgegoods.com"]
 
 
 def _signing_key() -> bytes:
@@ -91,7 +95,7 @@ def _target_guard(url: str) -> None:
         raise HTTPException(status_code=422, detail="target URL is outside governed VoltEdge hosts")
 
 
-def _tracked_target(url: str, exp_id: str, variant: str) -> str:
+def _tracked_target(url: str, exp_id: str, variant: str, bridge_token: str) -> str:
     parsed = urlparse(url)
     pairs = dict(parse_qsl(parsed.query, keep_blank_values=True))
     pairs.update({
@@ -99,6 +103,7 @@ def _tracked_target(url: str, exp_id: str, variant: str) -> str:
         "utm_medium": "experiment",
         "utm_campaign": exp_id,
         "utm_content": variant,
+        "dr_token": bridge_token,
     })
     return urlunparse(parsed._replace(query=urlencode(pairs)))
 
@@ -126,7 +131,20 @@ class ServerEvent(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-app = FastAPI(title="Dominion Revenue Runtime", version="1.0.0", docs_url=None, redoc_url=None)
+class WixFlowBridge(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+    purchase_flow_id: str = Field(default="", max_length=64)
+    checkout_id: str = Field(default="", max_length=64)
+
+
+app = FastAPI(title="Dominion Revenue Runtime", version="1.1.0", docs_url=None, redoc_url=None)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=VOLT_EDGE_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+)
 
 
 @app.get("/health")
@@ -202,7 +220,34 @@ def click(experiment_id: str, vid: str, variant: str, sig: str):
         event_type="click",
         metadata={"source": "revenue_router"},
     )
-    return RedirectResponse(_tracked_target(exp["target_url"], experiment_id, variant), status_code=302)
+    bridge_token = BRIDGE.issue_token(
+        experiment_id=experiment_id,
+        visitor_id=vid,
+        variant=variant,
+    )
+    return RedirectResponse(
+        _tracked_target(exp["target_url"], experiment_id, variant, bridge_token),
+        status_code=302,
+    )
+
+
+@app.post("/r/{experiment_id}/bridge")
+def wix_flow_bridge(experiment_id: str, payload: WixFlowBridge):
+    try:
+        result = BRIDGE.bind_token(
+            token=payload.token,
+            purchase_flow_id=payload.purchase_flow_id,
+            checkout_id=payload.checkout_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if result["experiment_id"] != experiment_id:
+        raise HTTPException(status_code=409, detail="Bridge token experiment mismatch")
+    return {
+        "status": "accepted",
+        "experiment_id": experiment_id,
+        "bound": result["bound"],
+    }
 
 
 @app.post("/revenue/events")

@@ -18,25 +18,29 @@ permissions:
 jobs:
   android-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: android-client
     steps:
       - name: Checkout exact revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Verify hosted Android SDK
+        run: |
+          command -v sdkmanager
+          sdkmanager --version
+          test -n "$ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
 
       - name: Install API 36 SDK
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+        run: sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
 
       - name: Set up Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
@@ -56,3 +60,11 @@ jobs:
 
       - name: Verify debug APK exists
         run: test -f app/build/outputs/apk/debug/app-debug.apk && echo 'ANDROID_DEBUG_APK_PASS'
+
+      - name: Upload installable debug APK receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: dominion-creator-debug-${{ github.sha }}
+          path: android-client/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .attribution_bridge import AttributionBridgeStore
 from .core import deterministic_variant, evaluate_treatment
 from .store import RevenueStore
 from . import wix_adapter
@@ -30,20 +31,36 @@ def reconcile_paid_orders(store: RevenueStore, policy: dict[str, Any]) -> list[d
     if not active:
         return receipts
 
+    bridge = AttributionBridgeStore(store.path)
     orders = wix_adapter.search_recent_paid_orders(limit=100)
     for exp in active:
         for order in orders:
             order_id = str(order.get("id") or "")
             created = str(order.get("created_date") or "")
-            if not order_id or not created or store.reconciliation_exists(order_id, exp["id"]):
+            if not order_id or not created:
+                continue
+            prior = [
+                item for item in store.attributed_reconciliations_for_order(order_id)
+                if item.get("experiment_id") == exp["id"]
+            ]
+            if prior:
                 continue
             relevant = [item for item in order.get("items", []) if item.get("product_id") == exp["product_id"]]
             if not relevant:
                 continue
             revenue_cents = sum(int(item.get("revenue_cents") or 0) for item in relevant)
-            candidates = store.click_candidates(exp["id"], created, lookback)
-            if len(candidates) != 1:
-                reason = "NO_CANDIDATE" if not candidates else "AMBIGUOUS_CANDIDATES"
+
+            native_links = bridge.order_links(
+                experiment_id=exp["id"],
+                purchase_flow_id=str(order.get("purchase_flow_id") or ""),
+                checkout_id=str(order.get("checkout_id") or ""),
+            )
+            native_identities = {
+                (str(item["visitor_id"]), str(item["variant"]))
+                for item in native_links
+            }
+            if len(native_identities) > 1:
+                reason = "CONFLICTING_WIX_NATIVE_LINKS"
                 store.record_reconciliation(
                     order_id=order_id,
                     exp_id=exp["id"],
@@ -51,12 +68,61 @@ def reconcile_paid_orders(store: RevenueStore, policy: dict[str, Any]) -> list[d
                     reason=reason,
                     revenue_cents=revenue_cents,
                 )
-                receipts.append({"order_id": order_id, "experiment_id": exp["id"], "status": "unattributed", "reason": reason})
+                receipts.append({
+                    "order_id": order_id,
+                    "experiment_id": exp["id"],
+                    "status": "unattributed",
+                    "reason": reason,
+                })
                 continue
 
-            candidate = candidates[0]
-            visitor_id = candidate["visitor_id"]
-            variant = candidate["variant"]
+            if len(native_identities) == 1:
+                visitor_id, variant = next(iter(native_identities))
+                expected = deterministic_variant(exp["id"], visitor_id, int(exp["treatment_pct"]))
+                if variant != expected:
+                    reason = "WIX_NATIVE_VARIANT_MISMATCH"
+                    store.record_reconciliation(
+                        order_id=order_id,
+                        exp_id=exp["id"],
+                        status="unattributed",
+                        reason=reason,
+                        revenue_cents=revenue_cents,
+                    )
+                    receipts.append({
+                        "order_id": order_id,
+                        "experiment_id": exp["id"],
+                        "status": "unattributed",
+                        "reason": reason,
+                    })
+                    continue
+                reason = (
+                    "WIX_PURCHASE_FLOW_LINK"
+                    if any(item["link_type"] == "purchase_flow" for item in native_links)
+                    else "WIX_CHECKOUT_LINK"
+                )
+            else:
+                candidates = store.click_candidates(exp["id"], created, lookback)
+                if len(candidates) != 1:
+                    reason = "NO_CANDIDATE" if not candidates else "AMBIGUOUS_CANDIDATES"
+                    store.record_reconciliation(
+                        order_id=order_id,
+                        exp_id=exp["id"],
+                        status="unattributed",
+                        reason=reason,
+                        revenue_cents=revenue_cents,
+                    )
+                    receipts.append({
+                        "order_id": order_id,
+                        "experiment_id": exp["id"],
+                        "status": "unattributed",
+                        "reason": reason,
+                    })
+                    continue
+                candidate = candidates[0]
+                visitor_id = candidate["visitor_id"]
+                variant = candidate["variant"]
+                reason = "UNIQUE_PRODUCT_CLICK_WINDOW"
+
             event_id = f"wix-order:{order_id}:{exp['id']}"
             inserted = store.record_event(
                 event_id=event_id,
@@ -65,14 +131,18 @@ def reconcile_paid_orders(store: RevenueStore, policy: dict[str, Any]) -> list[d
                 variant=variant,
                 event_type="purchase",
                 revenue_cents=revenue_cents,
-                metadata={"source": "wix_paid_order", "order_id": order_id},
+                metadata={
+                    "source": "wix_paid_order",
+                    "order_id": order_id,
+                    "attribution_reason": reason,
+                },
                 occurred_at=created,
             )
             store.record_reconciliation(
                 order_id=order_id,
                 exp_id=exp["id"],
                 status="attributed",
-                reason="UNIQUE_PRODUCT_CLICK_WINDOW",
+                reason=reason,
                 visitor_id=visitor_id,
                 revenue_cents=revenue_cents,
             )
@@ -80,6 +150,7 @@ def reconcile_paid_orders(store: RevenueStore, policy: dict[str, Any]) -> list[d
                 "order_id": order_id,
                 "experiment_id": exp["id"],
                 "status": "attributed",
+                "reason": reason,
                 "variant": variant,
                 "revenue_cents": revenue_cents,
                 "event_inserted": inserted,
@@ -89,13 +160,6 @@ def reconcile_paid_orders(store: RevenueStore, policy: dict[str, Any]) -> list[d
 
 
 def reconcile_refunds(store: RevenueStore) -> list[dict[str, Any]]:
-    """Attach provider-confirmed Wix refunds to previously attributed purchases.
-
-    A refund can never create attribution. It is accepted only when a prior
-    fail-closed order reconciliation already linked the order to one experiment
-    and visitor. Event IDs include Wix refund/payment identities, so repeated
-    evaluator cycles are idempotent.
-    """
     receipts: list[dict[str, Any]] = []
     for order in wix_adapter.search_recent_refunded_orders(limit=100):
         order_id = str(order.get("id") or "")
@@ -159,32 +223,26 @@ def evaluate_one(store: RevenueStore, exp_id: str, policy: dict[str, Any]) -> di
     }
     if evaluation["decision"] != "PROMOTE_TREATMENT":
         return receipt
-
     if not exp["auto_promote"]:
         store.mark_decision(exp_id, "winner_ready", "treatment")
         receipt["promotion"] = {"status": "HELD", "reason": "AUTO_PROMOTE_DISABLED"}
         return receipt
-
     required_event = policy["attribution"]["auto_promotion_requires_success_event"]
     if exp["success_event"] != required_event:
         store.mark_decision(exp_id, "winner_ready", "treatment")
         receipt["promotion"] = {"status": "HELD", "reason": "PURCHASE_EVIDENCE_REQUIRED"}
         return receipt
-
     if not runtime_enabled(policy):
         receipt["promotion"] = {"status": "HELD", "reason": "KILL_SWITCH_DISABLED"}
         return receipt
-
     allowed = set(policy["wix"]["allowed_product_fields"])
     if exp["wix_field"] not in allowed or exp["wix_field"] != "plainDescription":
         receipt["promotion"] = {"status": "HELD", "reason": "FIELD_NOT_ALLOWLISTED"}
         return receipt
-
     after_value = str(exp["treatment"].get("wix_value") or "")
     if not after_value:
         receipt["promotion"] = {"status": "HELD", "reason": "TREATMENT_WIX_VALUE_MISSING"}
         return receipt
-
     mutation = wix_adapter.update_plain_description(exp["product_id"], after_value)
     promotion = store.record_promotion(
         experiment_id=exp_id,

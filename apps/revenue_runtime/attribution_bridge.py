@@ -28,12 +28,7 @@ def _guid(value: str, field: str) -> str:
 
 
 class AttributionBridgeStore:
-    """Same-database bridge from a Dominion click to Wix-native purchase identity.
-
-    The bridge does not create a second analytics authority. It stores a short-lived,
-    one-time correlation token and durable Wix purchase-flow/checkout links inside the
-    existing Revenue Runtime SQLite database.
-    """
+    """Same-database bridge from a Dominion click to Wix-native purchase identity."""
 
     def __init__(self, path: str | Path):
         self.path = Path(path).expanduser()
@@ -111,6 +106,7 @@ class AttributionBridgeStore:
         self,
         *,
         token: str,
+        expected_experiment_id: str,
         purchase_flow_id: str = "",
         checkout_id: str = "",
     ) -> dict[str, Any]:
@@ -123,6 +119,8 @@ class AttributionBridgeStore:
             links.append(("checkout", checkout_id))
         if not links:
             raise ValueError("purchase_flow_id or checkout_id is required")
+        if not expected_experiment_id:
+            raise ValueError("expected experiment is required")
 
         token_hash = hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
         now = _utc_now()
@@ -135,6 +133,8 @@ class AttributionBridgeStore:
             ).fetchone()
             if row is None:
                 raise ValueError("invalid bridge token")
+            if str(row["experiment_id"]) != expected_experiment_id:
+                raise ValueError("bridge token experiment mismatch")
             if row["used_at"]:
                 raise ValueError("bridge token already used")
             expires = datetime.fromisoformat(str(row["expires_at"]).replace("Z", "+00:00"))

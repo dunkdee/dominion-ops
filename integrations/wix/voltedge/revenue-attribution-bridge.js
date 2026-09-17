@@ -3,6 +3,7 @@
 // No prices, products, payments, buyer PII, or checkout state are mutated.
 
 import { currentCartV2 } from "@wix/ecom";
+import { ecom } from "@wix/site-ecom";
 import { location, queryParams } from "@wix/site-location";
 import { session } from "wix-storage-frontend";
 
@@ -76,7 +77,7 @@ async function bindCurrentFlow() {
       return true;
     }
   } catch (_) {
-    // Network/runtime failures keep the token in session for the next page/navigation retry.
+    // Network/runtime failures keep the token in session for the next cart/page retry.
   }
   return false;
 }
@@ -89,5 +90,12 @@ async function bindWithBoundedRetry(attempt = 0) {
 
 $w.onReady(async function () {
   await captureBridgeState();
+
+  // Native Wix UI changes (including Add to Cart) trigger this even if the shopper
+  // remains on the same product page past the initial retry window.
+  ecom.onCartChange(async () => {
+    await bindWithBoundedRetry();
+  });
+
   await bindWithBoundedRetry();
 });

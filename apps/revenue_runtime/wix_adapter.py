@@ -33,7 +33,7 @@ def _request(method: str, url: str, **kwargs: Any):
         raise WixActuatorError("non-Wix destination rejected")
     try:
         import httpx
-    except ImportError as exc:  # keeps policy/ledger imports stdlib-only
+    except ImportError as exc:
         raise WixActuatorError("httpx runtime dependency unavailable") from exc
     response = httpx.request(method, url, headers=_headers(), timeout=TIMEOUT, **kwargs)
     response.raise_for_status()
@@ -41,7 +41,6 @@ def _request(method: str, url: str, **kwargs: Any):
 
 
 def get_product(product_id: str) -> dict[str, Any]:
-    """Read current V3 product and revision without relying on filter semantics."""
     cursor = None
     while True:
         cursor_paging: dict[str, Any] = {"limit": 100}
@@ -95,7 +94,6 @@ def update_plain_description(product_id: str, value: str) -> dict[str, Any]:
 
 
 def rollback_plain_description(product_id: str, before_value: str) -> dict[str, Any]:
-    """Rollback always re-reads current revision; stale revisions are never reused."""
     return update_plain_description(product_id, before_value)
 
 
@@ -110,7 +108,7 @@ def _money_to_cents(value: Any) -> int:
 
 
 def _search_recent_orders(limit: int = 100) -> list[dict[str, Any]]:
-    """Return only non-PII order fields required for deterministic reconciliation."""
+    """Return non-PII order fields required for deterministic reconciliation."""
     if limit < 1 or limit > 100:
         raise WixActuatorError("order limit must be 1..100")
     body = {
@@ -137,6 +135,8 @@ def _search_recent_orders(limit: int = 100) -> list[dict[str, Any]]:
             "id": order.get("id"),
             "created_date": order.get("createdDate"),
             "payment_status": order.get("paymentStatus"),
+            "checkout_id": order.get("checkoutId"),
+            "purchase_flow_id": order.get("purchaseFlowId"),
             "items": items,
         })
     return orders
@@ -147,7 +147,6 @@ def search_recent_paid_orders(limit: int = 100) -> list[dict[str, Any]]:
 
 
 def search_recent_refunded_orders(limit: int = 100) -> list[dict[str, Any]]:
-    """Return orders whose Wix payment lifecycle contains a partial or full refund."""
     return [
         order
         for order in _search_recent_orders(limit)
@@ -156,11 +155,7 @@ def search_recent_refunded_orders(limit: int = 100) -> list[dict[str, Any]]:
 
 
 def get_succeeded_refunds(order_id: str) -> list[dict[str, Any]]:
-    """Return provider-confirmed refund transactions only, stripped of buyer PII.
-
-    Wix order transaction records are authoritative for refund completion. Pending,
-    scheduled, failed, or reversed refund transactions are deliberately excluded.
-    """
+    """Return provider-confirmed refunds only, stripped of buyer PII."""
     if not order_id:
         raise WixActuatorError("order id is required")
     data = _request("GET", f"{ORDER_TRANSACTIONS_URL}/{order_id}").json()

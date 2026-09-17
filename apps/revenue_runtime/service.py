@@ -21,7 +21,6 @@ from .evaluator import load_policy, run_cycle
 from .store import RevenueStore
 from . import wix_adapter
 
-
 POLICY = load_policy()
 DB_PATH = Path(os.getenv("DOMINION_REVENUE_DB", str(Path.home() / ".dominion/revenue-runtime/revenue.db"))).expanduser()
 STORE = RevenueStore(DB_PATH)
@@ -168,7 +167,6 @@ def offer(experiment_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Experiment not found") from exc
     if exp["status"] != "active":
         raise HTTPException(status_code=409, detail="Experiment is not active")
-
     visitor_id = request.cookies.get(COOKIE_NAME, "")
     if not VID_RE.match(visitor_id):
         visitor_id = uuid.uuid4().hex
@@ -236,13 +234,12 @@ def wix_flow_bridge(experiment_id: str, payload: WixFlowBridge):
     try:
         result = BRIDGE.bind_token(
             token=payload.token,
+            expected_experiment_id=experiment_id,
             purchase_flow_id=payload.purchase_flow_id,
             checkout_id=payload.checkout_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    if result["experiment_id"] != experiment_id:
-        raise HTTPException(status_code=409, detail="Bridge token experiment mismatch")
     return {
         "status": "accepted",
         "experiment_id": experiment_id,
@@ -285,7 +282,6 @@ def create_experiment(payload: ExperimentCreate, request: Request):
         raise HTTPException(status_code=422, detail="Automatic promotion requires purchase evidence")
     _target_guard(payload.target_url)
     _variant_guard(payload.control)
-    _variant_guard(payload.treatment)
     try:
         created = STORE.create_experiment(payload.model_dump())
     except Exception as exc:

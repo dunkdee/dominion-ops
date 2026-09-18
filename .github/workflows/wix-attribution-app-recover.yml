@@ -72,8 +72,10 @@ jobs:
         id: recover
         env:
           WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          DOMINION_ATTRIBUTION_APP_ID: "5c72cb8a-686d-4dd2-8ec5-8985e7f55f01"
         run: |
           set -euo pipefail
+          [[ "$DOMINION_ATTRIBUTION_APP_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
           work="$(mktemp -d)"
           export WORK_DIR="$work"
           python3 <<'PY'
@@ -81,14 +83,24 @@ jobs:
           import pexpect
 
           work = os.environ["WORK_DIR"]
+          app_id = os.environ["DOMINION_ATTRIBUTION_APP_ID"]
           child_env = os.environ.copy()
           child_env["CI"] = "false"
           child_env["TERM"] = "xterm-256color"
           child_env["FORCE_COLOR"] = "0"
 
+          # Wix's documented --extend-app-id path binds directly to the already
+          # registered app and bypasses the API-key-incompatible existing-app picker.
           child = pexpect.spawn(
               "npm",
-              ["create", "@wix/new@latest", "--", "app"],
+              [
+                  "create",
+                  "@wix/new@latest",
+                  "--",
+                  "app",
+                  "--extend-app-id",
+                  app_id,
+              ],
               cwd=work,
               env=child_env,
               encoding="utf-8",
@@ -102,103 +114,61 @@ jobs:
           def clean(value: str) -> str:
               return ansi.sub("", value).replace("\r", "")
 
-          # Force the documented interactive flow. GitHub Actions exports CI=true,
-          # which suppresses the normal Wix selector even inside a pty.
+          # npm may first ask permission to install the official scaffold package.
           first = child.expect([
               re.compile(r"Ok to proceed\?\s*\(y\)", re.I),
-              re.compile(r"What would you like to do", re.I),
-              re.compile(r"Extend existing application", re.I),
+              re.compile(r"Mixpanel Analytics", re.I),
+              re.compile(r"template", re.I),
+              re.compile(r"package name|folder name|project name", re.I),
               pexpect.EOF,
               pexpect.TIMEOUT,
-          ], timeout=60)
+          ], timeout=90)
           if first == 0:
-              # npm is asking permission to install the official @wix/create-new
-              # package. This is dependency installation only; no Wix app mutation
-              # has occurred yet.
               child.send("y\r")
-              first = child.expect([
-                  re.compile(r"What would you like to do", re.I),
-                  re.compile(r"Extend existing application", re.I),
-                  pexpect.EOF,
-                  pexpect.TIMEOUT,
-              ], timeout=90)
-              if first in (2, 3):
-                  print("ERROR: Wix interactive selector did not render after npm package install")
-                  child.close(force=True)
-                  raise SystemExit(40)
-          elif first in (3, 4):
-              print("ERROR: Wix interactive selector did not render; refusing to guess")
+          elif first in (4, 5):
+              print("ERROR: Wix extend-app flow did not render")
               child.close(force=True)
               raise SystemExit(40)
-          time.sleep(0.5)
-          child.send("\x1b[B")
-          child.send("\r")
-          # Prove the flow actually moved into the existing-app selector.
-          child.expect(re.compile(r"Dominion Attribution", re.I), timeout=60)
 
-          # Existing-app picker: cycle deterministically until the exact app name
-          # is the selected option. No app mutation occurs during this picker.
-          target = "Dominion Attribution"
-          selected = False
+          template_selected = False
+          package_answered = False
           transcript = ""
-          deadline = time.time() + 120
+          deadline = time.time() + 300
+
           while time.time() < deadline and child.isalive():
               try:
                   chunk = child.read_nonblocking(size=4096, timeout=1)
-                  transcript = (transcript + chunk)[-30000:]
-              except pexpect.TIMEOUT:
-                  pass
-              view = clean(transcript)
-              lines = [line.strip() for line in view.splitlines() if line.strip()]
-              for line in lines[-80:]:
-                  if target in line and ("❯" in line or ">" in line[:4]):
-                      selected = True
-                      break
-              if selected:
-                  break
-              child.send("\x1b[B")
-              time.sleep(0.15)
-
-          if not selected:
-              print("ERROR: exact existing app was not selectable; refusing to continue")
-              child.sendcontrol("c")
-              child.close(force=True)
-              raise SystemExit(41)
-
-          child.send("\r")
-
-          # Package/folder prompt. Use the governed fixed package name.
-          child.expect(re.compile(r"package name|folder name|project name", re.I), timeout=120)
-          child.send("wix-dominion-attribution")
-          child.send("\r")
-
-          # Some CLI versions ask for a template when extending an app. If so,
-          # select the official Mixpanel Analytics template. Otherwise allow the
-          # documented default extension scaffold to finish.
-          template_target = "Mixpanel Analytics"
-          finish_deadline = time.time() + 240
-          buffer = ""
-          while time.time() < finish_deadline and child.isalive():
-              try:
-                  chunk = child.read_nonblocking(size=4096, timeout=1)
-                  buffer = (buffer + chunk)[-40000:]
+                  transcript = (transcript + chunk)[-50000:]
               except pexpect.TIMEOUT:
                   continue
-              view = clean(buffer)
-              if template_target in view:
-                  # Cycle until Mixpanel Analytics is visibly selected.
-                  for _ in range(30):
-                      lines = [line.strip() for line in clean(buffer).splitlines() if line.strip()]
-                      if any(template_target in line and ("❯" in line or ">" in line[:4]) for line in lines[-80:]):
-                          child.send("\r")
-                          buffer = ""
-                          break
-                      child.send("\x1b[B")
-                      time.sleep(0.15)
-                      try:
-                          buffer += child.read_nonblocking(size=4096, timeout=1)
-                      except pexpect.TIMEOUT:
-                          pass
+
+              view = clean(transcript)
+              lines = [line.strip() for line in view.splitlines() if line.strip()]
+
+              if not template_selected and "Mixpanel Analytics" in view:
+                  selected = any(
+                      "Mixpanel Analytics" in line
+                      and ("❯" in line or ">" in line[:4])
+                      for line in lines[-100:]
+                  )
+                  if selected:
+                      child.send("\r")
+                      template_selected = True
+                      transcript = ""
+                      continue
+                  child.send("\x1b[B")
+                  time.sleep(0.15)
+                  continue
+
+              if not package_answered and re.search(
+                  r"package name|folder name|project name",
+                  view,
+                  re.I,
+              ):
+                  child.send("wix-dominion-attribution\r")
+                  package_answered = True
+                  transcript = ""
+                  continue
 
           child.expect(pexpect.EOF, timeout=300)
           rc = child.exitstatus
@@ -207,16 +177,19 @@ jobs:
               rc = child.exitstatus
           if rc not in (0, None):
               raise SystemExit(rc)
+          if not template_selected:
+              print("ERROR: Mixpanel Analytics template was not selected; refusing recovery")
+              raise SystemExit(41)
           PY
 
           config="$(find "$work" -mindepth 2 -maxdepth 5 -type f -name wix.config.json -print -quit)"
           test -n "$config"
           project_dir="$(dirname "$config")"
           app_id="$(jq -r '.appId // empty' "$config")"
-          [[ "$app_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          test "$app_id" = "$DOMINION_ATTRIBUTION_APP_ID"
           echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
           echo "app_id=$app_id" >> "$GITHUB_OUTPUT"
-          echo "WIX_ATTRIBUTION_APP_RECOVERED=PASS app_id=$app_id"
+          echo "WIX_ATTRIBUTION_APP_RECOVERED=PASS app_id=$app_id mode=extend-app-id"
 
       - name: Import recovered scaffold without local auth material
         env:

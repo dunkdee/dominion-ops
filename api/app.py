@@ -1,7 +1,10 @@
 from flask import Flask, jsonify, request
 import glob, os, requests
 
+from beta import beta_bp
+
 app = Flask(__name__)
+app.register_blueprint(beta_bp)
 
 def flag(v):
     return "present" if (v and str(v).strip()) else "missing"

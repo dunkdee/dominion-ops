@@ -74,3 +74,54 @@ jobs:
               raise SystemExit("no argument-validation sources found")
           print(f"WIX_EXTEND_ARG_INSPECT=PASS sources={found}")
           PY
+
+      - name: Inspect Wix CLI app-secret path
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          cd "$work"
+          npm pack @wix/cli@1.1.247 >/dev/null
+          tar -xzf wix-cli-1.1.247.tgz
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          needles = (
+              "getAppSecret",
+              "FailedToGetAppSecret",
+              "withSecrets",
+              "getApp({",
+              "DevCenterClient",
+          )
+          found = 0
+          seen = set()
+          for map_path in sorted(Path("package/build").glob("*.js.map")):
+              try:
+                  sm = json.loads(map_path.read_text(encoding="utf-8"))
+              except Exception:
+                  continue
+              for source, body in zip(sm.get("sources", []), sm.get("sourcesContent", [])):
+                  if not body:
+                      continue
+                  low = body.lower()
+                  if not any(n.lower() in low for n in needles):
+                      continue
+                  key=(source, body[:200])
+                  if key in seen:
+                      continue
+                  seen.add(key)
+                  found += 1
+                  print(f"===== SECRET SOURCE map={map_path.name} path={source} =====")
+                  emitted=[]
+                  for needle in needles:
+                      pos=low.find(needle.lower())
+                      if pos < 0 or any(abs(pos-p)<5000 for p in emitted):
+                          continue
+                      emitted.append(pos)
+                      print(body[max(0,pos-8000):min(len(body),pos+16000)])
+                  print(f"===== END SECRET SOURCE {source} =====")
+          if found == 0:
+              raise SystemExit("no Wix app-secret source found")
+          print(f"WIX_APP_SECRET_PATH_INSPECT=PASS sources={found}")
+          PY

@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Inspect Wix known-app project path from public source maps
+      - name: Inspect Wix extend-app argument validation
         shell: bash
         run: |
           set -euo pipefail
@@ -33,65 +33,44 @@ jobs:
           import json
           from pathlib import Path
 
-          terms = (
-              "extendAppId",
-              "ExistingAppFlow",
-              "ExtendExistingApp",
-              "getApp({ appId",
-              "getApp({appId",
-              "wix.config.json",
-              "projectId",
-              "setupProject",
-              "createProject",
-              "generateProject",
-              "templateId",
-              "create-new-packages/app-command",
+          targets = (
+              "parse-command-options.ts",
+              "command.tsx",
+              "command.ts",
+              "index.tsx",
+              "index.ts",
           )
-          selected = []
-          seen = set()
-
+          must_contain = ("extendAppId", "--extend-app-id", "template", "appName")
+          found = 0
           for map_path in sorted(Path("package/build").glob("*.js.map")):
               try:
                   sm = json.loads(map_path.read_text(encoding="utf-8"))
               except Exception:
                   continue
               for source, body in zip(sm.get("sources", []), sm.get("sourcesContent", [])):
-                  if not body or source in seen:
+                  if not body:
                       continue
-                  score = sum(1 for term in terms if term.lower() in body.lower())
                   source_l = source.lower()
-                  if (
-                      score >= 2
-                      or "existingapp" in source_l
-                      or "extendexisting" in source_l
-                      or "app-command/src" in source_l and ("question" in source_l or "project" in source_l or "setup" in source_l)
-                      or "dev-center-client/src/dev-center-client.ts" in source_l
-                  ):
-                      seen.add(source)
-                      selected.append((score, map_path.name, source, body))
-
-          selected.sort(key=lambda row: (-row[0], row[2]))
-          if not selected:
-              raise SystemExit("no relevant Wix known-app source found")
-
-          for score, map_name, source, body in selected[:25]:
-              print(f"===== SOURCE score={score} map={map_name} path={source} =====")
-              if len(body) <= 50000:
-                  print(body)
-              else:
-                  # Print bounded windows around every high-value term.
-                  emitted = []
-                  low = body.lower()
-                  for term in terms:
-                      pos = low.find(term.lower())
-                      if pos < 0:
-                          continue
-                      if any(abs(pos - prior) < 6000 for prior in emitted):
-                          continue
-                      emitted.append(pos)
-                      print(f"--- WINDOW term={term} pos={pos} ---")
-                      print(body[max(0,pos-7000):min(len(body),pos+14000)])
-              print(f"===== END SOURCE {source} =====")
-
-          print(f"WIX_KNOWN_APP_STATIC_INSPECT=PASS sources={len(selected)}")
+                  if "create-new-packages/app-command" not in source_l:
+                      continue
+                  basename = source.split("/")[-1]
+                  score = sum(1 for term in must_contain if term.lower() in body.lower())
+                  if basename in targets or score >= 3:
+                      found += 1
+                      print(f"===== ARG SOURCE score={score} map={map_path.name} path={source} =====")
+                      if len(body) <= 50000:
+                          print(body)
+                      else:
+                          low = body.lower()
+                          emitted=[]
+                          for term in must_contain:
+                              pos=low.find(term.lower())
+                              if pos < 0 or any(abs(pos-p)<5000 for p in emitted):
+                                  continue
+                              emitted.append(pos)
+                              print(body[max(0,pos-7000):min(len(body),pos+14000)])
+                      print(f"===== END ARG SOURCE {source} =====")
+          if found == 0:
+              raise SystemExit("no argument-validation sources found")
+          print(f"WIX_EXTEND_ARG_INSPECT=PASS sources={found}")
           PY

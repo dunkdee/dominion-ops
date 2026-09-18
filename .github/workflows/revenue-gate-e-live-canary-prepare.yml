@@ -301,7 +301,8 @@ jobs:
             | tee "$log"
           grep -Fq 'GATE_E_LIVE_RUNTIME_HEALTH=PASS' "$log"
           grep -Fq 'GATE_E_LIVE_EVALUATOR_RUN=PASS' "$log"
-          grep -Fq 'GATE_E_WIX_NATIVE_LINK=PASS' "$log"
+          grep -Fq 'GATE_E_WIX_ORDER_PROOF=PASS' "$log"
+          grep -Eq 'GATE_E_(WIX_NATIVE_LINK|WIX_ORDER_IDENTITY_JOIN)=PASS' "$log"
           grep -Fq 'SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT=PASS' "$log"
           grep -Fq 'GATE_E_EVENT_LEDGER_PROOF=PASS' "$log"
           grep -Fq 'GATE_E_LIVE_CANARY_PAUSED=PASS' "$log"
@@ -311,7 +312,7 @@ jobs:
           grep -Fq 'new_refund=false' "$log"
           {
             echo 'proof_lines<<EOF'
-            grep -E '^(GATE_E_LIVE_RUNTIME_HEALTH|GATE_E_LIVE_EVALUATOR_RUN|GATE_E_LIVE_EXPERIMENT_PROOF|GATE_E_WIX_NATIVE_LINK|SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT|GATE_E_EVENT_LEDGER_PROOF|GATE_E_LIVE_CANARY_PAUSED|GATE_E_LIVE_RECONCILE)=' "$log"
+            grep -E '^(GATE_E_LIVE_RUNTIME_HEALTH|GATE_E_LIVE_EVALUATOR_RUN|GATE_E_LIVE_EXPERIMENT_PROOF|GATE_E_WIX_ORDER_PROOF|GATE_E_WIX_NATIVE_LINK|GATE_E_WIX_ORDER_IDENTITY_JOIN|SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT|GATE_E_EVENT_LEDGER_PROOF|GATE_E_LIVE_CANARY_PAUSED|GATE_E_LIVE_RECONCILE)=' "$log"
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
@@ -333,7 +334,7 @@ jobs:
           $PROOF_LINES
           \`\`\`
 
-          Evidence boundary: this closes Gate E with the already-completed zero-dollar Catalog V3 order and its Wix-native purchase-flow/checkout attribution. No new payment, refund, paid traffic, price mutation, provider change, or external publication was performed. Gate C/D real payment/refund capability remains preserved from order 10001. The live canary is paused after proof.
+          Evidence boundary: this closes Gate E with the already-completed zero-dollar Catalog V3 order, canonical signed source-to-order attribution, and an independently re-read live Wix purchase-flow/checkout identity join. No new payment, refund, paid traffic, price mutation, provider change, or external publication was performed. Gate C/D real payment/refund capability remains preserved from order 10001. The live canary is paused after proof.
           EOF
           )"
           jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/comment.json"

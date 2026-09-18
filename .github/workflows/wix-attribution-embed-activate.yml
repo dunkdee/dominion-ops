@@ -16,7 +16,7 @@ jobs:
       github.event.comment.author_association == 'OWNER' &&
       startsWith(github.event.comment.body, 'RUN_WIX_ATTRIBUTION_EMBED_ACTIVATE:')
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Bind authorization to exact current main
         id: auth
@@ -45,35 +45,109 @@ jobs:
           ref: ${{ steps.auth.outputs.main_sha }}
           persist-credentials: false
 
-      - name: Resolve installed app token without exposing it
-        id: app
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+
+      - name: Authenticate Wix CLI with existing governed API key
         env:
           WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
-          WIX_SITE_ID: "a790d430-a3a0-4b0e-9be6-4c874c229167"
-          APP_ID: "5c72cb8a-686d-4dd2-8ec5-8985e7f55f01"
         run: |
           set -euo pipefail
           test -n "$WIX_API_KEY"
-          [[ "$WIX_SITE_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
-          [[ "$APP_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
-          file="$RUNNER_TEMP/wix-installed-apps.json"
-          curl -fsSL \
-            -H "Authorization: $WIX_API_KEY" \
-            -H "wix-site-id: $WIX_SITE_ID" \
+          echo "::add-mask::$WIX_API_KEY"
+          npm install --global @wix/cli@1.1.247
+          wix login --api-key "$WIX_API_KEY"
+          identity="$(wix whoami 2>&1)"
+          test -n "$identity"
+          echo "WIX_ATTRIBUTION_CLI_AUTH=PASS"
+
+      - name: Resolve existing app secret through Wix CLI backoffice auth
+        id: secret
+        env:
+          APP_ID: "5c72cb8a-686d-4dd2-8ec5-8985e7f55f01"
+        run: |
+          set -euo pipefail
+          auth_file="$(find "$HOME" -maxdepth 5 -type f -path '*/auth/api-key.json' -print -quit)"
+          test -n "$auth_file"
+          api_token="$(jq -r '.token // empty' "$auth_file")"
+          account_id="$(jq -r '.accountId // empty' "$auth_file")"
+          test -n "$api_token"
+          [[ "$account_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          echo "::add-mask::$api_token"
+
+          secret_file="$RUNNER_TEMP/wix-app-secret.json"
+          curl -fsSL --get \
+            -H "Authorization: $api_token" \
+            -H "wix-account-id: $account_id" \
+            -H "X-XSRF-TOKEN: nocheck" \
+            -H "Cookie: XSRF-TOKEN=nocheck" \
+            -H "User-Agent: wix-cli" \
+            --data-urlencode "withSecrets=true" \
+            "https://manage.wix.com/apps-service/v1/apps/$APP_ID" > "$secret_file"
+
+          resolved_id="$(jq -r '.app.id // empty' "$secret_file")"
+          app_secret="$(jq -r '.app.appSecrets.appSecret // empty' "$secret_file")"
+          test "$resolved_id" = "$APP_ID"
+          test -n "$app_secret"
+          echo "::add-mask::$app_secret"
+          printf '%s' "$app_secret" > "$RUNNER_TEMP/dominion-attribution-app-secret"
+          chmod 600 "$RUNNER_TEMP/dominion-attribution-app-secret"
+          rm -f "$secret_file"
+          echo "WIX_ATTRIBUTION_APP_SECRET=PASS app_id=$APP_ID secret_exposed=false"
+
+      - name: Mint app access token for exact VoltEdge installation
+        id: token
+        env:
+          APP_ID: "5c72cb8a-686d-4dd2-8ec5-8985e7f55f01"
+          INSTANCE_ID: "609866e6-48cb-4378-b01f-9cfaf13ddb91"
+        run: |
+          set -euo pipefail
+          secret_file="$RUNNER_TEMP/dominion-attribution-app-secret"
+          test -s "$secret_file"
+          app_secret="$(cat "$secret_file")"
+          echo "::add-mask::$app_secret"
+
+          body="$(jq -nc \
+            --arg app "$APP_ID" \
+            --arg secret "$app_secret" \
+            --arg instance "$INSTANCE_ID" \
+            '{grant_type:"client_credentials",client_id:$app,client_secret:$secret,instance_id:$instance}')"
+          token_file="$RUNNER_TEMP/wix-oauth-token.json"
+          curl -fsSL -X POST \
             -H "Content-Type: application/json" \
-            "https://www.wixapis.com/apps-installer-service/v1/app-instances" > "$file"
-          count="$(jq --arg app "$APP_ID" '[.appInstances[]? | select(.appDefId == $app)] | length' "$file")"
-          test "$count" = "1"
-          app_token="$(jq -r --arg app "$APP_ID" '.appInstances[] | select(.appDefId == $app) | .appToken // empty' "$file")"
-          version="$(jq -r --arg app "$APP_ID" '.appInstances[] | select(.appDefId == $app) | .version // empty' "$file")"
-          enabled="$(jq -r --arg app "$APP_ID" '.appInstances[] | select(.appDefId == $app) | .enabled // false' "$file")"
-          test -n "$app_token"
-          test "$enabled" = "true"
-          echo "::add-mask::$app_token"
-          printf '%s' "$app_token" > "$RUNNER_TEMP/dominion-attribution-app-token"
-          chmod 600 "$RUNNER_TEMP/dominion-attribution-app-token"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "WIX_ATTRIBUTION_APP_INSTANCE=PASS app_id=$APP_ID version=$version enabled=$enabled token_exposed=false"
+            --data-binary "$body" \
+            "https://www.wixapis.com/oauth2/token" > "$token_file"
+
+          access_token="$(jq -r '.access_token // empty' "$token_file")"
+          token_type="$(jq -r '.token_type // empty' "$token_file")"
+          expires_in="$(jq -r '.expires_in // 0' "$token_file")"
+          test -n "$access_token"
+          test "$expires_in" -gt 0
+          echo "::add-mask::$access_token"
+          printf '%s' "$access_token" > "$RUNNER_TEMP/dominion-attribution-access-token"
+          chmod 600 "$RUNNER_TEMP/dominion-attribution-access-token"
+          rm -f "$token_file"
+          echo "expires_in=$expires_in" >> "$GITHUB_OUTPUT"
+          echo "WIX_ATTRIBUTION_OAUTH_TOKEN=PASS app_id=$APP_ID instance_id=$INSTANCE_ID token_type=$token_type expires_in=$expires_in token_exposed=false"
+
+      - name: Prove token is bound to exact installed app instance
+        env:
+          INSTANCE_ID: "609866e6-48cb-4378-b01f-9cfaf13ddb91"
+        run: |
+          set -euo pipefail
+          access_token="$(cat "$RUNNER_TEMP/dominion-attribution-access-token")"
+          echo "::add-mask::$access_token"
+          instance_file="$RUNNER_TEMP/wix-app-instance.json"
+          curl -fsSL \
+            -H "Authorization: $access_token" \
+            "https://www.wixapis.com/apps/v1/instance" > "$instance_file"
+          resolved_instance="$(jq -r '.instance.instanceId // empty' "$instance_file")"
+          test "$resolved_instance" = "$INSTANCE_ID"
+          app_version="$(jq -r '.instance.appVersion // empty' "$instance_file")"
+          echo "WIX_ATTRIBUTION_APP_INSTANCE_IDENTITY=PASS instance_id=$resolved_instance app_version=$app_version"
+          rm -f "$instance_file"
 
       - name: Activate exact embedded script as installed app
         id: embed
@@ -81,15 +155,12 @@ jobs:
           COMPONENT_ID: "c50757c2-9f64-46f8-891d-a87abfcdba0a"
         run: |
           set -euo pipefail
-          [[ "$COMPONENT_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
-          token_file="$RUNNER_TEMP/dominion-attribution-app-token"
-          test -s "$token_file"
-          app_token="$(cat "$token_file")"
-          echo "::add-mask::$app_token"
+          access_token="$(cat "$RUNNER_TEMP/dominion-attribution-access-token")"
+          echo "::add-mask::$access_token"
           body='{"properties":{"parameters":{},"disabled":false}}'
           response="$RUNNER_TEMP/embed-response.json"
           curl -fsSL -X POST \
-            -H "Authorization: $app_token" \
+            -H "Authorization: $access_token" \
             -H "Content-Type: application/json" \
             --data-binary "$body" \
             "https://www.wixapis.com/apps/v1/scripts?componentId=$COMPONENT_ID" > "$response"
@@ -103,29 +174,34 @@ jobs:
           COMPONENT_ID: "c50757c2-9f64-46f8-891d-a87abfcdba0a"
         run: |
           set -euo pipefail
-          token_file="$RUNNER_TEMP/dominion-attribution-app-token"
-          test -s "$token_file"
-          app_token="$(cat "$token_file")"
-          echo "::add-mask::$app_token"
+          access_token="$(cat "$RUNNER_TEMP/dominion-attribution-access-token")"
+          echo "::add-mask::$access_token"
           response="$RUNNER_TEMP/embed-verify.json"
           curl -fsSL \
-            -H "Authorization: $app_token" \
+            -H "Authorization: $access_token" \
             "https://www.wixapis.com/apps/v1/scripts?componentId=$COMPONENT_ID" > "$response"
           disabled="$(jq -r '.properties.disabled // false' "$response")"
           test "$disabled" = "false"
           echo "WIX_ATTRIBUTION_EMBED_READBACK=PASS component_id=$COMPONENT_ID disabled=$disabled"
 
-      - name: Remove ephemeral app token
+      - name: Remove ephemeral credentials and responses
         if: always()
         run: |
-          rm -f "$RUNNER_TEMP/dominion-attribution-app-token" "$RUNNER_TEMP/wix-installed-apps.json" "$RUNNER_TEMP/embed-response.json" "$RUNNER_TEMP/embed-verify.json"
+          rm -f \
+            "$RUNNER_TEMP/dominion-attribution-app-secret" \
+            "$RUNNER_TEMP/dominion-attribution-access-token" \
+            "$RUNNER_TEMP/wix-app-secret.json" \
+            "$RUNNER_TEMP/wix-oauth-token.json" \
+            "$RUNNER_TEMP/wix-app-instance.json" \
+            "$RUNNER_TEMP/embed-response.json" \
+            "$RUNNER_TEMP/embed-verify.json"
 
       - name: Record activation receipt on issue 367
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
           MAIN_SHA: ${{ steps.auth.outputs.main_sha }}
-          APP_VERSION: ${{ steps.app.outputs.version }}
+          EXPIRES_IN: ${{ steps.token.outputs.expires_in }}
         run: |
           set -euo pipefail
           body="$(cat <<EOF
@@ -133,13 +209,16 @@ jobs:
 
           - exact main: `$MAIN_SHA`
           - app: `5c72cb8a-686d-4dd2-8ec5-8985e7f55f01`
-          - installed version: `$APP_VERSION`
+          - app instance: `609866e6-48cb-4378-b01f-9cfaf13ddb91`
           - component: `c50757c2-9f64-46f8-891d-a87abfcdba0a`
+          - `WIX_ATTRIBUTION_CLI_AUTH=PASS`
+          - `WIX_ATTRIBUTION_APP_SECRET=PASS secret_exposed=false`
+          - `WIX_ATTRIBUTION_OAUTH_TOKEN=PASS token_exposed=false expires_in=$EXPIRES_IN`
+          - `WIX_ATTRIBUTION_APP_INSTANCE_IDENTITY=PASS`
           - `WIX_ATTRIBUTION_EMBED_ACTIVATE=PASS`
           - `WIX_ATTRIBUTION_EMBED_READBACK=PASS`
-          - app token remained ephemeral and was not logged or persisted
 
-          This proves activation/read-back only. Issue #367 remains open until live publication and a zero-spend native `WIX_CHECKOUT_LINK` runtime receipt are proven.
+          All app credentials/tokens were ephemeral and removed. This proves Wix activation/read-back only. Issue #367 remains open until live publication and a zero-spend native `WIX_CHECKOUT_LINK` runtime receipt are proven.
           EOF
           )"
           jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/comment.json"

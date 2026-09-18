@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Inspect public Wix My Apps compiled request
+      - name: Inspect public Wix route resolver
         shell: bash
         run: |
           set -euo pipefail
@@ -30,60 +30,37 @@ jobs:
           npm pack @wix/create-new@0.0.113 >/dev/null
           tar -xzf wix-create-new-0.0.113.tgz
           python3 - <<'PY'
-          import re
+          import json
           from pathlib import Path
 
-          root = Path("package/build")
-          files = sorted(root.glob("*.js"))
-          needles = (
-              "queryMyApps",
-              "devcenter-myapps",
-              "myapps",
-              "my-app",
-              "updatedDate",
-          )
-          hits = 0
-          for path in files:
-              text = path.read_text(encoding="utf-8", errors="replace")
-              positions = []
-              low = text.lower()
-              for needle in needles:
-                  start = 0
-                  while True:
-                      pos = low.find(needle.lower(), start)
-                      if pos < 0:
-                          break
-                      positions.append((pos, needle))
-                      start = pos + len(needle)
-              # De-duplicate overlapping windows.
-              positions.sort()
-              emitted = []
-              for pos, needle in positions:
-                  if any(abs(pos - prior) < 5000 for prior in emitted):
+          found = 0
+          for map_path in sorted(Path("package/build").glob("*.js.map")):
+              try:
+                  sm = json.loads(map_path.read_text(encoding="utf-8"))
+              except Exception:
+                  continue
+              for source, body in zip(sm.get("sources", []), sm.get("sourcesContent", [])):
+                  if not body:
                       continue
-                  emitted.append(pos)
-                  hits += 1
-                  lo = max(0, pos - 8000)
-                  hi = min(len(text), pos + 14000)
-                  print(f"===== COMPILED {path.name} needle={needle} pos={pos} =====")
-                  print(text[lo:hi])
-                  print(f"===== END COMPILED {path.name} =====")
-
-          # Print all likely Wix API route literals containing app/my-app/devcenter.
-          route_re = re.compile(r'["\x27\x60]([^"\x27\x60]{0,240}(?:myapps|my-app|devcenter)[^"\x27\x60]{0,240})["\x27\x60]', re.I)
-          routes = []
-          for path in files:
-              text = path.read_text(encoding="utf-8", errors="replace")
-              for m in route_re.finditer(text):
-                  value = m.group(1)
-                  if value not in routes:
-                      routes.append(value)
-          print("===== CANDIDATE_ROUTE_LITERALS =====")
-          for value in routes[:200]:
-              print(value)
-          print("===== END_CANDIDATE_ROUTE_LITERALS =====")
-
-          if hits == 0:
-              raise SystemExit("no My Apps compiled-code hits found")
-          print(f"WIX_MYAPPS_COMPILED_INSPECT=PASS hits={hits} routes={len(routes)}")
+                  if (
+                      "function resolveUrl" in body
+                      or "const resolveUrl" in body
+                      or "export const resolveUrl" in body
+                      or "export function resolveUrl" in body
+                  ):
+                      found += 1
+                      print(f"===== RESOLVER SOURCE {map_path.name} :: {source} =====")
+                      # Resolver source is small enough to print completely; if not, cap around symbol.
+                      idxs = [i for i in (
+                          body.find("function resolveUrl"),
+                          body.find("const resolveUrl"),
+                          body.find("export const resolveUrl"),
+                          body.find("export function resolveUrl"),
+                      ) if i >= 0]
+                      idx = min(idxs) if idxs else 0
+                      print(body[max(0, idx-6000):min(len(body), idx+16000)])
+                      print(f"===== END RESOLVER SOURCE {source} =====")
+          if found == 0:
+              raise SystemExit("resolveUrl source not found in public source maps")
+          print(f"WIX_ROUTE_RESOLVER_INSPECT=PASS sources={found}")
           PY

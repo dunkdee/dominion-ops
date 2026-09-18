@@ -114,6 +114,7 @@ jobs:
 
           patterns = [
               re.compile(r"Ok to proceed\?\s*\(y\)", re.I),
+              re.compile(r"Add new extensions for an existing Wix app", re.I),
               re.compile(r"Mixpanel Analytics", re.I),
               re.compile(r"package name|folder name|project name", re.I),
               re.compile(r"Failed to fetch|ERROR|Something went wrong", re.I),
@@ -121,6 +122,7 @@ jobs:
               pexpect.TIMEOUT,
           ]
 
+          existing_mode_selected = False
           template_selected = False
           package_answered = False
           npm_answered = False
@@ -139,6 +141,20 @@ jobs:
                   continue
 
               if event == 1:
+                  if existing_mode_selected:
+                      print("ERROR: existing-app mode prompt repeated unexpectedly")
+                      child.close(force=True)
+                      raise SystemExit(41)
+                  # The Wix CLI still renders its top-level mode selector even when
+                  # --extend-app-id is supplied. The default is "Create new", so one
+                  # ArrowDown selects "Add new extensions for an existing Wix app".
+                  child.send("\x1b[B")
+                  time.sleep(0.15)
+                  child.send("\r")
+                  existing_mode_selected = True
+                  continue
+
+              if event == 2:
                   # pexpect consumes the target text. Include child.before so the
                   # selected-row marker immediately preceding the label is retained.
                   context = clean((child.before or "")[-2500:] + (child.after or ""))
@@ -156,35 +172,35 @@ jobs:
                       time.sleep(0.15)
                   continue
 
-              if event == 2:
+              if event == 3:
                   if package_answered:
                       print("ERROR: project-name prompt repeated unexpectedly")
                       child.close(force=True)
-                      raise SystemExit(41)
+                      raise SystemExit(42)
                   child.send("wix-dominion-attribution\r")
                   package_answered = True
                   continue
 
-              if event == 3:
+              if event == 4:
                   context = clean((child.before or "")[-3000:] + (child.after or ""))
                   print("ERROR: Wix extend-app flow reported failure")
                   print(context)
                   child.close(force=True)
-                  raise SystemExit(42)
+                  raise SystemExit(43)
 
-              if event == 4:
+              if event == 5:
                   break
 
               # TIMEOUT is a bounded poll. Continue until the single absolute
               # deadline rather than adding a second hidden timeout window.
-              if event == 5:
+              if event == 6:
                   continue
 
           if child.isalive():
               print("ERROR: Wix extend-app prompt deadline exceeded")
               child.sendcontrol("c")
               child.close(force=True)
-              raise SystemExit(43)
+              raise SystemExit(44)
 
           rc = child.exitstatus
           if rc is None:
@@ -195,7 +211,10 @@ jobs:
               raise SystemExit(rc)
           if not template_selected:
               print("ERROR: Mixpanel Analytics template was not selected; refusing recovery")
-              raise SystemExit(44)
+              raise SystemExit(45)
+          if not existing_mode_selected:
+              print("ERROR: existing-app mode was not selected; refusing recovery")
+              raise SystemExit(46)
           PY
 
           config="$(find "$work" -mindepth 2 -maxdepth 5 -type f -name wix.config.json -print -quit)"

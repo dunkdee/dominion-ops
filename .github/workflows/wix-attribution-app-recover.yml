@@ -81,10 +81,16 @@ jobs:
           import pexpect
 
           work = os.environ["WORK_DIR"]
+          child_env = os.environ.copy()
+          child_env["CI"] = "false"
+          child_env["TERM"] = "xterm-256color"
+          child_env["FORCE_COLOR"] = "0"
+
           child = pexpect.spawn(
               "npm",
               ["create", "@wix/new@latest", "--", "app"],
               cwd=work,
+              env=child_env,
               encoding="utf-8",
               timeout=180,
               dimensions=(40, 160),
@@ -96,11 +102,23 @@ jobs:
           def clean(value: str) -> str:
               return ansi.sub("", value).replace("\r", "")
 
-          # First prompt: move from the default create option to the documented
-          # "Extend existing application" option.
-          child.expect(re.compile(r"Extend existing application", re.I))
+          # Force the documented interactive flow. GitHub Actions exports CI=true,
+          # which suppresses the normal Wix selector even inside a pty.
+          first = child.expect([
+              re.compile(r"What would you like to do", re.I),
+              re.compile(r"Extend existing application", re.I),
+              pexpect.EOF,
+              pexpect.TIMEOUT,
+          ], timeout=60)
+          if first in (2, 3):
+              print("ERROR: Wix interactive selector did not render; refusing to guess")
+              child.close(force=True)
+              raise SystemExit(40)
+          time.sleep(0.5)
           child.send("\x1b[B")
           child.send("\r")
+          # Prove the flow actually moved into the existing-app selector.
+          child.expect(re.compile(r"Dominion Attribution", re.I), timeout=60)
 
           # Existing-app picker: cycle deterministically until the exact app name
           # is the selected option. No app mutation occurs during this picker.

@@ -1,0 +1,231 @@
+name: Wix Attribution App Recover
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  recover:
+    if: >-
+      github.event.issue.number == 367 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.author_association == 'OWNER' &&
+      startsWith(github.event.comment.body, 'RUN_WIX_ATTRIBUTION_APP_RECOVER:')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Bind authorization to exact current main
+        id: auth
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$COMMENT_USER" = "$GITHUB_REPOSITORY_OWNER"
+          test "$AUTHOR_ASSOCIATION" = "OWNER"
+          main_sha="$(curl -fsSL             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | jq -r '.sha')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]]
+          expected="RUN_WIX_ATTRIBUTION_APP_RECOVER:$main_sha:RECOVER"
+          test "$COMMENT_BODY" = "$expected"
+          echo "main_sha=$main_sha" >> "$GITHUB_OUTPUT"
+          echo "WIX_ATTRIBUTION_APP_RECOVER_AUTH=PASS main_sha=$main_sha actor=$COMMENT_USER"
+
+      - name: Checkout exact current main
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ steps.auth.outputs.main_sha }}
+          fetch-depth: 1
+
+      - name: Prove recovery boundary
+        run: |
+          set -euo pipefail
+          test ! -e apps/wix-dominion-attribution/wix.config.json
+          test -z "$(git ls-remote --heads origin refs/heads/wix-attribution-app-recovered-367)"
+          echo "WIX_ATTRIBUTION_APP_RECOVER_BOUNDARY=PASS target=apps/wix-dominion-attribution"
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '20'
+
+      - name: Authenticate Wix CLI and configure Git identity
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$WIX_API_KEY"
+          npm install --global @wix/cli@latest
+          wix login --api-key "$WIX_API_KEY"
+          wix whoami
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python3 -m pip install --quiet pexpect
+          echo "WIX_ATTRIBUTION_APP_RECOVER_CLI_AUTH=PASS"
+
+      - name: Recover the already-registered Dominion Attribution app
+        id: recover
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          export WORK_DIR="$work"
+          python3 <<'PY'
+          import os, re, sys, time
+          import pexpect
+
+          work = os.environ["WORK_DIR"]
+          child = pexpect.spawn(
+              "npm",
+              ["create", "@wix/new@latest", "--", "app"],
+              cwd=work,
+              encoding="utf-8",
+              timeout=180,
+              dimensions=(40, 160),
+          )
+          child.logfile_read = sys.stdout
+
+          ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+          def clean(value: str) -> str:
+              return ansi.sub("", value).replace("\r", "")
+
+          # First prompt: move from the default create option to the documented
+          # "Extend existing application" option.
+          child.expect(re.compile(r"Extend existing application", re.I))
+          child.send("\x1b[B")
+          child.send("\r")
+
+          # Existing-app picker: cycle deterministically until the exact app name
+          # is the selected option. No app mutation occurs during this picker.
+          target = "Dominion Attribution"
+          selected = False
+          transcript = ""
+          deadline = time.time() + 120
+          while time.time() < deadline and child.isalive():
+              try:
+                  chunk = child.read_nonblocking(size=4096, timeout=1)
+                  transcript = (transcript + chunk)[-30000:]
+              except pexpect.TIMEOUT:
+                  pass
+              view = clean(transcript)
+              lines = [line.strip() for line in view.splitlines() if line.strip()]
+              for line in lines[-80:]:
+                  if target in line and ("❯" in line or ">" in line[:4]):
+                      selected = True
+                      break
+              if selected:
+                  break
+              child.send("\x1b[B")
+              time.sleep(0.15)
+
+          if not selected:
+              print("ERROR: exact existing app was not selectable; refusing to continue")
+              child.sendcontrol("c")
+              child.close(force=True)
+              raise SystemExit(41)
+
+          child.send("\r")
+
+          # Package/folder prompt. Use the governed fixed package name.
+          child.expect(re.compile(r"package name|folder name|project name", re.I), timeout=120)
+          child.send("wix-dominion-attribution")
+          child.send("\r")
+
+          # Some CLI versions ask for a template when extending an app. If so,
+          # select the official Mixpanel Analytics template. Otherwise allow the
+          # documented default extension scaffold to finish.
+          template_target = "Mixpanel Analytics"
+          finish_deadline = time.time() + 240
+          buffer = ""
+          while time.time() < finish_deadline and child.isalive():
+              try:
+                  chunk = child.read_nonblocking(size=4096, timeout=1)
+                  buffer = (buffer + chunk)[-40000:]
+              except pexpect.TIMEOUT:
+                  continue
+              view = clean(buffer)
+              if template_target in view:
+                  # Cycle until Mixpanel Analytics is visibly selected.
+                  for _ in range(30):
+                      lines = [line.strip() for line in clean(buffer).splitlines() if line.strip()]
+                      if any(template_target in line and ("❯" in line or ">" in line[:4]) for line in lines[-80:]):
+                          child.send("\r")
+                          buffer = ""
+                          break
+                      child.send("\x1b[B")
+                      time.sleep(0.15)
+                      try:
+                          buffer += child.read_nonblocking(size=4096, timeout=1)
+                      except pexpect.TIMEOUT:
+                          pass
+
+          child.expect(pexpect.EOF, timeout=300)
+          rc = child.exitstatus
+          if rc is None:
+              child.close()
+              rc = child.exitstatus
+          if rc not in (0, None):
+              raise SystemExit(rc)
+          PY
+
+          config="$(find "$work" -mindepth 2 -maxdepth 5 -type f -name wix.config.json -print -quit)"
+          test -n "$config"
+          project_dir="$(dirname "$config")"
+          app_id="$(jq -r '.appId // empty' "$config")"
+          [[ "$app_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+          echo "app_id=$app_id" >> "$GITHUB_OUTPUT"
+          echo "WIX_ATTRIBUTION_APP_RECOVERED=PASS app_id=$app_id"
+
+      - name: Import recovered scaffold without local auth material
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          PROJECT_DIR: ${{ steps.recover.outputs.project_dir }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/apps/wix-dominion-attribution"
+          rsync -a             --exclude='.git'             --exclude='.wix'             --exclude='node_modules'             --exclude='.env'             --exclude='.env.*'             "$PROJECT_DIR/" "$GITHUB_WORKSPACE/apps/wix-dominion-attribution/"
+          test -s "$GITHUB_WORKSPACE/apps/wix-dominion-attribution/wix.config.json"
+          if grep -R -F -q -- "$WIX_API_KEY" "$GITHUB_WORKSPACE/apps/wix-dominion-attribution"; then
+            echo "ERROR: API key material detected in recovered scaffold"
+            exit 1
+          fi
+          echo "WIX_ATTRIBUTION_APP_RECOVER_SECRET_SCAN=PASS"
+
+      - name: Commit recovered scaffold to isolated branch
+        id: push
+        env:
+          APP_ID: ${{ steps.recover.outputs.app_id }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          branch="wix-attribution-app-recovered-367"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add apps/wix-dominion-attribution
+          git diff --cached --quiet && { echo "ERROR: recovery produced no repository changes"; exit 1; }
+          git commit -m "feat(wix): recover Dominion attribution app scaffold"
+          git push origin "HEAD:refs/heads/$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "WIX_ATTRIBUTION_APP_RECOVER_PUSH=PASS app_id=$APP_ID branch=$branch"
+
+      - name: Record recovery receipt on issue 367
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ steps.auth.outputs.main_sha }}
+          APP_ID: ${{ steps.recover.outputs.app_id }}
+          BRANCH: ${{ steps.push.outputs.branch }}
+        run: |
+          set -euo pipefail
+          body="$(printf '%s\n'             '## Wix native attribution app recovery — PASS'             ''             "Exact authorized main: $MAIN_SHA"             "Recovered existing Wix app ID: $APP_ID"             "Generated branch: $BRANCH"             ''             'The already-registered Dominion Attribution app was selected through Wix CLI Extend existing application and scaffolded locally. No duplicate app was created. No app was installed on VoltEdge and no live-site code, product, checkout, payment, or existing custom embed was changed.')"
+          jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/comment.json"
+          curl -fsSL -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H 'Accept: application/vnd.github+json'             -H 'Content-Type: application/json'             --data-binary "@$RUNNER_TEMP/comment.json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/367/comments" >/dev/null
+          echo "WIX_ATTRIBUTION_APP_RECOVER_RECEIPT=PASS issue=367"

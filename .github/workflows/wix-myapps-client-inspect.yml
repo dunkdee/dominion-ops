@@ -1,0 +1,57 @@
+name: Wix My Apps Client Inspect
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wix-myapps-client-inspect.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+
+      - name: Inspect public Wix package source map
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          cd "$work"
+          npm pack @wix/create-new@0.0.113 >/dev/null
+          tar -xzf wix-create-new-0.0.113.tgz
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          sm = json.loads(Path("package/build/index.js.map").read_text(encoding="utf-8"))
+          wanted = (
+              "dev-center-client/src/dev-center-client.ts",
+              "ambassador-devcenter-myapps-v1-my-app/http.impl.ts",
+              "ambassador-devcenter-myapps-v1-my-app/types.impl.ts",
+              "create-new-packages/app-command/src/components/Questions/ExistingAppFlow.tsx",
+              "create-new-packages/app-command/src/components/ExtendExistingApp.tsx",
+          )
+          sources = sm.get("sources", [])
+          contents = sm.get("sourcesContent", [])
+          matched = 0
+          for i, source in enumerate(sources):
+              if any(source.endswith(x) for x in wanted):
+                  matched += 1
+                  print(f"===== SOURCE {source} =====")
+                  content = contents[i] if i < len(contents) else None
+                  print(content if content is not None else "<NO_SOURCE_CONTENT>")
+                  print(f"===== END SOURCE {source} =====")
+          if matched < 3:
+              raise SystemExit(f"expected >=3 relevant sources, got {matched}")
+          print(f"WIX_MYAPPS_STATIC_INSPECT=PASS matched={matched}")
+          PY

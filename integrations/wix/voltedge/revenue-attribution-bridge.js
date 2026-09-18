@@ -1,101 +1,95 @@
-// VoltEdge global site code (masterPage.js)
-// Deterministically binds a Dominion click to Wix Cart V2 purchaseFlowId.
-// No prices, products, payments, buyer PII, or checkout state are mutated.
+// VoltEdge embedded attribution bridge for the existing Dominion Attribution Wix app.
+// Binds the one-time Dominion click token to Wix-native checkout/order identity.
+// No product, price, cart, payment, refund, or buyer data is mutated.
 
-import { currentCartV2 } from "@wix/ecom";
-import { ecom } from "@wix/site-ecom";
-import { location, queryParams } from "@wix/site-location";
-import { session } from "wix-storage-frontend";
+import { analytics } from "@wix/site";
 
 const BRIDGE_ORIGIN = "https://dominionhealing.org";
-const SESSION_KEY = "dominion_revenue_bridge_v1";
-const MAX_ATTEMPTS = 15;
-const RETRY_MS = 2000;
+const SESSION_KEY = "dominion_revenue_bridge_v2";
+const EXPERIMENT_RE = /^[A-Za-z0-9_-]{3,120}$/;
+let bindingInFlight = false;
 
-function validExperiment(value) {
-  return typeof value === "string" && /^[A-Za-z0-9_-]{3,120}$/.test(value);
+function captureState() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("dr_token") || "";
+  const experiment = params.get("utm_campaign") || "";
+  if (
+    token.length >= 32 &&
+    token.length <= 256 &&
+    EXPERIMENT_RE.test(experiment)
+  ) {
+    sessionStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify({ token, experiment }),
+    );
+  }
 }
 
-async function captureBridgeState() {
-  const query = await location.query();
-  const token = typeof query.dr_token === "string" ? query.dr_token : "";
-  const experiment = typeof query.utm_campaign === "string" ? query.utm_campaign : "";
-  if (!token || !validExperiment(experiment)) return;
-
-  await session.setItem(SESSION_KEY, JSON.stringify({ token, experiment }));
-  // Keep campaign UTM values visible, but remove the one-time credential from the URL.
-  await queryParams().remove(["dr_token"]);
-}
-
-async function pendingBridgeState() {
-  const raw = await session.getItem(SESSION_KEY);
+function loadState() {
+  const raw = sessionStorage.getItem(SESSION_KEY);
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw);
-    if (!parsed.token || !validExperiment(parsed.experiment)) return null;
-    return parsed;
+    const value = JSON.parse(raw);
+    if (
+      typeof value?.token !== "string" ||
+      value.token.length < 32 ||
+      value.token.length > 256 ||
+      !EXPERIMENT_RE.test(value?.experiment || "")
+    ) {
+      sessionStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return value;
   } catch (_) {
-    await session.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
     return null;
   }
 }
 
-async function bindCurrentFlow() {
-  const state = await pendingBridgeState();
-  if (!state) return true;
+async function bindNativeIdentity({ checkoutId = "", orderId = "" } = {}) {
+  if (bindingInFlight) return;
+  const state = loadState();
+  if (!state) return;
 
-  let response;
-  try {
-    response = await currentCartV2.getCurrentCart();
-  } catch (_) {
-    return false;
-  }
-  const purchaseFlowId = response?.cart?.purchaseFlowId || "";
-  if (!purchaseFlowId) return false;
+  const checkout = typeof checkoutId === "string" ? checkoutId : "";
+  const order = typeof orderId === "string" ? orderId : "";
+  if (!checkout && !order) return;
 
+  const payload = { token: state.token };
+  if (checkout) payload.checkout_id = checkout;
+  if (order) payload.order_id = order;
+
+  bindingInFlight = true;
   try {
-    const bridgeResponse = await fetch(
+    const response = await fetch(
       `${BRIDGE_ORIGIN}/r/${encodeURIComponent(state.experiment)}/bridge`,
       {
         method: "POST",
         mode: "cors",
         credentials: "omit",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token: state.token,
-          purchase_flow_id: purchaseFlowId,
-        }),
+        body: JSON.stringify(payload),
       },
     );
-    if (bridgeResponse.ok) {
-      await session.removeItem(SESSION_KEY);
-      return true;
-    }
-    // 4xx means the token is invalid, expired, replayed, or mismatched. Do not retry it.
-    if (bridgeResponse.status >= 400 && bridgeResponse.status < 500) {
-      await session.removeItem(SESSION_KEY);
-      return true;
+
+    if (response.ok || (response.status >= 400 && response.status < 500)) {
+      sessionStorage.removeItem(SESSION_KEY);
     }
   } catch (_) {
-    // Network/runtime failures keep the token in session for the next cart/page retry.
+    // Preserve the token for a later Wix event if the network path is transiently unavailable.
+  } finally {
+    bindingInFlight = false;
   }
-  return false;
 }
 
-async function bindWithBoundedRetry(attempt = 0) {
-  const done = await bindCurrentFlow();
-  if (done || attempt >= MAX_ATTEMPTS - 1) return;
-  setTimeout(() => bindWithBoundedRetry(attempt + 1), RETRY_MS);
-}
+captureState();
 
-$w.onReady(async function () {
-  await captureBridgeState();
-
-  // Native Wix UI changes (including Add to Cart) trigger this even if the shopper
-  // remains on the same product page past the initial retry window.
-  ecom.onCartChange(async () => {
-    await bindWithBoundedRetry();
-  });
-
-  await bindWithBoundedRetry();
+analytics.registerEventListener((eventName, eventData) => {
+  if (eventName === "InitiateCheckout") {
+    void bindNativeIdentity({ checkoutId: eventData?.checkoutId || "" });
+    return;
+  }
+  if (eventName === "Purchase") {
+    void bindNativeIdentity({ orderId: eventData?.orderId || "" });
+  }
 });

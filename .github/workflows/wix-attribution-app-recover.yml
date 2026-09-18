@@ -89,8 +89,6 @@ jobs:
           child_env["TERM"] = "xterm-256color"
           child_env["FORCE_COLOR"] = "0"
 
-          # Wix's documented --extend-app-id path binds directly to the already
-          # registered app and bypasses the API-key-incompatible existing-app picker.
           child = pexpect.spawn(
               "npm",
               [
@@ -104,7 +102,7 @@ jobs:
               cwd=work,
               env=child_env,
               encoding="utf-8",
-              timeout=180,
+              timeout=10,
               dimensions=(40, 160),
           )
           child.logfile_read = sys.stdout
@@ -112,74 +110,92 @@ jobs:
           ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
           def clean(value: str) -> str:
-              return ansi.sub("", value).replace("\r", "")
+              return ansi.sub("", value or "").replace("\r", "")
 
-          # npm may first ask permission to install the official scaffold package.
-          first = child.expect([
+          patterns = [
               re.compile(r"Ok to proceed\?\s*\(y\)", re.I),
               re.compile(r"Mixpanel Analytics", re.I),
-              re.compile(r"template", re.I),
               re.compile(r"package name|folder name|project name", re.I),
+              re.compile(r"Failed to fetch|ERROR|Something went wrong", re.I),
               pexpect.EOF,
               pexpect.TIMEOUT,
-          ], timeout=90)
-          if first == 0:
-              child.send("y\r")
-          elif first in (4, 5):
-              print("ERROR: Wix extend-app flow did not render")
-              child.close(force=True)
-              raise SystemExit(40)
+          ]
 
           template_selected = False
           package_answered = False
-          transcript = ""
+          npm_answered = False
           deadline = time.time() + 300
 
-          while time.time() < deadline and child.isalive():
-              try:
-                  chunk = child.read_nonblocking(size=4096, timeout=1)
-                  transcript = (transcript + chunk)[-50000:]
-              except pexpect.TIMEOUT:
+          while child.isalive() and time.time() < deadline:
+              event = child.expect(patterns, timeout=min(10, max(1, int(deadline - time.time()))))
+
+              if event == 0:
+                  if npm_answered:
+                      print("ERROR: npm install confirmation repeated unexpectedly")
+                      child.close(force=True)
+                      raise SystemExit(40)
+                  child.send("y\r")
+                  npm_answered = True
                   continue
 
-              view = clean(transcript)
-              lines = [line.strip() for line in view.splitlines() if line.strip()]
-
-              if not template_selected and "Mixpanel Analytics" in view:
+              if event == 1:
+                  # pexpect consumes the target text. Include child.before so the
+                  # selected-row marker immediately preceding the label is retained.
+                  context = clean((child.before or "")[-2500:] + (child.after or ""))
+                  lines = [line.strip() for line in context.splitlines() if line.strip()]
+                  target_lines = [line for line in lines[-80:] if "Mixpanel Analytics" in line]
                   selected = any(
-                      "Mixpanel Analytics" in line
-                      and ("❯" in line or ">" in line[:4])
-                      for line in lines[-100:]
+                      "❯" in line or re.search(r"(^|\s)>\s*Mixpanel Analytics", line)
+                      for line in target_lines
                   )
                   if selected:
                       child.send("\r")
                       template_selected = True
-                      transcript = ""
-                      continue
-                  child.send("\x1b[B")
-                  time.sleep(0.15)
+                  else:
+                      child.send("\x1b[B")
+                      time.sleep(0.15)
                   continue
 
-              if not package_answered and re.search(
-                  r"package name|folder name|project name",
-                  view,
-                  re.I,
-              ):
+              if event == 2:
+                  if package_answered:
+                      print("ERROR: project-name prompt repeated unexpectedly")
+                      child.close(force=True)
+                      raise SystemExit(41)
                   child.send("wix-dominion-attribution\r")
                   package_answered = True
-                  transcript = ""
                   continue
 
-          child.expect(pexpect.EOF, timeout=300)
+              if event == 3:
+                  context = clean((child.before or "")[-3000:] + (child.after or ""))
+                  print("ERROR: Wix extend-app flow reported failure")
+                  print(context)
+                  child.close(force=True)
+                  raise SystemExit(42)
+
+              if event == 4:
+                  break
+
+              # TIMEOUT is a bounded poll. Continue until the single absolute
+              # deadline rather than adding a second hidden timeout window.
+              if event == 5:
+                  continue
+
+          if child.isalive():
+              print("ERROR: Wix extend-app prompt deadline exceeded")
+              child.sendcontrol("c")
+              child.close(force=True)
+              raise SystemExit(43)
+
           rc = child.exitstatus
           if rc is None:
               child.close()
               rc = child.exitstatus
+
           if rc not in (0, None):
               raise SystemExit(rc)
           if not template_selected:
               print("ERROR: Mixpanel Analytics template was not selected; refusing recovery")
-              raise SystemExit(41)
+              raise SystemExit(44)
           PY
 
           config="$(find "$work" -mindepth 2 -maxdepth 5 -type f -name wix.config.json -print -quit)"

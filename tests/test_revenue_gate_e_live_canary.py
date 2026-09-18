@@ -52,6 +52,21 @@ class GateELiveCanaryTests(unittest.TestCase):
         self.assertIn('public_route="$public_origin/r/$exp_id"', text)
         self.assertIn('GATE_E_LIVE_CANARY_PREP=PASS', text)
 
+    def test_live_reconciliation_is_owner_bound_native_link_only_and_no_new_spend(self):
+        text = WORKFLOW.read_text(encoding='utf-8')
+        script = (ROOT / 'scripts/revenue_runtime/reconcile_gate_e_live_canary.sh').read_text(encoding='utf-8')
+        self.assertIn("RECONCILE_GATE_E_LIVE_CANARY:$main_sha:", text)
+        self.assertIn("GATE_E_WIX_NATIVE_LINK=PASS", text)
+        self.assertIn("SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT=PASS", text)
+        self.assertIn("GATE_E_LIVE_CANARY_PAUSED=PASS", text)
+        self.assertIn("spend_cents=0", text)
+        self.assertIn("new_payment=false", text)
+        self.assertIn("new_refund=false", text)
+        self.assertIn("WIX_PURCHASE_FLOW_LINK", script)
+        self.assertIn("WIX_CHECKOUT_LINK", script)
+        self.assertIn("purchase_events=1", script)
+        self.assertNotIn("/revenue/events", script)
+
 
 if __name__ == '__main__':
     unittest.main()

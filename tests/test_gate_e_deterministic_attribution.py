@@ -243,15 +243,22 @@ class GateEDeterministicAttributionTests(unittest.TestCase):
         self.assertIn("_variant_guard(payload.control)", source)
         self.assertIn("_variant_guard(payload.treatment)", source)
 
-    def test_wix_bridge_retries_on_native_cart_change_without_mutating_commerce(self):
+    def test_wix_bridge_uses_embedded_analytics_checkout_identity_without_mutating_commerce(self):
         source = WIX_BRIDGE.read_text(encoding="utf-8")
-        self.assertIn('import { ecom } from "@wix/site-ecom"', source)
-        self.assertIn("ecom.onCartChange", source)
-        self.assertIn("currentCartV2.getCurrentCart", source)
-        self.assertIn("purchaseFlowId", source)
+        self.assertIn('import { analytics } from "@wix/site"', source)
+        self.assertIn("analytics.registerEventListener", source)
+        self.assertIn('"InitiateCheckout"', source)
+        self.assertIn("checkoutId", source)
+        self.assertIn('"Purchase"', source)
+        self.assertIn("orderId", source)
+        self.assertIn("sessionStorage", source)
+        self.assertIn("dr_token", source)
+        self.assertIn("/bridge", source)
         self.assertNotIn("updateCurrentCart", source)
         self.assertNotIn("addLineItemsToCurrentCart", source)
         self.assertNotIn("placeOrder", source)
+        self.assertNotIn("createOrder", source)
+        self.assertNotIn("refund", source.lower())
 
 
 if __name__ == "__main__":

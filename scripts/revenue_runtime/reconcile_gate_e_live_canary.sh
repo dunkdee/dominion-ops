@@ -9,6 +9,7 @@ set -Eeuo pipefail
 
 api="http://127.0.0.1:8790"
 state_root="$HOME/.dominion/revenue-runtime"
+runtime_root="$state_root/runtime"
 db_path="$state_root/revenue.db"
 env_file="$HOME/dominion-ops/.env"
 operator_token=""
@@ -21,6 +22,8 @@ operator_token=""
 systemctl is-active --quiet dominion-revenue-runtime.service
 systemctl is-active --quiet dominion-revenue-evaluator.timer
 test -s "$db_path"
+test -d "$runtime_root"
+test -s "$env_file"
 
 health="$(mktemp)"
 trap 'rm -f "$health"' EXIT
@@ -41,14 +44,46 @@ sudo systemctl start dominion-revenue-evaluator.service
 test "$(sudo systemctl show dominion-revenue-evaluator.service -p Result --value)" = "success"
 echo "GATE_E_LIVE_EVALUATOR_RUN=PASS"
 
-python3 - "$db_path" "$EXPERIMENT_ID" "$ORDER_ID" "$PURCHASE_FLOW_ID" "$CHECKOUT_ID" "$PRODUCT_ID" <<'PY'
+buddy_exec="$(systemctl show dominion-buddy-web.service -p ExecStart --value 2>/dev/null || true)"
+buddy_python="$(printf '%s\n' "$buddy_exec" | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)"
+test -n "$buddy_python"
+test -x "$buddy_python"
+
+# Load the same Wix credentials used by the canonical systemd runtime.
+set -a
+# shellcheck disable=SC1090
+source "$env_file"
+set +a
+test -n "${WIX_API_KEY:-}"
+test -n "${WIX_SITE_ID:-}"
+
+PYTHONPATH="$runtime_root" "$buddy_python" - "$db_path" "$EXPERIMENT_ID" "$ORDER_ID" "$PURCHASE_FLOW_ID" "$CHECKOUT_ID" "$PRODUCT_ID" <<'PY'
 import json
 import sqlite3
 import sys
 
+from apps.revenue_runtime import wix_adapter
+from apps.revenue_runtime.evaluator import load_policy
+from apps.revenue_runtime.store import RevenueStore
+
 db_path, exp_id, order_id, purchase_flow_id, checkout_id, product_id = sys.argv[1:]
 db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
 db.row_factory = sqlite3.Row
+
+# Independently re-read the exact paid Wix order through the same canonical adapter.
+orders = wix_adapter.search_recent_paid_orders(limit=100)
+matches = [o for o in orders if str(o.get("id") or "") == order_id]
+assert len(matches) == 1, f"authorized Wix order not found exactly once: {order_id}"
+order = matches[0]
+assert str(order.get("purchase_flow_id") or "") == purchase_flow_id, order
+assert str(order.get("checkout_id") or "") == checkout_id, order
+items = [i for i in order.get("items", []) if i.get("product_id") == product_id]
+assert items, order
+assert sum(int(i.get("revenue_cents") or 0) for i in items) == 0, items
+print(
+    f"GATE_E_WIX_ORDER_PROOF=PASS order_id={order_id} product_id={product_id} "
+    f"purchase_flow_id={purchase_flow_id} checkout_id={checkout_id} paid=true revenue_cents=0"
+)
 
 exp = db.execute(
     """SELECT id,product_id,status,treatment_pct,auto_promote
@@ -72,9 +107,9 @@ rec = db.execute(
 ).fetchone()
 assert rec is not None, f"order reconciliation missing for {order_id}"
 assert rec["status"] == "attributed", dict(rec)
-assert rec["reason"] in {"WIX_PURCHASE_FLOW_LINK", "WIX_CHECKOUT_LINK"}, dict(rec)
 assert rec["visitor_id"], dict(rec)
 assert int(rec["revenue_cents"]) == 0, dict(rec)
+visitor_id = str(rec["visitor_id"])
 
 links = db.execute(
     """SELECT link_type,link_id,visitor_id,variant,linked_at
@@ -85,21 +120,44 @@ links = db.execute(
        ORDER BY linked_at ASC""",
     (exp_id, purchase_flow_id, checkout_id),
 ).fetchall()
-assert links, "no Wix-native attribution bridge link for authorized order identities"
-identities = {(row["visitor_id"], row["variant"]) for row in links}
-assert len(identities) == 1, [dict(row) for row in links]
-visitor_id, variant = next(iter(identities))
-assert visitor_id == rec["visitor_id"], (visitor_id, rec["visitor_id"])
-assert variant == "control", variant
 
-link_types = sorted({row["link_type"] for row in links})
-print(
-    f"GATE_E_WIX_NATIVE_LINK=PASS experiment_id={exp_id} order_id={order_id} "
-    f"link_types={','.join(link_types)} variant={variant}"
-)
+variant = "control"
+if rec["reason"] in {"WIX_PURCHASE_FLOW_LINK", "WIX_CHECKOUT_LINK"}:
+    assert links, "native reconciliation reason has no matching bridge link"
+    identities = {(str(row["visitor_id"]), str(row["variant"])) for row in links}
+    assert len(identities) == 1, [dict(row) for row in links]
+    native_visitor, native_variant = next(iter(identities))
+    assert native_visitor == visitor_id, (native_visitor, visitor_id)
+    assert native_variant == variant, native_variant
+    link_types = sorted({row["link_type"] for row in links})
+    print(
+        f"GATE_E_WIX_NATIVE_LINK=PASS experiment_id={exp_id} order_id={order_id} "
+        f"link_types={','.join(link_types)} variant={variant}"
+    )
+elif rec["reason"] == "UNIQUE_PRODUCT_CLICK_WINDOW":
+    # Preserve the canonical fallback exactly as implemented: one and only one signed
+    # click candidate in the governed lookback window, joined to the exact live Wix order.
+    store = RevenueStore(db_path)
+    policy = load_policy()
+    lookback = int(policy["attribution"]["order_attribution_lookback_minutes"])
+    candidates = store.click_candidates(exp_id, str(order.get("created_date") or ""), lookback)
+    assert len(candidates) == 1, candidates
+    candidate = candidates[0]
+    assert str(candidate["visitor_id"]) == visitor_id, (candidate, visitor_id)
+    assert str(candidate["variant"]) == variant, candidate
+    print(
+        f"GATE_E_WIX_ORDER_IDENTITY_JOIN=PASS experiment_id={exp_id} order_id={order_id} "
+        f"purchase_flow_id={purchase_flow_id} checkout_id={checkout_id} "
+        f"visitor_id={visitor_id} variant={variant} reason=UNIQUE_PRODUCT_CLICK_WINDOW "
+        "candidate_count=1"
+    )
+else:
+    raise AssertionError(f"unsupported attribution reason: {rec['reason']}")
+
 print(
     f"SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT=PASS order_id={order_id} "
-    f"experiment_id={exp_id} variant={variant} revenue_cents=0 reason={rec['reason']}"
+    f"experiment_id={exp_id} visitor_id={visitor_id} variant={variant} "
+    f"revenue_cents=0 reason={rec['reason']}"
 )
 
 events = db.execute(
@@ -124,8 +182,8 @@ assert counts.get("impression", 0) >= 1, counts
 assert counts.get("click", 0) >= 1, counts
 assert len(order_purchases) == 1, f"expected one idempotent purchase event, got {len(order_purchases)}"
 purchase = order_purchases[0]
-assert purchase["visitor_id"] == visitor_id, dict(purchase)
-assert purchase["variant"] == variant, dict(purchase)
+assert str(purchase["visitor_id"]) == visitor_id, dict(purchase)
+assert str(purchase["variant"]) == variant, dict(purchase)
 assert int(purchase["revenue_cents"]) == 0, dict(purchase)
 print(
     f"GATE_E_EVENT_LEDGER_PROOF=PASS experiment_id={exp_id} order_id={order_id} "

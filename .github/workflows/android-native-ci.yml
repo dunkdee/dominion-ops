@@ -1,0 +1,76 @@
+name: Android Native CI
+
+on:
+  pull_request:
+    paths:
+      - 'android-client/**'
+      - '.github/workflows/android-native-ci.yml'
+  push:
+    branches:
+      - 'feat/dominion-android-native-v1'
+    paths:
+      - 'android-client/**'
+      - '.github/workflows/android-native-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: android-client
+    env:
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Verify hosted Android SDK
+        run: |
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" --version
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+      - name: Install API 36 SDK
+        run: |
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Prove public-app isolation
+        run: |
+          test "$(grep -RIlE 'PUBLISHER_CLIENT_SECRET|META_APP_SECRET|OANDA_API_KEY|BINANCE_API_KEY|GOOGLE_SERVICE_ACCOUNT_JSON' app/src || true)" = ""
+          ! grep -Rqi 'WebView' app/src/main
+          grep -q 'compileSdk = 36' app/build.gradle.kts
+          grep -q 'targetSdk = 36' app/build.gradle.kts
+          echo 'ANDROID_PUBLIC_BOUNDARY_PASS'
+
+      - name: Compile lint and unit test
+        run: gradle --no-daemon :app:assembleDebug :app:lintDebug :app:testDebugUnitTest
+
+      - name: Verify debug APK exists
+        run: test -f app/build/outputs/apk/debug/app-debug.apk && echo 'ANDROID_DEBUG_APK_PASS'
+
+      - name: Upload installable debug APK receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: dominion-creator-debug-${{ github.sha }}
+          path: android-client/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

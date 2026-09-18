@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Inspect public Wix package source map
+      - name: Inspect public Wix My Apps compiled request
         shell: bash
         run: |
           set -euo pipefail
@@ -30,28 +30,60 @@ jobs:
           npm pack @wix/create-new@0.0.113 >/dev/null
           tar -xzf wix-create-new-0.0.113.tgz
           python3 - <<'PY'
-          import json
+          import re
           from pathlib import Path
 
-          sm = json.loads(Path("package/build/index.js.map").read_text(encoding="utf-8"))
-          wanted = (
-              "dev-center-client/src/dev-center-client.ts",
-              "ambassador-devcenter-myapps-v1-my-app/http.impl.ts",
-              "ambassador-devcenter-myapps-v1-my-app/types.impl.ts",
-              "create-new-packages/app-command/src/components/Questions/ExistingAppFlow.tsx",
-              "create-new-packages/app-command/src/components/ExtendExistingApp.tsx",
+          root = Path("package/build")
+          files = sorted(root.glob("*.js"))
+          needles = (
+              "queryMyApps",
+              "devcenter-myapps",
+              "myapps",
+              "my-app",
+              "updatedDate",
           )
-          sources = sm.get("sources", [])
-          contents = sm.get("sourcesContent", [])
-          matched = 0
-          for i, source in enumerate(sources):
-              if any(source.endswith(x) for x in wanted):
-                  matched += 1
-                  print(f"===== SOURCE {source} =====")
-                  content = contents[i] if i < len(contents) else None
-                  print(content if content is not None else "<NO_SOURCE_CONTENT>")
-                  print(f"===== END SOURCE {source} =====")
-          if matched < 3:
-              raise SystemExit(f"expected >=3 relevant sources, got {matched}")
-          print(f"WIX_MYAPPS_STATIC_INSPECT=PASS matched={matched}")
+          hits = 0
+          for path in files:
+              text = path.read_text(encoding="utf-8", errors="replace")
+              positions = []
+              low = text.lower()
+              for needle in needles:
+                  start = 0
+                  while True:
+                      pos = low.find(needle.lower(), start)
+                      if pos < 0:
+                          break
+                      positions.append((pos, needle))
+                      start = pos + len(needle)
+              # De-duplicate overlapping windows.
+              positions.sort()
+              emitted = []
+              for pos, needle in positions:
+                  if any(abs(pos - prior) < 5000 for prior in emitted):
+                      continue
+                  emitted.append(pos)
+                  hits += 1
+                  lo = max(0, pos - 8000)
+                  hi = min(len(text), pos + 14000)
+                  print(f"===== COMPILED {path.name} needle={needle} pos={pos} =====")
+                  print(text[lo:hi])
+                  print(f"===== END COMPILED {path.name} =====")
+
+          # Print all likely Wix API route literals containing app/my-app/devcenter.
+          route_re = re.compile(r'["\x27\x60]([^"\x27\x60]{0,240}(?:myapps|my-app|devcenter)[^"\x27\x60]{0,240})["\x27\x60]', re.I)
+          routes = []
+          for path in files:
+              text = path.read_text(encoding="utf-8", errors="replace")
+              for m in route_re.finditer(text):
+                  value = m.group(1)
+                  if value not in routes:
+                      routes.append(value)
+          print("===== CANDIDATE_ROUTE_LITERALS =====")
+          for value in routes[:200]:
+              print(value)
+          print("===== END_CANDIDATE_ROUTE_LITERALS =====")
+
+          if hits == 0:
+              raise SystemExit("no My Apps compiled-code hits found")
+          print(f"WIX_MYAPPS_COMPILED_INSPECT=PASS hits={hits} routes={len(routes)}")
           PY

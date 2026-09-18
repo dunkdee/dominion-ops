@@ -105,12 +105,28 @@ jobs:
           # Force the documented interactive flow. GitHub Actions exports CI=true,
           # which suppresses the normal Wix selector even inside a pty.
           first = child.expect([
+              re.compile(r"Ok to proceed\?\s*\(y\)", re.I),
               re.compile(r"What would you like to do", re.I),
               re.compile(r"Extend existing application", re.I),
               pexpect.EOF,
               pexpect.TIMEOUT,
           ], timeout=60)
-          if first in (2, 3):
+          if first == 0:
+              # npm is asking permission to install the official @wix/create-new
+              # package. This is dependency installation only; no Wix app mutation
+              # has occurred yet.
+              child.send("y\r")
+              first = child.expect([
+                  re.compile(r"What would you like to do", re.I),
+                  re.compile(r"Extend existing application", re.I),
+                  pexpect.EOF,
+                  pexpect.TIMEOUT,
+              ], timeout=90)
+              if first in (2, 3):
+                  print("ERROR: Wix interactive selector did not render after npm package install")
+                  child.close(force=True)
+                  raise SystemExit(40)
+          elif first in (3, 4):
               print("ERROR: Wix interactive selector did not render; refusing to guess")
               child.close(force=True)
               raise SystemExit(40)

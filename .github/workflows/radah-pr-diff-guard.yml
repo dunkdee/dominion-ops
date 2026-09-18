@@ -1,0 +1,111 @@
+name: RADAH PR Diff Guard
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  diff-guard:
+    name: Fail-closed diff anomaly guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect PR scope without executing PR code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          pr_json="$(gh api "repos/$REPO/pulls/$PR_NUMBER")"
+          files_json="$(gh api "repos/$REPO/pulls/$PR_NUMBER/files?per_page=100")"
+
+          changed="$(jq -r '.changed_files' <<<"$pr_json")"
+          additions="$(jq -r '.additions' <<<"$pr_json")"
+          deletions="$(jq -r '.deletions' <<<"$pr_json")"
+          removed="$(jq '[.[] | select(.status == "removed")] | length' <<<"$files_json")"
+          workflow_changes="$(jq '[.[] | select(.filename | startswith(".github/workflows/"))] | length' <<<"$files_json")"
+
+          hard_block=0
+          reasons=()
+
+          if (( changed > 25 )); then
+            hard_block=1
+            reasons+=("changed_files=$changed exceeds 25")
+          fi
+
+          if (( deletions > 300 )); then
+            hard_block=1
+            reasons+=("deletions=$deletions exceeds 300")
+          fi
+
+          if (( removed > 8 )); then
+            hard_block=1
+            reasons+=("removed_files=$removed exceeds 8")
+          fi
+
+          if (( changed > 12 && deletions > 150 && deletions > additions * 2 )); then
+            hard_block=1
+            reasons+=("deletion-heavy scope expansion: files=$changed additions=$additions deletions=$deletions")
+          fi
+
+          {
+            echo "## RADAH PR Diff Guard"
+            echo
+            echo "- changed files: $changed"
+            echo "- additions: $additions"
+            echo "- deletions: $deletions"
+            echo "- removed files: $removed"
+            echo "- workflow files touched: $workflow_changes"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if (( hard_block == 0 )); then
+            echo
+            echo "RADAH_PR_DIFF_GUARD=PASS changed_files=$changed additions=$additions deletions=$deletions removed_files=$removed"
+            exit 0
+          fi
+
+          reason_text="$(printf '%s; ' "${reasons[@]}")"
+          body=$(cat <<EOF
+          <!-- radah-pr-diff-guard -->
+          ## RADAH PR Diff Guard — BLOCKED
+
+          This PR was stopped before merge because its diff crossed a destructive/scope-expansion guardrail.
+
+          **Observed**
+          - Changed files: `$changed`
+          - Additions: `$additions`
+          - Deletions: `$deletions`
+          - Removed files: `$removed`
+          - Workflow files touched: `$workflow_changes`
+
+          **Tripwire**
+          `$reason_text`
+
+          **Required action**
+          Reduce the PR to the intended scope and open/update a clean PR. Do not bypass the guard by merging the oversized diff.
+
+          `RADAH_PR_DIFF_GUARD=BLOCKED`
+          EOF
+          )
+
+          existing_id="$(
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100"               --jq '.[] | select(.body | contains("<!-- radah-pr-diff-guard -->")) | .id'               | head -n1
+          )"
+
+          if [[ -n "$existing_id" ]]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$existing_id" -f body="$body" >/dev/null
+          else
+            gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$body" >/dev/null
+          fi
+
+          gh api --method PATCH "repos/$REPO/pulls/$PR_NUMBER" -f state=closed >/dev/null
+
+          echo "::error title=RADAH PR Diff Guard::Blocked and closed anomalous PR: $reason_text"
+          exit 1

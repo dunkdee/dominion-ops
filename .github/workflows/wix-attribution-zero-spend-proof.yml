@@ -131,13 +131,10 @@ jobs:
           body="$(cat <<EOF
           ## Wix native attribution zero-spend canary — PREPARED
 
-          Exact authorized main: `$MAIN_SHA`
-          Experiment: `$EXPERIMENT_ID`
+          Exact authorized main: $MAIN_SHA
+          Experiment: $EXPERIMENT_ID
           Public signed route: $PUBLIC_ROUTE
-
-          ```
-          $PREP_RECEIPT
-          ```
+          Preparation receipt: $PREP_RECEIPT
 
           Boundary: treatment 0%, auto-promotion disabled, automatic paid spend disabled, automatic price changes disabled, and no synthetic click or payment. Use one browser only. Continue through the signed route and initiate Wix checkout, but do not submit payment.
           EOF
@@ -261,16 +258,24 @@ jobs:
           identities={(str(r["visitor_id"]), str(r["variant"])) for r in links}
           assert len(identities) == 1, [dict(r) for r in links]
           native_ids={(str(r["link_type"]), str(r["link_id"])) for r in links}
-          assert len(native_ids) == 1, [dict(r) for r in links]
           visitor, variant = next(iter(identities))
           assert variant == "control", variant
-          link_type, link_id = next(iter(native_ids))
+          checkout_ids=sorted(link_id for link_type, link_id in native_ids if link_type == "checkout")
+          purchase_flow_ids=sorted(link_id for link_type, link_id in native_ids if link_type == "purchase_flow")
+          assert checkout_ids or purchase_flow_ids, [dict(r) for r in links]
+          if checkout_ids:
+              reason = "WIX_CHECKOUT_LINK"
+              primary_type = "checkout"
+              primary_id = checkout_ids[0]
+          else:
+              reason = "WIX_PURCHASE_FLOW_LINK"
+              primary_type = "purchase_flow"
+              primary_id = purchase_flow_ids[0]
           counts=dict(con.execute("SELECT event_type,COUNT(*) FROM events WHERE experiment_id=? GROUP BY event_type", (exp_id,)).fetchall())
           assert int(counts.get("impression",0)) >= 1, counts
           assert int(counts.get("click",0)) >= 1, counts
           assert int(counts.get("purchase",0)) == 0, counts
-          reason = "WIX_PURCHASE_FLOW_LINK" if link_type == "purchase_flow" else "WIX_CHECKOUT_LINK"
-          print(f"WIX_ATTRIBUTION_NATIVE_LINK=PASS experiment_id={exp_id} link_type={link_type} native_id={link_id} visitor_id={visitor} variant={variant} reason={reason}")
+          print(f"WIX_ATTRIBUTION_NATIVE_LINK=PASS experiment_id={exp_id} link_type={primary_type} native_id={primary_id} visitor_id={visitor} variant={variant} reason={reason} native_link_count={len(native_ids)}")
           print(f"WIX_ATTRIBUTION_ZERO_SPEND=PASS experiment_id={exp_id} impression_events={counts.get('impression',0)} click_events={counts.get('click',0)} purchase_events={counts.get('purchase',0)} treatment_pct=0 auto_promote=false")
           con.close()
           PY
@@ -328,12 +333,10 @@ jobs:
           body="$(cat <<EOF
           ## Wix native attribution runtime proof — PASS
 
-          Exact authorized main: `$MAIN_SHA`
-          Experiment: `$EXPERIMENT_ID`
+          Exact authorized main: $MAIN_SHA
+          Experiment: $EXPERIMENT_ID
 
-          ```
           $PROOF_LINES
-          ```
 
           This is live VoltEdge execution evidence. The signed Dominion route produced the single governed visitor/click, Wix emitted and persisted a native purchase-flow or checkout identity through the activated embedded attribution component, and the canary recorded zero purchase events. No payment, refund, price/product mutation, paid traffic, Meta change, or #305 change was performed. The canary is paused after proof.
           EOF

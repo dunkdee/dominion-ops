@@ -130,6 +130,53 @@ class GateEDeterministicAttributionTests(unittest.TestCase):
             self.assertEqual(receipts[0]["variant"], v1_variant)
             self.assertEqual(receipts[0]["receipt"], "SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT=PASS")
 
+    def test_native_order_link_wins_with_multiple_clicks_without_new_checkout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "r.db"
+            store = RevenueStore(db_path)
+            store.create_experiment(self.payload())
+            store.activate("e1")
+            bridge = AttributionBridgeStore(db_path)
+            order_time = datetime.now(timezone.utc)
+
+            for idx, visitor in enumerate(("v1", "v2"), start=1):
+                variant = deterministic_variant("e1", visitor, 50)
+                store.record_event(
+                    event_id=f"c{idx}",
+                    experiment_id="e1",
+                    visitor_id=visitor,
+                    variant=variant,
+                    event_type="click",
+                    occurred_at=(order_time - timedelta(minutes=idx)).isoformat(),
+                )
+
+            order_id = str(uuid.uuid4())
+            v1_variant = deterministic_variant("e1", "v1", 50)
+            token = bridge.issue_token(experiment_id="e1", visitor_id="v1", variant=v1_variant)
+            result = bridge.bind_token(
+                token=token,
+                expected_experiment_id="e1",
+                order_id=order_id,
+            )
+            self.assertEqual(result["bound"], ["order"])
+
+            orders = [{
+                "id": order_id,
+                "created_date": order_time.isoformat(),
+                "payment_status": "PAID",
+                "purchase_flow_id": "",
+                "checkout_id": "",
+                "items": [{"product_id": "p1", "revenue_cents": 0}],
+            }]
+            with patch("apps.revenue_runtime.evaluator.wix_adapter.search_recent_paid_orders", return_value=orders):
+                receipts = reconcile_paid_orders(store, self.policy)
+
+            self.assertEqual(receipts[0]["status"], "attributed")
+            self.assertEqual(receipts[0]["reason"], "WIX_ORDER_LINK")
+            self.assertEqual(receipts[0]["variant"], v1_variant)
+            self.assertEqual(receipts[0]["revenue_cents"], 0)
+            self.assertEqual(receipts[0]["receipt"], "SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT=PASS")
+
     def test_unattributed_order_can_upgrade_after_late_native_binding(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "r.db"
@@ -192,6 +239,7 @@ class GateEDeterministicAttributionTests(unittest.TestCase):
         self.assertIn('"dr_token": bridge_token', source)
         self.assertIn('@app.post("/r/{experiment_id}/bridge")', source)
         self.assertIn("expected_experiment_id=experiment_id", source)
+        self.assertIn("order_id=payload.order_id", source)
         self.assertIn("_variant_guard(payload.control)", source)
         self.assertIn("_variant_guard(payload.treatment)", source)
 

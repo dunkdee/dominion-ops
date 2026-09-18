@@ -173,16 +173,20 @@ jobs:
           def clean(v):
               return ansi.sub("", v or "").replace("\r", "")
 
-          # --extend-app-id already binds the exact existing app. Per Wix CLI docs,
-          # that form skips the top-level app-mode picker and prompts only for a template.
+          # --extend-app-id is the canonical existing-app binding. Wix CLI versions
+          # may still render a top-level mode selector before the template selector,
+          # so handle it if present but do not require it. The generated config below
+          # remains the final authority and must match APP_ID exactly.
           patterns = [
               re.compile(r"Ok to proceed\?\s*\(y\)", re.I),
+              re.compile(r"Add new extensions for an existing Wix app", re.I),
               re.compile(r"Mixpanel Analytics", re.I),
               re.compile(r"package name|folder name|project name", re.I),
               re.compile(r"Failed to fetch|ERROR|Something went wrong", re.I),
               pexpect.EOF,
               pexpect.TIMEOUT,
           ]
+          mode_handled=False
           template=False
           package=False
           npm_yes=False
@@ -195,23 +199,52 @@ jobs:
                       raise SystemExit("npm confirmation repeated")
                   child.send("y\r"); npm_yes=True; continue
               if event == 1:
+                  if mode_handled:
+                      raise SystemExit("existing-app mode selector repeated unexpectedly")
                   context=clean((child.before or "")[-2500:] + (child.after or ""))
                   lines=[line.strip() for line in context.splitlines() if line.strip()]
-                  selected=any(("❯" in line or re.search(r"(^|\s)>\s*Mixpanel Analytics", line)) for line in lines[-80:] if "Mixpanel Analytics" in line)
-                  if selected:
-                      child.send("\r"); template=True
-                  else:
-                      child.send("\x1b[B"); time.sleep(.15)
+                  selected=any(
+                      ("❯" in line or re.search(r"(^|\s)>\s*Add new extensions", line))
+                      for line in lines[-80:]
+                      if "Add new extensions for an existing Wix app" in line
+                  )
+                  if not selected:
+                      child.send("\x1b[B")
+                      time.sleep(.15)
+                  child.send("\r")
+                  mode_handled=True
                   continue
               if event == 2:
+                  if template:
+                      raise SystemExit("template selector repeated unexpectedly")
+                  context=clean((child.before or "")[-2500:] + (child.after or ""))
+                  lines=[line.strip() for line in context.splitlines() if line.strip()]
+                  selected=any(
+                      ("❯" in line or re.search(r"(^|\s)>\s*Mixpanel Analytics", line))
+                      for line in lines[-80:]
+                      if "Mixpanel Analytics" in line
+                  )
+                  # The official list places Mixpanel immediately after the first
+                  # default template. Select it in this same screen update rather
+                  # than waiting for a redraw that may not re-emit its label.
+                  if not selected:
+                      child.send("\x1b[B")
+                      time.sleep(.15)
+                  child.send("\r")
+                  template=True
+                  continue
+              if event == 3:
                   if not package:
                       child.send("wix-dominion-attribution\r"); package=True
                   continue
-              if event == 3:
-                  raise SystemExit("Wix extend-app flow reported failure")
               if event == 4:
-                  break
+                  context=clean((child.before or "")[-3000:] + (child.after or ""))
+                  print("ERROR: Wix extend-app flow reported failure")
+                  print(context)
+                  raise SystemExit(43)
               if event == 5:
+                  break
+              if event == 6:
                   continue
 
           if child.isalive():

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,16 @@ def load_policy() -> dict[str, Any]:
 def runtime_enabled(policy: dict[str, Any]) -> bool:
     switch = policy["kill_switch"]
     return os.getenv(switch["environment_variable"], "0") == switch["enabled_value"]
+
+
+def _native_order_id(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        return str(uuid.UUID(text))
+    except ValueError:
+        return ""
 
 
 def reconcile_paid_orders(store: RevenueStore, policy: dict[str, Any]) -> list[dict[str, Any]]:
@@ -54,7 +65,7 @@ def reconcile_paid_orders(store: RevenueStore, policy: dict[str, Any]) -> list[d
                 experiment_id=exp["id"],
                 purchase_flow_id=str(order.get("purchase_flow_id") or ""),
                 checkout_id=str(order.get("checkout_id") or ""),
-                order_id=order_id,
+                order_id=_native_order_id(order_id),
             )
             native_identities = {
                 (str(item["visitor_id"]), str(item["variant"]))

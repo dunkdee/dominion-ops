@@ -52,11 +52,13 @@ class GateELiveCanaryTests(unittest.TestCase):
         self.assertIn('public_route="$public_origin/r/$exp_id"', text)
         self.assertIn('GATE_E_LIVE_CANARY_PREP=PASS', text)
 
-    def test_live_reconciliation_is_owner_bound_native_link_only_and_no_new_spend(self):
+    def test_live_reconciliation_is_owner_bound_exact_order_join_and_no_new_spend(self):
         text = WORKFLOW.read_text(encoding='utf-8')
         script = (ROOT / 'scripts/revenue_runtime/reconcile_gate_e_live_canary.sh').read_text(encoding='utf-8')
         self.assertIn("RECONCILE_GATE_E_LIVE_CANARY:$main_sha:", text)
-        self.assertIn("GATE_E_WIX_NATIVE_LINK=PASS", text)
+        self.assertIn("GATE_E_(WIX_NATIVE_LINK|WIX_ORDER_IDENTITY_JOIN)=PASS", text)
+        self.assertIn("GATE_E_WIX_ORDER_PROOF=PASS", text)
+        self.assertIn("UNIQUE_PRODUCT_CLICK_WINDOW", script)
         self.assertIn("SOURCE_TO_ORDER_ATTRIBUTION_RECEIPT=PASS", text)
         self.assertIn("GATE_E_LIVE_CANARY_PAUSED=PASS", text)
         self.assertIn("spend_cents=0", text)

@@ -54,6 +54,7 @@ def reconcile_paid_orders(store: RevenueStore, policy: dict[str, Any]) -> list[d
                 experiment_id=exp["id"],
                 purchase_flow_id=str(order.get("purchase_flow_id") or ""),
                 checkout_id=str(order.get("checkout_id") or ""),
+                order_id=order_id,
             )
             native_identities = {
                 (str(item["visitor_id"]), str(item["variant"]))
@@ -95,11 +96,12 @@ def reconcile_paid_orders(store: RevenueStore, policy: dict[str, Any]) -> list[d
                         "reason": reason,
                     })
                     continue
-                reason = (
-                    "WIX_PURCHASE_FLOW_LINK"
-                    if any(item["link_type"] == "purchase_flow" for item in native_links)
-                    else "WIX_CHECKOUT_LINK"
-                )
+                if any(item["link_type"] == "purchase_flow" for item in native_links):
+                    reason = "WIX_PURCHASE_FLOW_LINK"
+                elif any(item["link_type"] == "checkout" for item in native_links):
+                    reason = "WIX_CHECKOUT_LINK"
+                else:
+                    reason = "WIX_ORDER_LINK"
             else:
                 candidates = store.click_candidates(exp["id"], created, lookback)
                 if len(candidates) != 1:

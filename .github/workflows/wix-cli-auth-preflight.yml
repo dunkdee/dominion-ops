@@ -1,0 +1,92 @@
+name: Wix CLI Auth Preflight
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  preflight:
+    if: >-
+      github.event.issue.number == 367 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.author_association == 'OWNER' &&
+      startsWith(github.event.comment.body, 'RUN_WIX_CLI_AUTH_PREFLIGHT:')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Bind authorization to current main
+        id: auth
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$COMMENT_USER" = "$GITHUB_REPOSITORY_OWNER"
+          test "$AUTHOR_ASSOCIATION" = "OWNER"
+          main_sha="$(curl -fsSL             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | jq -r '.sha')"
+          test -n "$main_sha"
+          expected="RUN_WIX_CLI_AUTH_PREFLIGHT:$main_sha:PROVE"
+          test "$COMMENT_BODY" = "$expected"
+          echo "main_sha=$main_sha" >> "$GITHUB_OUTPUT"
+          echo "WIX_CLI_PREFLIGHT_AUTHORIZATION=PASS main_sha=$main_sha actor=$COMMENT_USER"
+
+      - name: Checkout exact current main
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ steps.auth.outputs.main_sha }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '20'
+
+      - name: Verify Wix CLI API-key authentication
+        id: wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$WIX_API_KEY"
+          npm install --global @wix/cli@latest
+          wix login --api-key "$WIX_API_KEY"
+          identity="$(wix whoami 2>&1)"
+          test -n "$identity"
+          printf '%s\n' "$identity"
+          echo "WIX_CLI_API_KEY_AUTH=PASS" 
+          {
+            echo 'identity<<EOF'
+            printf '%s\n' "$identity"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Record preflight result on issue 367
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ steps.auth.outputs.main_sha }}
+          IDENTITY: ${{ steps.wix.outputs.identity }}
+        run: |
+          set -euo pipefail
+          body="$(cat <<EOF
+          ## Wix CLI API-key preflight — PASS
+
+          Exact main: `$MAIN_SHA`
+
+          `WIX_CLI_API_KEY_AUTH=PASS`
+
+          Wix CLI identity:
+          ```
+          $IDENTITY
+          ```
+
+          This proves the existing governed GitHub `WIX_API_KEY` can authenticate the Wix CLI non-interactively. No Wix app, site code, product, checkout, payment, or embed was created or changed by this preflight.
+          EOF
+          )"
+          jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/comment.json"
+          curl -fsSL -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H 'Accept: application/vnd.github+json'             -H 'Content-Type: application/json'             --data-binary "@$RUNNER_TEMP/comment.json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/367/comments" >/dev/null

@@ -173,6 +173,13 @@ jobs:
           def clean(v):
               return ansi.sub("", v or "").replace("\r", "")
 
+          state_path = os.path.join(os.environ["RUNNER_TEMP"], "wix-scaffold-state.txt")
+          def record(event, **values):
+              payload = {"event": event, **values}
+              with open(state_path, "w", encoding="utf-8") as fh:
+                  for key, value in payload.items():
+                      fh.write(f"{key}={value}\n")
+
           # --extend-app-id is the canonical existing-app binding. Wix CLI versions
           # may still render a top-level mode selector before the template selector,
           # so handle it if present but do not require it. The generated config below
@@ -197,7 +204,7 @@ jobs:
               if event == 0:
                   if npm_yes:
                       raise SystemExit("npm confirmation repeated")
-                  child.send("y\r"); npm_yes=True; continue
+                  child.send("y\r"); npm_yes=True; record("NPM_CONFIRM"); continue
               if event == 1:
                   if mode_handled:
                       raise SystemExit("existing-app mode selector repeated unexpectedly")
@@ -213,6 +220,7 @@ jobs:
                       time.sleep(.15)
                   child.send("\r")
                   mode_handled=True
+                  record("MODE_SELECTED", selected_before=selected)
                   continue
               if event == 2:
                   if template:
@@ -232,37 +240,69 @@ jobs:
                       time.sleep(.15)
                   child.send("\r")
                   template=True
+                  record("TEMPLATE_SELECTED", selected_before=selected, mode_handled=mode_handled)
                   continue
               if event == 3:
                   if not package:
                       child.send("wix-dominion-attribution\r"); package=True
+                      record("PROJECT_NAME_SENT", template=template, mode_handled=mode_handled)
                   continue
               if event == 4:
                   context=clean((child.before or "")[-3000:] + (child.after or ""))
+                  record("CLI_ERROR", template=template, mode_handled=mode_handled, package=package)
                   print("ERROR: Wix extend-app flow reported failure")
                   print(context)
                   raise SystemExit(43)
               if event == 5:
+                  record("EOF", template=template, mode_handled=mode_handled, package=package)
                   break
               if event == 6:
+                  record("POLL_TIMEOUT", template=template, mode_handled=mode_handled, package=package)
                   continue
 
           if child.isalive():
               child.sendcontrol("c"); child.close(force=True)
+              record("DEADLINE", template=template, mode_handled=mode_handled, package=package)
               raise SystemExit("Wix scaffold deadline exceeded")
           child.close()
           if child.exitstatus not in (0, None):
               raise SystemExit(child.exitstatus)
           if not template:
+              record("TEMPLATE_NOT_PROVEN", mode_handled=mode_handled, package=package)
               raise SystemExit("template selection not proven for exact --extend-app-id flow")
+          record("CLI_COMPLETE", template=template, mode_handled=mode_handled, package=package)
           PY
 
           config="$(find "$work" -mindepth 2 -maxdepth 5 -type f -name wix.config.json -print -quit)"
           test -n "$config"
           project_dir="$(dirname "$config")"
-          test "$(jq -r '.appId // empty' "$config")" = "$APP_ID"
+          actual_app_id="$(jq -r '.appId // empty' "$config")"
+          if [ "$actual_app_id" != "$APP_ID" ]; then
+            printf '%s\n' "event=APP_ID_MISMATCH" "app_id_match=false" >> "$RUNNER_TEMP/wix-scaffold-state.txt"
+            echo "ERROR: generated Wix config did not bind the exact existing app"
+            exit 47
+          fi
+          printf '%s\n' "app_id_match=true" >> "$RUNNER_TEMP/wix-scaffold-state.txt"
           echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
           echo "WIX_ATTRIBUTION_EXISTING_APP_SCAFFOLD=PASS app_id=$APP_ID duplicate_app=false"
+
+      - name: Record bounded scaffold failure diagnostic
+        if: failure() && steps.scaffold.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ steps.auth.outputs.main_sha }}
+        run: |
+          set -euo pipefail
+          state="$RUNNER_TEMP/wix-scaffold-state.txt"
+          if [ -s "$state" ]; then
+            safe_state="$(grep -E '^(event|template|mode_handled|package|selected_before|app_id_match)=' "$state" || true)"
+          else
+            safe_state="event=NO_STATE_RECEIPT"
+          fi
+          body="$(printf '%s\n'             '## Wix attribution component scaffold — FAIL-CLOSED DIAGNOSTIC'             ''             "Exact authorized main: $MAIN_SHA"             "$safe_state"             ''             'No component build, app release, re-embed, product, price, checkout configuration, payment, refund, Meta, or #305 mutation followed this failure.')"
+          jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/scaffold-diag-comment.json"
+          curl -fsSL -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H 'Accept: application/vnd.github+json'             -H 'Content-Type: application/json'             --data-binary "@$RUNNER_TEMP/scaffold-diag-comment.json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/367/comments" >/dev/null
+          echo "WIX_ATTRIBUTION_SCAFFOLD_DIAGNOSTIC_RECORDED=PASS issue=367"
 
       - name: Replace only the existing embedded component source
         id: patch

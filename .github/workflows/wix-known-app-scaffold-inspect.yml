@@ -1,0 +1,97 @@
+name: Wix Known App Scaffold Inspect
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wix-known-app-scaffold-inspect.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+
+      - name: Inspect Wix known-app project path from public source maps
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          cd "$work"
+          npm pack @wix/create-new@0.0.113 >/dev/null
+          tar -xzf wix-create-new-0.0.113.tgz
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          terms = (
+              "extendAppId",
+              "ExistingAppFlow",
+              "ExtendExistingApp",
+              "getApp({ appId",
+              "getApp({appId",
+              "wix.config.json",
+              "projectId",
+              "setupProject",
+              "createProject",
+              "generateProject",
+              "templateId",
+              "create-new-packages/app-command",
+          )
+          selected = []
+          seen = set()
+
+          for map_path in sorted(Path("package/build").glob("*.js.map")):
+              try:
+                  sm = json.loads(map_path.read_text(encoding="utf-8"))
+              except Exception:
+                  continue
+              for source, body in zip(sm.get("sources", []), sm.get("sourcesContent", [])):
+                  if not body or source in seen:
+                      continue
+                  score = sum(1 for term in terms if term.lower() in body.lower())
+                  source_l = source.lower()
+                  if (
+                      score >= 2
+                      or "existingapp" in source_l
+                      or "extendexisting" in source_l
+                      or "app-command/src" in source_l and ("question" in source_l or "project" in source_l or "setup" in source_l)
+                      or "dev-center-client/src/dev-center-client.ts" in source_l
+                  ):
+                      seen.add(source)
+                      selected.append((score, map_path.name, source, body))
+
+          selected.sort(key=lambda row: (-row[0], row[2]))
+          if not selected:
+              raise SystemExit("no relevant Wix known-app source found")
+
+          for score, map_name, source, body in selected[:25]:
+              print(f"===== SOURCE score={score} map={map_name} path={source} =====")
+              if len(body) <= 50000:
+                  print(body)
+              else:
+                  # Print bounded windows around every high-value term.
+                  emitted = []
+                  low = body.lower()
+                  for term in terms:
+                      pos = low.find(term.lower())
+                      if pos < 0:
+                          continue
+                      if any(abs(pos - prior) < 6000 for prior in emitted):
+                          continue
+                      emitted.append(pos)
+                      print(f"--- WINDOW term={term} pos={pos} ---")
+                      print(body[max(0,pos-7000):min(len(body),pos+14000)])
+              print(f"===== END SOURCE {source} =====")
+
+          print(f"WIX_KNOWN_APP_STATIC_INSPECT=PASS sources={len(selected)}")
+          PY

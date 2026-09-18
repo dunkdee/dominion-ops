@@ -1,0 +1,347 @@
+name: Wix Attribution Zero-Spend Runtime Proof
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  prepare:
+    if: >-
+      github.event.issue.number == 367 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.author_association == 'OWNER' &&
+      startsWith(github.event.comment.body, 'RUN_WIX_ATTRIBUTION_ZERO_SPEND_PREP:')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    steps:
+      - name: Bind preparation authorization to exact current main
+        id: auth
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$ISSUE_NUMBER" = "367"
+          test "$COMMENT_USER" = "$REPOSITORY_OWNER"
+          test "$AUTHOR_ASSOCIATION" = "OWNER"
+          main_sha="$(curl -fsSL             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | jq -r '.sha')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]]
+          expected="RUN_WIX_ATTRIBUTION_ZERO_SPEND_PREP:$main_sha:PREP"
+          test "$COMMENT_BODY" = "$expected"
+          echo "main_sha=$main_sha" >> "$GITHUB_OUTPUT"
+          echo "WIX_ATTRIBUTION_ZERO_SPEND_PREP_AUTH=PASS issue=367 main_sha=$main_sha"
+
+      - name: Checkout exact current main
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ steps.auth.outputs.main_sha }}
+          persist-credentials: false
+
+      - name: Prove bounded canary asset
+        env:
+          MAIN_SHA: ${{ steps.auth.outputs.main_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$MAIN_SHA"
+          test -f scripts/revenue_runtime/prepare_gate_e_live_canary.sh
+          bash -n scripts/revenue_runtime/prepare_gate_e_live_canary.sh
+          echo "WIX_ATTRIBUTION_ZERO_SPEND_ASSET=PASS source_sha=$MAIN_SHA"
+
+      - name: Require Foundation VM connection material
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          test -n "$VM_SSH_KNOWN_HOSTS"
+
+      - name: Prepare pinned SSH trust
+        env:
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          printf '%s\n' "$VM_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          grep -Eq '^foundation-vm[[:space:]]+(ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa)[[:space:]]+' "$HOME/.ssh/known_hosts"
+          ssh-keygen -l -f "$HOME/.ssh/known_hosts" >/dev/null
+          echo 'FOUNDATION_VM_HOST_IDENTITY=PINNED alias=foundation-vm'
+
+      - name: Transfer bounded canary script
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          set -euo pipefail
+          scp -i "$HOME/.ssh/foundation_vm_key"             -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes             -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes             scripts/revenue_runtime/prepare_gate_e_live_canary.sh             "$VM_USER@$VM_HOST:/tmp/prepare-wix-attribution-367-$GITHUB_RUN_ID.sh"
+
+      - name: Prepare zero-spend live attribution canary
+        id: prepare
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          PRODUCT_ID: dbbcaa33-e143-4660-a238-d3182aa1701e
+          TARGET_URL: https://www.voltedgegoods.com/product-page/strong-magnetic-360-rotation-mag-safe-air-vent-car-mount-dashboard-phone-holder
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/wix-attribution-367-prep.log"
+          ssh -i "$HOME/.ssh/foundation_vm_key"             -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes             -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes             "$VM_USER@$VM_HOST"             "RUN_ID='367-$GITHUB_RUN_ID' PRODUCT_ID='$PRODUCT_ID' TARGET_URL='$TARGET_URL' bash /tmp/prepare-wix-attribution-367-$GITHUB_RUN_ID.sh; rc=\$?; rm -f /tmp/prepare-wix-attribution-367-$GITHUB_RUN_ID.sh; exit \$rc"             | tee "$log"
+          grep -Fq 'GATE_E_LIVE_RUNTIME_HEALTH=PASS' "$log"
+          grep -Fq 'GATE_E_LIVE_TARGET_BOUNDARY=PASS' "$log"
+          grep -Fq 'GATE_E_LIVE_EXPERIMENT_ACTIVE=PASS' "$log"
+          grep -Fq 'GATE_E_LIVE_CANARY_PREP=PASS' "$log"
+          grep -Fq 'automated_spend=false' "$log"
+          grep -Fq 'price_mutation=false' "$log"
+          grep -Fq 'synthetic_click=false' "$log"
+          receipt="$(grep -F 'GATE_E_LIVE_CANARY_PREP=PASS' "$log" | tail -n1)"
+          exp_id="$(printf '%s\n' "$receipt" | sed -n 's/.*experiment_id=\([^ ]*\).*/\1/p')"
+          route="$(printf '%s\n' "$receipt" | sed -n 's/.*public_route=\([^ ]*\).*/\1/p')"
+          test -n "$exp_id"
+          test -n "$route"
+          echo "experiment_id=$exp_id" >> "$GITHUB_OUTPUT"
+          echo "public_route=$route" >> "$GITHUB_OUTPUT"
+          echo "receipt=$receipt" >> "$GITHUB_OUTPUT"
+
+      - name: Record preparation receipt on issue 367
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ steps.auth.outputs.main_sha }}
+          EXPERIMENT_ID: ${{ steps.prepare.outputs.experiment_id }}
+          PUBLIC_ROUTE: ${{ steps.prepare.outputs.public_route }}
+          PREP_RECEIPT: ${{ steps.prepare.outputs.receipt }}
+        run: |
+          set -euo pipefail
+          body="$(cat <<EOF
+          ## Wix native attribution zero-spend canary — PREPARED
+
+          Exact authorized main: `$MAIN_SHA`
+          Experiment: `$EXPERIMENT_ID`
+          Public signed route: $PUBLIC_ROUTE
+
+          ```
+          $PREP_RECEIPT
+          ```
+
+          Boundary: treatment 0%, auto-promotion disabled, automatic paid spend disabled, automatic price changes disabled, and no synthetic click or payment. Use one browser only. Continue through the signed route and initiate Wix checkout, but do not submit payment.
+          EOF
+          )"
+          jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/comment.json"
+          curl -fsSL -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H 'Accept: application/vnd.github+json'             -H 'Content-Type: application/json'             --data-binary "@$RUNNER_TEMP/comment.json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/367/comments" >/dev/null
+          echo 'WIX_ATTRIBUTION_ZERO_SPEND_PREP_RECEIPT=PASS issue=367'
+
+      - name: Cleanup temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"
+
+  verify:
+    if: >-
+      github.event.issue.number == 367 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.author_association == 'OWNER' &&
+      startsWith(github.event.comment.body, 'RUN_WIX_ATTRIBUTION_ZERO_SPEND_VERIFY:')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: foundation-vm-production
+    steps:
+      - name: Bind verification authorization to exact current main and experiment
+        id: auth
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$ISSUE_NUMBER" = "367"
+          test "$COMMENT_USER" = "$REPOSITORY_OWNER"
+          test "$AUTHOR_ASSOCIATION" = "OWNER"
+          main_sha="$(curl -fsSL             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | jq -r '.sha')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]]
+          prefix="RUN_WIX_ATTRIBUTION_ZERO_SPEND_VERIFY:$main_sha:"
+          suffix=":VERIFY"
+          [[ "$COMMENT_BODY" == "$prefix"*"$suffix" ]]
+          exp_id="${COMMENT_BODY#"$prefix"}"
+          exp_id="${exp_id%"$suffix"}"
+          [[ "$exp_id" =~ ^gate-e-live-367-[0-9]+$ ]]
+          echo "main_sha=$main_sha" >> "$GITHUB_OUTPUT"
+          echo "experiment_id=$exp_id" >> "$GITHUB_OUTPUT"
+          echo "WIX_ATTRIBUTION_ZERO_SPEND_VERIFY_AUTH=PASS issue=367 main_sha=$main_sha experiment_id=$exp_id"
+
+      - name: Require Foundation VM connection material
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          test -n "$VM_SSH_KNOWN_HOSTS"
+
+      - name: Prepare pinned SSH trust
+        env:
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          printf '%s\n' "$VM_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          grep -Eq '^foundation-vm[[:space:]]+(ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa)[[:space:]]+' "$HOME/.ssh/known_hosts"
+          ssh-keygen -l -f "$HOME/.ssh/known_hosts" >/dev/null
+          echo 'FOUNDATION_VM_HOST_IDENTITY=PINNED alias=foundation-vm'
+
+      - name: Verify persisted native link and zero-spend state
+        id: proof
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          EXPERIMENT_ID: ${{ steps.auth.outputs.experiment_id }}
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/wix-attribution-367-proof.log"
+          ssh -i "$HOME/.ssh/foundation_vm_key"             -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes             -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes             "$VM_USER@$VM_HOST" "EXPERIMENT_ID='$EXPERIMENT_ID' bash -s" <<'REMOTE' | tee "$log"
+          set -Eeuo pipefail
+          api="http://127.0.0.1:8790"
+          db="$HOME/.dominion/revenue-runtime/revenue.db"
+          env_file="$HOME/dominion-ops/.env"
+          test -s "$db"
+          systemctl is-active --quiet dominion-revenue-runtime.service
+          health="$(curl -fsS "$api/health")"
+          python3 - "$health" <<'PY'
+          import json, sys
+          obj=json.loads(sys.argv[1])
+          assert obj.get("status") == "ok", obj
+          assert obj.get("execution_enabled") is False, obj
+          assert obj.get("automatic_price_changes") is False, obj
+          assert obj.get("automatic_paid_spend") is False, obj
+          print("WIX_ATTRIBUTION_RUNTIME_HEALTH=PASS execution_enabled=false price_automation=false paid_spend=false")
+          PY
+
+          proof="$(python3 - "$db" "$EXPERIMENT_ID" <<'PY'
+          import sqlite3, sys
+          db_path, exp_id = sys.argv[1:3]
+          con=sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+          con.row_factory=sqlite3.Row
+          exp=con.execute("SELECT id,status,treatment_pct,auto_promote FROM experiments WHERE id=?", (exp_id,)).fetchone()
+          assert exp is not None, exp_id
+          assert exp["status"] == "active", dict(exp)
+          assert int(exp["treatment_pct"]) == 0, dict(exp)
+          assert int(exp["auto_promote"]) == 0, dict(exp)
+          links=con.execute("""
+            SELECT link_type,link_id,visitor_id,variant,linked_at
+            FROM attribution_bridge_links
+            WHERE experiment_id=? AND link_type IN ('purchase_flow','checkout')
+            ORDER BY linked_at ASC
+          """, (exp_id,)).fetchall()
+          assert links, "no native purchase-flow/checkout link persisted"
+          identities={(str(r["visitor_id"]), str(r["variant"])) for r in links}
+          assert len(identities) == 1, [dict(r) for r in links]
+          native_ids={(str(r["link_type"]), str(r["link_id"])) for r in links}
+          assert len(native_ids) == 1, [dict(r) for r in links]
+          visitor, variant = next(iter(identities))
+          assert variant == "control", variant
+          link_type, link_id = next(iter(native_ids))
+          counts=dict(con.execute("SELECT event_type,COUNT(*) FROM events WHERE experiment_id=? GROUP BY event_type", (exp_id,)).fetchall())
+          assert int(counts.get("impression",0)) >= 1, counts
+          assert int(counts.get("click",0)) >= 1, counts
+          assert int(counts.get("purchase",0)) == 0, counts
+          reason = "WIX_PURCHASE_FLOW_LINK" if link_type == "purchase_flow" else "WIX_CHECKOUT_LINK"
+          print(f"WIX_ATTRIBUTION_NATIVE_LINK=PASS experiment_id={exp_id} link_type={link_type} native_id={link_id} visitor_id={visitor} variant={variant} reason={reason}")
+          print(f"WIX_ATTRIBUTION_ZERO_SPEND=PASS experiment_id={exp_id} impression_events={counts.get('impression',0)} click_events={counts.get('click',0)} purchase_events={counts.get('purchase',0)} treatment_pct=0 auto_promote=false")
+          con.close()
+          PY
+          )"
+          printf '%s\n' "$proof"
+
+          operator_token="$(python3 - "$env_file" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          for raw in p.read_text(encoding="utf-8").splitlines():
+              line=raw.strip()
+              if not line or line.startswith("#") or "=" not in line:
+                  continue
+              k,v=line.split("=",1)
+              if k.strip() != "WIX_AGENT_OPERATOR_TOKEN":
+                  continue
+              v=v.strip()
+              if len(v) >= 2 and v[0] == v[-1] and v[0] in {'"', "'"}:
+                  v=v[1:-1]
+              print(v)
+              break
+          PY
+          )"
+          test -n "$operator_token"
+          curl -fsS -X POST -H "X-Operator-Token: $operator_token" "$api/control/experiments/$EXPERIMENT_ID/pause" >/dev/null
+          python3 - "$db" "$EXPERIMENT_ID" <<'PY'
+          import sqlite3, sys
+          con=sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+          row=con.execute("SELECT status FROM experiments WHERE id=?", (sys.argv[2],)).fetchone()
+          assert row and row[0] == "paused", row
+          con.close()
+          print(f"WIX_ATTRIBUTION_CANARY_PAUSED=PASS experiment_id={sys.argv[2]} final_state=paused")
+          PY
+          REMOTE
+          grep -Fq 'WIX_ATTRIBUTION_RUNTIME_HEALTH=PASS' "$log"
+          grep -Fq 'WIX_ATTRIBUTION_NATIVE_LINK=PASS' "$log"
+          grep -Fq 'WIX_ATTRIBUTION_ZERO_SPEND=PASS' "$log"
+          grep -Fq 'purchase_events=0' "$log"
+          grep -Fq 'WIX_ATTRIBUTION_CANARY_PAUSED=PASS' "$log"
+          {
+            echo 'proof_lines<<EOF'
+            grep -E '^WIX_ATTRIBUTION_(RUNTIME_HEALTH|NATIVE_LINK|ZERO_SPEND|CANARY_PAUSED)=' "$log"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Record runtime proof on issue 367
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ steps.auth.outputs.main_sha }}
+          EXPERIMENT_ID: ${{ steps.auth.outputs.experiment_id }}
+          PROOF_LINES: ${{ steps.proof.outputs.proof_lines }}
+        run: |
+          set -euo pipefail
+          body="$(cat <<EOF
+          ## Wix native attribution runtime proof — PASS
+
+          Exact authorized main: `$MAIN_SHA`
+          Experiment: `$EXPERIMENT_ID`
+
+          ```
+          $PROOF_LINES
+          ```
+
+          This is live VoltEdge execution evidence. The signed Dominion route produced the single governed visitor/click, Wix emitted and persisted a native purchase-flow or checkout identity through the activated embedded attribution component, and the canary recorded zero purchase events. No payment, refund, price/product mutation, paid traffic, Meta change, or #305 change was performed. The canary is paused after proof.
+          EOF
+          )"
+          jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/comment.json"
+          curl -fsSL -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H 'Accept: application/vnd.github+json'             -H 'Content-Type: application/json'             --data-binary "@$RUNNER_TEMP/comment.json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/367/comments" >/dev/null
+          echo 'WIX_ATTRIBUTION_RUNTIME_PROOF_RECORDED=PASS issue=367'
+
+      - name: Cleanup temporary SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"

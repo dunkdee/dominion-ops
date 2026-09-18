@@ -208,39 +208,58 @@ jobs:
               if event == 1:
                   if mode_handled:
                       raise SystemExit("existing-app mode selector repeated unexpectedly")
-                  context=clean((child.before or "")[-2500:] + (child.after or ""))
-                  lines=[line.strip() for line in context.splitlines() if line.strip()]
-                  selected=any(
-                      ("❯" in line or re.search(r"(^|\s)>\s*Add new extensions", line))
-                      for line in lines[-80:]
-                      if "Add new extensions for an existing Wix app" in line
-                  )
+                  target = "Add new extensions for an existing Wix app"
+                  selected = False
+                  for _arrow in range(12):
+                      context = clean((child.before or "")[-2500:] + (child.after or ""))
+                      lines = [line.strip() for line in context.splitlines() if line.strip()]
+                      selected = any(
+                          ("❯" in line or re.search(r"(^|\\s)>\\s*Add new extensions", line))
+                          for line in lines[-80:]
+                          if target in line
+                      )
+                      if selected:
+                          break
+                      child.send("\\x1b[B")
+                      try:
+                          child.expect(r"(?s).", timeout=1)
+                      except pexpect.TIMEOUT:
+                          pass
+                      time.sleep(0.3)
                   if not selected:
-                      child.send("\x1b[B")
-                      time.sleep(.15)
-                  child.send("\r")
-                  mode_handled=True
-                  record("MODE_SELECTED", selected_before=selected)
+                      record("MODE_SELECT_FAILED", mode_handled=mode_handled)
+                      raise SystemExit("mode selector: cursor never landed on '%s'" % target)
+                  child.send("\\r")
+                  mode_handled = True
+                  record("MODE_SELECTED", selected_before=True)
                   continue
               if event == 2:
                   if template:
                       raise SystemExit("template selector repeated unexpectedly")
-                  context=clean((child.before or "")[-2500:] + (child.after or ""))
-                  lines=[line.strip() for line in context.splitlines() if line.strip()]
-                  selected=any(
-                      ("❯" in line or re.search(r"(^|\s)>\s*Mixpanel Analytics", line))
-                      for line in lines[-80:]
-                      if "Mixpanel Analytics" in line
-                  )
-                  # The official list places Mixpanel immediately after the first
-                  # default template. Select it in this same screen update rather
-                  # than waiting for a redraw that may not re-emit its label.
+                  target = "Mixpanel Analytics"
+                  selected = False
+                  for _arrow in range(12):
+                      context = clean((child.before or "")[-2500:] + (child.after or ""))
+                      lines = [line.strip() for line in context.splitlines() if line.strip()]
+                      selected = any(
+                          ("❯" in line or re.search(r"(^|\\s)>\\s*Mixpanel Analytics", line))
+                          for line in lines[-80:]
+                          if target in line
+                      )
+                      if selected:
+                          break
+                      child.send("\\x1b[B")
+                      try:
+                          child.expect(r"(?s).", timeout=1)
+                      except pexpect.TIMEOUT:
+                          pass
+                      time.sleep(0.3)
                   if not selected:
-                      child.send("\x1b[B")
-                      time.sleep(.15)
-                  child.send("\r")
-                  template=True
-                  record("TEMPLATE_SELECTED", selected_before=selected, mode_handled=mode_handled)
+                      record("TEMPLATE_SELECT_FAILED", mode_handled=mode_handled)
+                      raise SystemExit("template selector: cursor never landed on '%s'" % target)
+                  child.send("\\r")
+                  template = True
+                  record("TEMPLATE_SELECTED", selected_before=True, mode_handled=mode_handled)
                   continue
               if event == 3:
                   if not package:

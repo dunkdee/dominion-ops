@@ -1,6 +1,6 @@
 // VoltEdge embedded attribution bridge for the existing Dominion Attribution Wix app.
 // Binds the one-time Dominion click token to Wix-native checkout/order identity.
-// No product, price, cart, payment, refund, or buyer data is mutated.
+// No commerce state or buyer data is mutated.
 
 import { analytics } from "@wix/site";
 

@@ -1,0 +1,164 @@
+name: Wix Known App Scaffold Inspect
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wix-known-app-scaffold-inspect.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+
+      - name: Inspect Wix extend-app argument validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          cd "$work"
+          npm pack @wix/create-new@0.0.113 >/dev/null
+          tar -xzf wix-create-new-0.0.113.tgz
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          targets = (
+              "parse-command-options.ts",
+              "command.tsx",
+              "command.ts",
+              "index.tsx",
+              "index.ts",
+          )
+          must_contain = ("extendAppId", "--extend-app-id", "template", "appName")
+          found = 0
+          for map_path in sorted(Path("package/build").glob("*.js.map")):
+              try:
+                  sm = json.loads(map_path.read_text(encoding="utf-8"))
+              except Exception:
+                  continue
+              for source, body in zip(sm.get("sources", []), sm.get("sourcesContent", [])):
+                  if not body:
+                      continue
+                  source_l = source.lower()
+                  if "create-new-packages/app-command" not in source_l:
+                      continue
+                  basename = source.split("/")[-1]
+                  score = sum(1 for term in must_contain if term.lower() in body.lower())
+                  if basename in targets or score >= 3:
+                      found += 1
+                      print(f"===== ARG SOURCE score={score} map={map_path.name} path={source} =====")
+                      if len(body) <= 50000:
+                          print(body)
+                      else:
+                          low = body.lower()
+                          emitted=[]
+                          for term in must_contain:
+                              pos=low.find(term.lower())
+                              if pos < 0 or any(abs(pos-p)<5000 for p in emitted):
+                                  continue
+                              emitted.append(pos)
+                              print(body[max(0,pos-7000):min(len(body),pos+14000)])
+                      print(f"===== END ARG SOURCE {source} =====")
+          if found == 0:
+              raise SystemExit("no argument-validation sources found")
+          print(f"WIX_EXTEND_ARG_INSPECT=PASS sources={found}")
+          PY
+
+      - name: Inspect Wix CLI app-secret path
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          cd "$work"
+          npm pack @wix/cli@1.1.247 >/dev/null
+          tar -xzf wix-cli-1.1.247.tgz
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          needles = (
+              "getAppSecret",
+              "FailedToGetAppSecret",
+              "withSecrets",
+              "getApp({",
+              "DevCenterClient",
+          )
+          found = 0
+          seen = set()
+          for map_path in sorted(Path("package/build").glob("*.js.map")):
+              try:
+                  sm = json.loads(map_path.read_text(encoding="utf-8"))
+              except Exception:
+                  continue
+              for source, body in zip(sm.get("sources", []), sm.get("sourcesContent", [])):
+                  if not body:
+                      continue
+                  low = body.lower()
+                  if not any(n.lower() in low for n in needles):
+                      continue
+                  key=(source, body[:200])
+                  if key in seen:
+                      continue
+                  seen.add(key)
+                  found += 1
+                  print(f"===== SECRET SOURCE map={map_path.name} path={source} =====")
+                  emitted=[]
+                  for needle in needles:
+                      pos=low.find(needle.lower())
+                      if pos < 0 or any(abs(pos-p)<5000 for p in emitted):
+                          continue
+                      emitted.append(pos)
+                      print(body[max(0,pos-8000):min(len(body),pos+16000)])
+                  print(f"===== END SECRET SOURCE {source} =====")
+          if found == 0:
+              raise SystemExit("no Wix app-secret source found")
+          print(f"WIX_APP_SECRET_PATH_INSPECT=PASS sources={found}")
+          PY
+
+
+      - name: Inspect Wix Dev Center get-app wire route
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          cd "$work"
+          npm pack @wix/cli@1.1.247 >/dev/null
+          tar -xzf wix-cli-1.1.247.tgz
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          targets = (
+              "ambassador-devcenter-apps-v1-app/http.impl.ts",
+              "ambassador-devcenter-apps-v1-app/types.impl.ts",
+              "dev-center-client/src/dev-center-client.ts",
+          )
+          found = 0
+          for map_path in sorted(Path("package/build").glob("*.js.map")):
+              try:
+                  sm = json.loads(map_path.read_text(encoding="utf-8"))
+              except Exception:
+                  continue
+              for source, body in zip(sm.get("sources", []), sm.get("sourcesContent", [])):
+                  if not body:
+                      continue
+                  if any(source.endswith(t) for t in targets):
+                      found += 1
+                      print(f"===== WIRE SOURCE map={map_path.name} path={source} =====")
+                      print(body)
+                      print(f"===== END WIRE SOURCE {source} =====")
+          if found == 0:
+              raise SystemExit("no Wix Dev Center get-app wire source found")
+          print(f"WIX_GET_APP_WIRE_INSPECT=PASS sources={found}")
+          PY

@@ -134,6 +134,7 @@ class WixFlowBridge(BaseModel):
     token: str = Field(min_length=32, max_length=256)
     purchase_flow_id: str = Field(default="", max_length=64)
     checkout_id: str = Field(default="", max_length=64)
+    order_id: str = Field(default="", max_length=64)
 
 
 app = FastAPI(title="Dominion Revenue Runtime", version="1.1.0", docs_url=None, redoc_url=None)
@@ -230,6 +231,7 @@ def wix_flow_bridge(experiment_id: str, payload: WixFlowBridge):
             expected_experiment_id=experiment_id,
             purchase_flow_id=payload.purchase_flow_id,
             checkout_id=payload.checkout_id,
+            order_id=payload.order_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

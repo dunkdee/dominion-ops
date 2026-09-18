@@ -1,0 +1,412 @@
+name: Wix Attribution Component Release
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  release:
+    if: >-
+      github.event.issue.number == 367 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.author_association == 'OWNER' &&
+      startsWith(github.event.comment.body, 'RUN_WIX_ATTRIBUTION_COMPONENT_RELEASE:')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: foundation-vm-production
+    steps:
+      - name: Bind release authorization to current main and failed canary
+        id: auth
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$ISSUE_NUMBER" = "367"
+          test "$COMMENT_USER" = "$REPOSITORY_OWNER"
+          test "$AUTHOR_ASSOCIATION" = "OWNER"
+          main_sha="$(curl -fsSL             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | jq -r '.sha')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]]
+          prefix="RUN_WIX_ATTRIBUTION_COMPONENT_RELEASE:$main_sha:"
+          suffix=":RELEASE"
+          [[ "$COMMENT_BODY" == "$prefix"*"$suffix" ]]
+          failed_exp="${COMMENT_BODY#"$prefix"}"
+          failed_exp="${failed_exp%"$suffix"}"
+          [[ "$failed_exp" =~ ^gate-e-live-367-[0-9]+$ ]]
+          echo "main_sha=$main_sha" >> "$GITHUB_OUTPUT"
+          echo "failed_experiment=$failed_exp" >> "$GITHUB_OUTPUT"
+          echo "WIX_ATTRIBUTION_COMPONENT_RELEASE_AUTH=PASS issue=367 main_sha=$main_sha failed_experiment=$failed_exp"
+
+      - name: Checkout exact authorized main
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ steps.auth.outputs.main_sha }}
+          persist-credentials: false
+
+      - name: Prove canonical embedded bridge source
+        env:
+          MAIN_SHA: ${{ steps.auth.outputs.main_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$MAIN_SHA"
+          test -s integrations/wix/voltedge/revenue-attribution-bridge.js
+          test -s integrations/wix/voltedge/revenue-attribution-bridge.html
+          grep -Fq 'import { analytics } from "@wix/site"' integrations/wix/voltedge/revenue-attribution-bridge.js
+          grep -Fq 'analytics.registerEventListener' integrations/wix/voltedge/revenue-attribution-bridge.js
+          grep -Fq '"InitiateCheckout"' integrations/wix/voltedge/revenue-attribution-bridge.js
+          grep -Fq 'checkoutId' integrations/wix/voltedge/revenue-attribution-bridge.js
+          grep -Fq 'sessionStorage' integrations/wix/voltedge/revenue-attribution-bridge.js
+          ! grep -Eq 'placeOrder|createOrder|updateCurrentCart|addLineItemsToCurrentCart|refund' integrations/wix/voltedge/revenue-attribution-bridge.js
+          echo "WIX_ATTRIBUTION_EMBED_SOURCE=PASS source_sha=$MAIN_SHA"
+
+      - name: Prepare pinned Foundation VM trust
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
+          test -n "$VM_SSH_KEY"
+          test -n "$VM_SSH_KNOWN_HOSTS"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_KEY" > "$HOME/.ssh/foundation_vm_key"
+          chmod 600 "$HOME/.ssh/foundation_vm_key"
+          printf '%s\n' "$VM_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          grep -Eq '^foundation-vm[[:space:]]+(ssh-ed25519|ecdsa-sha2-nistp256|ssh-rsa)[[:space:]]+' "$HOME/.ssh/known_hosts"
+          ssh-keygen -l -f "$HOME/.ssh/known_hosts" >/dev/null
+          echo "FOUNDATION_VM_HOST_IDENTITY=PINNED alias=foundation-vm"
+
+      - name: Pause failed zero-spend canary
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          FAILED_EXPERIMENT: ${{ steps.auth.outputs.failed_experiment }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/foundation_vm_key"             -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes             -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes             "$VM_USER@$VM_HOST" "FAILED_EXPERIMENT='$FAILED_EXPERIMENT' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          api="http://127.0.0.1:8790"
+          env_file="$HOME/dominion-ops/.env"
+          token="$(python3 - "$env_file" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          for raw in p.read_text(encoding="utf-8").splitlines():
+              line=raw.strip()
+              if not line or line.startswith("#") or "=" not in line:
+                  continue
+              k,v=line.split("=",1)
+              if k.strip() != "WIX_AGENT_OPERATOR_TOKEN":
+                  continue
+              v=v.strip()
+              if len(v) >= 2 and v[0] == v[-1] and v[0] in {'"', "'"}:
+                  v=v[1:-1]
+              print(v)
+              break
+          PY
+          )"
+          test -n "$token"
+          status="$(curl -fsS -H "X-Operator-Token: $token" "$api/control/experiments/$FAILED_EXPERIMENT")"
+          state="$(printf '%s' "$status" | python3 -c 'import json,sys; print(json.load(sys.stdin)["experiment"]["status"])')"
+          if [ "$state" = "active" ]; then
+            curl -fsS -X POST -H "X-Operator-Token: $token" "$api/control/experiments/$FAILED_EXPERIMENT/pause" >/dev/null
+          fi
+          final="$(curl -fsS -H "X-Operator-Token: $token" "$api/control/experiments/$FAILED_EXPERIMENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["experiment"]["status"])')"
+          test "$final" = "paused"
+          echo "WIX_ATTRIBUTION_FAILED_CANARY_PAUSED=PASS experiment_id=$FAILED_EXPERIMENT final_state=paused"
+          REMOTE
+
+      - name: Set up Wix CLI
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$WIX_API_KEY"
+          npm install --global @wix/cli@latest
+          wix login --api-key "$WIX_API_KEY"
+          wix whoami
+          python3 -m pip install --quiet pexpect
+          echo "WIX_ATTRIBUTION_CLI_AUTH=PASS"
+
+      - name: Scaffold exact existing app without creating a duplicate
+        id: scaffold
+        env:
+          APP_ID: 5c72cb8a-686d-4dd2-8ec5-8985e7f55f01
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          export WORK_DIR="$work"
+          python3 <<'PY'
+          import os, re, sys, time
+          import pexpect
+
+          work = os.environ["WORK_DIR"]
+          app_id = os.environ["APP_ID"]
+          env = os.environ.copy()
+          env["CI"] = "false"
+          env["TERM"] = "xterm-256color"
+          env["FORCE_COLOR"] = "0"
+
+          child = pexpect.spawn(
+              "npm",
+              ["create", "@wix/new@latest", "--", "app", "--extend-app-id", app_id],
+              cwd=work,
+              env=env,
+              encoding="utf-8",
+              timeout=12,
+              dimensions=(40, 160),
+          )
+          child.logfile_read = sys.stdout
+          ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+          def clean(v):
+              return ansi.sub("", v or "").replace("\r", "")
+
+          patterns = [
+              re.compile(r"Ok to proceed\?\s*\(y\)", re.I),
+              re.compile(r"Add new extensions for an existing Wix app", re.I),
+              re.compile(r"Mixpanel Analytics", re.I),
+              re.compile(r"package name|folder name|project name", re.I),
+              re.compile(r"Failed to fetch|ERROR|Something went wrong", re.I),
+              pexpect.EOF,
+              pexpect.TIMEOUT,
+          ]
+          existing=False
+          template=False
+          package=False
+          npm_yes=False
+          deadline=time.time()+360
+
+          while child.isalive() and time.time() < deadline:
+              event=child.expect(patterns, timeout=min(12, max(1, int(deadline-time.time()))))
+              if event == 0:
+                  if npm_yes:
+                      raise SystemExit("npm confirmation repeated")
+                  child.send("y\r"); npm_yes=True; continue
+              if event == 1:
+                  if not existing:
+                      child.send("\x1b[B"); time.sleep(.15); child.send("\r"); existing=True
+                  continue
+              if event == 2:
+                  context=clean((child.before or "")[-2500:] + (child.after or ""))
+                  lines=[line.strip() for line in context.splitlines() if line.strip()]
+                  selected=any(("❯" in line or re.search(r"(^|\s)>\s*Mixpanel Analytics", line)) for line in lines[-80:] if "Mixpanel Analytics" in line)
+                  if selected:
+                      child.send("\r"); template=True
+                  else:
+                      child.send("\x1b[B"); time.sleep(.15)
+                  continue
+              if event == 3:
+                  if not package:
+                      child.send("wix-dominion-attribution\r"); package=True
+                  continue
+              if event == 4:
+                  raise SystemExit("Wix extend-app flow reported failure")
+              if event == 5:
+                  break
+              if event == 6:
+                  continue
+
+          if child.isalive():
+              child.sendcontrol("c"); child.close(force=True)
+              raise SystemExit("Wix scaffold deadline exceeded")
+          child.close()
+          if child.exitstatus not in (0, None):
+              raise SystemExit(child.exitstatus)
+          if not existing or not template:
+              raise SystemExit("existing app/template selection not proven")
+          PY
+
+          config="$(find "$work" -mindepth 2 -maxdepth 5 -type f -name wix.config.json -print -quit)"
+          test -n "$config"
+          project_dir="$(dirname "$config")"
+          test "$(jq -r '.appId // empty' "$config")" = "$APP_ID"
+          echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+          echo "WIX_ATTRIBUTION_EXISTING_APP_SCAFFOLD=PASS app_id=$APP_ID duplicate_app=false"
+
+      - name: Replace only the existing embedded component source
+        id: patch
+        env:
+          PROJECT_DIR: ${{ steps.scaffold.outputs.project_dir }}
+          COMPONENT_ID: c50757c2-9f64-46f8-891d-a87abfcdba0a
+        run: |
+          set -euo pipefail
+          test -d "$PROJECT_DIR"
+          rm -rf "$PROJECT_DIR/src/dashboard"
+
+          html_file="$(find "$PROJECT_DIR/src" -type f -name embedded.html -print -quit)"
+          test -n "$html_file"
+          ext_dir="$(dirname "$html_file")"
+          json_cfg="$ext_dir/embedded.json"
+          ts_cfg="$(find "$ext_dir" -maxdepth 1 -type f -name '*.extension.ts' -print -quit)"
+
+          if [ -f "$json_cfg" ]; then
+            tmp="$RUNNER_TEMP/embedded.json"
+            jq               --arg id "$COMPONENT_ID"               '.id=$id | .name="Dominion Revenue Attribution Bridge" | .scriptType="ANALYTICS" | .placement="BODY_END"'               "$json_cfg" > "$tmp"
+            mv "$tmp" "$json_cfg"
+            test "$(jq -r '.id' "$json_cfg")" = "$COMPONENT_ID"
+          elif [ -n "$ts_cfg" ]; then
+            python3 - "$ts_cfg" "$COMPONENT_ID" <<'PY'
+          from pathlib import Path
+          import re, sys
+          p=Path(sys.argv[1]); cid=sys.argv[2]
+          s=p.read_text(encoding="utf-8")
+          s=re.sub(r'id:\s*"[^"]+"', f'id: "{cid}"', s, count=1)
+          s=re.sub(r'name:\s*"[^"]+"', 'name: "Dominion Revenue Attribution Bridge"', s, count=1)
+          s=re.sub(r'placement:\s*"[^"]+"', 'placement: "BODY_END"', s, count=1)
+          s=re.sub(r'scriptType:\s*"[^"]+"', 'scriptType: "ANALYTICS"', s, count=1)
+          p.write_text(s, encoding="utf-8")
+          PY
+            grep -Fq "$COMPONENT_ID" "$ts_cfg"
+          else
+            echo "ERROR: embedded component config not found"
+            exit 1
+          fi
+
+          cp "$GITHUB_WORKSPACE/integrations/wix/voltedge/revenue-attribution-bridge.html" "$html_file"
+          cp "$GITHUB_WORKSPACE/integrations/wix/voltedge/revenue-attribution-bridge.js" "$ext_dir/revenue-attribution-bridge.js"
+          grep -Fq 'revenue-attribution-bridge.js' "$html_file"
+          grep -Fq 'analytics.registerEventListener' "$ext_dir/revenue-attribution-bridge.js"
+
+          # Exactly one embedded extension remains in this CLI project and it is bound
+          # to the already-existing component ID.
+          count="$(find "$PROJECT_DIR/src" -type f \( -name embedded.json -o -name '*.extension.ts' \) | wc -l | tr -d ' ')"
+          test "$count" = "1"
+          echo "WIX_ATTRIBUTION_COMPONENT_PATCH=PASS component_id=$COMPONENT_ID placement=BODY_END type=ANALYTICS duplicate_component=false"
+
+      - name: Build exact embedded component
+        env:
+          PROJECT_DIR: ${{ steps.scaffold.outputs.project_dir }}
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          npm install --no-audit --no-fund
+          wix build
+          echo "WIX_ATTRIBUTION_COMPONENT_BUILD=PASS"
+
+      - name: Release minor app version
+        env:
+          PROJECT_DIR: ${{ steps.scaffold.outputs.project_dir }}
+          SITE_ID: a790d430-a3a0-4b0e-9be6-4c874c229167
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          python3 <<'PY'
+          import os, re, sys
+          import pexpect
+
+          site=os.environ["SITE_ID"]
+          child=pexpect.spawn(
+              "wix",
+              ["release", "--site", site, "--version-type", "minor", "--comment", "Issue 367 embedded attribution bridge runtime fix"],
+              encoding="utf-8",
+              timeout=30,
+              env={**os.environ, "CI":"false", "TERM":"xterm-256color", "FORCE_COLOR":"0"},
+              dimensions=(40,160),
+          )
+          child.logfile_read=sys.stdout
+          patterns=[
+              re.compile(r"proceed|continue|release.*\?|confirm", re.I),
+              re.compile(r"major version|new permission|permission.*added", re.I),
+              re.compile(r"failed|error|something went wrong", re.I),
+              pexpect.EOF,
+              pexpect.TIMEOUT,
+          ]
+          deadline=__import__("time").time()+600
+          while child.isalive() and __import__("time").time() < deadline:
+              event=child.expect(patterns, timeout=min(30,max(1,int(deadline-__import__("time").time()))))
+              if event == 0:
+                  child.send("y\r"); continue
+              if event == 1:
+                  child.sendcontrol("c"); child.close(force=True)
+                  raise SystemExit("release attempted a major/permission change")
+              if event == 2:
+                  raise SystemExit("Wix release reported failure")
+              if event == 3:
+                  break
+              if event == 4:
+                  continue
+          if child.isalive():
+              child.sendcontrol("c"); child.close(force=True)
+              raise SystemExit("Wix release deadline exceeded")
+          child.close()
+          if child.exitstatus not in (0,None):
+              raise SystemExit(child.exitstatus)
+          PY
+          echo "WIX_ATTRIBUTION_COMPONENT_RELEASE=PASS version_type=minor app_id=5c72cb8a-686d-4dd2-8ec5-8985e7f55f01 component_id=c50757c2-9f64-46f8-891d-a87abfcdba0a"
+
+      - name: Resolve app secret and re-embed the same component
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_ACCOUNT_ID: 40d4b193-49a5-4717-8fdb-3ef9383e2cb1
+          APP_ID: 5c72cb8a-686d-4dd2-8ec5-8985e7f55f01
+          INSTANCE_ID: 1bc7daee-cebb-48da-afc6-3396a5586a12
+          COMPONENT_ID: c50757c2-9f64-46f8-891d-a87abfcdba0a
+        run: |
+          set -euo pipefail
+          response="$RUNNER_TEMP/app.json"
+          curl -fsSL             -H "Authorization: $WIX_API_KEY"             -H "wix-account-id: $WIX_ACCOUNT_ID"             -H "Accept: application/json"             "https://manage.wix.com/apps-service/v1/apps/$APP_ID?withSecrets=true" > "$response"
+          secret="$(jq -r '.app.appSecrets.appSecret // empty' "$response")"
+          test -n "$secret"
+          echo "::add-mask::$secret"
+
+          token_response="$RUNNER_TEMP/token.json"
+          jq -n             --arg grant_type client_credentials             --arg client_id "$APP_ID"             --arg client_secret "$secret"             --arg instance_id "$INSTANCE_ID"             '{grant_type:$grant_type,client_id:$client_id,client_secret:$client_secret,instance_id:$instance_id}'             > "$RUNNER_TEMP/token-body.json"
+          curl -fsSL -X POST -H 'Content-Type: application/json'             --data-binary "@$RUNNER_TEMP/token-body.json"             https://www.wixapis.com/oauth2/token > "$token_response"
+          access_token="$(jq -r '.access_token // empty' "$token_response")"
+          test -n "$access_token"
+          echo "::add-mask::$access_token"
+
+          printf '%s' '{"properties":{"parameters":{},"disabled":false}}' > "$RUNNER_TEMP/embed.json"
+          curl -fsSL -X POST             -H "Authorization: $access_token"             -H 'Content-Type: application/json'             --data-binary "@$RUNNER_TEMP/embed.json"             "https://www.wixapis.com/apps/v1/scripts?componentId=$COMPONENT_ID"             > "$RUNNER_TEMP/embed-response.json"
+          test "$(jq -r '.properties.disabled // false' "$RUNNER_TEMP/embed-response.json")" = "false"
+
+          curl -fsSL -H "Authorization: $access_token"             "https://www.wixapis.com/apps/v1/scripts?componentId=$COMPONENT_ID"             > "$RUNNER_TEMP/embed-readback.json"
+          test "$(jq -r '.properties.disabled // false' "$RUNNER_TEMP/embed-readback.json")" = "false"
+          echo "WIX_ATTRIBUTION_COMPONENT_REEMBED=PASS app_id=$APP_ID instance_id=$INSTANCE_ID component_id=$COMPONENT_ID disabled=false"
+
+      - name: Record component release receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ steps.auth.outputs.main_sha }}
+          FAILED_EXPERIMENT: ${{ steps.auth.outputs.failed_experiment }}
+        run: |
+          set -euo pipefail
+          body="$(cat <<EOF
+          ## Wix attribution embedded component — RELEASED
+
+          Exact authorized main: $MAIN_SHA
+          Existing app: 5c72cb8a-686d-4dd2-8ec5-8985e7f55f01
+          Existing instance: 1bc7daee-cebb-48da-afc6-3396a5586a12
+          Existing component: c50757c2-9f64-46f8-891d-a87abfcdba0a
+          Failed canary paused: $FAILED_EXPERIMENT
+
+          WIX_ATTRIBUTION_EXISTING_APP_SCAFFOLD=PASS
+          WIX_ATTRIBUTION_COMPONENT_PATCH=PASS
+          WIX_ATTRIBUTION_COMPONENT_BUILD=PASS
+          WIX_ATTRIBUTION_COMPONENT_RELEASE=PASS version_type=minor
+          WIX_ATTRIBUTION_COMPONENT_REEMBED=PASS disabled=false
+
+          Boundary: same app, same instance, same embedded component. No duplicate app/component, product, price, checkout configuration, payment, refund, paid traffic, Meta, or #305 change.
+          EOF
+          )"
+          jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/comment.json"
+          curl -fsSL -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H 'Accept: application/vnd.github+json'             -H 'Content-Type: application/json'             --data-binary "@$RUNNER_TEMP/comment.json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/367/comments" >/dev/null
+          echo "WIX_ATTRIBUTION_COMPONENT_RELEASE_RECEIPT=PASS issue=367"
+
+      - name: Cleanup credentials and SSH material
+        if: always()
+        run: |
+          rm -f "$HOME/.ssh/foundation_vm_key" "$HOME/.ssh/known_hosts"
+          rm -f "$RUNNER_TEMP/app.json" "$RUNNER_TEMP/token.json" "$RUNNER_TEMP/token-body.json" "$RUNNER_TEMP/embed.json" "$RUNNER_TEMP/embed-response.json" "$RUNNER_TEMP/embed-readback.json"

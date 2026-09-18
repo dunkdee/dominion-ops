@@ -1,0 +1,133 @@
+name: Wix Attribution App Scaffold
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  scaffold:
+    if: >-
+      github.event.issue.number == 367 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.author_association == 'OWNER' &&
+      startsWith(github.event.comment.body, 'RUN_WIX_ATTRIBUTION_APP_SCAFFOLD:')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Bind authorization to exact current main
+        id: auth
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$COMMENT_USER" = "$GITHUB_REPOSITORY_OWNER"
+          test "$AUTHOR_ASSOCIATION" = "OWNER"
+          main_sha="$(curl -fsSL             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | jq -r '.sha')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]]
+          expected="RUN_WIX_ATTRIBUTION_APP_SCAFFOLD:$main_sha:CREATE"
+          test "$COMMENT_BODY" = "$expected"
+          echo "main_sha=$main_sha" >> "$GITHUB_OUTPUT"
+          echo "WIX_ATTRIBUTION_APP_SCAFFOLD_AUTH=PASS main_sha=$main_sha actor=$COMMENT_USER"
+
+      - name: Checkout exact current main
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ steps.auth.outputs.main_sha }}
+          fetch-depth: 1
+
+      - name: Prove one-shot scaffold boundary
+        run: |
+          set -euo pipefail
+          test ! -e apps/wix-dominion-attribution/wix.config.json
+          test -z "$(git ls-remote --heads origin refs/heads/wix-attribution-app-scaffold-367)"
+          echo "WIX_ATTRIBUTION_APP_SCAFFOLD_BOUNDARY=PASS target=apps/wix-dominion-attribution branch=wix-attribution-app-scaffold-367"
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '20'
+
+      - name: Authenticate Wix CLI
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$WIX_API_KEY"
+          npm install --global @wix/cli@latest
+          wix login --api-key "$WIX_API_KEY"
+          wix whoami
+          echo "WIX_ATTRIBUTION_APP_CLI_AUTH=PASS"
+
+      - name: Register one Wix app and scaffold official analytics template
+        id: create
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          echo "work=$work" >> "$GITHUB_OUTPUT"
+          cd "$work"
+          npm create @wix/new@latest -- app             --app-name "Dominion Attribution"             --template c442b755-2276-4336-918a-915865a9fa2b
+
+          config="$(find "$work" -mindepth 2 -maxdepth 4 -type f -name wix.config.json -print -quit)"
+          test -n "$config"
+          project_dir="$(dirname "$config")"
+          app_id="$(jq -r '.appId // empty' "$config")"
+          [[ "$app_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+
+          echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+          echo "app_id=$app_id" >> "$GITHUB_OUTPUT"
+          echo "WIX_ATTRIBUTION_APP_REGISTERED=PASS app_id=$app_id template=Mixpanel-Analytics"
+
+      - name: Import scaffold without local auth material
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          PROJECT_DIR: ${{ steps.create.outputs.project_dir }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/apps/wix-dominion-attribution"
+          rsync -a             --exclude='.git'             --exclude='.wix'             --exclude='node_modules'             --exclude='.env'             --exclude='.env.*'             "$PROJECT_DIR/" "$GITHUB_WORKSPACE/apps/wix-dominion-attribution/"
+          test -s "$GITHUB_WORKSPACE/apps/wix-dominion-attribution/wix.config.json"
+          if grep -R -F -q -- "$WIX_API_KEY" "$GITHUB_WORKSPACE/apps/wix-dominion-attribution"; then
+            echo "ERROR: API key material detected in generated scaffold"
+            exit 1
+          fi
+          echo "WIX_ATTRIBUTION_APP_SECRET_SCAN=PASS"
+
+      - name: Commit scaffold to isolated branch
+        id: push
+        env:
+          APP_ID: ${{ steps.create.outputs.app_id }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          branch="wix-attribution-app-scaffold-367"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add apps/wix-dominion-attribution
+          git diff --cached --quiet && { echo "ERROR: generated scaffold produced no repository changes"; exit 1; }
+          git commit -m "feat(wix): scaffold Dominion attribution app"
+          git push origin "HEAD:refs/heads/$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "WIX_ATTRIBUTION_APP_SCAFFOLD_PUSH=PASS app_id=$APP_ID branch=$branch"
+
+      - name: Record scaffold receipt on issue 367
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ steps.auth.outputs.main_sha }}
+          APP_ID: ${{ steps.create.outputs.app_id }}
+          BRANCH: ${{ steps.push.outputs.branch }}
+        run: |
+          set -euo pipefail
+          body="$(printf '%s\n'             '## Wix native attribution app scaffold — PASS'             ''             "Exact authorized main: $MAIN_SHA"             "Wix app ID: $APP_ID"             "Generated branch: $BRANCH"             ''             'The official Wix Mixpanel Analytics template was registered once and imported into an isolated repository branch. The template supplies the supported embedded-script extension runtime. No app was installed on VoltEdge, no site code was published, and no product, checkout, payment, or existing custom embed was changed.')"
+          jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/comment.json"
+          curl -fsSL -X POST             -H "Authorization: Bearer $GH_TOKEN"             -H 'Accept: application/vnd.github+json'             -H 'Content-Type: application/json'             --data-binary "@$RUNNER_TEMP/comment.json"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/367/comments" >/dev/null
+          echo "WIX_ATTRIBUTION_APP_SCAFFOLD_RECEIPT=PASS issue=367"

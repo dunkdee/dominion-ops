@@ -322,6 +322,67 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
+      - name: Pause canary after failed native-link proof
+        if: failure() && steps.auth.outputs.experiment_id != ''
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          EXPERIMENT_ID: ${{ steps.auth.outputs.experiment_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          final_state="$(ssh -i "$HOME/.ssh/foundation_vm_key" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o IdentitiesOnly=yes \
+            -o HostKeyAlias=foundation-vm -o StrictHostKeyChecking=yes \
+            "$VM_USER@$VM_HOST" "EXPERIMENT_ID='$EXPERIMENT_ID' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          api="http://127.0.0.1:8790"
+          env_file="$HOME/dominion-ops/.env"
+          token="$(python3 - "$env_file" <<'PY'
+          from pathlib import Path
+          import sys
+          for raw in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+              line=raw.strip()
+              if not line or line.startswith("#") or "=" not in line:
+                  continue
+              k,v=line.split("=",1)
+              if k.strip() != "WIX_AGENT_OPERATOR_TOKEN":
+                  continue
+              v=v.strip()
+              if len(v) >= 2 and v[0] == v[-1] and v[0] in {'"', "'"}:
+                  v=v[1:-1]
+              print(v)
+              break
+          PY
+          )"
+          test -n "$token"
+          status="$(curl -fsS -H "X-Operator-Token: $token" "$api/control/experiments/$EXPERIMENT_ID")"
+          python3 - "$status" <<'PY'
+          import json,sys
+          obj=json.loads(sys.argv[1])["experiment"]
+          assert obj["product_id"] == "dbbcaa33-e143-4660-a238-d3182aa1701e", obj
+          assert obj["status"] in {"active","paused"}, obj
+          PY
+          state="$(printf '%s' "$status" | python3 -c 'import json,sys; print(json.load(sys.stdin)["experiment"]["status"])')"
+          if [ "$state" = "active" ]; then
+            curl -fsS -X POST -H "X-Operator-Token: $token" "$api/control/experiments/$EXPERIMENT_ID/pause" >/dev/null
+          fi
+          final="$(curl -fsS -H "X-Operator-Token: $token" "$api/control/experiments/$EXPERIMENT_ID" | python3 -c 'import json,sys; print(json.load(sys.stdin)["experiment"]["status"])')"
+          test "$final" = "paused"
+          printf '%s\n' "$final"
+          REMOTE
+          )"
+          test "$final_state" = "paused"
+          body="WIX_ATTRIBUTION_FAILED_CANARY_PAUSED=PASS experiment_id=$EXPERIMENT_ID final_state=paused commerce_mutation=false"
+          jq -n --arg body "$body" '{body:$body}' > "$RUNNER_TEMP/failed-canary-comment.json"
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'Content-Type: application/json' \
+            --data-binary "@$RUNNER_TEMP/failed-canary-comment.json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/367/comments" >/dev/null
+          echo "$body"
+
       - name: Record runtime proof on issue 367
         env:
           GH_TOKEN: ${{ github.token }}

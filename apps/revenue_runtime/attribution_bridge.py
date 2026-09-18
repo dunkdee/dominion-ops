@@ -115,16 +115,20 @@ class AttributionBridgeStore:
         expected_experiment_id: str,
         purchase_flow_id: str = "",
         checkout_id: str = "",
+        order_id: str = "",
     ) -> dict[str, Any]:
         purchase_flow_id = _guid(purchase_flow_id, "purchase_flow_id")
         checkout_id = _guid(checkout_id, "checkout_id")
+        order_id = _guid(order_id, "order_id")
         links = []
         if purchase_flow_id:
             links.append(("purchase_flow", purchase_flow_id))
         if checkout_id:
             links.append(("checkout", checkout_id))
+        if order_id:
+            links.append(("order", order_id))
         if not links:
-            raise ValueError("purchase_flow_id or checkout_id is required")
+            raise ValueError("purchase_flow_id, checkout_id, or order_id is required")
         if not expected_experiment_id:
             raise ValueError("expected experiment is required")
 
@@ -190,12 +194,15 @@ class AttributionBridgeStore:
         experiment_id: str,
         purchase_flow_id: str = "",
         checkout_id: str = "",
+        order_id: str = "",
     ) -> list[dict[str, str]]:
         specs: list[tuple[str, str]] = []
         if purchase_flow_id:
             specs.append(("purchase_flow", _guid(purchase_flow_id, "purchase_flow_id")))
         if checkout_id:
             specs.append(("checkout", _guid(checkout_id, "checkout_id")))
+        if order_id:
+            specs.append(("order", _guid(order_id, "order_id")))
         if not specs:
             return []
         out: list[dict[str, str]] = []

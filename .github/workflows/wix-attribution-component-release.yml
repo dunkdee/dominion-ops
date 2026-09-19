@@ -204,7 +204,45 @@ jobs:
               if event == 0:
                   if npm_yes:
                       raise SystemExit("npm confirmation repeated")
-                  child.send("y\r"); npm_yes=True; record("NPM_CONFIRM"); continue
+                  # npm's create-package bootstrap is a separate interactive
+                  # transition. Confirm the prompt is actually on screen, answer
+                  # once, then require observable progress instead of assuming
+                  # that sending 'y' committed the state.
+                  context = clean((child.before or "")[-2500:] + (child.after or ""))
+                  if not re.search(r"Ok to proceed\?\s*\(y\)", context, re.I):
+                      record("NPM_CONFIRM_FAILED", reason="prompt_not_proven")
+                      raise SystemExit("npm confirmation prompt was not proven before response")
+                  child.send("y\r")
+                  npm_yes = True
+                  progressed = False
+                  progress_patterns = [
+                      re.compile(r"Add new extensions for an existing Wix app", re.I),
+                      re.compile(r"Mixpanel Analytics", re.I),
+                      re.compile(r"package name|folder name|project name", re.I),
+                      re.compile(r"Failed to fetch|ERROR|Something went wrong", re.I),
+                      pexpect.EOF,
+                  ]
+                  try:
+                      next_event = child.expect(progress_patterns, timeout=60)
+                      progressed = True
+                  except pexpect.TIMEOUT:
+                      record("NPM_CONFIRM_FAILED", reason="no_progress_after_yes")
+                      raise SystemExit("npm confirmation accepted no observable scaffold progress within 60s")
+                  record("NPM_CONFIRM", accepted=True, progressed=progressed)
+                  # Re-handle the observed next state in the main state machine.
+                  if next_event == 0:
+                      event = 1
+                  elif next_event == 1:
+                      event = 2
+                  elif next_event == 2:
+                      event = 3
+                  elif next_event == 3:
+                      record("CLI_ERROR", npm_yes=npm_yes, mode_handled=mode_handled, template=template)
+                      raise SystemExit("Wix CLI reported an error after npm confirmation")
+                  elif next_event == 4:
+                      event = 5
+                  # Fall through intentionally so the already-observed state is
+                  # processed below without waiting for another screen redraw.
               if event == 1:
                   if mode_handled:
                       raise SystemExit("existing-app mode selector repeated unexpectedly")

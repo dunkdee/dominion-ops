@@ -169,23 +169,23 @@ jobs:
           record("SPAWN_START")
           try:
               child = pexpect.spawn(
-              "npm",
-              ["create", "--yes", "@wix/new@latest", "--", "app", "--extend-app-id", app_id],
+                  "npm",
+                  ["create", "--yes", "@wix/new@latest", "--", "app", "--extend-app-id", app_id],
                   cwd=work,
                   env=env,
                   encoding="utf-8",
                   timeout=12,
                   dimensions=(40, 160),
               )
-          ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-          def clean(v):
-              return ansi.sub("", v or "").replace("\r", "")
-
           except Exception as exc:
               record("SPAWN_FAILED", error_type=type(exc).__name__)
               raise
           child.logfile_read = sys.stdout
           record("SPAWN_OK")
+
+          ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+          def clean(v):
+              return ansi.sub("", v or "").replace("\r", "")
 
           # --extend-app-id is the canonical existing-app binding. Wix CLI versions
           # may still render a top-level mode selector before the template selector,

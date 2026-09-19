@@ -264,7 +264,7 @@ jobs:
                       context = clean((child.before if isinstance(child.before, str) else "")[-2500:] + (child.after if isinstance(child.after, str) else ""))
                       lines = [line.strip() for line in context.splitlines() if line.strip()]
                       selected = any(
-                          ("❯" in line or re.search(r"(^|\\s)>\\s*Add new extensions", line))
+                          ("●" in line or "❯" in line)
                           for line in lines[-80:]
                           if target in line
                       )
@@ -292,7 +292,7 @@ jobs:
                       context = clean((child.before if isinstance(child.before, str) else "")[-2500:] + (child.after if isinstance(child.after, str) else ""))
                       lines = [line.strip() for line in context.splitlines() if line.strip()]
                       selected = any(
-                          ("❯" in line or re.search(r"(^|\\s)>\\s*Mixpanel Analytics", line))
+                          ("●" in line or "❯" in line)
                           for line in lines[-80:]
                           if target in line
                       )

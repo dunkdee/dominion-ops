@@ -272,7 +272,7 @@ jobs:
                           break
                       child.send("\\x1b[B")
                       try:
-                          child.expect(r"(?s).", timeout=1)
+                          child.expect(re.escape(target), timeout=4)
                       except pexpect.TIMEOUT:
                           pass
                       time.sleep(0.3)
@@ -300,7 +300,7 @@ jobs:
                           break
                       child.send("\\x1b[B")
                       try:
-                          child.expect(r"(?s).", timeout=1)
+                          child.expect(re.escape(target), timeout=4)
                       except pexpect.TIMEOUT:
                           pass
                       time.sleep(0.3)

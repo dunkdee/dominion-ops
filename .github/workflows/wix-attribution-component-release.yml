@@ -270,7 +270,7 @@ jobs:
                       )
                       if selected:
                           break
-                      child.send("\\x1b[B")
+                      child.send("\x1b[B")
                       try:
                           child.expect(re.escape(target), timeout=4)
                       except pexpect.TIMEOUT:
@@ -279,7 +279,7 @@ jobs:
                   if not selected:
                       record("MODE_SELECT_FAILED", mode_handled=mode_handled)
                       raise SystemExit("mode selector: cursor never landed on '%s'" % target)
-                  child.send("\\r")
+                  child.send("\r")
                   mode_handled = True
                   record("MODE_SELECTED", selected_before=True)
                   continue
@@ -298,7 +298,7 @@ jobs:
                       )
                       if selected:
                           break
-                      child.send("\\x1b[B")
+                      child.send("\x1b[B")
                       try:
                           child.expect(re.escape(target), timeout=4)
                       except pexpect.TIMEOUT:
@@ -307,7 +307,7 @@ jobs:
                   if not selected:
                       record("TEMPLATE_SELECT_FAILED", mode_handled=mode_handled)
                       raise SystemExit("template selector: cursor never landed on '%s'" % target)
-                  child.send("\\r")
+                  child.send("\r")
                   template = True
                   record("TEMPLATE_SELECTED", selected_before=True, mode_handled=mode_handled)
                   continue

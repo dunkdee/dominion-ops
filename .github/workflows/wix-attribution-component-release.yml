@@ -159,26 +159,33 @@ jobs:
           env["TERM"] = "xterm-256color"
           env["FORCE_COLOR"] = "0"
 
-          child = pexpect.spawn(
-              "npm",
-              ["create", "--yes", "@wix/new@latest", "--", "app", "--extend-app-id", app_id],
-              cwd=work,
-              env=env,
-              encoding="utf-8",
-              timeout=12,
-              dimensions=(40, 160),
-          )
-          child.logfile_read = sys.stdout
-          ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-          def clean(v):
-              return ansi.sub("", v or "").replace("\r", "")
-
           state_path = os.path.join(os.environ["RUNNER_TEMP"], "wix-scaffold-state.txt")
           def record(event, **values):
               payload = {"event": event, **values}
               with open(state_path, "w", encoding="utf-8") as fh:
                   for key, value in payload.items():
                       fh.write(f"{key}={value}\n")
+
+          record("SPAWN_START")
+          try:
+              child = pexpect.spawn(
+              "npm",
+              ["create", "--yes", "@wix/new@latest", "--", "app", "--extend-app-id", app_id],
+                  cwd=work,
+                  env=env,
+                  encoding="utf-8",
+                  timeout=12,
+                  dimensions=(40, 160),
+              )
+          ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+          def clean(v):
+              return ansi.sub("", v or "").replace("\r", "")
+
+          except Exception as exc:
+              record("SPAWN_FAILED", error_type=type(exc).__name__)
+              raise
+          child.logfile_read = sys.stdout
+          record("SPAWN_OK")
 
           # --extend-app-id is the canonical existing-app binding. Wix CLI versions
           # may still render a top-level mode selector before the template selector,

@@ -93,7 +93,7 @@ jobs:
 
       - name: Upload read-only evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dominion-nemotron-readonly-audit-${{ github.run_id }}
           path: ${{ runner.temp }}/nemotron-readonly-audit.txt

@@ -424,7 +424,7 @@ jobs:
           chmod 600 "$AUDIT_FILE"
 
       - name: Upload private audit artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ env.AUDIT_FILE }}

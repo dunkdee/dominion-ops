@@ -207,7 +207,12 @@ jobs:
           deadline=time.time()+360
 
           while child.isalive() and time.time() < deadline:
-              event=child.expect(patterns, timeout=min(12, max(1, int(deadline-time.time()))))
+              try:
+                  event=child.expect(patterns, timeout=min(12, max(1, int(deadline-time.time()))))
+              except Exception as exc:
+                  record("EXPECT_EXCEPTION", error_type=type(exc).__name__, error=str(exc)[:200],
+                         template=template, mode_handled=mode_handled, package=package)
+                  raise
               if event == 0:
                   if npm_yes:
                       raise SystemExit("npm confirmation repeated")
@@ -329,8 +334,10 @@ jobs:
               record("DEADLINE", template=template, mode_handled=mode_handled, package=package)
               raise SystemExit("Wix scaffold deadline exceeded")
           child.close()
-          if child.exitstatus not in (0, None):
-              raise SystemExit(child.exitstatus)
+          if child.exitstatus not in (0, None) or child.signalstatus:
+              record("CHILD_EXIT", exitstatus=child.exitstatus, signalstatus=child.signalstatus,
+                     template=template, mode_handled=mode_handled, package=package)
+              raise SystemExit(child.exitstatus or 128)
           if not template:
               record("TEMPLATE_NOT_PROVEN", mode_handled=mode_handled, package=package)
               raise SystemExit("template selection not proven for exact --extend-app-id flow")
@@ -359,7 +366,7 @@ jobs:
           set -euo pipefail
           state="$RUNNER_TEMP/wix-scaffold-state.txt"
           if [ -s "$state" ]; then
-            safe_state="$(grep -E '^(event|template|mode_handled|package|selected_before|app_id_match)=' "$state" || true)"
+            safe_state="$(grep -E '^(event|template|mode_handled|package|selected_before|app_id_match|error_type|error|exitstatus|signalstatus)=' "$state" || true)"
           else
             safe_state="event=NO_STATE_RECEIPT"
           fi

@@ -220,7 +220,7 @@ jobs:
                   # transition. Confirm the prompt is actually on screen, answer
                   # once, then require observable progress instead of assuming
                   # that sending 'y' committed the state.
-                  context = clean((child.before or "")[-2500:] + (child.after or ""))
+                  context = clean((child.before if isinstance(child.before, str) else "")[-2500:] + (child.after if isinstance(child.after, str) else ""))
                   if not re.search(r"Ok to proceed\?\s*\(y\)", context, re.I):
                       record("NPM_CONFIRM_FAILED", reason="prompt_not_proven")
                       raise SystemExit("npm confirmation prompt was not proven before response")
@@ -261,7 +261,7 @@ jobs:
                   target = "Add new extensions for an existing Wix app"
                   selected = False
                   for _arrow in range(12):
-                      context = clean((child.before or "")[-2500:] + (child.after or ""))
+                      context = clean((child.before if isinstance(child.before, str) else "")[-2500:] + (child.after if isinstance(child.after, str) else ""))
                       lines = [line.strip() for line in context.splitlines() if line.strip()]
                       selected = any(
                           ("❯" in line or re.search(r"(^|\\s)>\\s*Add new extensions", line))
@@ -289,7 +289,7 @@ jobs:
                   target = "Mixpanel Analytics"
                   selected = False
                   for _arrow in range(12):
-                      context = clean((child.before or "")[-2500:] + (child.after or ""))
+                      context = clean((child.before if isinstance(child.before, str) else "")[-2500:] + (child.after if isinstance(child.after, str) else ""))
                       lines = [line.strip() for line in context.splitlines() if line.strip()]
                       selected = any(
                           ("❯" in line or re.search(r"(^|\\s)>\\s*Mixpanel Analytics", line))

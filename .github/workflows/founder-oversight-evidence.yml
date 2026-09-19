@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Compile validator
         run: python3 -m py_compile scripts/validate_founder_oversight.py tests/test_founder_oversight.py
       - name: Validate founder oversight contract

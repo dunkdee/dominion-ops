@@ -33,7 +33,7 @@ jobs:
       expected: ${{ steps.resolve.outputs.expected }}
       maximum: ${{ steps.resolve.outputs.maximum }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -94,7 +94,7 @@ jobs:
     timeout-minutes: 20
     environment: foundation-vm-production
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.deploy_sha }}
           fetch-depth: 0

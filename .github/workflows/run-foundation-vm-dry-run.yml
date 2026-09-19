@@ -22,7 +22,7 @@ jobs:
     environment: foundation-vm-production
     steps:
       - name: Checkout main
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: main
 

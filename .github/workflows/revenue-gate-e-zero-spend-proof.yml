@@ -48,7 +48,7 @@ jobs:
           echo "GATE_E_ZERO_SPEND_AUTHORIZATION=PASS actor=$COMMENT_USER issue=$ISSUE_NUMBER main_sha=$main_sha"
 
       - name: Checkout exact authorized main
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ steps.authorize.outputs.main_sha }}
           persist-credentials: false

@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Validate policy
         run: python scripts/validate_buddy_authority_policy.py governance/buddy/buddy_authority_policy.json
       - name: Run policy tests

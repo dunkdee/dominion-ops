@@ -47,7 +47,7 @@ jobs:
           echo "PREVIOUS_SHA=$PREVIOUS_SHA" >> "$GITHUB_ENV"
 
       - name: Checkout exact PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.HEAD_SHA }}
 

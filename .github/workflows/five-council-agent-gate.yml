@@ -36,7 +36,7 @@ jobs:
           echo "SHA=$SHA" >> "$GITHUB_ENV"
           echo "PR_BRANCH=$BRANCH" >> "$GITHUB_ENV"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.SHA }}
           fetch-depth: 0

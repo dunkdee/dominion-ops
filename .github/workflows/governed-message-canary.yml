@@ -68,7 +68,7 @@ jobs:
           echo "CANARY_EXECUTION_MODE=$mode"
 
       - name: Checkout exact verification source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.resolve.outputs.expected_sha }}
 

@@ -38,7 +38,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -70,7 +70,7 @@ jobs:
       brain_digest: ${{ steps.brain.outputs.digest }}
       agent_count: ${{ steps.brain.outputs.agent_count }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -127,7 +127,7 @@ jobs:
       brain_digest: ${{ steps.receipt.outputs.brain_digest }}
       agent_count: ${{ steps.receipt.outputs.agent_count }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -216,7 +216,7 @@ jobs:
       brain_digest: ${{ steps.remote.outputs.brain_digest }}
       agent_count: ${{ steps.remote.outputs.agent_count }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0

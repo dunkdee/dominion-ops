@@ -161,7 +161,7 @@ jobs:
 
           child = pexpect.spawn(
               "npm",
-              ["create", "@wix/new@latest", "--", "app", "--extend-app-id", app_id],
+              ["--yes", "create", "@wix/new@latest", "--", "app", "--extend-app-id", app_id],
               cwd=work,
               env=env,
               encoding="utf-8",
